@@ -51,6 +51,8 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
+-- Sprout Dash's own training boost (2026-10-08), added to the chest's below.
+local SproutDash = require(Shared:WaitForChild("SproutDash"))
 
 local MILL = GameConfig.Treadmill
 local LADDER = GameConfig.Mill
@@ -185,6 +187,19 @@ local function standingOn(root: BasePart, belt: BasePart): boolean
 	return above > -1 and above < STAND_HEIGHT
 end
 
+-- Over the belt at ANY height above it: what a dismount's block waits out. A
+-- jump straight up rises 7.3 studs, past STAND_HEIGHT, so standingOn called the
+-- top of the jump "off"; a 1 s tick that fell in that ~0.4 s cleared the block
+-- and the landing's Touched remounted -- a dismount that did not stick (Play,
+-- 2026-10-08: MillMounted nil at take-off, true again 0.67 s later). Off is off
+-- the footprint, or below the belt.
+local function overBelt(root: BasePart, belt: BasePart): boolean
+	local local_ = belt.CFrame:PointToObjectSpace(root.Position)
+	local half = belt.Size * 0.5
+	return math.abs(local_.X) <= half.X + EDGE_MARGIN and math.abs(local_.Z) <= half.Z + EDGE_MARGIN
+		and local_.Y - half.Y > -1
+end
+
 --==============================================================================
 -- THE DISCO MILL, AS THE PAYOUT SEES IT (2026-10-04)
 --
@@ -210,6 +225,12 @@ end
 local function discoLive(): boolean
 	local id = disco.eventId
 	return disco.belt ~= nil and id ~= nil and discoWanted() == id
+end
+
+-- Riding their own mill: mounted, and not on the Disco Mill (Sprout Dash's
+-- rule, 2026-10-08: a run counts only here, start to end).
+function TreadmillService.OnOwnMill(player: Player): boolean
+	return mounted[player] ~= nil and discoSpot[player] == nil
 end
 
 function TreadmillService.OnDiscoMill(player: Player): boolean
@@ -339,6 +360,50 @@ local function setBeltSpeed(belt: BasePart, occupied: boolean, tier: number)
 end
 
 --==============================================================================
+-- A TELEPORT TAKES YOU OFF (2026-10-08, the owner's report)
+--
+-- BIOMES and OBBY (PlotService.TeleportTo) move a mounted player without a
+-- jump, and the zero WalkSpeed went with them: they landed at the road unable
+-- to walk until they jumped. So a mount also ends when the player is moved
+-- AWAY from the belt -- at once when a script moves the root (every teleport
+-- writes its CFrame), and on the next tick for anything else. "Away" is well
+-- clear of the belt's footprint, so a mill rebuilt at a new size under a
+-- mounted player, which moves nobody, never counts.
+--==============================================================================
+local AWAY_STUDS = 12
+
+local function awayFrom(root: BasePart, belt: BasePart): boolean
+	if not belt.Parent then
+		return true
+	end
+	local p = belt.CFrame:PointToObjectSpace(root.Position)
+	local half = belt.Size * 0.5
+	return math.abs(p.X) > half.X + AWAY_STUDS or math.abs(p.Z) > half.Z + AWAY_STUDS
+		or math.abs(p.Y) > half.Y + STAND_HEIGHT + AWAY_STUDS
+end
+
+-- What ends a mount besides Unmount's own callers: a jump, a death, and a
+-- script moving the root away. One list for Mount and for Rebuild.
+local function watchMount(player: Player, humanoid: Humanoid, root: BasePart): { RBXScriptConnection }
+	return {
+		humanoid.Jumping:Connect(function(active: boolean)
+			if active then
+				TreadmillService.Unmount(player)
+			end
+		end),
+		humanoid.Died:Connect(function()
+			TreadmillService.Unmount(player)
+		end),
+		root:GetPropertyChangedSignal("CFrame"):Connect(function()
+			local belt = mounted[player]
+			if belt and awayFrom(root, belt) then
+				TreadmillService.Unmount(player)
+			end
+		end),
+	}
+end
+
+--==============================================================================
 -- GETTING ON AND GETTING OFF
 --==============================================================================
 function TreadmillService.Unmount(player: Player)
@@ -404,16 +469,7 @@ function TreadmillService.Mount(player: Player, belt: BasePart, spot: Vector2?):
 
 	CarryService.RefreshWalkSpeed(player)
 
-	local conns: { RBXScriptConnection } = {}
-	table.insert(conns, humanoid.Jumping:Connect(function(active: boolean)
-		if active then
-			TreadmillService.Unmount(player)
-		end
-	end))
-	table.insert(conns, humanoid.Died:Connect(function()
-		TreadmillService.Unmount(player)
-	end))
-	mountConns[player] = conns
+	mountConns[player] = watchMount(player, humanoid, root)
 	return true
 end
 
@@ -446,6 +502,16 @@ end
 local function payEveryone()
 	local now = os.clock()
 	for _, player in ipairs(Players:GetPlayers()) do
+		-- Mounted but carried well away from the belt by anything a script's
+		-- CFrame signal did not see (A TELEPORT TAKES YOU OFF, above).
+		local ridden = mounted[player]
+		if ridden then
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if not (root and root:IsA("BasePart")) or awayFrom(root :: BasePart, ridden) then
+				TreadmillService.Unmount(player)
+			end
+		end
 		--==================================================================
 		-- Cheap because it only runs for somebody who just got off: one
 		-- region test until they step clear, then never again.
@@ -457,8 +523,8 @@ local function payEveryone()
 			local discoBelt = disco.belt
 			local still = root ~= nil
 				and root:IsA("BasePart")
-				and ((belt ~= nil and standingOn(root :: BasePart, belt :: BasePart))
-					or (discoBelt ~= nil and standingOn(root :: BasePart, discoBelt :: BasePart)))
+				and ((belt ~= nil and overBelt(root :: BasePart, belt :: BasePart))
+					or (discoBelt ~= nil and overBelt(root :: BasePart, discoBelt :: BasePart)))
 			if not still then
 				mountBlocked[player] = nil
 			end
@@ -519,7 +585,12 @@ local function payEveryone()
 					-- RATE at the top of this file.)
 					--==========================================================
 					local discoFactor = if onDisco then DISCO.Multiplier else 1
-					local paid = rate * BonusChestService.Multiplier(player, "training") * discoFactor * dt
+					-- Sprout Dash's +25% (2026-10-08, the owner's choice): its own
+					-- source, so its percentage ADDS to the chest's or the wheel's.
+					local sprout = PlayerDataService.Get(player)
+					local training = BonusChestService.Multiplier(player, "training")
+						+ SproutDash.bonusAt(sprout and (sprout :: any).SproutBoostEndsAt, os.time())
+					local paid = rate * training * discoFactor * dt
 					if PlayerDataService.AddSpeed(player, paid) then
 						granted[player] = (granted[player] or 0) + paid
 						-- CarryService owns WalkSpeed. Ask, do not write.
@@ -1067,20 +1138,12 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 		mounted[mountedPlayer] = belt
 		local character = mountedPlayer.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid and humanoid.Health > 0 then
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if humanoid and humanoid.Health > 0 and root and root:IsA("BasePart") then
 			for _, c in ipairs(mountConns[mountedPlayer] or {}) do
 				c:Disconnect()
 			end
-			local conns: { RBXScriptConnection } = {}
-			table.insert(conns, humanoid.Jumping:Connect(function(active: boolean)
-				if active then
-					TreadmillService.Unmount(mountedPlayer)
-				end
-			end))
-			table.insert(conns, humanoid.Died:Connect(function()
-				TreadmillService.Unmount(mountedPlayer)
-			end))
-			mountConns[mountedPlayer] = conns
+			mountConns[mountedPlayer] = watchMount(mountedPlayer, humanoid, root :: BasePart)
 
 			local on = TreadmillService.RateFor(mountedPlayer) > 0
 			setBeltSpeed(belt, on, tier)

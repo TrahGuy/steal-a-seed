@@ -497,18 +497,61 @@ function MenuKit.rimTheme(lift: number?): UIKit.ModalTheme
 	}
 end
 
+--==============================================================================
+-- THE STUDDED KIT'S LOOK (2026-10-08, the owner: "restyle the shop and
+-- settings first"; GameConfig.StuddedLook)
+--
+-- A coloured band for the header with the kit's stud tile over it, a white
+-- studded body, the outline and a solid base in the band's dark `edge`, the
+-- kit's red studded close and a white title with a black line. `colours` is
+-- one menu's entry in GameConfig.StuddedLook (Band, Edge).
+--==============================================================================
+local STUDDED = GameConfig.StuddedLook
+
+function MenuKit.studdedTheme(colours: { Band: Color3, Edge: Color3 }): UIKit.ModalTheme
+	return {
+		band = true,
+		fill = STUDDED.Body,
+		shade = STUDDED.Body,
+		outline = colours.Edge,
+		headerTop = colours.Band,
+		headerBottom = colours.Band,
+		headerRule = colours.Band,
+		texture = {
+			image = STUDDED.Texture,
+			tile = STUDDED.Tile,
+			band = STUDDED.BandStuds,
+			body = STUDDED.BodyStuds,
+		},
+		base = STUDDED.Base,
+		titleStroke = STUDDED.TitleLine,
+		titleStrokeThickness = LOOK.TitleStroke,
+		titleSize = LOOK.TitleSize,
+		closeTop = STUDDED.Close,
+		closeBottom = STUDDED.Close,
+		closeShade = STUDDED.CloseEdge,
+		closeEdge = STUDDED.CloseEdge,
+		closeMarkLine = STUDDED.TitleLine,
+		closeRadius = 11,
+	}
+end
+
 -- `drawIcon` draws a native icon into the title's icon box (a menu with no
--- approved picture, e.g. EVENTS' calendar) when `iconImage` is nil.
+-- approved picture, e.g. EVENTS' calendar) when `iconImage` is nil. `theme` is
+-- the menus' studded rim unless a menu names another (the studded kit's band:
+-- MenuKit.studdedTheme).
 function MenuKit.modal(gui: ScreenGui, name: string, title: string, iconImage: string?, iconFallback: string?,
-	drawIcon: ((holder: Frame, z: number) -> ())?, stillWhenReduced: boolean?): Modal
+	drawIcon: ((holder: Frame, z: number) -> ())?, stillWhenReduced: boolean?, theme: UIKit.ModalTheme?): Modal
+	local look = theme or MenuKit.rimTheme()
+	local band = look.band == true
 	local modal = UIKit.modal(gui, {
 		name = name,
 		title = title,
 		maxWidth = 4000,
 		maxHeight = 4000,
-		titleColour = LOOK.Title,
+		titleColour = if band then STUDDED.Title else LOOK.Title,
 		fixedHeader = true,
-		theme = MenuKit.rimTheme(),
+		theme = look,
 		-- Opt-in (WHAT'S NEW): no open/shut pop under reduced motion.
 		stillWhenReduced = stillWhenReduced,
 	})
@@ -564,13 +607,20 @@ function MenuKit.modal(gui: ScreenGui, name: string, title: string, iconImage: s
 			modal.group.Size = UDim2.fromOffset(r.w, r.h)
 			out.header = p.header
 			-- The shell starts `lift` under the panel's top; MenuLayout's blocks
-			-- are in its coordinates, so nothing below the rim moves.
-			modal.shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - p.lift)
+			-- are in its coordinates, so nothing below the rim moves. A band has
+			-- no lift: its shell starts at the top and gives its base up instead,
+			-- and its blocks (in shell coordinates) stand where MenuLayout says.
+			if band then
+				modal.shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - (look.base or 0))
+			else
+				modal.shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - p.lift)
+			end
 			if rimBlocker then
 				rimBlocker.Size = UDim2.new(1, 0, 0, p.lift + outline)
 			end
-			-- The title row's middle stands just under the rim's top edge.
-			local centre = MenuKit.titleCentre(p.short)
+			-- The title row's middle stands just under the rim's top edge -- or,
+			-- on a band, in the middle of the band.
+			local centre = if band then p.header / 2 else MenuKit.titleCentre(p.short)
 			titleBar.Position = UDim2.fromOffset(p.pad, centre - MenuLayout.Config.Touch / 2)
 			titleBar.Size = UDim2.new(1, -p.pad * 2, 0, MenuLayout.Config.Touch)
 			if banner then

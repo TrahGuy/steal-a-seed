@@ -72,7 +72,6 @@ RewardSplash.MaxWidthShare = 0.92
 RewardSplash.TitleFont = Enum.Font.LuckiestGuy
 RewardSplash.DetailFont = Enum.Font.GothamBold
 RewardSplash.Outline = Color3.fromRGB(34, 24, 16)
-RewardSplash.Plate = Color3.fromRGB(22, 18, 12)
 RewardSplash.Gold = Color3.fromRGB(255, 211, 77)
 RewardSplash.Cream = Color3.fromRGB(242, 238, 206)
 
@@ -231,31 +230,27 @@ function RewardSplash.build(opts: Options): Built?
 	local height = S.Pad * 2 + headH + columnH
 	local k = math.min(S.scaleFor(view), view.X * S.MaxWidthShare / total)
 
+	-- TRANSPARENT (2026-10-09, the owner: "everything must be transparent,
+	-- applies to buffs, and effects", and yes for this card): no plate, corner
+	-- or rim behind the rewards -- the icons and the outlined words carry it,
+	-- the way the floating signs read over any scene.
 	local card = Instance.new("Frame")
 	card.Name = "RewardSplash"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, S.CentreY)
 	card.Size = UDim2.fromOffset(total, height)
-	card.BackgroundColor3 = S.Plate
-	card.BackgroundTransparency = 0.25
+	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.Active = false
 	card.ZIndex = z
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 14)
-	corner.Parent = card
-	local rim = Instance.new("UIStroke")
-	rim.Color = S.Gold
-	rim.Thickness = 2
-	rim.Transparency = 0.2
-	rim.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	rim.Parent = card
 	local scale = Instance.new("UIScale")
 	scale.Scale = k
 	scale.Parent = card
 
+	-- Outlines a little heavier than they were on the plate: the only thing
+	-- between a word and the scene now.
 	if opts.heading then
-		label(card, "Heading", opts.heading, S.HeadingSize, S.TitleFont, S.Gold, S.Pad - 2, S.HeadingSize + 4, 1.5, z + 1)
+		label(card, "Heading", opts.heading, S.HeadingSize, S.TitleFont, S.Gold, S.Pad - 2, S.HeadingSize + 4, 2, z + 1)
 	end
 
 	local pieces: { Piece } = {}
@@ -281,7 +276,7 @@ function RewardSplash.build(opts: Options): Built?
 		local holderScale = Instance.new("UIScale")
 		holderScale.Parent = holder
 		item.draw(holder, S.IconPx)
-		-- Above the plate whatever the gui's ZIndexBehavior, in the icon's own order.
+		-- Above the card whatever the gui's ZIndexBehavior, in the icon's own order.
 		for _, d in ipairs(holder:GetDescendants()) do
 			if d:IsA("GuiObject") then
 				d.ZIndex += z + 2
@@ -292,7 +287,7 @@ function RewardSplash.build(opts: Options): Built?
 			z + 1)
 		if item.detail then
 			label(column, "Detail", item.detail, S.DetailSize, S.DetailFont, S.Cream,
-				S.IconPx + 6 + S.TitleSize + 4, S.DetailSize + 4, 1.5, z + 1)
+				S.IconPx + 6 + S.TitleSize + 4, S.DetailSize + 4, 2, z + 1)
 		end
 		local fades: { Fade } = {}
 		collect(holder, fades)

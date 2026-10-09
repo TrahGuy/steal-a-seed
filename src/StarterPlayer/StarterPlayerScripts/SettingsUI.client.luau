@@ -65,11 +65,14 @@ local PANEL_NAME = "Settings"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
--- The panel is the menus' light studded one now (the global UI pass,
--- 2026-10-04): a row's words are dark and plain (CREAM is the live state's,
--- MUTED the muted one's), and the slider's knob is white, grey when muted.
-local CREAM = LOOK.Text
-local MUTED = LOOK.Muted
+-- The studded kit's look (2026-10-08, the owner: "restyle the shop and
+-- settings first"; GameConfig.StuddedLook): a blue band, and each row the
+-- kit's dark blue strip with white words (CREAM is the live state's, MUTED the
+-- muted one's). The slider's knob is white, grey when muted.
+local STUDDED = GameConfig.StuddedLook
+local ROWS = STUDDED.Settings
+local CREAM = ROWS.RowDetail
+local MUTED = ROWS.RowMuted
 local KNOB_FILL = WHITE
 local KNOB_FILL_MUTED = LOOK.OffBottom
 
@@ -254,12 +257,14 @@ end
 --==============================================================================
 -- THE PANEL
 --==============================================================================
+-- The studded kit's blue band (MenuKit.studdedTheme).
 local modal = UIKit.modal(gui, {
 	name = PANEL_NAME,
 	title = "SETTINGS",
 	maxWidth = MAX_WIDTH,
 	maxHeight = MAX_HEIGHT,
-	theme = MenuKit.rimTheme(),
+	titleColour = STUDDED.Title,
+	theme = MenuKit.studdedTheme(STUDDED.Settings),
 })
 -- This gui holds only the panel, so it takes the player's menu size whole --
 -- clamped so all three rows still fit, since they do not scroll.
@@ -407,11 +412,11 @@ local function makeRow(order: number, name: string, titleText: string): Row
 	frame.ZIndex = 3
 	frame.Parent = rowsFrame
 	UIKit.corner(frame, 12)
-	-- A light card with a clear thin keyline (the menus' cards), dark words.
-	MenuKit.cardFace(frame)
-	MenuKit.keyline(frame, LOOK.CardEdge, 1.5, LOOK.CardEdgeTransparency)
+	-- The studded kit's row: a dark blue strip with its edge, white words.
+	frame.BackgroundColor3 = ROWS.Row
+	MenuKit.keyline(frame, ROWS.RowEdge, 2)
 
-	local title = MenuKit.text(frame, "Title", 18, LOOK.Text, 4)
+	local title = MenuKit.text(frame, "Title", 18, ROWS.RowText, 4)
 	title.AnchorPoint = Vector2.new(0, 1)
 	title.Position = UDim2.new(0, ROW_PAD, 0.5, 3)
 	title.TextXAlignment = Enum.TextXAlignment.Left

@@ -122,8 +122,9 @@ check(#rows == 14, "fourteen production pods measured", #rows)
 check(unchanged, "every pod whose timer already sat under the ceiling keeps it to the thousandth")
 check(capped, "every taller one is held exactly at the ceiling")
 check(above, "no pod's timer sits above " .. POD.MaxAboveSoil .. " studs")
-check(rows[7] and rows[7].old > 15 and near(rows[7].now, POD.MaxAboveSoil, 0.001),
-	"a Colossal nubkin's timer comes down from over 15 studs to eye level",
+-- Over 15 studs with the old pod; 14 with the owner's (2026-10-09, PodModel: at most 1.45 D tall).
+check(rows[7] and rows[7].old > POD.MaxAboveSoil * 2 and near(rows[7].now, POD.MaxAboveSoil, 0.001),
+	"a Colossal nubkin's timer comes down from over twice the ceiling to eye level",
 	rows[7] and string.format("%.2f -> %.2f", rows[7].old, rows[7].now))
 check(rows[1] and rows[1].old < POD.MaxAboveSoil,
 	"a Tiny's timer was always under it, and is untouched")
@@ -333,6 +334,42 @@ check(pick and pick:find("markerFor", 1, true) ~= nil and pick:find("myPlot()", 
 	"only a plant in your own plot can be selected")
 check(pick and pick:find("ProximityPrompt\")", 1, true) == nil,
 	"and no pickup ProximityPrompt came back -- the one with no key ate every mouse click")
+
+--==========================================================================
+-- A PROMPT ON A PHONE IS THREE QUARTERS (the owner's call, 2026-10-08)
+--==========================================================================
+local P = GameConfig.Labels.Prompt
+check(P.PhoneScale == 0.75 and P.PhoneShortSide == 500, "a phone's prompt is 3/4 size; a phone is a touch screen under 500 px")
+check(ReachPoint.promptScale(Vector2.new(705, 338), true, 500, 0.75) == 0.75
+		and ReachPoint.promptScale(Vector2.new(390, 844), true, 500, 0.75) == 0.75,
+	"a landscape and a portrait phone: 0.75")
+check(ReachPoint.promptScale(Vector2.new(1024, 768), true, 500, 0.75) == 1
+		and ReachPoint.promptScale(Vector2.new(705, 338), false, 500, 0.75) == 1,
+	"a tablet, and a small window with no touch: unchanged")
+local lab = Vector2.new(P.PanelHeight * 2, 30)
+local small = Vector2.new(170, P.PanelHeight) * 0.75
+local timerAt, promptAt = ReachPoint.stack(Vector2.new(352, 200), Vector2.new(705, 338), 58, lab, small, P.StackGap, 6)
+check(math.abs((timerAt.Y - promptAt.Y) - (lab.Y / 2 + P.StackGap + small.Y / 2)) < 1e-6,
+	"stacked at 3/4, the prompt sits StackGap over the timer: no extra gap")
+check(promptUI and promptUI:find("rest = ReachPoint.promptScale(camera.ViewportSize, true, PROMPT.PhoneShortSide, PROMPT.PhoneScale)", 1, true) ~= nil
+		and promptUI:find("made.Scale = rest", 1, true) ~= nil
+		and promptUI:find("entry.size * entry.rest, PROMPT.StackGap", 1, true) ~= nil
+		and promptUI:find("local half = entry.size * entry.rest * 0.5", 1, true) ~= nil,
+	"PromptUI draws, stacks and culls the touch panel at that scale")
+check(plantUI and plantUI:find("TOUCH, PROMPT.PhoneShortSide, PROMPT.PhoneScale", 1, true) ~= nil,
+	"and PlantUI reserves the same smaller room above a pod's timer")
+
+--==========================================================================
+-- ANOTHER PLAYER'S PLOT IS NOT YOURS TO PRESS (the owner's report, 2026-10-08)
+--==========================================================================
+check(promptUI and promptUI:find("if onSomebodyElsesPlot(prompt) then", 1, true) ~= nil
+		and promptUI:find("prompt.MaxActivationDistance = 0", 1, true) ~= nil,
+	"a prompt on another player's plot is never drawn, and is put out of reach")
+check(promptUI and promptUI:find("local id = at:GetAttribute(PLOT_ID)", 1, true) ~= nil
+		and promptUI:find("return tonumber(id) ~= tonumber(player:GetAttribute(OWN_PLOT))", 1, true) ~= nil,
+	"'another player's plot': the nearest PlotId above the prompt is not this player's OwnPlotId")
+check(promptUI and promptUI:find("player:GetAttributeChangedSignal(OWN_PLOT):Connect", 1, true) ~= nil,
+	"its reach is given back when this player's plot changes")
 
 end)
 

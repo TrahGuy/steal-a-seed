@@ -251,6 +251,11 @@ do
 			and has(ui, "HudLayout.statusRows(L, insetTop)"),
 		"the client places both off HudLayout's own rects, in a gui that is the whole screen")
 	check(has(ui, "table.insert(blocked, barRect)"), "and the pop stands clear of the bar")
+	-- TRANSPARENT (the owner, 2026-10-09): the track draws nothing, the fill is outlined.
+	check(has(ui, "track.BackgroundTransparency = 1") and not has(ui, "track.BackgroundTransparency = 0.")
+			and not has(ui, "UIKit.corner(track") and not has(ui, "edge.Parent = track")
+			and has(ui, "UIKit.stroke(fill, Color3.new(0, 0, 0), 1.5)"),
+		"the bar has no dark track and no gold edge: only the gold fill, outlined in black")
 end
 
 --==============================================================================
@@ -872,8 +877,11 @@ end
 say("\n-- unchanged --")
 do
 	local mill = sourceOf(Server, "TreadmillService")
-	check(has(mill, "local paid = rate * BonusChestService.Multiplier(player, \"training\") * discoFactor * dt"),
-		"the belt still pays its one rate, times the boosts that already existed: nothing new multiplies it")
+	-- Sprout Dash (2026-10-08) adds its own boost to the chest's -- the owner's
+	-- choice -- and treadmill fun still adds nothing to the rate.
+	check(has(mill, "local paid = rate * training * discoFactor * dt")
+		and has(mill, "local training = BonusChestService.Multiplier(player, \"training\")"),
+		"the belt still pays its one rate, times its boosts (the chest's, and Sprout Dash's added): treadmill fun adds none")
 	local rates = { 20, 100, 1000, 8000, 50000, 300000, 2e6, 1.2e7, 7e7, 4e8, 2.5e9, 1.5e10, 8e10, 4.5e11 }
 	local same = true
 	for tier, rate in ipairs(rates) do
@@ -902,7 +910,7 @@ do
 		{ Shared, "MenuKit", "SizedIcon.follow(pic)" },
 		{ Shared, "WheelDraw", "SizedIcon.follow(image)" },
 		{ Shared, "StatusText", "image.Image = SizedIcon.at(picture, size)" },
-		{ Scripts, "CashUI", "shoePicture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, 38 * style.ShoeScale)" },
+		{ Scripts, "CashUI", "shoePicture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, PICTURE * style.ShoeScale)" },
 		{ Scripts, "SpeedFX", "picture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, 20)" },
 		{ Scripts, "TreadmillFunUI", "popShoe.Image = SizedIcon.at(SpeedMilestones.Art.Shoe, SHOE_PX.Pop * scale())" },
 		{ Scripts, "TreadmillFunUI", "SizedIcon.at(SpeedMilestones.Art.Shoe, SHOE_PX.Bar * k)" },

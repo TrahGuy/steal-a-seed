@@ -39,6 +39,7 @@
 --==============================================================================
 
 local ContentProvider = game:GetService("ContentProvider")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
@@ -164,6 +165,63 @@ local function discoPlaying(): boolean
 	return mode ~= nil and mode.Disco == true
 end
 
+--==============================================================================
+-- AND A FIFTH, WHILE A POD RUSH RUNS (2026-10-09, the owner: the rush needs
+-- music)
+--
+-- Music.PodRushTrack while the global mini event is a running POD RUSH (a mode
+-- with PodRush): the disco's place in the order -- the two are both mini
+-- events and never run at once -- on this same one Sound, so the chase bed
+-- ducks it as it ducks any bed; started at the rush's own position like the
+-- disco's, probed and skipped like the rain's. "" keeps the bed that was
+-- playing.
+--==============================================================================
+local rushTracks: { string } = usable({ (MUSIC :: any).PodRushTrack })
+local rushOk: boolean? = nil
+local RUSH_PROBE = "SeedMusicRushProbe"
+for _, stale in ipairs(SoundService:GetChildren()) do
+	if stale.Name == RUSH_PROBE then
+		stale:Destroy()
+	end
+end
+
+local function rushPlaying(): boolean
+	if Workspace:GetAttribute(MINI.Attributes.State) ~= "running" then
+		return false
+	end
+	local mode = MINI_MODES[Workspace:GetAttribute(MINI.Attributes.Mode) or ""]
+	return mode ~= nil and mode.PodRush == true
+end
+
+--==============================================================================
+-- AND A SIXTH, WHILE THIS PLAYER PLAYS SPROUT DASH (2026-10-09, the owner:
+-- "sprout rush")
+--
+-- GameConfig.SproutDash.Music while THIS player has the minigame's screen open
+-- (the LocalPlayer's SproutDash Open attribute, which SproutDashUI writes and
+-- no other client sees). FIRST in the order -- the player is in the game,
+-- whatever the world is doing -- on this same one Sound, so the music level,
+-- mute and the chase bed's duck apply as to any bed; looping; crossfaded over
+-- its own FadeSeconds, from its start each time the screen opens; at its own
+-- Volume on the beds' scale (levelFor). Probed and skipped like the rain's: an
+-- id that cannot load keeps the bed that was playing.
+--==============================================================================
+local SPROUT = GameConfig.SproutDash
+local SPROUT_MUSIC: { [string]: any } = (SPROUT :: any).Music or {}
+local sproutTracks: { string } = usable({ SPROUT_MUSIC.Id })
+local sproutOk: boolean? = nil
+local SPROUT_PROBE = "SeedMusicSproutProbe"
+for _, stale in ipairs(SoundService:GetChildren()) do
+	if stale.Name == SPROUT_PROBE then
+		stale:Destroy()
+	end
+end
+local localPlayer = Players.LocalPlayer
+
+local function sproutOpen(): boolean
+	return localPlayer ~= nil and localPlayer:GetAttribute(SPROUT.Attributes.Open) == true
+end
+
 if #tracks == 0 then
 	warn("[Seed/Music] No ids in GameConfig.Music.Tracks, so there is no music. "
 		.. "The pieces in sfx/ are files on disk and Roblox can only play "
@@ -243,9 +301,17 @@ local current: { string } = tracks
 -- No remote, no clock of this script's own, and nothing to drift.
 --==============================================================================
 local function listFor(): { string }
-	-- The disco first, once it has a track that loads (2026-10-03).
+	-- Sprout Dash's own while this player has its screen open (2026-10-09).
+	if #sproutTracks > 0 and sproutOk ~= false and sproutOpen() then
+		return sproutTracks
+	end
+	-- The disco next, once it has a track that loads (2026-10-03).
 	if #discoTracks > 0 and discoOk ~= false and discoPlaying() then
 		return discoTracks
+	end
+	-- A Pod Rush in the disco's place (2026-10-09): never at the same time.
+	if #rushTracks > 0 and rushOk ~= false and rushPlaying() then
+		return rushTracks
 	end
 	-- The rain next: a storm at night is still a storm.
 	if #rainTracks > 0 and rainOk ~= false and rainFalling() then
@@ -256,6 +322,20 @@ local function listFor(): { string }
 		return nightTracks
 	end
 	return tracks
+end
+
+-- The Sound's own level under a list: 1 for every bed but Sprout Dash's, whose
+-- Volume is on the beds' scale -- Music.Volume is what the bus carries, so its
+-- own over that is what the Sound adds.
+local function levelFor(list: { string }): number
+	if list == sproutTracks then
+		local base = tonumber(MUSIC.Volume) or 0
+		local own = tonumber(SPROUT_MUSIC.Volume)
+		if base > 0 and own then
+			return math.clamp(own / base, 0, 3)
+		end
+	end
+	return 1
 end
 
 --==============================================================================
@@ -293,6 +373,7 @@ sound.Ended:Connect(function()
 end)
 
 playTrack(listFor(), 1)
+sound.Volume = levelFor(current)
 
 --==============================================================================
 -- DUSK AND DAWN, AS A CROSSFADE THE SKY IS ALREADY DOING
@@ -328,8 +409,12 @@ local function applyPhase()
 	local token = swap
 	-- The rain's bed comes and goes over its own, gentler fade; dusk and dawn
 	-- keep the sky's.
-	local seconds = if want == discoTracks or current == discoTracks
+	local seconds = if want == sproutTracks or current == sproutTracks
+		then tonumber(SPROUT_MUSIC.FadeSeconds) or 1.5
+		elseif want == discoTracks or current == discoTracks
 		then tonumber((MUSIC :: any).DiscoFadeSeconds) or 3.0
+		elseif want == rushTracks or current == rushTracks
+		then tonumber((MUSIC :: any).PodRushFadeSeconds) or 3.0
 		elseif want == rainTracks or current == rainTracks
 		then tonumber((MUSIC :: any).RainFadeSeconds) or 4.0
 		else tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0
@@ -341,7 +426,7 @@ local function applyPhase()
 		end
 		playTrack(want, 1)
 		alignDisco()
-		fadeSound(1, half)
+		fadeSound(levelFor(want), half)
 	end)
 end
 
@@ -353,11 +438,13 @@ Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(applyPhase)
 -- The track's length is only known once it has loaded, so this waits for it
 -- (a few seconds at most) and then moves the playhead to where the global event
 -- is: every client starting from the same MiniEventStartedAt lands on the same
--- bar. Dropped if anything else has started playing meanwhile.
+-- bar. Dropped if anything else has started playing meanwhile. The Pod Rush's
+-- bed (2026-10-09) is put on its event's clock the same way.
 --==============================================================================
 function alignDisco()
 	local started = Workspace:GetAttribute(MINI.Attributes.StartedAt)
-	if type(started) ~= "number" or current ~= discoTracks then
+	local list = current
+	if type(started) ~= "number" or (list ~= discoTracks and list ~= rushTracks) then
 		return
 	end
 	local token = swap
@@ -365,14 +452,38 @@ function alignDisco()
 		local waited = 0
 		while sound.TimeLength <= 0 and waited < 10 do
 			waited += task.wait(0.1)
-			if swap ~= token or current ~= discoTracks or not sound.Parent then
+			if swap ~= token or current ~= list or not sound.Parent then
 				return
 			end
 		end
 		local length = sound.TimeLength
-		if length > 0 and swap == token and current == discoTracks then
+		if length > 0 and swap == token and current == list then
 			sound.TimePosition = math.max(0, Workspace:GetServerTimeNow() - started) % length
 		end
+	end)
+end
+
+--==============================================================================
+-- ONE PROBE FOR EVERY EVENT BED (2026-10-09)
+--
+-- A silent Sound preloads a bed's id and its IsLoaded is the answer, handed to
+-- `onAnswer`; then it goes. The rain's, the disco's and the rush's each ask it
+-- through their own function below, so this client only ever builds its one
+-- track Sound and this one probe.
+--==============================================================================
+local function probeBed(id: string, name: string, onAnswer: (boolean) -> ())
+	task.spawn(function()
+		local probe = Instance.new("Sound")
+		probe.Name = name
+		probe.SoundId = id
+		probe.Volume = 0
+		probe.Parent = SoundService
+		pcall(function()
+			ContentProvider:PreloadAsync({ probe })
+		end)
+		local loaded = probe.IsLoaded
+		probe:Destroy()
+		onAnswer(loaded)
 	end)
 end
 
@@ -383,17 +494,7 @@ local function probeRain()
 		return
 	end
 	probing = true
-	task.spawn(function()
-		local probe = Instance.new("Sound")
-		probe.Name = PROBE_NAME
-		probe.SoundId = rainTracks[1]
-		probe.Volume = 0
-		probe.Parent = SoundService
-		pcall(function()
-			ContentProvider:PreloadAsync({ probe })
-		end)
-		local loaded = probe.IsLoaded
-		probe:Destroy()
+	probeBed(rainTracks[1], PROBE_NAME, function(loaded: boolean)
 		probing = false
 		if not loaded and rainOk ~= false then
 			warn(string.format("[Seed/Music] The rain bed %s did not load, so the day/night bed plays "
@@ -420,17 +521,7 @@ local function probeDisco()
 		return
 	end
 	probingDisco = true
-	task.spawn(function()
-		local probe = Instance.new("Sound")
-		probe.Name = DISCO_PROBE
-		probe.SoundId = discoTracks[1]
-		probe.Volume = 0
-		probe.Parent = SoundService
-		pcall(function()
-			ContentProvider:PreloadAsync({ probe })
-		end)
-		local loaded = probe.IsLoaded
-		probe:Destroy()
+	probeBed(discoTracks[1], DISCO_PROBE, function(loaded: boolean)
 		probingDisco = false
 		if not loaded and discoOk ~= false then
 			warn(string.format("[Seed/Music] The disco bed %s did not load, so the bed that was playing carries on "
@@ -440,15 +531,63 @@ local function probeDisco()
 		applyPhase()
 	end)
 end
+-- The rush's probe, the same; nothing while Music.PodRushTrack is "".
+local probingRush = false
+local function probeRush()
+	if #rushTracks == 0 or probingRush then
+		return
+	end
+	probingRush = true
+	probeBed(rushTracks[1], RUSH_PROBE, function(loaded: boolean)
+		probingRush = false
+		if not loaded and rushOk ~= false then
+			warn(string.format("[Seed/Music] The Pod Rush bed %s did not load, so the bed that was playing carries "
+				.. "on through the rush.", rushTracks[1]))
+		end
+		rushOk = loaded
+		applyPhase()
+	end)
+end
 local function onDisco()
 	if discoOk == false and discoPlaying() then
 		probeDisco()
+	end
+	if rushOk == false and rushPlaying() then
+		probeRush()
 	end
 	applyPhase()
 end
 Workspace:GetAttributeChangedSignal(MINI.Attributes.State):Connect(onDisco)
 Workspace:GetAttributeChangedSignal(MINI.Attributes.Mode):Connect(onDisco)
 probeDisco()
+probeRush()
+-- Sprout Dash's probe, the same; nothing while its Music.Id is "". Its screen
+-- opening or closing re-chooses the bed (2026-10-09).
+local probingSprout = false
+local function probeSprout()
+	if #sproutTracks == 0 or probingSprout then
+		return
+	end
+	probingSprout = true
+	probeBed(sproutTracks[1], SPROUT_PROBE, function(loaded: boolean)
+		probingSprout = false
+		if not loaded and sproutOk ~= false then
+			warn(string.format("[Seed/Music] The Sprout Dash bed %s did not load, so the bed that was playing "
+				.. "carries on under the minigame.", sproutTracks[1]))
+		end
+		sproutOk = loaded
+		applyPhase()
+	end)
+end
+if localPlayer then
+	localPlayer:GetAttributeChangedSignal(SPROUT.Attributes.Open):Connect(function()
+		if sproutOk == false and sproutOpen() then
+			probeSprout()
+		end
+		applyPhase()
+	end)
+end
+probeSprout()
 -- Joined during a disco: the first track chosen above was the disco's.
 alignDisco()
 

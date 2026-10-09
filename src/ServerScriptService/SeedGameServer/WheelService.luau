@@ -471,7 +471,8 @@ local function deliverOne(player: Player, profile: Profile, row: Prize): boolean
 		if not CarryService.IsHeldRestored(player) then
 			return false
 		end
-		local room, _, known = CarryService.HeldRoom(player)
+		-- The POD room since 2026-10-09: pods have their own (Save.MaxPods).
+		local room, _, known = CarryService.PodRoom(player)
 		if not known or room < 1 then
 			return false
 		end

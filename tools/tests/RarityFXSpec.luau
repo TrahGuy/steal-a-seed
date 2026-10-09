@@ -113,7 +113,8 @@ local ok, err = pcall(function()
 		string.format("%d pods: an ordinary pod has no rarity; a Secret pod says Secret; a Rain pod its pod's",
 			podsSeen), table.concat(leaks, ", "))
 	f = InventoryModel.face(item("pod", "gloomlotus", 4, { hatched = false }))
-	check(f.rarity == nil and f.name == "Unhatched pod", "a Mythic inside an ordinary pod stays an Unhatched pod")
+	check(f.rarity == nil and f.name == "Tanglemire pod",
+		"a Mythic inside an ordinary pod shows no rarity: only its biome's pod (the Pod Guide, 2026-10-09)")
 	f = InventoryModel.face(item("pod", "drizzlet_colossal", 7, { hatched = false }))
 	check(f.rarity == "Mythic" and not f.variantIsRarity and f.variant == "Colossal",
 		"Rain pod 2 shows its size; its rarity is the shell's own")

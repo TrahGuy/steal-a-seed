@@ -52,7 +52,6 @@ local ATTR = GameConfig.Attributes
 local GOLD = Color3.fromRGB(255, 216, 96)
 local GOLD_DEEP = Color3.fromRGB(240, 156, 40)
 local WHITE = Color3.fromRGB(255, 255, 255)
-local INK = Color3.fromRGB(24, 20, 14)
 
 -- A re-run (a hot reload in Studio) starts clean.
 for _, name in ipairs({ "SeedTreadmillFun", "SeedTreadmillFunMeasure" }) do
@@ -221,22 +220,18 @@ nextWords.Size = UDim2.new(1, 0, 0, 22)
 nextWords.Position = UDim2.fromOffset(0, 0)
 nextWords.TextXAlignment = Enum.TextXAlignment.Center
 
+-- TRANSPARENT (2026-10-09, the owner: "everything must be transparent,
+-- applies to buffs, and effects", and yes for this bar's track): the track
+-- draws nothing -- no dark well, no gold edge -- and only the gold fill shows,
+-- outlined in black so it reads over any scene, as the Pod Rush bar's does.
+-- The track stays as the fill's frame: the fill is a share of it.
 local track = Instance.new("Frame")
 track.Name = "Track"
 track.Size = UDim2.new(1, 0, 0, 16)
 track.Position = UDim2.fromOffset(0, 26)
-track.BackgroundColor3 = INK
-track.BackgroundTransparency = 0.35
+track.BackgroundTransparency = 1
 track.BorderSizePixel = 0
 track.Parent = bar
-UIKit.corner(track, 8)
-do
-	local edge = Instance.new("UIStroke")
-	edge.Color = GOLD
-	edge.Thickness = 2
-	edge.Transparency = 0.2
-	edge.Parent = track
-end
 local fill = Instance.new("Frame")
 fill.Name = "Fill"
 fill.Size = UDim2.fromScale(0, 1)
@@ -244,6 +239,7 @@ fill.BackgroundColor3 = GOLD
 fill.BorderSizePixel = 0
 fill.Parent = track
 UIKit.corner(fill, 8)
+UIKit.stroke(fill, Color3.new(0, 0, 0), 1.5)
 do
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new(GOLD, GOLD_DEEP)

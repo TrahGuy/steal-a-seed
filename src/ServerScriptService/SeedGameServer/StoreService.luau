@@ -283,6 +283,14 @@ local RETRY = Enum.ProductPurchaseDecision.NotProcessedYet
 
 -- Receipts being decided at this moment, by purchase id (see processReceipt).
 local deciding: { [string]: boolean } = {}
+-- And how many for each player (2026-10-08): a rebirth waits for them, so a
+-- cash pack being granted is never wiped by the rebirth that spends the cash.
+local decidingFor: { [Player]: number } = {}
+
+-- Whether a receipt of this player's is being decided right now.
+function StoreService.Deciding(player: Player): boolean
+	return (decidingFor[player] or 0) > 0
+end
 
 local function decide(info: any, player: Player, profile: any, purchaseId: string): Enum.ProductPurchaseDecision
 	if alreadyHonoured(profile, purchaseId) then
@@ -398,8 +406,10 @@ local function processReceipt(info: any): Enum.ProductPurchaseDecision
 		return RETRY
 	end
 	deciding[purchaseId] = true
+	decidingFor[player] = (decidingFor[player] or 0) + 1
 	local ok, decision = pcall(decide, info, player, profile, purchaseId)
 	deciding[purchaseId] = nil
+	decidingFor[player] = if (decidingFor[player] or 1) > 1 then (decidingFor[player] :: number) - 1 else nil
 	if not ok then
 		warn(string.format("[Seed/StoreService] %s: receipt %s failed while it was being decided (%s); "
 			.. "not acknowledging", player.Name, purchaseId, tostring(decision)))

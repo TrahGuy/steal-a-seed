@@ -921,6 +921,14 @@ end
 -- the tier they belong to rather than inside a curve somebody has to solve
 -- before they can read them.
 --==============================================================================
+-- A size's weight in a biome's nests: a biome's RarityBonus multiplies the
+-- weights of Mega and up. ONE rule for the roll below and for the Pod Guide's
+-- odds (PodGuide), so the two cannot drift.
+function SeedData.TierWeight(t: Tier, rarityBonus: number?): number
+	local bonus = math.max(1, rarityBonus or 1)
+	return if t.index >= 4 then t.weight * bonus else t.weight
+end
+
 function SeedData.RollTier(rng: Random, rarityBonus: number?): number
 	local bonus = math.max(1, rarityBonus or 1)
 	local roll = rng:NextNumber()
@@ -937,15 +945,13 @@ function SeedData.RollTier(rng: Random, rarityBonus: number?): number
 
 	local total = 0
 	for _, t in ipairs(SeedData.Tiers) do
-		local w = if t.index >= 4 then t.weight * bonus else t.weight
-		total += w
+		total += SeedData.TierWeight(t, bonus)
 	end
 
 	local target = roll * total
 	local acc = 0
 	for _, t in ipairs(SeedData.Tiers) do
-		local w = if t.index >= 4 then t.weight * bonus else t.weight
-		acc += w
+		acc += SeedData.TierWeight(t, bonus)
 		if target <= acc then
 			return t.index
 		end

@@ -158,6 +158,10 @@ local function configFor()
 		species = "bellchime", tier = 3 }
 	return setmetatable({
 		Plant = plantConfig,
+		-- THE POD ROOM AT THE PLANTS' 24 IN THIS SPEC (2026-10-09), so its fixtures
+		-- stay small: the doors are the same at any limit, and the real 60 is
+		-- HatchInBagSpec's.
+		Save = setmetatable({ MaxPods = GameConfig.Save.MaxHeld }, { __index = GameConfig.Save }),
 		Store = setmetatable({ InWorld = { hatchItem, podItem } }, { __index = GameConfig.Store }),
 		isDay = function()
 			return true
@@ -356,13 +360,22 @@ local function countKey(list, read, key)
 	return n
 end
 
--- A record of `n` rows: plants and banked pods mixed, all of them one tier, so
--- that anything of two tiers or more is the thing a check is about.
+-- A record of `n` rows, all of them one tier, so that anything of two tiers or
+-- more is the thing a check is about. Since 2026-10-09 pods and plants have
+-- rooms of their own: `rowsOf` fills the PLANT room (pickups, hatches) and
+-- `podRowsOf` the POD room (takes, banks, pods given), each pod with a deadline.
 local POOL = { "nubkin", "petalpip", "spiretip", "dunebud" }
 local function rowsOf(n)
 	local rows = {}
 	for i = 1, n do
-		table.insert(rows, { Id = POOL[(i % #POOL) + 1], Tier = 1, Hatched = i % 3 ~= 0 })
+		table.insert(rows, { Id = POOL[(i % #POOL) + 1], Tier = 1, Hatched = true })
+	end
+	return rows
+end
+local function podRowsOf(n)
+	local rows = {}
+	for i = 1, n do
+		table.insert(rows, { Id = POOL[(i % #POOL) + 1], Tier = 1, Hatched = false, HatchAt = os.time() + 3600 })
 	end
 	return rows
 end
@@ -893,7 +906,8 @@ local function body()
 	if not (loadOk and w and w.receipt) then
 		return
 	end
-	check(MAX == 24, "the saved record holds 24 plants and pods", MAX)
+	check(MAX == 24 and GameConfig.Save.MaxPods == 60,
+		"the saved record holds 24 plants and, in a room of their own, 60 pods (run at 24 here)", MAX)
 	check(map ~= nil, "the map folder exists (loose pods lie in it)")
 	if not map then
 		return
@@ -906,6 +920,35 @@ local function body()
 		w.CarryService.GiveHatched(p, SeedData.Get("spiretip"), 1)
 		w.CarryService.SyncHeldNow(p)
 		task.wait()
+	end
+
+	-- THE POD ROOM'S OWN (2026-10-09): one fixture pod sold (a tier-1 one, never a
+	-- pod a check is about), and the pod room filled by a pod Tool that arrived a
+	-- way no door counts -- as a rebuild puts one back -- and written down by the
+	-- bag's own snapshot.
+	local function sellOnePod(p)
+		for _, tool in ipairs(plantsOf(p)) do
+			if tool:GetAttribute("Hatched") ~= true and tool:GetAttribute(KG) == 1 then
+				tool:Destroy()
+				w.CarryService.SyncHeldNow(p, { tool })
+				task.wait()
+				return true
+			end
+		end
+		return false
+	end
+	local function fillPodUncounted(p)
+		for _, tool in ipairs(plantsOf(p)) do
+			if tool:GetAttribute("Hatched") ~= true and tool:GetAttribute(KG) == 1 then
+				local extra = tool:Clone()
+				extra:SetAttribute(ATTR.ItemId, nil)
+				extra.Parent = p._backpack
+				w.CarryService.SyncHeldNow(p)
+				task.wait()
+				return true
+			end
+		end
+		return false
 	end
 
 	-- One PLANT sold, as the stall sells one: never a pod, so the pods a check
@@ -1161,12 +1204,12 @@ local function body()
 			"a record of 27 rows is put back whole: 27 Tools, none dropped",
 			string.format("%d tools, %d rows", #plantsOf(o), #oProfile.Held))
 		local picked, why = w.PlantService.PickUpById(o, 1)
+		-- A take is not this room's (2026-10-09): pods have their own, and 27
+		-- plants leave it empty -- a pod past ITS limit is section 5's.
 		local pod = w.pod("nubkin", 2)
-		local took = w.take(o, pod)
 		check(picked == false and why == "STORAGE_FULL" and modelFor(oPlot, 1) ~= nil
-				and took == false and pod.Parent ~= nil and not w.CarryService.IsCarrying(o)
-				and saidTo(o.Name, "STORAGE_FULL") == 2 and saidTo(o.Name) == 2,
-			"a pickup is refused and the plant stays; a take is refused and the pod stays; each says why",
+				and saidTo(o.Name, "STORAGE_FULL") == 1 and saidTo(o.Name) == 1,
+			"a pickup is refused and the plant stays, and says why",
 			saidTo(o.Name))
 		w.CarryService.SyncHeldNow(o)
 		task.wait()
@@ -1190,10 +1233,10 @@ local function body()
 	end
 
 	--==========================================================================
-	-- 5. A POD AT A NEST, WITH THE RECORD FULL
+	-- 5. A POD AT A NEST, WITH THE POD ROOM FULL (pods' own room since 2026-10-09)
 	--==========================================================================
 	say("\n-- a pod at a nest: refused at 24 --")
-	local r, _, rProfile = w.arrive("Raider", -705, {}, rowsOf(MAX), nil, true)
+	local r, _, rProfile = w.arrive("Raider", -705, {}, podRowsOf(MAX), nil, true)
 	do
 		local nestPod = w.pod("bellchime", 3, "spec-nest-1")
 		local toolsBefore, rowsBefore = census(plantsOf(r), toolKey), census(rProfile.Held, rowKey)
@@ -1209,8 +1252,8 @@ local function body()
 		check(#plantsOf(r) == MAX and census(plantsOf(r), toolKey) == toolsBefore and #rProfile.Held == MAX
 				and census(rProfile.Held, rowKey) == rowsBefore and writesOf(r.Name, "Held") == heldBefore,
 			"the bag and the record are what they were")
-		check(saidTo(r.Name, "STORAGE_FULL") == 1 and saidTo(r.Name) == 1,
-			"the player is told PLANT STORAGE FULL, once", saidTo(r.Name))
+		check(saidTo(r.Name, "POD_STORAGE_FULL") == 1 and saidTo(r.Name) == 1,
+			"the player is told POD STORAGE FULL, once", saidTo(r.Name))
 		for _ = 1, 6 do
 			w.take(r, nestPod)
 		end
@@ -1219,7 +1262,7 @@ local function body()
 		w.later(2.1)
 		local loose = w.pod("nubkin", 2)
 		local tookLoose = w.take(r, loose)
-		check(tookLoose == false and loose.Parent ~= nil and saidTo(r.Name, "STORAGE_FULL") == 2
+		check(tookLoose == false and loose.Parent ~= nil and saidTo(r.Name, "POD_STORAGE_FULL") == 2
 				and #w.nest == 0,
 			"a pod lying loose is refused the same way, a few seconds later, and the reason said again",
 			saidTo(r.Name))
@@ -1231,14 +1274,14 @@ local function body()
 			"after a death the 24 are rebuilt")
 		w.later(2.1)
 		check(w.take(r, nestPod) == false and nestPod.Parent ~= nil and #w.nest == 0
-				and saidTo(r.Name, "STORAGE_FULL") == 3,
+				and saidTo(r.Name, "POD_STORAGE_FULL") == 3,
 			"and the new body is refused the same pod, for the same reason", saidTo(r.Name))
 		leave(w, r)
 		check(#rProfile.Held == MAX and census(rProfile.Held, rowKey) == rowsBefore,
 			"the save they leave with is the 24 it was")
 		r = w.arrive("Raider", -705, nil, nil, rProfile, true)
 		check(#plantsOf(r) == MAX and w.take(r, nestPod) == false and nestPod.Parent ~= nil and #w.nest == 0
-				and saidTo(r.Name, "STORAGE_FULL") == 4,
+				and saidTo(r.Name, "POD_STORAGE_FULL") == 4,
 			"they come back to the 24, and to the same refusal", saidTo(r.Name))
 
 		-- Room is made: the pod is taken, carried home, and banked.
@@ -1261,6 +1304,25 @@ local function body()
 		check(r:GetAttribute(ATTR.BankedCount) == 1 and stepsOf(r.Name, "bank") == 1
 				and w.metricsOf(r.Name, "raidEnded", "banked") == 1,
 			"and the raid is counted as banked, once")
+		-- THE WAIT STARTS AT THE BANK (2026-10-09, pods hatch in the Bag): the
+		-- row and the Tool carry the same deadline, the ladder's own from now.
+		local bankedRow, bankedTool = nil, nil
+		for _, row in ipairs(rProfile.Held) do
+			if row.Id == "bellchime" and row.Tier == 3 and row.Hatched == false then
+				bankedRow = row
+			end
+		end
+		for _, tool in ipairs(plantsOf(r)) do
+			if toolKey(tool) == "bellchime:3:false" then
+				bankedTool = tool
+			end
+		end
+		local grow = SeedData.GrowSecondsFor(SeedData.Get("bellchime"), 3)
+		check(bankedRow ~= nil and bankedTool ~= nil and type(bankedRow.HatchAt) == "number"
+				and math.abs(bankedRow.HatchAt - (os.time() + grow)) <= 2
+				and bankedTool:GetAttribute(GameConfig.HatchInBag.Attribute) == bankedRow.HatchAt,
+			"its wait starts at the bank: the row and the Tool carry one deadline, the ladder's own from now",
+			bankedRow and tostring(bankedRow.HatchAt))
 
 		-- What was banked is still there after a death and a rejoin.
 		die(w, r)
@@ -1280,44 +1342,46 @@ local function body()
 	-- 6. A POD IN THE ARMS KEEPS ITS PLACE
 	--==========================================================================
 	say("\n-- a pod in the arms keeps its place --")
+	-- In the POD room since 2026-10-09: a pickup, a hatch and an Instant Hatch
+	-- take the plants' room, which a carried pod never touches.
 	do
 		local k, kPlot, kProfile = w.arrive("KeepsPlace", -706, {
 			{ id = "nubkin", tier = 2, grown = true },
 			{ id = "petalpip", tier = 2, ready = true },
 			{ id = "spiretip", tier = 4, wait = 900 },
-		}, rowsOf(MAX - 1), nil, true)
+		}, podRowsOf(MAX - 1), nil, true)
 		check(w.PlantService.OfferInstantHatch(k, kPlot, 3) == true and #w.prompts == 1,
-			"with room for one, a purchase dialog opens for a growing pod")
+			"a purchase dialog opens for a growing pod: the plants' room is empty")
 		local took = w.take(k, w.pod("toadcap", 2))
-		check(took == true and w.CarryService.IsCarrying(k), "and with room for one, a pod is taken")
+		check(took == true and w.CarryService.IsCarrying(k), "with room for one more pod, a pod is taken")
 		do
-			local room, count, known = w.CarryService.HeldRoom(k)
-			local own, ownCount = w.CarryService.HeldRoom(k, true)
+			local room, count, known = w.CarryService.PodRoom(k)
+			local own, ownCount = w.CarryService.PodRoom(k, true)
+			local plantRoom, plants = w.CarryService.HeldRoom(k)
 			check(room == 0 and count == MAX and known == true and own == 1 and ownCount == MAX - 1
-					and #kProfile.Held == MAX - 1,
-				"the pod in the arms is counted: no room for anything else, and room for itself",
-				string.format("%d and %d of %d", count, ownCount, MAX))
+					and plantRoom == MAX and plants == 0,
+				"the pod in the arms is counted in the pod room (no room for another pod, room for itself), "
+					.. "and not in the plants'",
+				string.format("%d and %d of %d; %d plants", count, ownCount, MAX, plants))
 		end
+		check(w.CarryService.GivePod(k, "spiretip", 1) == false and #kProfile.Held == MAX - 1,
+			"a pod given on the run home is refused: the carried pod keeps its place")
 		local picked, pickedWhy = w.PlantService.PickUpById(k, 1)
 		local hatched, hatchedWhy = w.byHand(k, kPlot, 2)
-		check(picked == false and pickedWhy == "STORAGE_FULL" and hatched == false
-				and hatchedWhy == "STORAGE_FULL" and #plantsOf(k) == MAX - 1 and #kProfile.Held == MAX - 1
-				and plantedIn(kPlot) == 3 and saidTo(k.Name, "STORAGE_FULL") == 1,
-			"a pickup and a hatch are refused on the run home: neither takes the place the pod was taken for",
+		check(picked == true and pickedWhy == nil and hatched == true and hatchedWhy == nil
+				and saidTo(k.Name, "STORAGE_FULL") == 0,
+			"a pickup and a hatch go ahead on the run home: they take the plants' room, never the pod's place",
 			string.format("%s / %s", tostring(pickedWhy), tostring(hatchedWhy)))
 		-- The receipt for the dialog that was opened arrives on the run home.
 		local decision, payload = w.deliver(k, "spec-arms-1")
-		local row = plantRow(kProfile, "spiretip", 4)
-		check(decision == GRANTED and payload == nil and row ~= nil and row.HatchAt <= os.time()
-				and promptsOn(modelFor(kPlot, 3), "HatchPrompt") == 1 and #plantsOf(k) == MAX - 1
-				and #kProfile.Receipts == 1 and saidTo(k.Name, "STORAGE_FULL_READY") == 1,
-			"a purchase that arrives then makes its pod ready instead, and hands nothing over",
+		check(decision == GRANTED and payload ~= nil and #kProfile.Receipts == 1 and plantedIn(kPlot) == 0,
+			"a purchase that arrives then hatches its pod: the plants' room has space",
 			tostring(decision))
 		local banked = w.CarryService.Bank(k)
-		check(banked == true and #plantsOf(k) == MAX and #kProfile.Held == MAX
-				and countKey(kProfile.Held, rowKey, "toadcap:2:false") == 1
+		check(banked == true and countKey(kProfile.Held, rowKey, "toadcap:2:false") == 1
+				and select(2, w.CarryService.PodRoom(k)) == MAX
 				and census(kProfile.Held, rowKey) == census(plantsOf(k), toolKey),
-			"and the pod is banked into the place that was kept for it: 24 of 24",
+			"and the pod is banked into the place that was kept for it: 24 of 24 pods",
 			string.format("%d tools, %d rows", #plantsOf(k), #kProfile.Held))
 	end
 
@@ -1326,7 +1390,7 @@ local function body()
 	--==========================================================================
 	say("\n-- the red line: refused at 24 --")
 	do
-		local b, _, bProfile = w.arrive("FillsOnTheWay", -707, {}, rowsOf(MAX - 1), nil, true)
+		local b, _, bProfile = w.arrive("FillsOnTheWay", -707, {}, podRowsOf(MAX - 1), nil, true)
 		check(w.take(b, w.pod("novaorb", 5)) == true and w.CarryService.IsCarrying(b),
 			"a pod is taken with room for it")
 		-- Every door a player uses keeps the carried pod's place (a pod given is
@@ -1335,8 +1399,8 @@ local function body()
 		-- hands one back, and written down by the bag's own snapshot.
 		check(w.CarryService.GivePod(b, "spiretip", 1) == false and #bProfile.Held == MAX - 1,
 			"a pod given on the run home is refused: the carried pod keeps its place")
-		fillUncounted(b)
-		check(#bProfile.Held == MAX and #plantsOf(b) == MAX, "the record is filled some other way: 24 of 24")
+		fillPodUncounted(b)
+		check(#bProfile.Held == MAX and #plantsOf(b) == MAX, "the pod room is filled some other way: 24 of 24")
 		local toolsBefore, rowsBefore = census(plantsOf(b), toolKey), census(bProfile.Held, rowKey)
 		local heldBefore = writesOf(b.Name, "Held")
 		local carriedBefore = inArms(b)
@@ -1355,7 +1419,7 @@ local function body()
 				and w.metricsOf(b.Name, "raidEnded") == 0,
 			"no success is reported: nothing banked, nothing counted, the raid not ended")
 		check(saidTo(b.Name, "STORAGE_FULL_BANK") == 1 and saidTo(b.Name) == 1,
-			"the carrier is told PLANT STORAGE FULL, once", saidTo(b.Name))
+			"the carrier is told POD STORAGE FULL, once", saidTo(b.Name))
 
 		-- The poll asks five times a second for as long as they stand there.
 		for _ = 1, 25 do
@@ -1391,9 +1455,9 @@ local function body()
 			end
 		end
 		w.later(2.1)
-		local fullBefore = saidTo(b.Name, "STORAGE_FULL")
+		local fullBefore = saidTo(b.Name, "POD_STORAGE_FULL")
 		check(lying ~= nil and w.take(b, lying) == false and lying.Parent ~= nil
-				and saidTo(b.Name, "STORAGE_FULL") == fullBefore + 1,
+				and saidTo(b.Name, "POD_STORAGE_FULL") == fullBefore + 1,
 			"the pod on the ground cannot be taken back while the record is full, and the reason is said")
 
 		-- Room is made, and it is banked with nothing pressed.
@@ -1409,9 +1473,9 @@ local function body()
 			string.format("%d tools, %d rows", #plantsOf(b), #bProfile.Held))
 
 		-- Room made while they stand on the line with the pod in their arms.
-		local c, _, cProfile = w.arrive("WaitsOnTheLine", -708, {}, rowsOf(MAX - 1), nil, true)
+		local c, _, cProfile = w.arrive("WaitsOnTheLine", -708, {}, podRowsOf(MAX - 1), nil, true)
 		w.take(c, w.pod("bellchime", 4))
-		fillUncounted(c)
+		fillPodUncounted(c)
 		task.wait()
 		check(w.CarryService.Bank(c) == false and w.CarryService.IsCarrying(c) and #cProfile.Held == MAX,
 			"another carrier is refused at the line, the pod in their arms")
@@ -1419,13 +1483,13 @@ local function body()
 		check(w.CarryService.Bank(c) == true and not w.CarryService.IsCarrying(c) and #cProfile.Held == MAX
 				and countKey(cProfile.Held, rowKey, "bellchime:4:false") == 1
 				and census(cProfile.Held, rowKey) == census(plantsOf(c), toolKey),
-			"one plant sold where they stand, and the pod is banked by itself",
+			"one pod sold where they stand, and the pod is banked by itself",
 			string.format("%d tools, %d rows", #plantsOf(c), #cProfile.Held))
 
 		-- Leaving with the pod in the arms.
-		local l, _, lProfile = w.arrive("LeavesCarrying", -709, {}, rowsOf(MAX - 1), nil, true)
+		local l, _, lProfile = w.arrive("LeavesCarrying", -709, {}, podRowsOf(MAX - 1), nil, true)
 		w.take(l, w.pod("toadcap", 3))
-		fillUncounted(l)
+		fillPodUncounted(l)
 		task.wait()
 		local leftRows = census(lProfile.Held, rowKey)
 		check(w.CarryService.Bank(l) == false and #lProfile.Held == MAX, "a third is refused at the line")
@@ -1472,7 +1536,7 @@ local function body()
 		-- used to be allowed, the bank waiting for the record -- and a record
 		-- that then arrived full left the pod in the arms for good: no bank, no
 		-- planting, no single sale. Now the take waits for the record instead.
-		local u, _, uProfile = w.arrive("SaveArriving", -711, {}, rowsOf(MAX), nil, true)
+		local u, _, uProfile = w.arrive("SaveArriving", -711, {}, podRowsOf(MAX), nil, true)
 		local early = w.pod("petalpip", 2)
 		ready[u] = false
 		local took = w.take(u, early)
@@ -1481,10 +1545,10 @@ local function body()
 			tostring(took))
 		ready[u] = true
 		check(w.take(u, early) == false and not w.CarryService.IsCarrying(u) and early.Parent ~= nil
-				and #uProfile.Held == MAX and saidTo(u.Name, "STORAGE_FULL") == 1,
+				and #uProfile.Held == MAX and saidTo(u.Name, "POD_STORAGE_FULL") == 1,
 			"when the record arrives full, the take is refused for room and the reason is said: nothing is stuck "
 				.. "in the arms")
-		sellOnePlant(u)
+		sellOnePod(u)
 		check(w.take(u, early) == true and w.CarryService.IsCarrying(u) and w.CarryService.Bank(u) == true
 				and #uProfile.Held == MAX and countKey(uProfile.Held, rowKey, "petalpip:2:false") == 1,
 			"with room it is taken and banked into the record")
@@ -1500,13 +1564,13 @@ local function body()
 	--==========================================================================
 	say("\n-- a pod given: counted --")
 	do
-		local gv, _, gvProfile = w.arrive("PodGiven", -712, {}, rowsOf(MAX))
+		local gv, _, gvProfile = w.arrive("PodGiven", -712, {}, podRowsOf(MAX))
 		local toolsBefore, rowsBefore = census(plantsOf(gv), toolKey), census(gvProfile.Held, rowKey)
 		local refused = w.CarryService.GivePod(gv, "bellchime", 3)
 		check(refused == false and census(plantsOf(gv), toolKey) == toolsBefore
 				and census(gvProfile.Held, rowKey) == rowsBefore,
 			"at 24 a pod given is refused: no Tool, no row", tostring(refused))
-		sellOnePlant(gv)
+		sellOnePod(gv)
 		local given = w.CarryService.GivePod(gv, "bellchime", 3)
 		check(given == true and #plantsOf(gv) == MAX and #gvProfile.Held == MAX
 				and countKey(gvProfile.Held, rowKey, "bellchime:3:false") == 1
@@ -1514,7 +1578,7 @@ local function body()
 				and census(gvProfile.Held, rowKey) == census(plantsOf(gv), toolKey),
 			"with room it is handed over and written down in the same call: one Tool, one row",
 			census(gvProfile.Held, rowKey))
-		sellOnePlant(gv)
+		sellOnePod(gv)
 		heldFails[gv] = true
 		local unwritten = w.CarryService.GivePod(gv, "toadcap", 4)
 		heldFails[gv] = nil
@@ -1557,7 +1621,7 @@ local function body()
 			"the new body has it, once", string.format("%d tools, %d rows", #plantsOf(gv), #gvProfile.Held))
 
 		-- A record already past the limit is given nothing, and keeps every row.
-		local o, _, oProfile = w.arrive("GivenPastTheLimit", -713, {}, rowsOf(MAX + 2))
+		local o, _, oProfile = w.arrive("GivenPastTheLimit", -713, {}, podRowsOf(MAX + 2))
 		local overRows = census(oProfile.Held, rowKey)
 		check(w.CarryService.GivePod(o, "bellchime", 3) == false and #oProfile.Held == MAX + 2
 				and census(oProfile.Held, rowKey) == overRows,
@@ -1575,7 +1639,7 @@ local function body()
 	--==========================================================================
 	say("\n-- a paid pod --")
 	do
-		local b, _, bProfile = w.arrive("PodBuyer", -714, {}, rowsOf(MAX), nil, true)
+		local b, _, bProfile = w.arrive("PodBuyer", -714, {}, podRowsOf(MAX), nil, true)
 		local savesBefore = #saves
 		local full = w.buyPod(b, "spec-pod-1")
 		check(full == RETRY and #bProfile.Receipts == 0 and #plantsOf(b) == MAX and #bProfile.Held == MAX
@@ -1583,7 +1647,7 @@ local function body()
 			"at 24 a paid pod is NOT acknowledged: no pod, no row, nothing in the ledger", tostring(full))
 
 		-- A pod in the arms keeps its place against a paid pod too.
-		sellOnePlant(b)
+		sellOnePod(b)
 		check(w.take(b, w.pod("toadcap", 2)) == true, "(a pod is taken with room for it)")
 		local carrying = w.buyPod(b, "spec-pod-1")
 		check(carrying == RETRY and #bProfile.Receipts == 0 and countKey(plantsOf(b), toolKey, "bellchime:3:false") == 0,
@@ -1591,7 +1655,7 @@ local function body()
 			tostring(carrying))
 		check(w.CarryService.Bank(b) == true and #bProfile.Held == MAX, "(the carried pod is banked into its place)")
 
-		sellOnePlant(b)
+		sellOnePod(b)
 		local granted = w.buyPod(b, "spec-pod-1")
 		local save = lastSave(b.Name)
 		check(granted == GRANTED and countKey(bProfile.Held, rowKey, "bellchime:3:false") == 1
@@ -1604,7 +1668,7 @@ local function body()
 			"delivered again: acknowledged, and no second pod", tostring(again))
 
 		-- A save that fails: open, and no second pod on the retry.
-		sellOnePlant(b)
+		sellOnePod(b)
 		saveFails[b] = true
 		local failing = w.buyPod(b, "spec-pod-2")
 		local stillFailing = w.buyPod(b, "spec-pod-2")
@@ -1616,7 +1680,7 @@ local function body()
 			"acknowledged once the save has been written: two purchases, two pods")
 
 		-- The record will not take the row: nothing given, not acknowledged.
-		sellOnePlant(b)
+		sellOnePod(b)
 		heldFails[b] = true
 		local unwritten = w.buyPod(b, "spec-pod-3")
 		heldFails[b] = nil
@@ -1687,21 +1751,19 @@ local function body()
 			"spec-nest", nb.UserId, true)
 		check(reserved ~= nil and outstanding(), "it lays one, reserved for them, and now they hold one")
 		w.later(2.1)
-		local refused = w.take(nb, reserved)
-		check(refused == false and reserved.Parent ~= nil and w.CarryService.ReservedFor(reserved) == nb.UserId
-				and not w.CarryService.IsCarrying(nb) and saidTo(nb.Name, "STORAGE_FULL") >= 1,
-			"with the record full the take is refused and told, and the pod stays in the world, still theirs")
-		check(outstanding(), "so the tutorial sees a pod held, and lays no second one")
-
-		sellOnePlant(nb)
-		check(w.take(nb, reserved) == true and outstanding(), "with room it is taken, and still counts as theirs")
+		-- Since 2026-10-09 pods have a room of their own: 24 plants never stop
+		-- the take, and a beginner whose pods fill theirs holds pods and is laid
+		-- no reserved one -- so the reserved pod is never refused for room.
+		check(w.take(nb, reserved) == true and outstanding() and saidTo(nb.Name) == 0,
+			"with the plants' room full the reserved pod is still taken -- pods have their own room -- and still "
+				.. "counts as theirs")
 		local dropped = die(w, nb)
 		local lying = reservedLying()
 		check(dropped == true and lying ~= nil and outstanding(),
 			"a death on the way drops it where they stood, still reserved for them: nothing to grant again")
 		check(lying ~= nil and w.take(nb, lying) == true and w.CarryService.Bank(nb) == true
-				and countKey(nbProfile.Held, rowKey, "nubkin:1:false") == 1 and #nbProfile.Held == MAX and outstanding(),
-			"picked back up and banked: one row for it, and the tutorial still sees it held")
+				and countKey(nbProfile.Held, rowKey, "nubkin:1:false") == 1 and #nbProfile.Held == MAX + 1 and outstanding(),
+			"picked back up and banked: one row for it beside the 24 plants, and the tutorial still sees it held")
 	end
 
 	--==========================================================================
@@ -1711,12 +1773,12 @@ local function body()
 	do
 		local carry = sourceOf(Server:FindFirstChild("CarryService")) or ""
 		local take = string.match(carry, "function CarryService%.TryTake(.-)\nend\n") or ""
-		local roomAt = string.find(take, "CarryService.HeldRoom(player)", 1, true)
+		local roomAt = string.find(take, "CarryService.PodRoom(player)", 1, true)
 		local lineAt = string.find(take, "EVERYTHING BELOW THIS LINE CHANGES THE WORLD", 1, true)
 		check(roomAt ~= nil and lineAt ~= nil and roomAt < lineAt,
 			"TryTake counts the room with its refusals, above the line where the world changes")
 		local bankBody = string.match(carry, "local function bank(.-)\nend\n") or ""
-		local askAt = string.find(bankBody, "CarryService.HeldRoom(player, true)", 1, true)
+		local askAt = string.find(bankBody, "CarryService.PodRoom(player, true)", 1, true)
 		local buildAt = string.find(bankBody, "CreatureModel.BuildPod", 1, true)
 		local recordAt = string.find(bankBody, "CarryService.RecordPod(player, species, tier, tool)", 1, true)
 		local clearAt = string.find(bankBody, "carried[player] = nil", 1, true)
@@ -1741,8 +1803,8 @@ local function body()
 			"a pickup is handed over ON THE RECORD before the plant leaves the garden")
 
 		local givePod = string.match(carry, "function CarryService%.GivePod(.-)\nend\n") or ""
-		local podRoomAt = string.find(givePod, "CarryService.HeldRoom(player)", 1, true)
-		local podToolAt = string.find(givePod, "givePodTool(player, species, size)", 1, true)
+		local podRoomAt = string.find(givePod, "CarryService.PodRoom(player)", 1, true)
+		local podToolAt = string.find(givePod, "givePodTool(player, species, size,", 1, true)
 		local podRecordAt = string.find(givePod, "CarryService.RecordPod(player, species, size, tool)", 1, true)
 		local podBackAt = string.find(givePod, "tool:Destroy()", 1, true)
 		check(podRoomAt ~= nil and podToolAt ~= nil and podRecordAt ~= nil and podBackAt ~= nil
@@ -1757,7 +1819,7 @@ local function body()
 			adminHatched += if string.find(args, ", true$") then 1 else 100
 		end
 		check(#admin > 0 and string.find(admin, "SpawnLoose", 1, true) == nil
-				and string.find(admin, "CarryService.HeldRoom(target)", 1, true) ~= nil
+				and string.find(admin, "CarryService.HeldRoom(target, nil, if form == \"pod\" then \"pod\" else nil)", 1, true) ~= nil
 				and adminHatched == 1 and string.find(admin, "CarryService.GivePod(target,", 1, true) ~= nil,
 			"the admin console gives only through GivePod and GiveHatched on the record, after HeldRoom",
 			adminHatched)
@@ -1773,15 +1835,23 @@ local function body()
 		check(full ~= nil and full.kind == "blocked" and full.title == "PLANT STORAGE FULL"
 				and string.find(full.detail, count, 1, true) ~= nil
 				and string.find(string.lower(full.detail), "room", 1, true) ~= nil,
-			"a refused pickup or take: PLANT STORAGE FULL, the limit's own number, and what makes room",
+			"a refused pickup or hatch: PLANT STORAGE FULL, the limit's own number, and what makes room",
 			full and (full.title .. " / " .. tostring(full.detail)))
+		-- The pod room's own lines (2026-10-09), with ITS limit, Save.MaxPods.
+		local pods = string.format("%d/%d", GameConfig.Save.MaxPods, GameConfig.Save.MaxPods)
 		local line = ActionRefusal.notice("STORAGE_FULL_BANK")
 		local words = string.lower(line and line.detail or "")
-		check(line ~= nil and line.kind == "blocked" and line.title == "PLANT STORAGE FULL"
-				and string.find(words, count, 1, true) ~= nil and string.find(words, "free a slot", 1, true) ~= nil
+		check(line ~= nil and line.kind == "blocked" and line.title == "POD STORAGE FULL"
+				and string.find(words, pods, 1, true) ~= nil and string.find(words, "free a slot", 1, true) ~= nil
 				and string.find(words, "bank this pod", 1, true) ~= nil and full ~= nil and line.key ~= full.key,
-			"at the red line: PLANT STORAGE FULL, the limit's own number, and that a free slot banks the pod",
+			"at the red line: POD STORAGE FULL, the pods' own number, and that a free slot banks the pod",
 			line and (line.title .. " / " .. tostring(line.detail)))
+		local nest = ActionRefusal.notice("POD_STORAGE_FULL")
+		check(nest ~= nil and nest.kind == "blocked" and nest.title == "POD STORAGE FULL"
+				and string.find(nest.detail, pods, 1, true) ~= nil
+				and string.find(string.lower(nest.detail), "room", 1, true) ~= nil,
+			"at a nest: POD STORAGE FULL, the pods' own number, and what makes room",
+			nest and (nest.title .. " / " .. tostring(nest.detail)))
 	end
 end
 

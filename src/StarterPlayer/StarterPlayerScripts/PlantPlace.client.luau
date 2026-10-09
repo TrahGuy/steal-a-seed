@@ -715,7 +715,13 @@ player.CharacterRemoving:Connect(function()
 end)
 
 RunService.RenderStepped:Connect(function()
+	-- A PLANT, not a pod (2026-10-09, pods hatch in the Bag): a pod is never
+	-- placed, so no disc or reticle offers to. A click with one still reaches
+	-- the server, which answers "Pods hatch in your Bag now".
 	local tool = heldTool()
+	if tool and tool:GetAttribute("Hatched") ~= true then
+		tool = nil
+	end
 	setBound(tool ~= nil)
 	-- On a controller with a panel up, the panel has the buttons and the world
 	-- shows nothing: no disc behind it, no reticle over it. The same while the

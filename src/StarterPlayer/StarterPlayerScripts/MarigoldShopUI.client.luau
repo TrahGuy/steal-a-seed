@@ -130,6 +130,15 @@ HEADER_H = 58 - modal.lift
 BODY_TOP = HEADER_H + 10 + FILTER_H + 8
 -- This gui holds only the panel, so it takes the player's menu size whole.
 UIKit.menuGui(gui)
+-- On a phone the gui is drawn smaller (UIKit.menuScaleFor) and the panel takes
+-- that share of the screen: the room it had, short of the edges (2026-10-08).
+-- Deferred: the gui's scale is set by a handler on the same signal.
+local function fitScreen()
+	task.defer(modal.fitScreen)
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitScreen)
+UIKit.onMenuSize(fitScreen)
+modal.fitScreen()
 
 --==============================================================================
 -- THE HEADER (the global UI pass, 2026-10-04)

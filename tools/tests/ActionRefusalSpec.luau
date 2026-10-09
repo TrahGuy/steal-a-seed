@@ -106,7 +106,9 @@ do
 	local bag, belongs, long = {}, {}, {}
 	for code, line in pairs(TEXT) do
 		local lower = string.lower(line)
-		if string.find(lower, "bag", 1, true) or string.find(lower, "inventory", 1, true) then
+		-- POD_IN_BAG (2026-10-09) names the Bag as where pods hatch, not as full.
+		if (string.find(lower, "bag", 1, true) or string.find(lower, "inventory", 1, true))
+			and code ~= "POD_IN_BAG" then
 			table.insert(bag, code)
 		end
 		if string.find(lower, "belongs to", 1, true) or string.find(lower, "another player", 1, true) then
@@ -712,14 +714,16 @@ local function planting()
 	planter.Character = body
 	leases[planter] = plantPlot
 
-	-- Stamped the way CarryService stamps a banked pod: the species, and the
-	-- weight class it travelled with.
+	-- Stamped the way CarryService stamps a hatched plant: the species, the
+	-- weight class it travelled with, and Hatched. Since 2026-10-09 only a plant
+	-- is placed (pods hatch in the Bag); a pod's own refusal is checked below.
 	local function pod()
 		local t = Instance.new("Tool")
 		t.Name = "Nubkin"
 		t.RequiresHandle = false
 		t:SetAttribute("SpeciesId", "nubkin")
 		t:SetAttribute(GameConfig.Attributes.CarryingKg, 1)
+		t:SetAttribute("Hatched", true)
 		t.Parent = body
 		return t
 	end
@@ -775,6 +779,15 @@ local function planting()
 		tostring(code))
 
 	held:Destroy()
+	-- A POD IN THE HANDS (2026-10-09): never placed, wherever it is clicked, and
+	-- the player is told where pods hatch now.
+	local unhatched = pod()
+	unhatched:SetAttribute("Hatched", false)
+	placed, code, line = plant(near)
+	check(not placed and code == "POD" and line == "POD_IN_BAG" and unhatched.Parent == body
+			and ActionRefusal.Text.POD_IN_BAG == "Pods hatch in your Bag now",
+		"a pod is never placed: \"Pods hatch in your Bag now\", and it stays in your hands", tostring(code))
+	unhatched:Destroy()
 	placed, code, line = plant(near)
 	check(not placed and code == "NO_TOOL" and line == nil, "empty hands: refused, and silent",
 		tostring(code))

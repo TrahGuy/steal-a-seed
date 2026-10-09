@@ -1649,7 +1649,9 @@ function MapService.Init()
 		t.Size = UDim2.fromScale(1, 1)
 		t.BackgroundTransparency = 1
 		t.Font = Enum.Font.FredokaOne
-		t.Text = "SELL"
+		-- SHOP, not SELL (2026-10-08, the owner): this is Marigold's bat stall now;
+		-- selling is at the SELL ONE / SELL ALL boards.
+		t.Text = "SHOP"
 		t.TextScaled = true
 		t.TextColor3 = Color3.fromRGB(255, 248, 232)
 		t.Parent = sign

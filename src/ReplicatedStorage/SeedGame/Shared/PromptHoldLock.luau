@@ -109,9 +109,14 @@ end
 -- Read at the moment the handler runs, not at the write: with deferred signals
 -- a handler for the lock's own write runs after the lock has moved on, so a
 -- "was it me?" flag would already be down, and the 0 would be kept as the
--- value to give back -- a prompt left out of reach for good. Nothing in the
--- game sets a prompt's reach to 0, so a 0 is always ours, and any other value
--- is kept as the one given back while the prompt stays out of reach.
+-- value to give back -- a prompt left out of reach for good. A 0 is treated
+-- as ours, and any other value is kept as the one given back while the prompt
+-- stays out of reach.
+--
+-- ONE OTHER WRITER OF 0 (2026-10-08): PromptUI puts a prompt on ANOTHER
+-- player's plot out of reach the same way. One already at 0 when the lock
+-- begins is given back 0. One PromptUI zeroes during a lock gets its old reach
+-- back at the end, and PromptUI puts it out again the next time it shows.
 --==============================================================================
 local function putOut(lock: Lock, prompt: ProximityPrompt)
 	lock.off[prompt] = prompt.MaxActivationDistance

@@ -116,7 +116,8 @@ local ALLOWED: { [number]: string } = {
 	[11607308004] = "Teambarnze825",
 	[4119740186] = "nicnicniccoal",
 	-- 2026-10-07, the owner's: every power Teambarnze825 has, and nothing of
-	-- the owner's (IsOwner: the title).
+	-- the owner's (IsOwner). No ADMIN title either (HasTitle: the owner and
+	-- Teambarnze825, since 2026-10-09).
 	[1139904972] = "TappedYou",
 }
 
@@ -138,8 +139,9 @@ AdminService.Config = {
 	-- SPAWN (2026-10-07; it replaced SECRET ITEMS' SecretGrants of 2026-10-02):
 	-- the owner approved every allowlisted account giving any plant or pod to
 	-- anybody in the server, on live servers and in Studio. ITS OWN SWITCH, on
-	-- the server: natural Secret spawning stays off (GameConfig.Secret.Enabled),
-	-- and no spawn reads that switch -- only the Ready line names it.
+	-- the server: natural Secret spawning has its own (GameConfig.Secret.Enabled,
+	-- on since 2026-10-09), and no spawn reads that one -- only the Ready line
+	-- names it.
 	--==========================================================================
 	Spawning = true,
 	-- Between two spawns by one admin, on top of MinInterval. Every spawn ends
@@ -177,7 +179,8 @@ local ACTIONS: { [string]: boolean } = {
 	-- 2026-10-03: a GLOBAL mini event (Ticket Disco) for every server of this
 	-- place, by ANY allowlisted account (MiniEventService). The second word
 	-- is the mode -- "ticketdisco", "disco" (DISCO + MILL), "party" (the pure
-	-- DISCO ONLY, 2026-10-04) or "tickets" -- or "end"; the third the duration.
+	-- DISCO ONLY, 2026-10-04), "tickets" or "podrush" (POD RUSH, 2026-10-09)
+	-- -- or "end"; the third the duration.
 	MiniEvent = true,
 }
 
@@ -187,6 +190,7 @@ local MINI_STARTS: { [string]: boolean } = {
 	disco = true,
 	party = true,
 	tickets = true,
+	podrush = true,
 }
 
 -- A spawn request is exactly these five fields: the species id, "pod" or
@@ -287,7 +291,7 @@ end
 --
 -- The owner's own account -- the one they play and build in Studio as -- by
 -- UserId, and only while it is on the allowlist above. Read by the cosmetic
--- ADMIN title over their head (OwnerTitleService) and nothing else: every power
+-- ADMIN title over the head (HasTitle, below) and nothing else: every power
 -- is every allowlisted account's alike, the weather too since 2026-10-07 (the
 -- owner's, from 2026-10-02 until then).
 --==============================================================================
@@ -296,6 +300,27 @@ local OWNER_USER_ID = 4119740186
 function AdminService.IsOwner(player: any): boolean
 	local id = userIdOf(player)
 	return id ~= nil and id == OWNER_USER_ID and ALLOWED[id] ~= nil
+end
+
+--==============================================================================
+-- WHO WEARS THE ADMIN TITLE (2026-10-09, the owner: "add admin title to
+-- michael"; "yes, Teambarnze825 is Michael")
+--
+-- The owner, and the accounts listed here by UserId while they are on the
+-- allowlist. The floating ADMIN word over the head (OwnerTitleService) and
+-- nothing else: a listed account does not become the owner, and no power
+-- changes. TappedYou is not listed.
+--==============================================================================
+local TITLED: { [number]: string } = {
+	[11607308004] = "Teambarnze825",
+}
+
+function AdminService.HasTitle(player: any): boolean
+	if AdminService.IsOwner(player) then
+		return true
+	end
+	local id = userIdOf(player)
+	return id ~= nil and TITLED[id] ~= nil and ALLOWED[id] ~= nil
 end
 
 -- Who is in this server by UserId. A seam: AdminSpec, which has no real
@@ -725,10 +750,10 @@ local function giveAll(admin: any, target: Player, species: SeedData.Species, si
 		if #made > 0 then
 			CarryService.SyncHeldNow(target, made)
 		end
-		local room, count = CarryService.HeldRoom(target)
+		local room, count = CarryService.HeldRoom(target, nil, if form == "pod" then "pod" else nil)
 		local stray = gave - #made
 		return refuse(string.format("The spawn could not finish, so nothing was spawned (%s: %d/%d, %d free).%s",
-			bagOf(target, own), count, SAVE.MaxHeld, room,
+			bagOf(target, own), count, if form == "pod" then SAVE.MaxPods else SAVE.MaxHeld, room,
 			if stray > 0 then string.format(" %d item(s) could not be taken back: check the Bag.", stray) else ""))
 	end
 
@@ -843,13 +868,16 @@ local function spawn(admin: any, targetId: any, request: any, confirmName: any):
 		return refuse(string.format("%s profile is not saving in this session, so nothing can be spawned.",
 			whose(target, own)))
 	end
-	local room, count, known = CarryService.HeldRoom(target)
+	-- The room of the form asked for (2026-10-09): pods have their own,
+	-- Save.MaxPods; grown plants keep Save.MaxHeld.
+	local room, count, known = CarryService.HeldRoom(target, nil, if form == "pod" then "pod" else nil)
 	if not known then
 		return refuse(string.format("%s has not loaded yet. Nothing was spawned.", bagOf(target, own)))
 	end
 	if room < quantity then
-		return refuse(string.format("Not enough room: %s has %d free (%d/%d) and %d %s asked for. Nothing was spawned.",
-			bagOf(target, own), room, count, SAVE.MaxHeld, quantity, if quantity == 1 then "was" else "were"))
+		return refuse(string.format("Not enough room: %s has %d free (%d/%d %s) and %d %s asked for. Nothing was spawned.",
+			bagOf(target, own), room, count, if form == "pod" then SAVE.MaxPods else SAVE.MaxHeld,
+			if form == "pod" then "pods" else "plants", quantity, if quantity == 1 then "was" else "were"))
 	end
 	--== 8 to 10, with the request marked as running ==--
 	answers[requestId] = { at = now, reply = nil }
@@ -914,7 +942,8 @@ end
 --
 -- Any allowlisted account -- the allowlist is Handle's first check, by the
 -- UserId the engine stamped; nothing new is added to it and no other identity
--- is read. `verb` is a mode ("ticketdisco", "disco", "party", "tickets") with
+-- is read. `verb` is a mode ("ticketdisco", "disco", "party", "tickets",
+-- "podrush") with
 -- a whole number of seconds, or "end". One event at a time across every server, a
 -- duplicate START that changes nothing and a harmless second END are
 -- MiniEventService's rules (the shared record decides); what it answers --
@@ -1117,7 +1146,18 @@ local function rosterLine(): string
 	local rows = {}
 	for _, p in ipairs(Players:GetPlayers()) do
 		local profile: any = PlayerDataService.Get(p)
-		local held = if profile and type(profile.Held) == "table" then #profile.Held else 0
+		-- Two rooms since 2026-10-09: the plants' (held, room) and the pods'
+		-- (pods, podRoom), where a pod being carried home keeps its place.
+		local held, pods = 0, 0
+		if profile and type(profile.Held) == "table" then
+			for _, row in ipairs(profile.Held) do
+				if type(row) == "table" and row.Hatched == true then
+					held += 1
+				elseif type(row) == "table" then
+					pods += 1
+				end
+			end
+		end
 		local carrying = if CarryService.IsCarrying(p) then 1 else 0
 		table.insert(rows, {
 			id = p.UserId,
@@ -1126,7 +1166,9 @@ local function rosterLine(): string
 			cash = if profile then tonumber(profile.Cash) or 0 else nil,
 			speed = if profile then tonumber(profile.Speed) or 0 else nil,
 			held = held,
-			room = if profile then math.max(0, SAVE.MaxHeld - held - carrying) else 0,
+			room = if profile then math.max(0, SAVE.MaxHeld - held) else 0,
+			pods = pods,
+			podRoom = if profile then math.max(0, SAVE.MaxPods - pods - carrying) else 0,
 			ready = PlayerDataService.IsReady(p),
 			saving = PlayerDataService.IsPersistent(p),
 		})

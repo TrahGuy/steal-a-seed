@@ -56,7 +56,8 @@ export type Biome = {
 	-- before it wakes -- where a lone pod is just a pickup.
 	Nests: number,
 	PodsPerNest: number,
-	-- Weight multiplier on the Epic-and-above bands. 1.0 is the base table.
+	-- Weight multiplier on the SIZE bands Mega and up (SeedData.TierWeight), not
+	-- on rarities. 1.0 is the base table.
 	RarityBonus: number,
 	-- Whether this segment raises nests. Geometry exists for every segment so the
 	-- whole road reads correctly; unfinished biomes stay empty without becoming

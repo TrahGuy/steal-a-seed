@@ -808,14 +808,16 @@ local function body()
 		local sealed = InventoryModel.collect({ held = held, tools = { stand(now + 2) }, sealedUntil = {}, now = now })[1]
 		local face = InventoryModel.face(sealed)
 		local species = SeedData.Get("nubkin")
-		local said = string.lower(face.name .. " " .. face.search .. " " .. face.visual .. " " .. face.variant)
+		-- Since the owner's pods (2026-10-09) a pod is its own plant's: a plant mid-roll is drawn as the pod it
+		-- came out of, which shows its plant as that pod always did. Its words still say nothing of it.
+		local said = string.lower(face.name .. " " .. face.search .. " " .. face.variant)
 		check(sealed.kind == "pod" and sealed.sealed and face.category == "pods" and face.art.kind == "pod"
 				and not string.find(said, string.lower(species.Name), 1, true)
-				and not string.find(face.visual, "nubkin", 1, true),
-			"a plant mid-roll is a pod in the Bag and on the strip: its name, picture, search words and key say nothing of it")
+				and face.visual == "pod|p:nubkin|3" and face.art.speciesId == "nubkin",
+			"a plant mid-roll is the pod it came out of in the Bag and on the strip; its name and search words say nothing of it")
 		local key = InventoryModel.groupKey(sealed, face)
-		check(string.find(key, "|sealed", 1, true) ~= nil and not string.find(key, "nubkin", 1, true),
-			"and it is grouped by its shell, never by its species", key)
+		check(string.find(key, "|sealed", 1, true) ~= nil and string.find(key, "pod|p:nubkin|3", 1, true) ~= nil,
+			"and it is grouped with its own pod's sealed copies, apart from the pods and the plants", key)
 		local shown = InventoryModel.collect({ held = held, tools = { stand(now - 1) }, sealedUntil = {}, now = now })[1]
 		check(shown.kind == "plant" and InventoryModel.face(shown).name == species.Name,
 			"once its time comes off it is the plant")

@@ -53,6 +53,8 @@ local GreenhollowForms = require(Shared:WaitForChild("GreenhollowForms"))
 local SecretForms = require(Shared:WaitForChild("SecretForms"))
 local SecretModel = require(Shared:WaitForChild("SecretModel"))
 local PlantForms = require(Shared:WaitForChild("PlantForms"))
+-- The owner's 25 pods (2026-10-09): BuildPod hands the ordinary species to it.
+local PodModel = require(Shared:WaitForChild("PodModel"))
 
 local CreatureModel = {}
 
@@ -2047,7 +2049,9 @@ end
 --
 -- Egg, jagged seam, curled tendril -- the pod sheet. The body says biome; its
 -- diameter and smaller tier-coloured crown/seam say how hard it is to carry.
--- Species stays hidden until hatch.
+-- Since 2026-10-09 the 25 ordinary plants each have the owner's own pod
+-- (PodModel, routed below), so a pod's look says WHICH PLANT it holds -- the
+-- owner's call; this shell is for the species with no pod of their own.
 --==============================================================================
 function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	parent: Instance): Model
@@ -2125,6 +2129,41 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	local accent = if palette then palette.accent else color
 	local shadow = if palette then palette.shadow else color:Lerp(Color3.new(0, 0, 0), 0.30)
 	local focal = if palette then palette.focal else color
+	-- The Colossal core's colour, by biome (its light and aura take the tier's
+	-- colour in Greenhollow, the core's everywhere else).
+	local coreColor = if biome == "dustbowl" then Color3.fromRGB(255, 210, 145)
+		elseif biome == "tanglemire" then Color3.fromRGB(158, 255, 223)
+		elseif biome == "emberroot" then Color3.fromRGB(255, 174, 92)
+		elseif biome == "starbloom" then Color3.fromRGB(222, 210, 255)
+		else Color3.fromRGB(255, 240, 190)
+
+	--==========================================================================
+	-- THE OWNER'S 25 PODS -- 2026-10-09 (KB/POD-MODELS-PLAN.md)
+	--
+	-- One pod per plant, modelled by the owner and replayed from PodForms at the
+	-- tier's size by PodModel: the same contract (an invisible upright Shell at
+	-- the middle as the PrimaryPart, everything anchored and inert), the size
+	-- colour on its own seam or a ring round its foot, and the top two tiers'
+	-- aura, vent and core. A pod now shows which plant it holds -- the owner's
+	-- call, made when the pods were modelled one per plant.
+	--
+	-- Everything below this branch is the pod every ordinary species wore until
+	-- then, kept for a species with no owner's pod.
+	--==========================================================================
+	if PodModel.Has(sp.Id) then
+		local ownShell = PodModel.Build(sp, tier, cf, model, {
+			color = color,
+			accent = accent,
+			focal = focal,
+			coreColor = coreColor,
+			coreGlow = if biome == "greenhollow" then color else coreColor,
+		})
+		if ownShell then
+			model.PrimaryPart = ownShell
+			return model
+		end
+	end
+
 	local shell: BasePart
 	local shellTop = 1.00
 
@@ -2326,42 +2365,10 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	-- Sized off D, so a Colossal's aura is a Colossal's aura rather than a Tiny
 	-- effect stretched over a bigger egg.
 	--==========================================================================
+	-- One recipe for every pod's aura, the owner's pods included (PodModel).
 	local function addAura(host: BasePart, hue: Color3, tail: Color3,
 		reach: number, rate: number, bright: number)
-		local att = Instance.new("Attachment")
-		att.Name = "AuraAttachment"
-		att.Position = Vector3.new(0, 0, 0)
-		att.Parent = host
-
-		local halo = Instance.new("ParticleEmitter")
-		halo.Name = "AuraPulse"
-		halo.Color = ColorSequence.new(hue, tail)
-		halo.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, D * 0.30 * reach),
-			NumberSequenceKeypoint.new(1, D * 1.30 * reach),
-		})
-		-- In at the start, out at the end: a swell, not a pop.
-		halo.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.25, 0.62),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		halo.Lifetime = NumberRange.new(2.2, 2.6)
-		-- Slow. One swell a second is a heartbeat; five is a strobe.
-		halo.Rate = rate
-		halo.Speed = NumberRange.new(0, 0)
-		halo.LightEmission = 1
-		halo.LightInfluence = 0
-		halo.Parent = att
-
-		local glow = Instance.new("PointLight")
-		glow.Name = "AuraGlow"
-		glow.Color = hue
-		glow.Brightness = bright
-		glow.Range = D * 2.0 * reach
-		glow.Shadows = false
-		glow.Parent = host
-		return halo
+		return PodModel.AddAura(host, D, hue, tail, reach, rate, bright)
 	end
 
 	if tier == 6 then
@@ -2415,37 +2422,14 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 
 		-- Restrained on purpose: this is punctuation on the cleft, not a fire.
 		-- An emitter animates itself, so the pod needs no driver to look alive.
-		local att = Instance.new("Attachment")
-		att.Name = "EmberVent"
-		att.Parent = shell
-		if biome == "greenhollow" then
-			att.Position = Vector3.new(0, D * 0.42, 0)
-		else
-			att.Position = shell.CFrame:PointToObjectSpace(
-				(cf * CFrame.new(0, D * (shellTop + 0.03), 0)).Position)
-		end
-		local em = Instance.new("ParticleEmitter")
-		em.Name = "EmberTrail"
-		em.Color = if biome == "greenhollow"
-			then ColorSequence.new(color, color:Lerp(Color3.fromRGB(120, 20, 10), 0.7))
-			else ColorSequence.new(color, focal)
-		em.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, D * 0.05),
-			NumberSequenceKeypoint.new(0.4, D * 0.11),
-			NumberSequenceKeypoint.new(1, 0),
-		})
-		em.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.35),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		em.Lifetime = NumberRange.new(0.9, 1.6)
-		em.Rate = 7
-		em.Speed = NumberRange.new(D * 0.10, D * 0.22)
-		em.Acceleration = Vector3.new(0, D * 0.30, 0)
-		em.SpreadAngle = Vector2.new(16, 16)
-		em.LightEmission = 1
-		em.LightInfluence = 0
-		em.Parent = att
+		-- One recipe for every pod's vent, the owner's pods included (PodModel).
+		PodModel.AddVent(shell,
+			if biome == "greenhollow" then Vector3.new(0, D * 0.42, 0)
+				else shell.CFrame:PointToObjectSpace((cf * CFrame.new(0, D * (shellTop + 0.03), 0)).Position),
+			D,
+			if biome == "greenhollow"
+				then ColorSequence.new(color, color:Lerp(Color3.fromRGB(120, 20, 10), 0.7))
+				else ColorSequence.new(color, focal))
 
 		-- AND THE AURA. The vent trail above is punctuation on the cleft; this
 		-- is the field around the whole egg, and it is the thing a player sees
@@ -2477,11 +2461,7 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 			elseif biome == "emberroot" then 0.56
 			elseif biome == "starbloom" then 0.48
 			else 0.60
-		local coreColor = if biome == "dustbowl" then Color3.fromRGB(255, 210, 145)
-			elseif biome == "tanglemire" then Color3.fromRGB(158, 255, 223)
-			elseif biome == "emberroot" then Color3.fromRGB(255, 174, 92)
-			elseif biome == "starbloom" then Color3.fromRGB(222, 210, 255)
-			else Color3.fromRGB(255, 240, 190)
+		-- coreColor is the biome's, worked out above (the owner's pods use it too).
 		local coreCF = if biome == "greenhollow"
 			then baseCF * CFrame.new(0, D * 0.44, 0)
 			else cf * CFrame.new(0, D * (shellTop + 0.24 - coreDiameter * 0.5), 0)
@@ -2553,8 +2533,9 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		--
 		-- Nothing is lost that the pod was not already saying louder: a Colossal
 		-- is the widest shell in the game, its crown is lifted clear of the
-		-- shell, its core burns through the gap, and it is the only pod with an
-		-- aura. A player who cannot tell has not looked at it.
+		-- shell, its core burns through the gap, and its aura is the strongest
+		-- (Titan wears one too, turned down). A player who cannot tell has not
+		-- looked at it.
 		--
 		-- DO NOT PUT IT BACK as a smaller label, a tooltip or a prompt line. The
 		-- rule is the whole category: no species, no rarity, no tier, no name.

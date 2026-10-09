@@ -793,8 +793,11 @@ local function placeOnTouch(camera: Camera)
 			if (world - eye).Magnitude <= DISPLAY_RANGE then
 				local at, inFront = camera:WorldToViewportPoint(world)
 				if inFront then
+					-- The prompt drawn smaller on a phone keeps a smaller room.
+					local slot = PROMPT_SLOT * Vector2.new(1, ReachPoint.promptScale(viewport,
+						TOUCH, PROMPT.PhoneShortSide, PROMPT.PhoneScale))
 					local centre = ReachPoint.stack(Vector2.new(at.X, at.Y), viewport, topInset,
-						LABEL_SIZE, PROMPT_SLOT, PROMPT.StackGap, POD.ScreenMargin)
+						LABEL_SIZE, slot, PROMPT.StackGap, POD.ScreenMargin)
 					local x, y = math.round(centre.X), math.round(centre.Y)
 					if x ~= panel.lastX or y ~= panel.lastY then
 						panel.lastX, panel.lastY = x, y

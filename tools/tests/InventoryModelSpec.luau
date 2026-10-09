@@ -25,6 +25,8 @@ local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+-- The owner's 25 pods, one per plant (2026-10-09): their picture is their own.
+local PodForms = require(Shared:WaitForChild("PodForms"))
 
 local out = {}
 local pass, fail = 0, 0
@@ -78,7 +80,7 @@ local ok, err = pcall(function()
 		end
 	end
 	local byVisual = {}
-	local leaks, mentions = {}, {}
+	local leaks, mentions, ownless = {}, {}, {}
 	for _, s in ipairs(all) do
 		for tier = 1, SeedData.TierCount do
 			local f = InventoryModel.face(podItem(s.Id, tier))
@@ -89,10 +91,15 @@ local ok, err = pcall(function()
 			byVisual[f.visual] = seen or faceKey(f)
 			local words = string.lower(f.name .. " " .. f.search .. " " .. f.variant)
 			local named = string.find(words, string.lower(s.Name), 1, true) ~= nil
+			-- An owner's pod (2026-10-09) is drawn as its own species' pod, so its picture
+			-- key holds its id; its words still never do.
 			for token in string.gmatch(f.visual, "[^|:]+") do
-				if token == s.Id then
+				if token == s.Id and not PodForms.Has(s.Id) then
 					named = true
 				end
+			end
+			if PodForms.Has(s.Id) and not (f.art.speciesId == s.Id and f.visual == "pod|p:" .. s.Id .. "|" .. tier) then
+				table.insert(ownless, s.Id .. "@" .. tier)
 			end
 			if named then
 				table.insert(mentions, s.Id)
@@ -101,14 +108,26 @@ local ok, err = pcall(function()
 	end
 	check(#leaks == 0, "every pod with the same shell has the same face, key and picture, whatever is inside",
 		table.concat(leaks, ","))
-	check(#mentions == 0, "no pod's name, search words, key or variant names its species", table.concat(mentions, ","))
-	-- The order: shells alike sort by item id alone.
+	check(#mentions == 0, "no pod's name, search words or variant names its species, nor any key but an owner's pod's",
+		table.concat(mentions, ","))
+	check(#ownless == 0, "each of the owner's 25 pods is drawn as its own species' pod, at its size (2026-10-09)",
+		table.concat(ownless, ","))
+	-- One pod per plant (2026-10-09): two species are two pictures, so two tiles; two of one species and
+	-- size are one tile of two, sorted by item id alone.
+	local greenhollow = SeedData.InBiome("greenhollow")
 	local a = InventoryModel.collect(input({ held = {
-		{ Id = SeedData.InBiome("greenhollow")[1].Id, Tier = 2, Hatched = false, Item = "7" },
-		{ Id = SeedData.InBiome("greenhollow")[2].Id, Tier = 2, Hatched = false, Item = "3" },
+		{ Id = greenhollow[1].Id, Tier = 2, Hatched = false, Item = "7" },
+		{ Id = greenhollow[2].Id, Tier = 2, Hatched = false, Item = "3" },
 	} }))
 	local g1 = InventoryModel.groups(a, HotbarSlots.empty(), 10)
-	check(#g1 == 1 and g1[1].count == 2, "two different species in the same shell are one tile of two", #g1)
+	check(#g1 == 2 and g1[1].count == 1 and g1[2].count == 1,
+		"two different species' pods are two tiles, each its own pod", #g1)
+	local same = InventoryModel.collect(input({ held = {
+		{ Id = greenhollow[1].Id, Tier = 2, Hatched = false, Item = "7" },
+		{ Id = greenhollow[1].Id, Tier = 2, Hatched = false, Item = "3" },
+	} }))
+	local g2 = InventoryModel.groups(same, HotbarSlots.empty(), 10)
+	check(#g2 == 1 and g2[1].count == 2, "two of one species at one size are one tile of two", #g2)
 	local f1 = InventoryModel.face(podItem("snarlbloom", 1))
 	check(f1.name == "Secret pod" and f1.category == "pods", "a Secret pod is called a Secret pod", f1.name)
 	local rain = InventoryModel.face(podItem("tempestoak", 1))
@@ -317,6 +336,72 @@ local ok, err = pcall(function()
 	check(kind == "bag" and index == nil, "a drop on the open Bag is the Bag")
 	kind = PressGesture.dropTarget(V(500, 500), slots, bagRect, 2)
 	check(kind == nil, "anywhere else cancels")
+
+	--==========================================================================
+	-- 5. PODS HATCH IN THE BAG (2026-10-09)
+	--==========================================================================
+	say("\n-- 5. pods hatch in the Bag --")
+	local HATCH_AT = GameConfig.HatchInBag.Attribute
+	local function podTool(item, tier, hatchAt)
+		return tool({ SpeciesId = "nubkin", CarryingKg = tier, Hatched = false, ItemId = item, [HATCH_AT] = hatchAt })
+	end
+	local items = InventoryModel.collect(input({
+		held = {
+			{ Id = "nubkin", Tier = 1, Hatched = false, Item = "71", HatchAt = NOW - 10 },
+			{ Id = "nubkin", Tier = 1, Hatched = false, Item = "72", HatchAt = NOW + 200 },
+			{ Id = "nubkin", Tier = 1, Hatched = false, Item = "73", HatchAt = NOW + 65 },
+			{ Id = "nubkin", Tier = 1, Hatched = false, Item = "74", HatchAt = NOW + 9999 },
+		},
+		tools = { podTool("71", 1, NOW - 10), podTool("72", 1, NOW + 200), podTool("73", 1, NOW + 65) },
+	}))
+	local byItem = {}
+	for _, it in ipairs(items) do
+		byItem[tostring(it.ref)] = it
+	end
+	check(byItem["i:71"].ready == true and byItem["i:71"].hatchAt == NOW - 10 and byItem["i:72"].ready == false
+			and byItem["i:74"].restoring == true and byItem["i:74"].hatchAt == NOW + 9999,
+		"a pod's deadline comes off its Tool, or its row while it is put back; READY once it has passed")
+	local groups = InventoryModel.groups(items, HotbarSlots.empty(), 10)
+	local readyGroup, growGroup = nil, nil
+	for _, g in ipairs(groups) do
+		if string.find(g.key, "|ready", 1, true) then
+			readyGroup = g
+		elseif string.find(g.key, "|grow", 1, true) then
+			growGroup = g
+		end
+	end
+	check(readyGroup ~= nil and growGroup ~= nil and readyGroup.count == 1 and growGroup.count == 3,
+		"the same shell splits into a READY tile and a growing one", #groups)
+	local isReady, left = InventoryModel.podState(growGroup, NOW)
+	local picked = InventoryModel.pick(growGroup)
+	check(isReady == false and left == 65 and picked ~= nil and picked.ref == "i:73",
+		"a growing tile counts down the pod due first, and a press means that pod", tostring(left))
+	local readyNow = InventoryModel.podState(readyGroup, NOW)
+	check(readyNow == true and InventoryModel.readyCount(items, NOW) == 1, "the READY tile says so, and HATCH ALL counts 1")
+	check(InventoryModel.clock(45) == "0:45" and InventoryModel.clock(245) == "4:05" and InventoryModel.clock(4350) == "1:12:30"
+			and InventoryModel.clock(0.2) == "0:01",
+		"the countdown's words: 0:45, 4:05, 1:12:30, and never 0:00 while time is left")
+	local face = InventoryModel.face(byItem["i:73"])
+	local lines = InventoryModel.details(byItem["i:73"], face, nil, nil, false, NOW)
+	local hatches = nil
+	for _, line in ipairs(lines) do
+		if line.key == "Hatches" then
+			hatches = line.value
+		end
+	end
+	local readyLines = InventoryModel.details(byItem["i:71"], InventoryModel.face(byItem["i:71"]), nil, nil, false, NOW)
+	local readyWord = nil
+	for _, line in ipairs(readyLines) do
+		if line.key == "Hatches" then
+			readyWord = line.value
+		end
+	end
+	check(hatches == "In 1:05" and readyWord == "Ready now", "the details say when it hatches", tostring(hatches))
+	local podText, podsFull, known = InventoryModel.podStorage(12, false, 60)
+	local carried = InventoryModel.podStorage(59, true, 60)
+	check(podText == "Pods: 12/60" and not podsFull and known and carried == "Pods: 59+1/60"
+			and select(2, InventoryModel.podStorage(59, true, 60)) == true,
+		"the pod room's line: Pods 12/60, and a carried pod's place in it", podText)
 end)
 
 if not ok then

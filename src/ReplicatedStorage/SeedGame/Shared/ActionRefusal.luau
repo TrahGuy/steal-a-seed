@@ -33,7 +33,8 @@
 --       is handed over without being counted.
 --
 -- WHAT IS REFUSED IS WHAT THE SAVED RECORD HAS NO ROOM FOR (2026-09-29). The
--- record holds SAVE.MaxHeld plants and pods, and anything handed over past it
+-- record holds SAVE.MaxHeld plants and (2026-10-09, pods hatching in the Bag)
+-- SAVE.MaxPods pods, each in its own room, and anything handed over past it
 -- used to be given and never saved -- gone at the next death or rejoin. The
 -- owner's decisions: "refuse the hatch and leave the pod planted and ready
 -- until the player makes room"; a pickup and a banked pod "must not hand over
@@ -42,8 +43,10 @@
 -- that pod's wait already over is kept as a credit (2026-09-30), as is one
 -- that finds no unhatched pod at all. The lines:
 --
---   STORAGE_FULL           a hatch, a pickup, or a pod at a nest: refused
---   STORAGE_FULL_BANK      a pod at the red line: it stays in the arms
+--   STORAGE_FULL           a hatch or a pickup with the plant room full: refused
+--   POD_STORAGE_FULL       a pod at a nest with the pod room full: refused
+--   STORAGE_FULL_BANK      a pod at the red line, the pod room full: it stays in
+--                          the arms
 --   STORAGE_FULL_READY     an instant hatch that was paid for: the pod is ready
 --   STORAGE_FULL_CREDIT    an instant hatch that was paid for, and no wait left
 --                          to end: saved, and the next one is free
@@ -62,9 +65,10 @@ local WeaponData = require(script.Parent:WaitForChild("WeaponData"))
 
 local ActionRefusal = {}
 
--- How many plants and pods the saved record holds: the number in the storage
--- lines below.
+-- How many plants the saved record holds, and (2026-10-09, pods hatching in the
+-- Bag) how many pods: the numbers in the storage lines below.
 local MAX_HELD: number = GameConfig.Save.MaxHeld
+local MAX_PODS: number = GameConfig.Save.MaxPods
 -- How many placed traps one player may have out at once (2026-10-04).
 local MAX_TRAPS: number = WeaponData.Trap.MaxActivePerPlayer
 
@@ -160,8 +164,15 @@ ActionRefusal.Text = {
 	STORAGE_FULL = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
 	-- The owner's approved wording (2026-10-03), "Storage full — free a slot
 	-- to bank this pod.", held to forty characters; the toast's own detail
-	-- below says it whole.
+	-- below says it whole. Since 2026-10-09 the room is the POD room
+	-- (Save.MaxPods): pods no longer count against the plants'.
 	STORAGE_FULL_BANK = "Storage full. Free a slot to bank it.",
+	-- A pod at a nest with the pod room full (2026-10-09): the take is refused
+	-- and the pod stays where it was.
+	POD_STORAGE_FULL = string.format("Pod storage full (%d/%d).", MAX_PODS, MAX_PODS),
+	-- A pod clicked onto a bed (2026-10-09, the owner's words): pods hatch in the
+	-- Bag now, and placing one is refused.
+	POD_IN_BAG = "Pods hatch in your Bag now",
 	STORAGE_FULL_READY = "Pod ready. Make room to hatch it free.",
 	STORAGE_FULL_CREDIT = "Instant Hatch saved: next one is free.",
 	INSTANT_CREDIT_NO_POD = "Instant Hatch saved for later.",
@@ -229,10 +240,22 @@ ActionRefusal.Notices = {
 	},
 	-- A pod at the red line: it stays in the arms, and is banked by itself the
 	-- moment there is room. Since 2026-10-03 (the owner's approved wording) it
-	-- says what makes that room: a free slot in the plant storage.
+	-- says what makes that room: a free slot -- since 2026-10-09 in the POD
+	-- storage, which a hatch or a sale frees.
 	STORAGE_FULL_BANK = {
-		title = "PLANT STORAGE FULL",
-		detail = string.format("%d/%d. Free a slot to bank this pod.", MAX_HELD, MAX_HELD),
+		title = "POD STORAGE FULL",
+		detail = string.format("%d/%d. Free a slot to bank this pod.", MAX_PODS, MAX_PODS),
+	},
+	-- A pod at a nest with the pod storage full (2026-10-09).
+	POD_STORAGE_FULL = {
+		title = "POD STORAGE FULL",
+		detail = string.format("%d/%d. Hatch or sell a pod to make room.", MAX_PODS, MAX_PODS),
+	},
+	-- A pod clicked onto a bed (2026-10-09): what to do with it instead.
+	POD_IN_BAG = {
+		title = "HATCH IT IN YOUR BAG",
+		detail = "Pods hatch in your Bag now.",
+		kind = "info",
 	},
 	-- THE PURCHASE WAS USED: it ended the pod's wait. Not a refusal, so not red:
 	-- the player is told the storage is full AND what they now have.
@@ -318,6 +341,8 @@ end
 local FROM_PLACEMENT: { [string]: string } = {
 	OUT_OF_RANGE = "PLANT_OUT_OF_RANGE",
 	BED_FULL = "PLOT_FULL",
+	-- A pod in the hands (2026-10-09): pods hatch in the Bag now.
+	POD = "POD_IN_BAG",
 }
 
 function ActionRefusal.fromPlacement(code: string?): string?

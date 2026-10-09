@@ -395,7 +395,7 @@ local ok, err = pcall(function()
 	local idleClient = sourceOf(Scripts, "SecretIdle")
 	check(string.find(idleClient, "rig.walks = CollectionService:HasTag(model, PLANTED)", 1, true) ~= nil,
 		"only a PLANTED Secret steps; the copy carried overhead does not")
-	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is still switched off")
+	check(GameConfig.Secret.Enabled == true, "natural Secret spawning is on (the owner, 2026-10-09)")
 end)
 
 scratch:Destroy()

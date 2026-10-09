@@ -93,7 +93,9 @@ for _, species in ipairs(SeedData.Species) do
 	for tier = 1, SeedData.TierCount do
 		local info = PlantInfo.Describe(species.Id, tier, false, 2)
 		local why: string? = nil
-		if info.title ~= PlantInfo.PodTitle or info.rarity ~= PlantInfo.Unknown then
+		-- Named by its biome since the Pod Guide (2026-10-09): "Greenhollow pod".
+		local podTitle = string.format(GameConfig.PodGuide.Words.BagTitle, BiomeData.ById[species.Biome].DisplayName)
+		if info.title ~= podTitle or info.rarity ~= PlantInfo.Unknown then
 			why = "title/rarity"
 		elseif info.incomePerSecond ~= nil or info.sell ~= nil or info.sellValue ~= nil then
 			why = "priced"

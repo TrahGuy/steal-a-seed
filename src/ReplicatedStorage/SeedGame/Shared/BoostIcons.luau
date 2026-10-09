@@ -37,6 +37,13 @@ export type Snapshot = {
 	chestEndsAt: number?,
 	sacrificeMultiplier: number?,
 	sacrificeEndsAt: number?,
+	-- Sprout Dash's own training boost (2026-10-08): when it runs out.
+	sproutEndsAt: number?,
+	-- POD RUSH (2026-10-09): the running event's id, and the rush this
+	-- player's count is for, with the count.
+	miniId: string?,
+	podRushId: string?,
+	podRushCount: number?,
 }
 
 export type Entry = {
@@ -88,6 +95,10 @@ function BoostIcons.read(player: Player, workspace: Workspace, now: number): Sna
 		chestEndsAt = num(player:GetAttribute(C.EndsAt)),
 		sacrificeMultiplier = num(player:GetAttribute(S.Multiplier)),
 		sacrificeEndsAt = num(player:GetAttribute(S.EndsAt)),
+		sproutEndsAt = num(player:GetAttribute(GameConfig.SproutDash.Attributes.BoostEndsAt)),
+		miniId = str(workspace:GetAttribute(M.EventId)),
+		podRushId = str(player:GetAttribute(GameConfig.PodRush.Attributes.Id)),
+		podRushCount = num(player:GetAttribute(GameConfig.PodRush.Attributes.Count)),
 	}
 end
 
@@ -107,6 +118,9 @@ function BoostIcons.watched(): { { on: string, name: string } }
 	for _, name in pairs(GameConfig.Sacrifice.Attributes) do
 		table.insert(list, { on = "player", name = name })
 	end
+	table.insert(list, { on = "player", name = GameConfig.SproutDash.Attributes.BoostEndsAt })
+	table.insert(list, { on = "player", name = GameConfig.PodRush.Attributes.Id })
+	table.insert(list, { on = "player", name = GameConfig.PodRush.Attributes.Count })
 	return list
 end
 
@@ -194,6 +208,26 @@ function BoostIcons.entries(s: Snapshot): { Entry }
 				total = total,
 			}
 		end
+		-- POD RUSH (2026-10-09): the owner's icon, the levels, and this player's
+		-- count banked on the badge -- theirs only when it is for THIS rush.
+		if mode.PodRush then
+			local rush = GameConfig.PodRush
+			local mine = s.podRushId ~= nil and s.podRushId == s.miniId
+			local banked = if mine then math.max(0, math.floor(s.podRushCount or 0)) else 0
+			local levels = rush.Levels
+			found.podrush = {
+				id = "podrush",
+				source = "podrush",
+				glyph = "boost",
+				tint = CFG.Tints.podrush,
+				title = WORDS.PodRush,
+				effect = string.format(WORDS.PodRushEffect, levels[1].Pods, levels[2].Pods, levels[3].Pods),
+				hint = string.format(WORDS.PodRushProgress, banked),
+				badge = tostring(banked),
+				endsAt = miniEnds,
+				total = total,
+			}
+		end
 	end
 
 	-- THE CHEST'S (OR THE WHEEL'S) BOOST: one slot, income or training.
@@ -215,6 +249,23 @@ function BoostIcons.entries(s: Snapshot): { Entry }
 				total = GameConfig.BonusChest.BoostSeconds,
 			}
 		end
+	end
+
+	-- SPROUT DASH'S OWN (2026-10-08): +25% training while it runs, its own
+	-- source beside the chest's, wearing the boosted shoe.
+	local sproutEnds = s.sproutEndsAt
+	if sproutEnds and sproutEnds > now then
+		found.sprout = {
+			id = "sprout",
+			source = "training",
+			glyph = "boost",
+			tint = CFG.Tints.sprout,
+			title = WORDS.Sprout,
+			effect = string.format(WORDS.SproutEffect, percent(GameConfig.SproutDash.Boost.Multiplier)),
+			hint = WORDS.SproutHint,
+			endsAt = sproutEnds,
+			total = GameConfig.SproutDash.Boost.BankMax,
+		}
 	end
 
 	-- THE PEDESTAL'S.

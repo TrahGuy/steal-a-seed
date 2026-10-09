@@ -214,6 +214,8 @@ local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
 local MY_PLANTS = PLANTING.MyPlants
 local INSTANT = PLANTING.InstantHatch
+-- Pods hatch in the Bag (2026-10-09): its verbs, timings and words.
+local BAG = GameConfig.HatchInBag
 
 -- The Robux product the Instant Hatch prompt sells, off the store manifest.
 -- Found by kind rather than by key, so renaming the key cannot quietly cut the
@@ -341,10 +343,19 @@ local function storageFull(player: Player, code: string, door: string?, always: 
 	end
 	lastStorageNotice[player] = now
 	if door then
+		-- The PLANT rows (2026-10-09): pods have a room of their own, and a pod in
+		-- the arms keeps its place there, not here.
 		local profile = PlayerDataService.Get(player)
-		local saved = if profile and type(profile.Held) == "table" then #profile.Held else 0
-		log(string.format("%s: %s, plant storage full (%d/%d saved%s).", player.Name, door, saved,
-			GameConfig.Save.MaxHeld, if CarryService.IsCarrying(player) then ", and a pod in the arms" else ""))
+		local saved = 0
+		if profile and type(profile.Held) == "table" then
+			for _, row in ipairs(profile.Held) do
+				if type(row) == "table" and row.Hatched == true then
+					saved += 1
+				end
+			end
+		end
+		log(string.format("%s: %s, plant storage full (%d/%d plants saved).", player.Name, door, saved,
+			GameConfig.Save.MaxHeld))
 	end
 	ActionRefusal.send(player, code)
 end
@@ -354,6 +365,16 @@ local function creditsOf(player: Player): number
 	local profile = PlayerDataService.Get(player)
 	local n = if profile then tonumber(profile.InstantCredits) else nil
 	return if n and n > 0 then math.floor(n) else 0
+end
+
+-- The count on the player, for the Bag's Instant Hatch button (2026-10-09): it
+-- says FREE while a credit is saved. Told whenever a credit is granted or spent
+-- (refreshInstantPrompts) and when the garden is restored. A spec's stand-in
+-- player is a table and is left alone.
+local function publishCredits(player: any)
+	if typeof(player) == "Instance" and player:IsA("Player") then
+		player:SetAttribute(BAG.CreditsAttribute, creditsOf(player))
+	end
 end
 
 --==============================================================================
@@ -975,8 +996,11 @@ end
 --==============================================================================
 -- UserId -> the pod that player last opened the purchase dialog for, and the
 -- Planted it was then. Keyed by id rather than Player, and cleared when they
--- leave.
-local wanted: { [number]: { plot: Model, id: number, entry: Planted } } = {}
+-- leave. A pod in the BAG (2026-10-09) is named by its item id instead
+-- (`bagItem`): the receipt hatches that pod, still in the Bag and still
+-- growing, or keeps the purchase as a credit -- the same rule, one door over.
+type Wanted = { plot: Model?, id: number?, entry: Planted?, bagItem: string? }
+local wanted: { [number]: Wanted } = {}
 -- UserId -> os.clock() of the last dialog opened for them.
 local lastOffer: { [number]: number } = {}
 -- Said once per server, not once per press.
@@ -1067,6 +1091,8 @@ end
 -- up to the pod.
 --==============================================================================
 local function refreshInstantPrompts(player: Player)
+	-- And the Bag's Instant Hatch, which reads the count off the player.
+	publishCredits(player)
 	local plot = PlotService.PlotOf(player)
 	local byPlot = if plot then growing[plot] else nil
 	if not byPlot then
@@ -1163,6 +1189,22 @@ function PlantService.DebugReady(player: Player): number
 			end
 			if count > 0 then
 				persisted(plot)
+			end
+		end
+	end
+	-- And every growing pod in their Bag (2026-10-09), row and Tool together.
+	local profile = PlayerDataService.Get(player)
+	if profile and type(profile.Held) == "table" then
+		local items: { string } = {}
+		for _, row in ipairs(profile.Held) do
+			if type(row) == "table" and row.Hatched ~= true and type(row.Item) == "string"
+				and (tonumber(row.HatchAt) or 0) > now then
+				table.insert(items, row.Item)
+			end
+		end
+		for _, item in ipairs(items) do
+			if CarryService.SetPodDeadline(player, item, now) then
+				count += 1
 			end
 		end
 	end
@@ -1275,14 +1317,21 @@ end
 -- leaves the receipt unacknowledged so Roblox tries again. A receipt already
 -- fulfilled never gets this far: StoreService's ledger answers it first.
 --==============================================================================
+-- The receipt for a pod in the Bag (2026-10-09); defined with the Bag's hatch.
+local instantBagReceipt: (Player, string) -> boolean
+
 function PlantService.InstantHatch(player: Player): boolean
 	local plot = PlotService.PlotOf(player)
 	local byPlot = if plot then growing[plot] else nil
 	local note = wanted[player.UserId]
 	local now = os.time()
+	-- A pod in the Bag was pressed (2026-10-09): that pod, or a credit.
+	if note and note.bagItem then
+		return instantBagReceipt(player, note.bagItem)
+	end
 	local entry: Planted? = nil
 	if note and plot and byPlot and note.plot == plot then
-		local named = byPlot[note.id]
+		local named = if note.id then byPlot[note.id] else nil
 		if named ~= nil and named == note.entry and named.stage == CreatureModel.STAGE_POD then
 			entry = named
 		end
@@ -1309,6 +1358,18 @@ function PlantService.InstantHatch(player: Player): boolean
 				if candidate.stage == CreatureModel.STAGE_POD then
 					unhatched = true
 					if not isReady(candidate, now) then
+						waiting = true
+					end
+				end
+			end
+		end
+		-- And the Bag's pods (2026-10-09), where every new pod grows now.
+		local profile = PlayerDataService.Get(player)
+		if profile and type(profile.Held) == "table" then
+			for _, row in ipairs(profile.Held) do
+				if type(row) == "table" and row.Hatched ~= true then
+					unhatched = true
+					if now < (tonumber(row.HatchAt) or 0) then
 						waiting = true
 					end
 				end
@@ -1536,6 +1597,14 @@ local function burst(model: Model, tier: number)
 	end
 
 	task.delay(squeeze, function()
+		-- A part's Transparency does not reach its Textures and Decals (the
+		-- owner's pods are studded with textures, 2026-10-09): they fade with it.
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("Decal") then
+				TweenService:Create(d, TweenInfo.new(fly, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{ Transparency = 1 }):Play()
+			end
+		end
 		for _, d in ipairs(pieces) do
 			if d.Parent then
 				local away = d.Position - origin
@@ -1586,6 +1655,10 @@ local function lift(model: Model)
 					CFrame = d.CFrame + Vector3.new(0, 2.2, 0),
 					Transparency = 1,
 				}):Play()
+		elseif d:IsA("Decal") then
+			-- A stud texture (a Decal's kind) fades with its part (2026-10-09).
+			TweenService:Create(d, TweenInfo.new(LIFT, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Transparency = 1 }):Play()
 		end
 	end
 	task.delay(LIFT + 0.05, function()
@@ -2100,6 +2173,18 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg)) or species.Tier,
 		1, SeedData.TierCount)
 	local hatched = tool:GetAttribute("Hatched") == true
+	--==========================================================================
+	-- PODS HATCH IN THE BAG (2026-10-09, the owner's Phase 1)
+	--
+	-- A pod's wait runs in the Bag from the moment it is banked, and beds hold
+	-- plants only, so a pod is never put in the ground: "Pods hatch in your Bag
+	-- now" (ActionRefusal POD_IN_BAG, said from the click's handler). One path,
+	-- so nobody is confused. Pods planted before this keep their beds and hatch
+	-- where they stand.
+	--==========================================================================
+	if not hatched then
+		return refuse(player, "POD")
+	end
 
 	--==========================================================================
 	-- WHICH BED, DECIDED HERE AND NOWHERE ELSE
@@ -2190,14 +2275,9 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 	-- and only it, off the saved bag.
 	tool:Destroy()
 	CarryService.SyncHeldNow(player, { tool })
-	PlayerDataService.RecordTutorial(player, if hatched then "plant" else "place")
-
-	if hatched then
-		log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))
-	else
-		log(string.format("%s buried a %d tier %s pod (%.0fs until it can be hatched).",
-			player.Name, tier, species.Name, SeedData.GrowSecondsFor(species, tier)))
-	end
+	-- The guide's `place` (2026-10-09): a PLANT in the garden, after the hatch.
+	PlayerDataService.RecordTutorial(player, "place")
+	log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))
 	return true, nil
 end
 
@@ -2254,6 +2334,21 @@ local function toolOfItem(player: Player, item: string): Tool?
 end
 
 type Stored = { item: string, species: SeedData.Species, tier: number, tool: Tool }
+
+-- How many PLANT rows the Bag's record holds (2026-10-09): the room Save.MaxHeld
+-- limits since pods got a room of their own.
+local function plantRowsOf(player: Player): number
+	local profile = PlayerDataService.Get(player)
+	local n = 0
+	if profile and type(profile.Held) == "table" then
+		for _, row in ipairs(profile.Held) do
+			if type(row) == "table" and row.Hatched == true then
+				n += 1
+			end
+		end
+	end
+	return n
+end
 
 -- Every stored creature that may go into the ground: a Bag row that is hatched,
 -- with its live Tool, the Tool itself a creature whose reveal is over.
@@ -2333,8 +2428,10 @@ end
 
 -- A creature into the ground at `offset` (plot frame), as PlaceAt plants one --
 -- a new placement id, a golden-angle bearing, rendered, its pickup marker on.
+-- `later` (2026-10-09, a Bag hatch) leaves the model unbuilt: the caller stands
+-- it up once the hatch's reveal has played there, as the starter pod's does.
 local function plantCreature(plot: Model, species: SeedData.Species, tier: number, offset: Vector3,
-	item: string): Planted
+	item: string, later: boolean?): Planted
 	local byPlot = growing[plot]
 	if not byPlot then
 		byPlot = {}
@@ -2358,7 +2455,9 @@ local function plantCreature(plot: Model, species: SeedData.Species, tier: numbe
 		item = item,
 	}
 	byPlot[id] = entry
-	render(entry)
+	if not later then
+		render(entry)
+	end
 	return entry
 end
 
@@ -2409,7 +2508,7 @@ function PlantService.PlantFromBag(player: Player, item: string): (boolean, stri
 	-- Its Bag row comes off by its own id (A SNAPSHOT MAY ADD, a transaction takes).
 	s.tool:Destroy()
 	CarryService.SyncHeldNow(player, { s.tool })
-	PlayerDataService.RecordTutorial(player, "plant")
+	PlayerDataService.RecordTutorial(player, "place")
 	log(string.format("%s planted a %d tier %s from MY PLANTS (item %s). %d/%d in the bed.", player.Name,
 		s.tier, s.species.Name, s.item, countIn(plot), capacityOf(plot)))
 	return true, "PLANTED"
@@ -2471,10 +2570,10 @@ function PlantService.EquipBest(player: Player): (boolean, string, number, numbe
 	if not GardenPlan.changes(plan) then
 		return true, "UNCHANGED", 0, 0
 	end
-	-- The Bag after the whole change, before anything moves.
-	local profile = PlayerDataService.Get(player)
-	local heldRows = if profile and type(profile.Held) == "table" then #profile.Held else 0
-	if not GardenPlan.fits(heldRows, CarryService.IsCarrying(player), #plan.plant, #plan.ret,
+	-- The Bag after the whole change, before anything moves: its PLANT room
+	-- (2026-10-09). Pods have their own, and a pod in the arms keeps its place
+	-- there, so neither is counted against these.
+	if not GardenPlan.fits(plantRowsOf(player), false, #plan.plant, #plan.ret,
 		GameConfig.Save.MaxHeld) then
 		return false, "STORAGE_FULL", 0, 0
 	end
@@ -2543,9 +2642,8 @@ function PlantService.UnequipAll(player: Player): (boolean, string, number)
 	if #grown == 0 then
 		return true, "NOTHING", 0
 	end
-	local profile = PlayerDataService.Get(player)
-	local heldRows = if profile and type(profile.Held) == "table" then #profile.Held else 0
-	if not GardenPlan.fits(heldRows, CarryService.IsCarrying(player), 0, #grown, GameConfig.Save.MaxHeld) then
+	-- The PLANT room only (2026-10-09), as EQUIP BEST counts it.
+	if not GardenPlan.fits(plantRowsOf(player), false, 0, #grown, GameConfig.Save.MaxHeld) then
 		return false, "STORAGE_FULL_ALL", 0
 	end
 	local returned = 0
@@ -2558,6 +2656,583 @@ function PlantService.UnequipAll(player: Player): (boolean, string, number)
 	persist(plot)
 	local complete = returned == #grown
 	return complete, if complete then "UNEQUIPPED" else "INCOMPLETE", returned
+end
+
+--==============================================================================
+-- PODS HATCH IN THE BAG (2026-10-09, the owner's Phase 1, "More stealing, less
+-- waiting"; GameConfig.HatchInBag, KB/STEAL-MORE-PLAN.md)
+--
+-- A pod's wait runs in the Bag from the moment it is banked (its row's HatchAt,
+-- CarryService), so every stolen pod grows at once and none takes a bed. Once
+-- ready it is hatched from the Bag: HATCH (one, by its item id, after the bed
+-- prompt's own 1.1 s hold, held on the client) or HATCH ALL (every ready pod).
+-- The plant goes straight into a free bed of the player's own garden, its hatch
+-- moment playing there, or into the Bag when no bed is free. A growing pod in
+-- the Bag offers Instant Hatch: the bed prompt's product, price and credits.
+--
+-- THE ORDER, the bed hatch's own (hatch, above), with the pod in the Bag:
+--   1. the guards      -- the Bag's record armed, the pod still a pod in it (by
+--                         its own id), and ready or paid for
+--   2. the plant       -- into a free bed (in the table, and saved), else into
+--                         the Bag (its Tool and its row, GiveHatched)
+--   3. the pod off     -- its Tool destroyed and its row taken off by name
+--                         (SyncHeldNow), in the same step
+--   4. the records     -- the Almanac, the guide's "hatch" (and "place" for a
+--                         bed), the first catch
+--   5. the decoration  -- a shell bursts where the moment plays, the clients
+--                         are told, and a bed's plant stands up as the reveal's
+--                         own fades out (as the starter pod's does)
+-- NOT ONE YIELD IN 1 TO 4: the plant is theirs, and saved, before any of 5.
+--
+-- WHERE THE MOMENT PLAYS: at the bed while the player stands within
+-- RevealAtBedStuds of it, otherwise in front of them (FrontStuds, fanned for a
+-- HATCH ALL), so it is never played where nobody sees it. A HATCH ALL's moments
+-- follow one another AllGapSeconds apart; every plant is theirs at once.
+--==============================================================================
+local SHELLS_NAME = "SeedBagHatchShells"
+
+-- The Bag pod that is item `item`: its saved row and its live Tool, both still
+-- a pod; nil and nil otherwise.
+local function bagPod(player: Player, item: string): (any, Tool?)
+	local profile = PlayerDataService.Get(player)
+	if not (profile and type(profile.Held) == "table") or type(item) ~= "string" then
+		return nil, nil
+	end
+	local row: any = nil
+	for _, r in ipairs(profile.Held) do
+		if type(r) == "table" and r.Item == item and r.Hatched ~= true then
+			row = r
+			break
+		end
+	end
+	local tool = if row then toolOfItem(player, item) else nil
+	if not (row and tool and tool:GetAttribute("Hatched") ~= true) then
+		return nil, nil
+	end
+	return row, tool
+end
+
+-- In front of the player, on whatever ground is there, facing them: where a Bag
+-- hatch plays away from its bed. `slot` fans a HATCH ALL -- straight ahead, then
+-- right, left, further right, further left -- and the next FanSlots stand a
+-- shell's width further out.
+local FAN = { 0, 1, -1, 2, -2 }
+
+local function frontOf(player: Player, tier: number, slot: number): CFrame?
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (character and root and root:IsA("BasePart")) then
+		return nil
+	end
+	local look = root.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude > 0.05 then flat.Unit else Vector3.new(0, 0, -1)
+	local slots = math.clamp(math.floor(BAG.FanSlots), 1, #FAN)
+	local widest = math.floor(slots / 2)
+	local step = if widest > 0 then BAG.FanDegrees / widest else 0
+	local ring = math.floor(slot / slots)
+	local turn = math.rad(FAN[(slot % slots) + 1] * step)
+	local dir = CFrame.Angles(0, turn, 0):VectorToWorldSpace(flat)
+	local reach = BAG.FrontStuds + SeedData.PodDiameter(tier) * (1 + ring)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local feet = root.Position.Y - root.Size.Y * 0.5 - (if humanoid then humanoid.HipHeight else 2)
+	local spot = Vector3.new(root.Position.X, feet, root.Position.Z) + dir * reach
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.RespectCanCollide = true
+	local hit = Workspace:Raycast(spot + Vector3.new(0, 8, 0), Vector3.new(0, -24, 0), params)
+	if hit then
+		spot = hit.Position
+	end
+	local toward = Vector3.new(root.Position.X, spot.Y, root.Position.Z)
+	if (toward - spot).Magnitude < 0.05 then
+		return CFrame.new(spot)
+	end
+	return CFrame.lookAt(spot, toward)
+end
+
+-- The shell, where the moment plays: built as a planted pod is, and burst at
+-- once -- the crack every hatch has. Decoration only: a shell that will not
+-- build leaves the reveal to play without it.
+local function burstShellAt(species: SeedData.Species, tier: number, where: CFrame)
+	local folder = Workspace:FindFirstChild(SHELLS_NAME)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = SHELLS_NAME
+		folder.Parent = Workspace
+	end
+	local ok, model = pcall(CreatureModel.Build, species, tier, CreatureModel.STAGE_POD, where, folder)
+	if not ok or typeof(model) ~= "Instance" or not (model :: Instance):IsA("Model") then
+		return
+	end
+	for _, d in ipairs((model :: Model):GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
+		end
+	end
+	burst(model :: Model, tier)
+end
+
+-- What a Bag hatch says once its plant has come up, `after` seconds from now: a
+-- HATCH ALL of several, by where they went; one into the Bag; one planted while
+-- its moment played away from its bed. A plant that came up in its own bed in
+-- front of the player is not announced: they watched it land.
+local function tellBagHatch(player: Player, planted: number, bagged: number, after: number)
+	local W = BAG.Words
+	local total = planted + bagged
+	local title: string, detail: string
+	if total > 1 then
+		title = string.format(W.AllTitle, total)
+		detail = if bagged == 0 then W.AllPlanted
+			elseif planted == 0 then W.AllBagged
+			else string.format(W.AllSplit, planted, bagged)
+	elseif bagged > 0 then
+		title, detail = W.BaggedTitle, W.BaggedDetail
+	elseif planted > 0 then
+		title, detail = W.PlantedTitle, W.PlantedDetail
+	else
+		return
+	end
+	task.delay(math.max(after, 0), function()
+		local channel = revealChannel
+		if channel and player.Parent == Players then
+			-- pcall: a player who left in between is no error worth having.
+			pcall(function()
+				channel:FireClient(player, Notice.ServerNotice, { title = title, detail = detail, key = "bag-hatch" })
+			end)
+		end
+	end)
+end
+
+--==============================================================================
+-- ONE BAG POD, HATCHED
+--
+-- `early` is an Instant Hatch, paid or credited: it skips the wait and nothing
+-- else. `slot` and `lead` are HATCH ALL's: the pod's place in the fan, and how
+-- long after the press its moment plays; a HATCH ALL's plants that go to the Bag
+-- are not put in the hands (a single hatch's is, after its reveal, as a bed's).
+--
+-- Answers ok, a code (why not), whether the plant went into a bed, whether its
+-- moment played at that bed, and in how many seconds the plant has come up.
+--==============================================================================
+local function hatchOneFromBag(player: Player, item: string, early: boolean?, slot: number?,
+	lead: number?): (boolean, string?, boolean, boolean, number)
+	-- 1. The guards.
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY", false, false, 0
+	end
+	local row, tool = bagPod(player, item)
+	local species = if row then SeedData.Get(tostring(row.Id)) else nil
+	if not (row and tool and species) then
+		return false, "NO_POD", false, false, 0
+	end
+	local s = species :: SeedData.Species
+	local podTool = tool :: Tool
+	local tier = math.clamp(math.floor(tonumber(row.Tier) or 1), 1, SeedData.TierCount)
+	local due = tonumber(row.HatchAt)
+	if due == nil then
+		-- CarryService stamps every pod it makes; this only mends a row an older
+		-- writer left without one, whose wait starts now.
+		CarryService.SetPodDeadline(player, item, os.time() + SeedData.GrowSecondsFor(s, tier))
+		return false, "NOT_READY", false, false, 0
+	end
+	if early ~= true and os.time() < due then
+		return false, "NOT_READY", false, false, 0
+	end
+	-- When its moment plays (HATCH ALL's lead from now) and when the plant may be
+	-- shown: the roll after that, none for the Rain pods -- a bed hatch's timing.
+	local delay = math.max(tonumber(lead) or 0, 0)
+	local at = Workspace:GetServerTimeNow() + delay
+	local revealAt = if s.SkipHatchRoll == true then at else HatchRoll.revealAt(at)
+	local rolled = math.max(revealAt - at, 0)
+	local risen = delay + (if rolled > 0
+		then rolled + HATCH.Reveal.Seconds
+		else BURST + HATCH.Reveal.Seconds + (if early == true then HATCH.Paid.PulseSeconds else 0))
+
+	-- 2. The plant: a free bed of their own garden, else the Bag.
+	local plot = ownGarden(player)
+	local entry: Planted? = nil
+	if plot and countIn(plot) < capacityOf(plot) then
+		local id = PlayerDataService.MintItem(player)
+		if not id then
+			return false, "NO_RECORD", false, false, 0
+		end
+		entry = plantCreature(plot, s, tier, spotsFor(plot, 1)[1], id, true)
+		persist(plot)
+	else
+		local given, why = CarryService.GiveHatched(player, s, tier, if slot ~= nil then -1 else risen,
+			if rolled > 0 then revealAt else nil, true)
+		if not given then
+			return false, why, false, false, 0
+		end
+	end
+
+	-- 3. The pod off the Bag: its Tool, and its row by its own id.
+	podTool:Destroy()
+	CarryService.SyncHeldNow(player, { podTool })
+	log(string.format("%s %s a %d tier %s in the Bag: %s.", player.Name,
+		if early == true then "instantly hatched" else "hatched", tier, s.Name,
+		if entry then "planted in a free bed" else "into the Bag, no bed free"))
+
+	-- 4. The records, as a bed hatch keeps them.
+	local discovered = PlayerDataService.MarkSeen(player, s.Id)
+	local firstHatch = PlayerDataService.RecordTutorial(player, "hatch")
+	if entry then
+		PlayerDataService.RecordTutorial(player, "place")
+	end
+	local firstCatch = PlayerDataService.TakeFirstCatch(player, s.Id, tier)
+
+	-- 5. The decoration. The plant is theirs and saved already.
+	local where: CFrame? = nil
+	local atBed = false
+	if entry then
+		local bedAt = standCF(entry)
+		local character = player.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if bedAt and root and root:IsA("BasePart")
+			and (root.Position - bedAt.Position).Magnitude <= BAG.RevealAtBedStuds then
+			where = bedAt
+			atBed = true
+		end
+	end
+	if not where then
+		where = frontOf(player, tier, slot or 0)
+	end
+	revealToken += 1
+	local payload = {
+		token = revealToken,
+		species = s.Id,
+		tier = tier,
+		rarity = s.Rarity,
+		income = SeedData.IncomePerSecond(s, tier),
+		cf = where,
+		owner = player,
+		paid = early == true,
+		discovery = discovered,
+		firstHatch = firstHatch == true,
+		firstCatch = firstCatch == true,
+		at = at,
+		revealAt = revealAt,
+	}
+	local function show()
+		if where then
+			burstShellAt(s, tier, where :: CFrame)
+		end
+		announceReveal(payload)
+	end
+	if delay > 0 then
+		task.delay(delay, show)
+	else
+		show()
+	end
+	-- A bed's plant stands up as the reveal's label and figure fade, so the
+	-- garden shows one plant, not two -- only while it is still that bed's plant.
+	if entry then
+		local planted = entry :: Planted
+		task.delay(risen + HATCH.Label.Seconds + HATCH.Label.FadeSeconds, function()
+			local live = growing[planted.plot]
+			if live and live[planted.id] == planted and planted.stage == CreatureModel.STAGE_GROWN
+				and not planted.model and planted.plot.Parent then
+				render(planted)
+			end
+		end)
+	end
+	return true, nil, entry ~= nil, atBed, risen
+end
+
+-- HATCH: one ready Bag pod, by its item id. Answers ok and a code.
+function PlantService.HatchFromBag(player: Player, item: string): (boolean, string?)
+	local ok, code, bed, atBed, risen = hatchOneFromBag(player, item, false, nil, nil)
+	if not ok then
+		-- No free bed and no plant room: the pod stays in the Bag, ready, and the
+		-- player is told what makes room. Every other refusal is silent.
+		if code == "STORAGE_FULL" then
+			storageFull(player, "STORAGE_FULL", "Bag hatch refused")
+		end
+		return false, code
+	end
+	if not bed then
+		tellBagHatch(player, 0, 1, risen)
+	elseif not atBed then
+		tellBagHatch(player, 1, 0, risen)
+	end
+	return true, if bed then "PLANTED" else "BAGGED"
+end
+
+-- HATCH ALL: every ready Bag pod, the soonest due first. Answers ok, a code, and
+-- how many were planted, how many went to the Bag, and how many are left ready.
+function PlantService.HatchAllFromBag(player: Player): (boolean, string, number, number, number)
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY", 0, 0, 0
+	end
+	local profile = PlayerDataService.Get(player)
+	if not (profile and type(profile.Held) == "table") then
+		return false, "NOT_READY", 0, 0, 0
+	end
+	-- Gathered before any of them moves: each hatch writes the record anew.
+	local now = os.time()
+	local ready: { { item: string, due: number } } = {}
+	for _, row in ipairs(profile.Held) do
+		local due = if type(row) == "table" and row.Hatched ~= true then tonumber(row.HatchAt) else nil
+		if due and now >= due and type(row.Item) == "string" then
+			table.insert(ready, { item = row.Item, due = due })
+		end
+	end
+	if #ready == 0 then
+		return true, "NOTHING", 0, 0, 0
+	end
+	table.sort(ready, function(a, b)
+		if a.due ~= b.due then
+			return a.due < b.due
+		end
+		return a.item < b.item
+	end)
+	local planted, bagged, shown = 0, 0, 0
+	local firstUp = 0
+	local stopped = false
+	for _, pod in ipairs(ready) do
+		local ok, why, bed, _, risen = hatchOneFromBag(player, pod.item, false, shown, shown * BAG.AllGapSeconds)
+		if ok then
+			if shown == 0 then
+				firstUp = risen
+			end
+			shown += 1
+			if bed then
+				planted += 1
+			else
+				bagged += 1
+			end
+		elseif why == "STORAGE_FULL" then
+			-- No free bed and no plant room: every pod after this would be refused
+			-- the same way. They stay in the Bag, ready.
+			stopped = true
+			break
+		end
+	end
+	local left = #ready - planted - bagged
+	if planted + bagged > 0 then
+		tellBagHatch(player, planted, bagged, firstUp)
+	end
+	if stopped then
+		storageFull(player, "STORAGE_FULL", "HATCH ALL stopped")
+	end
+	log(string.format("%s: HATCH ALL hatched %d of %d ready pod(s): %d planted, %d into the Bag%s.", player.Name,
+		planted + bagged, #ready, planted, bagged, if left > 0 then string.format(", %d left ready", left) else ""))
+	local code = if stopped then "STORAGE_FULL" elseif left > 0 then "INCOMPLETE" else "HATCHED"
+	return planted + bagged > 0, code, planted, bagged, left
+end
+
+-- INSTANT HATCH on a growing Bag pod: a saved credit is spent, else the purchase
+-- dialog opens for that pod (the receipt reads the note: instantBagReceipt).
+-- Every rule of the bed prompt's (OfferInstantHatch) holds: no dialog for a ready
+-- pod or for a hatch that would be refused for room, and a credit spent only
+-- once the hatch has succeeded.
+function PlantService.OfferInstantHatchBag(player: Player, item: string): (boolean, string?)
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY"
+	end
+	local row, tool = bagPod(player, item)
+	if not (row and tool) then
+		return false, "NO_POD"
+	end
+	if os.time() >= (tonumber(row.HatchAt) or 0) then
+		-- A ready pod hatches free; nothing is sold for it.
+		return false, "READY"
+	end
+	-- NO ROOM, NO DIALOG: a free bed, or room for one more plant in the Bag.
+	local plot = ownGarden(player)
+	if not (plot and countIn(plot) < capacityOf(plot)) then
+		local room, _, known = CarryService.HeldRoom(player)
+		if not known then
+			return false, "NOT_READY"
+		end
+		if room < 1 then
+			storageFull(player, "STORAGE_FULL", "Instant Hatch not offered")
+			return false, "STORAGE_FULL"
+		end
+	end
+	if creditsOf(player) > 0 then
+		local ok, why, bed, atBed, risen = hatchOneFromBag(player, item, true, nil, nil)
+		if not ok then
+			return false, why
+		end
+		local left = PlayerDataService.AddInstantCredits(player, -1)
+		if left == nil then
+			warn(string.format("[Seed/PlantService] %s: a saved Instant Hatch hatched a Bag pod and the credit "
+				.. "could not be taken.", player.Name))
+		end
+		refreshInstantPrompts(player)
+		log(string.format("%s spent a saved instant hatch on a Bag pod (%s left).", player.Name, tostring(left)))
+		ActionRefusal.send(player, "INSTANT_CREDIT_USED")
+		if not bed then
+			tellBagHatch(player, 0, 1, risen)
+		elseif not atBed then
+			tellBagHatch(player, 1, 0, risen)
+		end
+		return true, "CREDIT"
+	end
+	local productId = instantProductId()
+	if productId <= 0 then
+		if not warnedNoProduct then
+			warnedNoProduct = true
+			warn("[Seed/PlantService] Instant Hatch was pressed, but its Developer Product "
+				.. "id is still 0. Create the product in the Creator Dashboard and fill its "
+				.. "id into GameConfig.Store.InWorld.")
+		end
+		return false, "NO_PRODUCT"
+	end
+	local clock = os.clock()
+	if clock - (lastOffer[player.UserId] or -math.huge) < INSTANT.OfferGapSeconds then
+		return false, "WAIT"
+	end
+	lastOffer[player.UserId] = clock
+	wanted[player.UserId] = { bagItem = item }
+	local opened, err = pcall(function()
+		local open = promptFn
+		if open then
+			open(player, productId)
+		else
+			MarketplaceService:PromptProductPurchase(player, productId)
+		end
+	end)
+	if not opened then
+		warn(string.format("[Seed/PlantService] Instant Hatch dialog for %s failed: %s",
+			player.Name, tostring(err)))
+		return false, "NO_DIALOG"
+	end
+	return true, "OFFERED"
+end
+
+--==============================================================================
+-- THE RECEIPT FOR A BAG POD: THAT POD, OR A CREDIT (2026-10-09)
+--
+-- The bed receipt's rules (InstantHatch), for the pod the Bag's note names:
+--   1. still in the Bag and still growing: it hatches, the wait skipped. With
+--      no free bed and no plant room it is made READY instead (its deadline now,
+--      row and Tool), and the player is told it hatches free once there is room;
+--   2. gone, or already ready: the purchase is kept as ONE saved Instant Hatch.
+-- False leaves the receipt unacknowledged, so Roblox delivers it again.
+--==============================================================================
+instantBagReceipt = function(player: Player, item: string): boolean
+	local row, tool = bagPod(player, item)
+	local now = os.time()
+	if not (row and tool) or now >= (tonumber(row.HatchAt) or 0) then
+		local why = if row then "the Bag pod it was bought for already ready" else "the Bag pod it was bought for gone"
+		if not keepForLater(player, why) then
+			return false
+		end
+		ActionRefusal.send(player, if row then "INSTANT_CREDIT_READY" else "INSTANT_CREDIT_SAVED")
+		return true
+	end
+	local ok, why, bed, atBed, risen = hatchOneFromBag(player, item, true, nil, nil)
+	if ok then
+		wanted[player.UserId] = nil
+		if not bed then
+			tellBagHatch(player, 0, 1, risen)
+		elseif not atBed then
+			tellBagHatch(player, 1, 0, risen)
+		end
+		return true
+	end
+	if why ~= "STORAGE_FULL" then
+		return false
+	end
+	-- PAID FOR, AND NO ROOM: the pod is made ready instead, as a bed's pod is.
+	if not CarryService.SetPodDeadline(player, item, now) then
+		return false
+	end
+	wanted[player.UserId] = nil
+	log(string.format("%s bought an instant hatch with no bed and plant storage full: the Bag pod is ready "
+		.. "now, and hatches free once there is room.", player.Name))
+	storageFull(player, "STORAGE_FULL_READY", nil, true)
+	return true
+end
+
+--==============================================================================
+-- A STUDIO TEST'S OLD SAVE (2026-10-09): a pod planted the way PlaceAt planted
+-- one before pods hatched in the Bag -- in a free bed of this player's own
+-- garden, `seconds` from ready, with its prompts -- so a guarded Play can show
+-- an old save's planted pod growing and hatching where it stands. Studio only,
+-- like DebugReady; nothing in a live server calls it and no remote reaches it.
+-- Answers whether it planted, and why not.
+--==============================================================================
+function PlantService.DebugOldPod(player: Player, speciesId: string, tier: number, seconds: number): (boolean, string?)
+	if not game:GetService("RunService"):IsStudio() then
+		return false, "NOT_STUDIO"
+	end
+	local plot, why = ownGarden(player)
+	if not plot then
+		return false, why
+	end
+	local species = SeedData.Get(speciesId)
+	if not species then
+		return false, "UNKNOWN_SPECIES"
+	end
+	if countIn(plot) >= capacityOf(plot) then
+		return false, "BED_FULL"
+	end
+	local byPlot = growing[plot] or {}
+	growing[plot] = byPlot
+	local id = (nextId[plot] or 0) + 1
+	nextId[plot] = id
+	local now = os.time()
+	local entry: Planted = {
+		plot = plot,
+		id = id,
+		species = species,
+		tier = math.clamp(math.floor(tonumber(tier) or 1), 1, SeedData.TierCount),
+		offset = spotsFor(plot, 1)[1],
+		plantedAt = now,
+		hatchAt = now + math.max(0, math.floor(tonumber(seconds) or 0)),
+		stage = CreatureModel.STAGE_POD,
+		facing = facingFor(id),
+		model = nil,
+		prompt = nil,
+	}
+	byPlot[id] = entry
+	render(entry)
+	if isReady(entry, now) then
+		attachHatchPrompt(entry)
+	else
+		attachInstantPrompt(entry)
+	end
+	persist(plot)
+	return true, nil
+end
+
+-- The Bag's verbs off the wire: every argument a claim, one request per cooldown.
+local lastBagHatch: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+local function onBagHatch(player: Player, action: string, payload: any)
+	local now = os.clock()
+	if now - (lastBagHatch[player] or -math.huge) < BAG.Cooldown then
+		return
+	end
+	lastBagHatch[player] = now
+	local reply: { [string]: any } = { op = action }
+	if action == BAG.Hatch or action == BAG.Instant then
+		if type(payload) ~= "string" or #payload == 0 or #payload > 24 then
+			return
+		end
+		reply.item = payload
+		if action == BAG.Hatch then
+			reply.ok, reply.code = PlantService.HatchFromBag(player, payload)
+		else
+			reply.ok, reply.code = PlantService.OfferInstantHatchBag(player, payload)
+		end
+	elseif action == BAG.HatchAll then
+		reply.ok, reply.code, reply.planted, reply.bagged, reply.left = PlantService.HatchAllFromBag(player)
+	else
+		return
+	end
+	local channel = revealChannel
+	if channel and player.Parent == Players then
+		channel:FireClient(player, BAG.Reply, reply)
+	end
 end
 
 -- The verbs off the wire: every argument a claim, one request per cooldown.
@@ -2700,6 +3375,8 @@ local function restore(player: Player, plot: Model)
 		if PlotService.PlotOf(player) ~= plot then
 			return
 		end
+		-- Their saved Instant Hatches, for the Bag's button (2026-10-09).
+		publishCredits(player)
 
 		local soil = soilOf(plot)
 		if not soil then
@@ -3461,6 +4138,10 @@ function PlantService.Start()
 				elseif action == MY_PLANTS.Plant or action == MY_PLANTS.Return or action == MY_PLANTS.Best
 					or action == MY_PLANTS.Clear then
 					onMyPlants(player, action, payload)
+				elseif action == BAG.Hatch or action == BAG.HatchAll or action == BAG.Instant then
+					-- Pods hatch in the Bag (2026-10-09): HATCH, HATCH ALL and
+					-- Instant Hatch on a Bag pod.
+					onBagHatch(player, action, payload)
 				elseif action == PICKUP_ACTION then
 					--==========================================================
 					-- AN ID IS A CLAIM TOO
@@ -3531,7 +4212,8 @@ function PlantService.Start()
 	end)
 
 	log(string.format(
-		"Ready. Click your soil to plant; hold E on a ready pod for %.1fs to hatch it.",
+		"Ready. Pods hatch in the Bag: hold HATCH %.1fs (an old save's planted pod: hold E). "
+			.. "Click your soil to place a plant.",
 		HATCH_HOLD))
 	if not INSTANT_ITEM then
 		warn("[Seed/PlantService] GameConfig.Store.InWorld has no \"hatch\" product, "

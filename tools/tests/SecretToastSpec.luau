@@ -171,7 +171,7 @@ local ok, err = pcall(function()
 	check(SeedData.RainPods.rainpod3.Rarity == "Divine" and SeedData.RainPods.rainpod1.Rarity == "Mythic"
 		and SeedData.RainPods.rainpod2.Rarity == "Mythic" and SeedData.RainPods.rainpod3.Name == "Thunderstorm pod",
 		"Pod 3 is still Divine and still the Thunderstorm pod; the Rain pods are untouched")
-	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is still off: the toast adds no egg")
+	check(GameConfig.Secret.Enabled == true, "natural Secret spawning is on (the owner, 2026-10-09); the toast itself adds no egg")
 	local rng = Random.new(51005)
 	local thunderOne, rainNone = true, true
 	for _ = 1, 300 do

@@ -190,15 +190,23 @@ local C = {
 	Black = rgb(0, 0, 0),
 	Scrim = rgb(10, 20, 12), -- rgba(10,20,12,.55)
 	PointerGold = rgb(255, 210, 63), -- #ffd23f
-	Blue = rgb(63, 143, 224), -- #3f8fe0
-	BlueRim = rgb(29, 63, 115), -- #1d3f73
-	Red = rgb(216, 69, 59), -- #d8453b
-	RedRim = rgb(122, 26, 20), -- #7a1a14
-	Sheet = rgb(47, 90, 52), -- #2f5a34
-	SheetFoot = rgb(62, 37, 15), -- #3e250f
-	Header = rgb(138, 90, 43), -- #8a5a2b
-	-- rgba(0,0,0,.25) on the sheet, made opaque so its rounded foot can overlap.
-	Footer = rgb(35, 68, 39),
+	-- THE STUDDED KIT'S FACES (2026-10-08, the owner: "let claude terminal do
+	-- the wheel too"; GameConfig.StuddedLook, Wheel): Settings' blue and the
+	-- kit's close red for the round buttons and CANCEL / ODDS; the kit's Spin
+	-- purple for the cards and Reward info's band, its edge for their rims,
+	-- foot and footer; the kit's green SPIN for buying and spending; a dark
+	-- purple strip under each prize row. (Was the mockup's wood and green.)
+	Blue = GameConfig.StuddedLook.Settings.Band,
+	BlueRim = GameConfig.StuddedLook.Settings.Edge,
+	Red = GameConfig.StuddedLook.Close,
+	RedRim = GameConfig.StuddedLook.CloseEdge,
+	Sheet = GameConfig.StuddedLook.Wheel.Band,
+	SheetFoot = GameConfig.StuddedLook.Wheel.Edge,
+	Header = GameConfig.StuddedLook.Wheel.Band,
+	Footer = GameConfig.StuddedLook.Wheel.Edge,
+	Edge = GameConfig.StuddedLook.Wheel.Edge,
+	Go = GameConfig.StuddedLook.Wheel.Go,
+	Row = GameConfig.StuddedLook.Wheel.Row,
 	NameInk = rgb(20, 35, 15), -- #14230f
 	Note = rgb(207, 227, 200), -- #cfe3c8
 	FootText = rgb(228, 239, 220), -- #e4efdc
@@ -370,6 +378,28 @@ local function blank(parent: Instance, name: string, z: number): TextButton
 	return b
 end
 
+-- The kit's stud tile over a face (GameConfig.StuddedLook, as UIKit.modal lays
+-- it over the menus): tiled, see-through, rounded as the face is, under its
+-- words and pictures.
+local function studs(parent: GuiObject, transparency: number, radius: UDim, z: number): ImageLabel
+	local t = Instance.new("ImageLabel")
+	t.Name = "StudTexture"
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.BorderSizePixel = 0
+	t.Image = GameConfig.StuddedLook.Texture
+	t.ScaleType = Enum.ScaleType.Tile
+	t.TileSize = UDim2.fromOffset(GameConfig.StuddedLook.Tile, GameConfig.StuddedLook.Tile)
+	t.ImageTransparency = transparency
+	t.Active = false
+	t.ZIndex = z
+	t.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = radius
+	c.Parent = t
+	return t
+end
+
 --==============================================================================
 -- A ROUND BUTTON, the mockup's "?" and X: a face in a darker rim, standing on
 -- a foot of the rim's colour, the glyph outlined with a drop under it.
@@ -388,6 +418,7 @@ local function roundButton(parent: Instance, name: string, fill: Color3, rim: Co
 	local foot = round(b, "Foot", rim, 1)
 	local ring = round(b, "Rim", rim, 2)
 	local face = round(b, "Face", fill, 3)
+	studs(face, GameConfig.StuddedLook.BandStuds, UDim.new(0.5, 0), 3)
 	local glyph, drop = nil, nil
 	if glyphText then
 		drop = WheelDraw.words(b, "GlyphDrop", 20, PAL.Ink, PAL.Ink, 2, 4)
@@ -462,11 +493,17 @@ local padFirst = Instance.new("ObjectValue")
 padFirst.Name = "PadFirst"
 padFirst.Parent = shell
 
+-- The shell's top-left in this gui's own units: 0 but on a phone (2026-10-08),
+-- where the gui is drawn smaller (UIKit.menuScaleFor) and the shell takes only
+-- that share of it, centred -- the room it had at 1:1, short of the edges.
+local shellAt = Vector2.zero
+
 -- The scrim out to every edge of the screen, and the shell -- everything the
--- player touches -- back inside the safe area, centred where it always was.
--- In this gui's own units: pixels / `k`, its TV and menu scale. Returns the
--- safe area's inset from the screen's left and right edges.
-local function reachEdges(k: number): (number, number)
+-- player touches -- back inside the safe area, centred where it always was
+-- (the middle `fill` of it on a phone). In this gui's own units: pixels / `k`,
+-- its TV and menu scale. Returns the safe area's inset from the screen's left
+-- and right edges.
+local function reachEdges(k: number, fill: number): (number, number)
 	local whole, safe = edge.whole, edge.safe
 	local wp, ws = whole.AbsolutePosition, whole.AbsoluteSize
 	local sp, ss = safe.AbsolutePosition, safe.AbsoluteSize
@@ -477,7 +514,7 @@ local function reachEdges(k: number): (number, number)
 	scrim.Position = UDim2.fromOffset(-left, -top)
 	scrim.Size = UDim2.new(1, left + right, 1, top + bottom)
 	shell.Position = UDim2.new(0.5, (left - right) / 2, 0.5, (top - bottom) / 2)
-	shell.Size = UDim2.new(1, -(left + right), 1, -(top + bottom))
+	shell.Size = UDim2.new(fill, -(left + right) * fill, fill, -(top + bottom) * fill)
 	return left, right
 end
 
@@ -599,7 +636,8 @@ UIKit.clicks(claimButton)
 local confirm = panel(stage, "UseBought", C.Sheet, 14, 8)
 confirm.AnchorPoint = Vector2.new(0.5, 0.5)
 confirm.Visible = false
-ink(confirm, PAL.Gold, 2.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+ink(confirm, C.Edge, 2.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+studs(confirm, GameConfig.StuddedLook.BandStuds, UDim.new(0, 14), 1)
 local confirmText = text(confirm, "Question", 14, PAL.Cream, Enum.Font.GothamBold, 2)
 confirmText.TextWrapped = true
 confirmText.Text = "No earned spins left. Use 1 PURCHASED spin?"
@@ -610,6 +648,7 @@ local function wordButton(parent: Instance, name: string, words: string, colour:
 	b.BackgroundTransparency = 0
 	b.BackgroundColor3 = colour
 	UIKit.corner(b, 8)
+	studs(b, GameConfig.StuddedLook.BandStuds, UDim.new(0, 8), 2)
 	-- The family's lit face over a darker foot (the global UI pass, 2026-10-04),
 	-- drawn as a SHADING -- white at the top, darker to the foot -- so the colour
 	-- stays BackgroundColor3's and the paints below (GET SPINS busy, a choice on
@@ -638,7 +677,7 @@ end
 -- The functional colours (the global UI pass, 2026-10-04): spending a bought spin
 -- is the main action, green; CANCEL is secondary, sky blue -- grey reads as a
 -- button that cannot be pressed.
-local confirmYes = wordButton(confirm, "Yes", "USE PURCHASED", rgb(67, 176, 79))
+local confirmYes = wordButton(confirm, "Yes", "USE PURCHASED", C.Go)
 local confirmNo = wordButton(confirm, "No", "CANCEL", C.Blue)
 
 --==============================================================================
@@ -685,7 +724,7 @@ local shop: { [string]: any } = {
 	bought = 0,
 	-- Buying is the family's green (the global UI pass, 2026-10-04), as the
 	-- Shop's own price buttons are.
-	button = wordButton(stage, "GetSpins", "GET SPINS", rgb(67, 176, 79)),
+	button = wordButton(stage, "GetSpins", "GET SPINS", C.Go),
 	card = panel(stage, "BuySpins", C.Sheet, 14, 8),
 	choices = {} :: { ShopChoice },
 	-- The word under the round "?", where a purchase can be made: Roblox asks
@@ -713,12 +752,13 @@ shop.infoWord.AnchorPoint = Vector2.new(0.5, 0)
 shop.infoWord.Visible = false
 shop.card.AnchorPoint = Vector2.new(0.5, 0.5)
 shop.card.Visible = false
-ink(shop.card, PAL.Gold, 2.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+ink(shop.card, C.Edge, 2.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+studs(shop.card, GameConfig.StuddedLook.BandStuds, UDim.new(0, 14), 1)
 do
 	local title = WheelDraw.words(shop.card, "Title", 20, C.White, PAL.Ink, 2, 2)
 	title.Text = "GET SPINS"
 	shop.title = title
-	local note = text(shop.card, "Note", 11, C.Note, Enum.Font.GothamBold, 2)
+	local note = text(shop.card, "Note", 11, C.White, Enum.Font.GothamBold, 2)
 	note.TextWrapped = true
 	note.TextYAlignment = Enum.TextYAlignment.Center
 	note.Text = "Every spin wins one random reward. Bought spins never expire and are not part of "
@@ -740,8 +780,9 @@ do
 		local b = blank(shop.card, "Buy_" .. product.key, 2)
 		b.Selectable = true
 		b.BackgroundTransparency = 0
-		b.BackgroundColor3 = rgb(67, 176, 79)
+		b.BackgroundColor3 = C.Go
 		UIKit.corner(b, 10)
+		studs(b, GameConfig.StuddedLook.BandStuds, UDim.new(0, 10), 2)
 		ink(b, PAL.Ink, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		do
 			-- The word buttons' shading: a lit face over a darker foot.
@@ -841,7 +882,7 @@ shop.watch = function()
 			end
 			choice.button.Active = choice.onSale
 			choice.button.Selectable = choice.onSale
-			choice.button.BackgroundColor3 = if choice.onSale then rgb(67, 176, 79) else PAL.HubGrey
+			choice.button.BackgroundColor3 = if choice.onSale then C.Go else PAL.HubGrey
 		end)
 	end
 end
@@ -867,13 +908,17 @@ sheet.Visible = false
 -- square foot and gold rule, and the footer's rounded bottom, top and rule.
 local trim = {
 	foot = panel(sheet, "Foot", C.SheetFoot, 25, 1),
-	ring = panel(sheet, "Ring", PAL.Gold, 25, 2),
-	wood = panel(sheet, "Border", PAL.Wood, 22, 3),
+	ring = panel(sheet, "Ring", C.Edge, 25, 2),
+	wood = panel(sheet, "Border", C.Edge, 22, 3),
 }
-local body = panel(sheet, "Body", C.Sheet, 17, 4)
+-- The studded kit's white body, faintly studded; its purple band, studded.
+local body = panel(sheet, "Body", GameConfig.StuddedLook.Body, 17, 4)
+studs(body, GameConfig.StuddedLook.BodyStuds, UDim.new(0, 17), 0)
 trim.header = panel(body, "Header", C.Header, 17, 1)
 trim.headerFoot = panel(body, "HeaderFoot", C.Header, 0, 2)
-trim.headerRule = panel(body, "HeaderRule", PAL.Gold, 0, 3)
+trim.headerRule = panel(body, "HeaderRule", C.Header, 0, 3)
+studs(trim.header, GameConfig.StuddedLook.BandStuds, UDim.new(0, 17), 1)
+studs(trim.headerFoot, GameConfig.StuddedLook.BandStuds, UDim.new(0, 0), 2)
 local backButton = roundButton(body, "Back", C.Blue, C.BlueRim, nil, 6)
 chevron(backButton.face)
 local sheetClose = roundButton(body, "Close", C.Red, C.RedRim, "X", 6)
@@ -887,7 +932,7 @@ list.Name = "Rewards"
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
 list.ScrollBarThickness = 6
-list.ScrollBarImageColor3 = PAL.Gold
+list.ScrollBarImageColor3 = C.Edge
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 list.CanvasSize = UDim2.new()
 list.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -903,7 +948,7 @@ end
 
 trim.footer = panel(body, "Footer", C.Footer, 17, 1)
 trim.footerTop = panel(body, "FooterTop", C.Footer, 0, 2)
-trim.footerRule = panel(body, "FooterRule", PAL.Wood, 0, 3)
+trim.footerRule = panel(body, "FooterRule", C.Edge, 0, 3)
 local spinsToday = WheelDraw.words(body, "SpinsToday", 16, PAL.Cream, PAL.Ink, 1.5, 6)
 spinsToday.TextXAlignment = Enum.TextXAlignment.Left
 local nextLine = text(body, "NextSpin", 13, C.FootText, Enum.Font.GothamBold, 6)
@@ -1020,8 +1065,10 @@ local function buildRow(pair: Frame, reward: WheelData.Reward, column: number): 
 	else
 		frame = panel(pair, "Row_" .. reward.id, C.Black, 0, 1)
 	end
-	frame.BackgroundColor3 = if reward.rainbow then C.White else C.Black
-	frame.BackgroundTransparency = if reward.rainbow then 0.92 else 0.82
+	-- A solid dark strip (the studded kit's white body, 2026-10-08), the trail's
+	-- as every other row's: its gold ring and rainbow name still mark it.
+	frame.BackgroundColor3 = C.Row
+	frame.BackgroundTransparency = 0
 	frame.Position = UDim2.new(if column == 1 then 0 else 0.5, if column == 1 then 0 else 3, 0, 0)
 	frame.Size = UDim2.new(0.5, -3, 1, 0)
 	UIKit.corner(frame, 10)
@@ -1390,7 +1437,7 @@ local function paint()
 	getSpins.Visible = may
 	getSpins.Active = may and not busy
 	getSpins.Selectable = may and not busy and not behind
-	getSpins.BackgroundColor3 = if busy then PAL.HubGrey else rgb(67, 176, 79)
+	getSpins.BackgroundColor3 = if busy then PAL.HubGrey else C.Go
 	shop.infoWord.Visible = may
 	if may then
 		shop.watch()
@@ -1659,13 +1706,13 @@ local function buildWheel(d: number, force: boolean?)
 	hubFace = hub
 end
 
--- Where Roblox's own topbar buttons are, in gui units: the band's height and
--- the free stretch between the left and right groups.
+-- Where Roblox's own topbar buttons are, in the shell's units: the band's
+-- height and the free stretch between the left and right groups.
 local function topbarBand(k: number, W: number): (number, number, number)
 	local inset = GuiService.TopbarInset
-	local bottom = inset.Max.Y / k
-	local left = inset.Min.X / k
-	local right = if inset.Max.X > 0 then inset.Max.X / k else W
+	local bottom = inset.Max.Y / k - shellAt.Y
+	local left = inset.Min.X / k - shellAt.X
+	local right = if inset.Max.X > 0 then inset.Max.X / k - shellAt.X else W
 	return bottom, left, right
 end
 
@@ -1934,14 +1981,18 @@ end
 
 local function layout()
 	local k = UIKit.scaleOf(gui)
-	local area = gui.AbsoluteSize / UIKit.scaleOf(gui)
+	-- A phone draws this gui smaller (UIKit.menuScaleFor): the shell keeps its room.
+	local fill = math.min(1, k)
+	local whole = gui.AbsoluteSize / UIKit.scaleOf(gui)
+	local area = whole * fill
 	local W, H = math.floor(area.X), math.floor(area.Y)
 	if W <= 0 or H <= 0 then
 		return
 	end
-	local insetL, insetR = reachEdges(k)
+	shellAt = (whole - area) / 2
+	local insetL, insetR = reachEdges(k, fill)
 	layoutStage(W, H, k)
-	layoutSheet(W, H, k, insetL, insetR)
+	layoutSheet(W, H, k, insetL + shellAt.X, insetR + shellAt.X)
 	paint()
 end
 

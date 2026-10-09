@@ -101,9 +101,17 @@ end
 --
 -- Income online and income claimed after an absence are the same income, so the
 -- x2 pass reaches both through this and nothing else. BalanceSpec counts it.
+--
+-- AND THE REBIRTHS' INCOME BONUS (2026-10-08), the other permanent one: +25%
+-- per rebirth (GameConfig.rebirthIncomeFor), so it reaches exactly what the
+-- pass reaches -- the live garden, the garden sign's boost and the offline
+-- claim -- and nothing the pass stays out of: a sale, a cash pack, a refund,
+-- a reward.
 --==============================================================================
 local function withPass(player: Player, amount: number): number
+	local profile = PlayerDataService.Get(player)
 	return amount * PassService.CashMultiplier(player)
+		* GameConfig.rebirthIncomeFor(profile and (profile :: any).Rebirths)
 end
 
 --==============================================================================

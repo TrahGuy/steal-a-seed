@@ -774,6 +774,41 @@ GameConfig.Weapon = {
 	-- than the prompt: a shop that slammed shut the instant you took a step
 	-- back would be unusable on a phone, where the thumb is on the screen.
 	CloseDistance = 26,
+	--==========================================================================
+	-- THE WORDS OVER HER STALL (2026-10-08, the owner: "new players dont know
+	-- about where to buy bats, we will add a shop text above marigold like
+	-- spinwheel")
+	--
+	-- Drawn like the wheel's "SPIN THE WHEEL!" (FloatingSign), in one plain
+	-- colour no other hub sign wears -- a red orange, well clear of FREE
+	-- CHEST's gold (a marigold orange sat too close to it), and the blue sky's
+	-- opposite by day -- with a smaller second line of what she sells. Shown
+	-- to every player in range all the time: anyone can buy. Each client's own
+	-- (MarigoldSign).
+	--
+	-- On the STALL, not on Marigold: she wanders 6.5 studs either side of her
+	-- spot, and the words never move. They hang UNDER the awning's front lip,
+	-- over her head and her prompt, like a shop's board -- not over the roof.
+	-- The wheel stands straight behind the stall, so from the square and the
+	-- road (all of it on that line) words over the roof sat right on top of
+	-- "SPIN THE WHEEL!" (Play, 2026-10-08); down here they read below it from
+	-- anywhere on the square's south half. Above is the middle of both lines
+	-- over the counter's middle; Front is how far toward the customers (the
+	-- lip is 4.3 out, its underside 14.9 up). Width, Height and SubHeight are
+	-- the lines' boxes in studs: the headline's letters come out 2.17 studs
+	-- tall (TextService), a touch over the wheel's 2.01 for the square's one
+	-- shop, and the second line's 1.3.
+	--==========================================================================
+	FloatingWords = {
+		Text = "BAT SHOP!",
+		SubText = "BATS & TRAPS",
+		Colour = Color3.fromRGB(255, 105, 40), -- red orange #FF6928
+		Width = 10,
+		Height = 2.4,
+		SubHeight = 1.3,
+		Above = 9.1,
+		Front = 4.5,
+	},
 }
 
 --==============================================================================
@@ -1730,6 +1765,15 @@ GameConfig.MenuSize = {
 		{ Id = "large", Label = "LARGE", Scale = 1.15 },
 		{ Id = "larger", Label = "LARGER", Scale = 1.3 },
 	},
+	-- ON A PHONE (2026-10-08, the owner: "make the ui smaller on phones"; every
+	-- menu panel, 85%): every menu panel is drawn PhoneScale times its size and
+	-- takes that share of the screen, so it keeps exactly the room it had -- the
+	-- same layout, smaller -- and stops short of the screen's edges, the HUD
+	-- showing round it. Times the player's own choice: LARGE on a phone is still
+	-- larger. A phone is the prompts' rule (Labels.Prompt): touch, and the
+	-- viewport's shorter side under PhoneShortSide. The HUD is never scaled.
+	PhoneScale = 0.85,
+	PhoneShortSide = 500,
 }
 
 --==============================================================================
@@ -1950,6 +1994,19 @@ GameConfig.OwnerTitle = {
 	Lift = 0.9,
 	Size = Vector2.new(140, 34),
 	TextSize = 30,
+	-- The glow's edge under the letters, and the letters' dark outline.
+	GlowThickness = 7,
+	EdgeThickness = 3,
+	-- ON A PHONE (2026-10-09, the owner: "shrink admin on phones too ...
+	-- shrink it that it matches the name size of a player"): the same phone as
+	-- the rebirth title's (GameConfig.titlePhone) draws ADMIN with its letters
+	-- at PhoneTextSize, its box and outlines with them (ownerTitleLook). 15
+	-- MATCHES A PLAYER'S NAME, measured on the owner's phone screenshot of the
+	-- engine's default name tag (2000 x 900): its capitals 28 px tall where the
+	-- top bar's 44-point logo button is 108 px, so 11.4 points; ADMIN at 15
+	-- draws 12 points tall with its outline. The engine's name label cannot be
+	-- measured in Studio (no instance; the capture leaves it out).
+	PhoneTextSize = 15,
 	MaxDistance = 100,
 	-- One turn of the rainbow's hues, as the broadcast name and FREE drift.
 	DriftSeconds = 7,
@@ -1958,6 +2015,71 @@ GameConfig.OwnerTitle = {
 -- Whether a broadcast showing now sounds its chime: once per id on this client
 -- (`heard` remembers), and never for one already up when the client started --
 -- a late joiner reads it in silence. Anything that is not an id never sounds.
+-- A phone, for the titles over heads (2026-10-09, the prompts' rule): a touch
+-- screen whose shorter side is under Rebirth.Title.PhoneShortSide.
+function GameConfig.titlePhone(viewport: Vector2?, touch: boolean): boolean
+	local R = GameConfig.Rebirth.Title
+	return touch and viewport ~= nil and viewport.X > 0 and viewport.Y > 0
+		and math.min(viewport.X, viewport.Y) < R.PhoneShortSide
+end
+
+-- What a screen draws the rebirth title at: Rebirth.Title.PhoneScale on a
+-- phone, 1 anywhere else.
+function GameConfig.rebirthTitleScale(viewport: Vector2?, touch: boolean): number
+	if GameConfig.titlePhone(viewport, touch) then
+		return GameConfig.Rebirth.Title.PhoneScale
+	end
+	return 1
+end
+
+-- What a screen draws ADMIN at: its letters at OwnerTitle.PhoneTextSize on a
+-- phone, 1 anywhere else.
+function GameConfig.ownerTitleScale(viewport: Vector2?, touch: boolean): number
+	local T = GameConfig.OwnerTitle
+	if GameConfig.titlePhone(viewport, touch) then
+		return T.PhoneTextSize / T.TextSize
+	end
+	return 1
+end
+
+-- ADMIN at a scale: its box in whole pixels, its letters' size, and its glow's
+-- and outline's thickness (never under 1). OwnerTitleService builds it at 1;
+-- OwnerTitleUI redraws it for a phone, on that phone only.
+function GameConfig.ownerTitleLook(scale: number): { box: Vector2, text: number, glow: number, edge: number }
+	local T = GameConfig.OwnerTitle
+	return {
+		box = Vector2.new(math.round(T.Size.X * scale), math.round(T.Size.Y * scale)),
+		text = T.TextSize * scale,
+		glow = math.max(T.GlowThickness * scale, 1),
+		edge = math.max(T.EdgeThickness * scale, 1),
+	}
+end
+
+-- The rebirth title at a scale: its box in whole pixels, its words' size and
+-- REBIRTH N's, never under SubMinTextSize. The server builds it at 1;
+-- OwnerTitleUI redraws it for a phone, on that phone only.
+function GameConfig.rebirthTitleLook(scale: number): (Vector2, number, number)
+	local R = GameConfig.Rebirth.Title
+	local box = Vector2.new(math.round(R.Size.X * scale), math.round(R.Size.Y * scale))
+	return box, R.TextSize * scale, math.max(R.SubTextSize * scale, R.SubMinTextSize)
+end
+
+-- How far over its own height ADMIN is raised (its SizeOffset): its own Lift,
+-- or -- over a rebirth title (GameConfig.Rebirth.Title, 2026-10-08) -- clear of
+-- that title's top by two pixels, so a player with both shows both, ADMIN on top.
+-- `titleScale` is the title's on this screen (rebirthTitleScale) and
+-- `adminScale` ADMIN's (ownerTitleScale); 1 if left out.
+function GameConfig.ownerTitleLift(stacked: boolean, titleScale: number?, adminScale: number?): number
+	local T = GameConfig.OwnerTitle
+	if not stacked then
+		return T.Lift
+	end
+	local R = GameConfig.Rebirth.Title
+	local box = GameConfig.rebirthTitleLook(titleScale or 1)
+	local admin = GameConfig.ownerTitleLook(adminScale or 1).box
+	return ((R.Lift + 0.5) * box.Y + 2) / admin.Y + 0.5
+end
+
 function GameConfig.announceChime(heard: { [string]: boolean }, id: any, starting: boolean): boolean
 	if type(id) ~= "string" or id == "" or heard[id] then
 		return false
@@ -1974,6 +2096,17 @@ function GameConfig.restartCountdown(secondsLeft: number): string
 	end
 	local s = math.ceil(secondsLeft)
 	return string.format("Restarting in %02d:%02d", s // 60, s % 60)
+end
+
+-- What a phone draws every menu at (MenuSize.PhoneScale), 1 on anything else:
+-- touch, and the viewport's shorter side under MenuSize.PhoneShortSide.
+function GameConfig.menuPhoneScale(viewport: Vector2?, touch: boolean): number
+	local M = GameConfig.MenuSize
+	if touch and viewport and viewport.X > 0 and viewport.Y > 0
+		and math.min(viewport.X, viewport.Y) < M.PhoneShortSide then
+		return M.PhoneScale
+	end
+	return 1
 end
 
 -- The scale an option id stands for, or nil for anything that is not one.
@@ -4522,12 +4655,13 @@ GameConfig.Carry = {
 -- THE SECRET POD AND PLANT -- 2026-10-01
 --
 -- The switch and the structure; the numbers are BiomeData's (per biome) and
--- SeedData's (the species). NOTHING SPAWNS NATURALLY UNTIL THE OWNER FLIPS
--- Enabled: with it off, NestService's roll never runs and the only secret pod
--- in a server is one the Studio-only DebugService `SpawnSecret` action asked for.
+-- SeedData's (the species). ON SINCE 2026-10-09 (the owner: "turn secret pods
+-- back on"): each nest stocking rolls its biome's SpawnChance. With it off,
+-- NestService's roll never runs and the only secret pod in a server is one the
+-- Studio-only DebugService `SpawnSecret` action asked for.
 --==============================================================================
 GameConfig.Secret = {
-	Enabled = false,
+	Enabled = true,
 	-- The spawn toast: everyone in the server, once per actual spawn, never on a
 	-- return, a respawn or across servers.
 	Toast = {
@@ -5078,6 +5212,13 @@ GameConfig.MiniEvent = {
 	--   party        DISCO ONLY          disco + x1.5 movement for everyone; no
 	--                                    mill, no tickets (new 2026-10-04)
 	--   tickets      TICKET SHOWER ONLY  tickets only
+	--   podrush      POD RUSH            five minutes to steal and bank as many
+	--                                    pods as you can (2026-10-09; PodRush
+	--                                    below names it, GameConfig.PodRush
+	--                                    runs it)
+	--
+	-- `Seconds`, where a mode has it, is its own length: the console puts it in
+	-- the duration box when the mode is picked.
 	--==========================================================================
 	Modes = {
 		ticketdisco = {
@@ -5117,6 +5258,18 @@ GameConfig.MiniEvent = {
 			Mill = false,
 			Announce = { Title = "TICKET SHOWER!", Detail = "Free Spin Tickets are falling all over the map!",
 				Icon = "tickets" },
+		},
+		-- KB/POD-RUSH-PLAN.md, approved 2026-10-09. No disco, tickets or mill:
+		-- the rush is PodRushService's (GameConfig.PodRush).
+		podrush = {
+			Name = "POD RUSH",
+			Tickets = false,
+			Disco = false,
+			Mill = false,
+			PodRush = true,
+			Seconds = 300,
+			Announce = { Title = "POD RUSH!", Detail = "Steal and bank as many pods as you can in 5 minutes!",
+				Icon = "podrush" },
 		},
 	},
 	-- The console's duration box starts at this; whole seconds in Min..Max.
@@ -5501,6 +5654,8 @@ GameConfig.MiniEvent = {
 			{ Name = "BonusChest", At = Vector3.new(-40, 0, -6), Radius = 8 },
 			{ Name = "CommunityChest", At = Vector3.new(-31, 0, -22), Radius = 8 },
 			{ Name = "Pedestal", At = Vector3.new(14, 0, -38), Radius = 8 },
+			-- The rebirth shrine (GameConfig.Rebirth.Position), just off the rim.
+			{ Name = "RebirthShrine", At = Vector3.new(45, 0, 36), Radius = 8 },
 			-- The Disco Mill (DiscoMill above), while it stands and while not.
 			{ Name = "DiscoMill", At = Vector3.new(-40, 0, -95), Radius = 35 },
 			-- The deck's rim step: nobody stands half on it.
@@ -5546,6 +5701,126 @@ GameConfig.MiniEvent = {
 	-- with reduced motion it only fades. Cosmetic: it grants nothing.
 	--==========================================================================
 	Pop = { Text = "+1", Seconds = 1.4, Rise = 3, Above = 3.2, Width = 120, Height = 50 },
+}
+
+--==============================================================================
+-- POD RUSH (2026-10-09; KB/POD-RUSH-PLAN.md. The owner: "approve, let terminal
+-- work", every recommendation taken)
+--
+-- The fifth global mini event (MiniEvent.Modes.podrush): started from the
+-- admin console like the other four, on every server at once. While it runs:
+--   * every nest grows a taken pod back RegrowSeconds later -- normal pods,
+--     normal odds and sizes -- and a golden ring of light lies under each nest;
+--   * guardians chase as usual but build no rage past the theft itself
+--     (NestService);
+--   * dusk waits until the rush and its grace are over, and DuskMarginSeconds
+--     more (WorldCycleService reads Attributes.Until);
+--   * a pod TAKEN FROM A NEST during the rush and banked by the same player
+--     counts one. A pod still in the arms when it ends has GraceSeconds to be
+--     banked; one picked back up after a drop never counts.
+-- Three levels by the count, each paid once per player per rush the moment it
+-- is reached. The count, the levels paid and the highest biome banked from
+-- are saved on the profile under the event's id (PodRush), so a rejoin -- on
+-- any server -- keeps them. Every pod banked is the player's as always: the
+-- levels are on top. PodRushService runs it, PodRushUI draws it, and
+-- Shared/PodRush is the pure part both share.
+--==============================================================================
+GameConfig.PodRush = {
+	-- The mini event mode that is a rush.
+	Mode = "podrush",
+	RegrowSeconds = 15,
+	GraceSeconds = 20,
+	DuskMarginSeconds = 10,
+	--==========================================================================
+	-- THE THREE LEVELS (the owner's defaults: 3 / 7 / 12)
+	--
+	-- Spins land on the earned balance (WheelService.GrantMilestoneSpins); any
+	-- that do not fit are owed and paid when there is room (MilestoneSpinsOwed).
+	-- Boost is the Bonus Chest's own (BonusChestService.GrantBoost: its one
+	-- slot, BonusChest.BoostSeconds at its multiplier). PodTier is the Titan pod
+	-- (SeedData tier 6) of the highest biome the player banked from during the
+	-- rush (CarryService.GivePod), kept owed (PodRush.PodOwed) while the Bag is
+	-- full and given as soon as there is room.
+	--==========================================================================
+	Levels = {
+		{ Id = "bronze", Name = "BRONZE", Pods = 3, Spins = 1 },
+		{ Id = "silver", Name = "SILVER", Pods = 7, Spins = 3, Boost = "training" },
+		{ Id = "gold", Name = "GOLD", Pods = 12, Spins = 5, PodTier = 6 },
+	},
+	-- GOLD pods still owed are kept as a list, oldest first, at most this many
+	-- (PodRush.owedList): a second won while the first waits is never lost.
+	MaxOwed = 8,
+	-- The owner's art (uploaded and checked 2026-10-09: Image, CrazyCozy Games
+	-- 744756221, IsLoaded, 512 x 512, corner alpha 0), one shared crop.
+	Art = {
+		Icon = "rbxassetid://108173602941410",
+		Bronze = "rbxassetid://106320803448209",
+		Silver = "rbxassetid://108448116105933",
+		Gold = "rbxassetid://100048210150003",
+		CropOffset = Vector2.new(41, 41),
+		CropSize = Vector2.new(430, 430),
+	},
+	Attributes = {
+		-- On the Workspace (each server's own): the server time until which the
+		-- rush, its grace included, holds dusk. Absent while no rush is on.
+		Until = "PodRushUntil",
+		-- On each player: the rush their numbers are for, the count, the level
+		-- reached (0 none, 1 bronze, 2 silver, 3 gold), and whether the pod in
+		-- their arms would count if banked now.
+		Id = "PodRushId",
+		Count = "PodRushCount",
+		Level = "PodRushLevel",
+		Carrying = "PodRushCarrying",
+	},
+	-- GameEvent actions, server to client.
+	Events = {
+		-- A pod counted: { id, count, level, levelUp? }. levelUp is the level
+		-- just reached and what it paid: { level, spins, boost, pod }.
+		Counted = "PodRushCounted",
+		-- This player's rush is over: { id, count, level, spins, boost, pod,
+		-- podOwed }.
+		Over = "PodRushOver",
+	},
+	Words = {
+		Title = "POD RUSH",
+		Banked = "%d banked",
+		ToNext = "%d more for %s",
+		Top = "GOLD! Keep banking",
+		BankIt = "BANK IT!",
+		Plus = "+1",
+		LevelUp = "%s!",
+		Spins = "+%d Spin Ticket%s",
+		Boost = "+%d%% training for %d min",
+		Pod = "a Titan %s pod",
+		PodOwed = "Make room in your Bag for your Titan pod",
+		PodGiven = "Your Titan %s pod is in your Bag",
+		Over = "POD RUSH OVER",
+		OverCount = "%d pod%s",
+		NoLevel = "no level",
+		ServerLine = "%s hit GOLD in the Pod Rush!",
+		Close = "TAP TO CLOSE",
+	},
+	-- The tracker (PodRushUI): its logical size, the scale a phone draws it at
+	-- (touch, short side under 500), and its gap to the HUD. Where no spot is
+	-- clear for it -- a short phone with boost icons up has a band 20 px tall
+	-- over the toast -- it is a one-line STRIP of StripWidth x StripHeight
+	-- (drawn 1:1, so its words stay readable), the bar left out; and where not
+	-- even that fits (the beginner's guide card up as well), the MINI strip,
+	-- MiniWidth: the time and the pods banked.
+	Tracker = { Width = 300, Height = 86, PhoneScale = 0.78, Gap = 8, StripWidth = 240, MiniWidth = 150,
+		StripHeight = 24,
+		-- BANK IT! is said in this red; the time otherwise in the ring's gold.
+		BankItColour = Color3.fromRGB(255, 104, 86) },
+	-- The end card, centred: its logical size (scaled down to fit inside the
+	-- safe area less Margin a side), and how long it stays.
+	EndCard = { Width = 340, Height = 214, Seconds = 8, Margin = 16 },
+	-- The "+1" and the level's pop by the tracker (none with REDUCED FX).
+	Pop = { Seconds = 1.2, Rise = 26, LevelSeconds = 1.8 },
+	-- The ring under each nest: on the pods' own ring (NestService's 16),
+	-- Segments flat Neon bars, breathing between Transparency and PulseTo
+	-- (still with REDUCED FX).
+	Ring = { Radius = 16, Width = 3, Segments = 36, Thickness = 0.2, Colour = Color3.fromRGB(255, 204, 64),
+		Transparency = 0.2, PulseSeconds = 1.6, PulseTo = 0.55 },
 }
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.
@@ -5677,21 +5952,493 @@ function GameConfig.miniEventSpeedFactor(): number
 end
 
 --==============================================================================
--- REBIRTH, WHICH DOES NOT EXIST YET
+-- REBIRTH (2026-10-08, the owner: "rebirth first, cash and mill tier reset,
+-- plan it" / "we should also do a fence upgrade every rebirth and a title
+-- above the name" / "use your defaults")
 --
--- A SEAM, not a stub with a TODO. Everything that computes a training rate
--- multiplies by this, so the day rebirth lands there is one function to write
--- and no call sites to find. Until then it answers 1 for everybody, which is
--- exactly what a system that does not exist should contribute.
+-- A rebirth SPENDS all the player's cash -- the price is what it must reach --
+-- and puts their mill back to Compost Walk, for a PERMANENT bonus that adds up
+-- with every rebirth: +50% training and +25% garden income (offline earnings
+-- included, like the x2 pass). Everything else in the save is kept: Speed, the
+-- plot's level, every plant (garden and Bag), pods, weapons, spin tickets, the
+-- Speed milestones, the Index, passes and running boosts. Shared/Rebirth is
+-- the pure rulebook (prices, the requirement, titles, fence tiers, what blocks
+-- one); RebirthService is the only thing that does one.
 --
--- Takes the whole profile rather than a level, so adding rebirth does not
--- change this signature.
+-- THE PRICE: rebirth 1 needs $1B, then x4 each time ($4B, $16B, $64B...) --
+-- until that would pass PriceCap. The save holds at most $1Qa (Save.MaxCash),
+-- so x4 alone would make rebirth 11 ($1.05Qa) unpayable and every title past
+-- 10 unreachable; past the cap every rebirth costs the cap. And the mill must
+-- be at least MinMillTier first (Inferno Forge, itself $1B).
+--==============================================================================
+GameConfig.Rebirth = {
+	Enabled = true,
+	-- The GameEvent action; the verbs are "confirm" (client) and "quote",
+	-- "done", "refused" (server).
+	Action = "Rebirth",
+	BasePrice = 1e9,
+	PriceFactor = 4,
+	PriceCap = 5e14,
+	MinMillTier = 8,
+	TrainingPer = 0.5,
+	IncomePer = 0.25,
+	-- After a rebirth, this long before another is considered at all: a double
+	-- press, a lagging client and a replayed packet all land inside it.
+	CooldownSeconds = 10,
+	-- How long the shrine's quote (the panel's numbers) stays good to confirm.
+	QuoteSeconds = 120,
+	-- Published on the player for every client: the panel, the displays' income.
+	Attributes = { Rebirths = "Rebirths" },
+	--==========================================================================
+	-- THE SHRINE, just off the deck's north-east rim: the one ground left where
+	-- its prompt shares nothing -- every other prompt is more than its reach
+	-- plus this one's away (hub deck prompt map, measured in Play 2026-10-08) --
+	-- and no walk crosses it (the mini event's corridors to every plot, the
+	-- obby and the road). It faces the square.
+	--==========================================================================
+	FolderName = "SeedRebirthShrine",
+	Position = Vector3.new(45, 0, 36),
+	PromptDistance = 10,
+	PromptHoldSeconds = 0.5,
+	-- The panel shuts when the player walks further than this from the shrine.
+	CloseDistance = 24,
+	-- The kit's Rebirth band (MenuKit.studdedTheme).
+	Look = { Band = Color3.fromRGB(255, 53, 93), Edge = Color3.fromRGB(120, 19, 41) },
+	-- The words over it (FloatingSign), in a colour no other sign in the square
+	-- wears; Above is their middle over the shrine's ground.
+	FloatingWords = {
+		Text = "REBIRTH",
+		SubText = "+50% TRAINING · +25% INCOME",
+		Colour = Color3.fromRGB(255, 80, 200), -- magenta #FF50C8
+		Width = 11,
+		Height = 2.4,
+		SubHeight = 1.1,
+		Above = 10.5,
+	},
+	--==========================================================================
+	-- THE TITLE OVER A REBORN PLAYER'S NAME: built on the Head by RebirthService
+	-- like OwnerTitleService's ADMIN, back on every respawn, one per character.
+	-- With ADMIN both show, ADMIN on top. The highest step reached; the last
+	-- one turns like ADMIN's rainbow (still for reduced motion: OwnerTitleUI).
+	--==========================================================================
+	Title = {
+		Name = "SeedRebirthTitle",
+		Tag = "SeedRebirthTitle",
+		-- SMALLER (2026-10-09, the owner: "make the title smaller, it looks huge
+		-- specially on phones"; it was 320 x 46, the words at 28 and REBIRTH N
+		-- at 14). 228 wide for the numerals: at 20 the widest title to rebirth
+		-- 4200, GAIA MMMDCCCLXXXVIII, is 212 px and its outline 6 more
+		-- (RebirthSpec measures every one). The box is invisible; only the
+		-- words show.
+		Size = Vector2.new(228, 34),
+		Rise = 2.4,
+		Lift = 0.9,
+		TextSize = 20,
+		SubTextSize = 12,
+		-- ON A PHONE, THREE QUARTERS AGAIN (the prompts' rule): a touch screen
+		-- whose shorter side is under PhoneShortSide draws the title at
+		-- PhoneScale -- 171 x 26, the words at 15 -- each viewer for their own
+		-- screen (OwnerTitleUI, GameConfig.rebirthTitleLook). REBIRTH N never
+		-- under SubMinTextSize.
+		PhoneScale = 0.75,
+		PhoneShortSide = 500,
+		SubMinTextSize = 10,
+		MaxDistance = 100,
+		Sub = "REBIRTH %d",
+		-- ROMAN NUMERALS (2026-10-08, the owner: "Add roman numerals so that
+		-- players wont think it's repepitive"): a step that lasts more than one
+		-- rebirth counts through it from I -- BOTANIST I at 5, BOTANIST II at 6,
+		-- GROVE KEEPER I to V for 10 to 14, GAIA I at 100 and on with no end. A
+		-- step of one rebirth (SPROUT to GREEN THUMB) has none: a lone I would
+		-- promise a II that never comes. The TITLES list names each step's
+		-- range (Span, or From for the top step). A plain hyphen: these fonts'
+		-- dashes are unchecked (memory: the tofu list).
+		Numbered = "%s %s",
+		Span = "%s %s-%s",
+		From = "%s %s+",
+		-- Fifteen steps (2026-10-08, the owner: "yes add more titles"; the other
+		-- session's proposed names and colours, DEFAULTS the owner may rename).
+		-- The rainbow is the last step's alone.
+		Ladder = {
+			{ At = 1, Text = "SPROUT", Colour = Color3.fromRGB(150, 235, 100) },
+			{ At = 2, Text = "SEEDLING", Colour = Color3.fromRGB(60, 205, 115) },
+			{ At = 3, Text = "GARDENER", Colour = Color3.fromRGB(255, 190, 70) },
+			{ At = 4, Text = "GREEN THUMB", Colour = Color3.fromRGB(170, 255, 60) },
+			{ At = 5, Text = "BOTANIST", Colour = Color3.fromRGB(90, 200, 255) },
+			{ At = 7, Text = "HERBALIST", Colour = Color3.fromRGB(40, 215, 190) },
+			{ At = 10, Text = "GROVE KEEPER", Colour = Color3.fromRGB(190, 125, 255) },
+			{ At = 15, Text = "BLOOM WARDEN", Colour = Color3.fromRGB(255, 120, 200) },
+			{ At = 20, Text = "THORN KNIGHT", Colour = Color3.fromRGB(235, 60, 80) },
+			{ At = 25, Text = "ELDER ROOT", Colour = Color3.fromRGB(255, 125, 80) },
+			{ At = 30, Text = "CANOPY LORD", Colour = Color3.fromRGB(30, 190, 110) },
+			{ At = 40, Text = "ANCIENT OAK", Colour = Color3.fromRGB(205, 150, 90) },
+			{ At = 50, Text = "WORLD TREE", Colour = Color3.fromRGB(255, 215, 80) },
+			{ At = 75, Text = "EVERBLOOM", Colour = Color3.fromRGB(255, 90, 230) },
+			{ At = 100, Text = "GAIA", Colour = Color3.fromRGB(255, 255, 255), Rainbow = true },
+		},
+	},
+	--==========================================================================
+	-- THE OWNER'S FENCE, BY THEIR REBIRTHS. Colours, materials and caps that
+	-- nothing can touch, stand on or hit ONLY: the boards, the gap filler and
+	-- the posts keep exactly their size, place and collision -- tuned against
+	-- snagging and climbing (MapService, THE GAP IS SHUT TO THE BODY). The tier
+	-- is the rebirths, up to the last; past it the gold fence's gems step
+	-- through Trims every TrimEvery rebirths. Built from parts and materials,
+	-- no uploads.
+	--==========================================================================
+	Fence = {
+		-- `Says` is how the panel's NEXT UNLOCKS names each one.
+		Tiers = {
+			[0] = { Name = "Wood", Says = "Plain wood", Colour = Color3.fromRGB(96, 66, 44), Material = Enum.Material.Wood },
+			{ Name = "White picket", Says = "White picket", Colour = Color3.fromRGB(240, 238, 228),
+				Material = Enum.Material.SmoothPlastic,
+				Cap = "point", CapColour = Color3.fromRGB(240, 238, 228), CapMaterial = Enum.Material.SmoothPlastic },
+			{ Name = "Stone", Says = "Stone with moss caps", Colour = Color3.fromRGB(130, 128, 120),
+				Material = Enum.Material.Slate,
+				Cap = "moss", CapColour = Color3.fromRGB(91, 151, 76), CapMaterial = Enum.Material.Grass },
+			{ Name = "Iron", Says = "Iron with gold tips", Colour = Color3.fromRGB(56, 58, 66),
+				Material = Enum.Material.DiamondPlate,
+				Cap = "tip", CapColour = Color3.fromRGB(255, 196, 64), CapMaterial = Enum.Material.Metal },
+			{ Name = "Marble", Says = "Marble with flower planters", Colour = Color3.fromRGB(236, 232, 224),
+				Material = Enum.Material.Marble,
+				Cap = "planter", CapColour = Color3.fromRGB(186, 98, 58), CapMaterial = Enum.Material.Wood,
+				FlowerColour = Color3.fromRGB(255, 120, 175) },
+			{ Name = "Crystal", Says = "Crystal with glowing caps", Colour = Color3.fromRGB(170, 225, 255),
+				Material = Enum.Material.Glass,
+				Cap = "glow", CapColour = Color3.fromRGB(190, 245, 255), CapMaterial = Enum.Material.Neon },
+			{ Name = "Gold", Says = "Gold with gem caps", Colour = Color3.fromRGB(255, 198, 64),
+				Material = Enum.Material.Foil,
+				Cap = "gem", CapMaterial = Enum.Material.Neon },
+		},
+		TrimEvery = 4,
+		Trims = {
+			Color3.fromRGB(230, 40, 70), -- ruby
+			Color3.fromRGB(60, 110, 255), -- sapphire
+			Color3.fromRGB(40, 205, 110), -- emerald
+			Color3.fromRGB(170, 80, 255), -- amethyst
+			Color3.fromRGB(255, 150, 30), -- topaz
+			Color3.fromRGB(235, 248, 255), -- diamond
+		},
+		-- The decorations' folder in the plot, beside the fence it dresses.
+		FolderName = "FenceDecor",
+	},
+	--==========================================================================
+	-- THE PANEL'S ICONS (2026-10-08, the owner: "add more detail on the rebirth
+	-- info, we will add how the required mill look"). The owner's uploads, one
+	-- Image each (output/imagegen/rebirth/rebirth-icons-v1; CrazyCozy Games,
+	-- 512 x 512, real alpha; checked: economy details, Edit IsLoaded). ""
+	-- draws the stand-in, never anybody else's upload: no MILL icon was
+	-- uploaded, and the mill picture is the real model, live (Preview).
+	--==========================================================================
+	Art = {
+		Emblem = "rbxassetid://133554119533442",
+		Mill = "",
+		CashReset = "rbxassetid://112687292855232",
+		TitleBadge = "rbxassetid://133032357694764",
+		-- The part of each 512 px picture that is drawn: one square round all
+		-- three drawings (measured alpha bounds 76..435), so the transparent
+		-- margin does not shrink them under ScaleType Fit and all three draw at
+		-- the same size.
+		CropOffset = Vector2.new(72, 72),
+		CropSize = Vector2.new(368, 368),
+	},
+	-- The live 3D pictures (RebirthUI): the required mill and the next fence,
+	-- each in a ViewportFrame, built while the panel is open and destroyed on
+	-- close. One turn every TurnSeconds; still for reduced motion.
+	Preview = {
+		TurnSeconds = 18,
+		Pitch = 20,
+		-- How long a sample of fence the next tier is shown on, in studs.
+		FenceLength = 12,
+	},
+	--==========================================================================
+	-- THE CELEBRATION (2026-10-09, the owner: "can we also make a pop up when
+	-- rebirthed? like a animation rotating the character, or a light that
+	-- rotates around when you rebirth then a text and sfx" -- the plan the other
+	-- session wrote for it, approved as written: "approve, let terminal work").
+	--
+	-- About Seconds long from the server's "done" (Shared/RebirthCelebration is
+	-- the timeline, Shared/RebirthFX draws it):
+	--   0.0       the panel shuts; a soft white-gold flash; a column of light
+	--             rises from the feet; the fanfare;
+	--   0.0-1.6   the body spins SpinTurns, eased, and ends facing the camera;
+	--             eight orbs orbit the other way, rising from the feet to over
+	--             the head; the camera is held still and the controls with it;
+	--   0.6       the REBORN! card pops in at the upper middle, the owner's gold
+	--             rays turning behind it;
+	--   1.6       the burst at the feet; leaves and sparkles in the new title's
+	--             colour drift up; the controls come back;
+	--   3.5       the card has faded (a tap on it closes it sooner); every piece
+	--             is gone.
+	-- Players within Range see the column, the orbs and the burst round that
+	-- body and hear the fanfare from there; everybody else in the server reads
+	-- one line (Notice.ServerNotice). From Aura.From rebirths a faint aura loops
+	-- round the body. REDUCED FX (StatusText.reducedMotion): no spin, orbs, rays,
+	-- flash, column or particles -- the card simply appears and the fanfare
+	-- still plays.
+	--==========================================================================
+	Celebration = {
+		-- The fanfare (the owner's "Triumphant Chime"): SoundKit cue rows, flat
+		-- on the reborn player's own screen, and from the body for everybody
+		-- within Range. Their window puts its hit on the burst (SpinSeconds).
+		Cue = "Rebirth",
+		NearbyCue = "RebirthNearby",
+		-- Who else sees it: everybody whose body is this close to the reborn one.
+		Range = 120,
+		Seconds = 3.5,
+		SpinSeconds = 1.6,
+		SpinTurns = 2,
+		PopupAt = 0.6,
+		-- The card's entrance: 0.6 -> 1.08 -> 1 of its fitted size.
+		PopSeconds = 0.35,
+		FadeSeconds = 0.4,
+		FlashSeconds = 0.5,
+		-- At its brightest the flash is this see-through.
+		FlashTransparency = 0.45,
+		FlashColour = Color3.fromRGB(255, 244, 214),
+		Column = {
+			RiseSeconds = 0.35,
+			FadeFrom = 1.2,
+			FadeTo = 1.9,
+			Height = 16,
+			-- The bright core and the soft glow round it: diameters in studs.
+			Core = 1.6,
+			Glow = 4.4,
+			CoreColour = Color3.fromRGB(255, 250, 225),
+			Colour = Color3.fromRGB(255, 222, 130),
+		},
+		Orbs = {
+			Count = 8,
+			Radius = 3.4,
+			-- Round the body the other way while it spins.
+			Turns = 1.5,
+			-- Each orb, in studs.
+			Size = 1.6,
+			-- From the feet to over the head, against the body's root.
+			FromY = -2.6,
+			ToY = 4.2,
+			FadeSeconds = 0.3,
+			Colour = Color3.fromRGB(255, 214, 90),
+		},
+		-- The coloured burst, once: facing the camera behind the body, and flat
+		-- on the ground round the feet. Studs across.
+		Burst = { Size = 14, Ground = 11, Lifetime = 0.9 },
+		Leaves = { Count = 18 },
+		Sparkles = { Count = 28 },
+		-- THE AURA, from WORLD TREE up: the owner's looping wisp sheet played as a
+		-- 16-frame picture (Framerate a second) on two billboards Size studs
+		-- square, Side studs to the left and the right of the body in camera
+		-- space, Back studs behind it and Lift up -- so from any side they stand
+		-- beside the body and never over it. Tinted by the title. Billboards, not
+		-- particles: the same sheet as a flipbook ParticleEmitter drew only now
+		-- and then in Play (2026-10-09, on the body and off it), the billboards
+		-- every time.
+		Aura = {
+			From = 50,
+			Size = 6.5,
+			Side = 1.8,
+			Back = 0.8,
+			Lift = 0.25,
+			Framerate = 10,
+			Transparency = 0,
+			MaxDistance = 160,
+		},
+		-- The owner's four effect sheets (uploaded 2026-10-09; checked by the
+		-- other session: Image, CrazyCozy Games, Edit IsLoaded, real alpha).
+		-- Every frame 256 px, left to right, top row first.
+		Textures = {
+			-- 1024, 4 x 4, coloured: played ONCE (frame 16 is nearly empty).
+			Burst = "rbxassetid://104561904060787",
+			-- 512, 2 x 2, white (tinted): played back and forth, because its last
+			-- frame jumps back to its first.
+			Leaf = "rbxassetid://139088327003961",
+			-- 512, 2 x 2, white (tinted): once per particle; frame 3 is the orb.
+			Sparkle = "rbxassetid://113832021583342",
+			-- 1024, 4 x 4, white (tinted), at most 69% opaque: loops.
+			Aura = "rbxassetid://136617357503029",
+		},
+		-- THE OWNER'S EXTRA ART (output/imagegen/extras/
+		-- hatch-rebirth-extras-v1.prompt.md), uploaded 2026-10-09. "" puts the
+		-- drawn stand-in back -- never another upload standing in.
+		--   Rays  a 1024 WHITE sunburst (sunburst-rays-v1, 16 rays, peak alpha
+		--         204), tinted RayColour and turned behind the card's emblem;
+		--         drawn as RayBars bars (twice as many rays) when "";
+		--   Logo  a 1024 x 384 "REBORN!" word picture (reborn-logo-v1; the art
+		--         fills about 89% x 77% of it) over the card's first line; the
+		--         LuckiestGuy words when "".
+		Rays = "rbxassetid://134900206184752",
+		Logo = "rbxassetid://107076109311776",
+		RayColour = Color3.fromRGB(255, 206, 70),
+		-- How see-through the sunburst is at its fullest (2026-10-09): it sits
+		-- on the card, round the emblem and under the words.
+		RayFade = 0.4,
+		RayBars = 8,
+		-- Degrees a second.
+		RaySpin = 40,
+		-- THE CARD: its base size, placed by RebirthCelebration.popup at the
+		-- upper middle clear of the HUD, at most a phone's menu size there
+		-- (MenuSize.PhoneScale), never under MinScale.
+		Popup = {
+			Size = Vector2.new(460, 156),
+			Gap = 8,
+			MinScale = 0.5,
+			Step = 0.02,
+			-- The most it may stand off the middle, as a share of the width (a
+			-- small phone's free gap between its corner buttons is off it).
+			Shift = 0.15,
+			Emblem = 112,
+			Rays = 250,
+		},
+		-- Over the menus' layers (Shop, EVENTS, the panel: 32) and the invite
+		-- card (35), under the rail layer (40) and the alarm (50).
+		DisplayOrder = 36,
+		Words = {
+			Reborn = "REBORN!",
+			Line = "REBIRTH %d · %s",
+			Bonus = "x%s training · x%s income",
+			-- To everybody else in the server.
+			Server = "%s reached REBIRTH %d · %s!",
+		},
+	},
+	-- THE PANEL'S PLACES (Rebirth.layout): at most MaxW x MaxH, placed by
+	-- MenuLayout like the Shop's (between the rails, or over them on a phone).
+	-- The FOOT -- the reason line and the button -- is pinned to the bottom of
+	-- the body, outside the scroll, on every screen (a phone of the owner's
+	-- once showed the old panel's body run off its bottom and the button gone).
+	-- Two columns where the body is WideAt or wider.
+	Layout = {
+		MaxW = 860,
+		MaxH = 640,
+		Foot = 86,
+		ButtonTop = 26,
+		ButtonH = 56,
+		ButtonW = 0.5,
+		WideAt = 640,
+		-- The least of the body the scroll ever gets.
+		MinScroll = 40,
+		-- THE TITLES VIEW (the owner: "i want players to see the titles inside a
+		-- question mark button inside the rebirth ui"): its BACK control over a
+		-- list that fills the rest of the body, one TitleRow per step; the "?"
+		-- that opens it stands left of the X in the band, the X's own size.
+		BackW = 140,
+		BackH = 36,
+		TitleRow = 56,
+		HelpGap = 8,
+	},
+	-- YOU KEEP / YOU LOSE as chips: a word and an existing icon where there is
+	-- one (`Icon` names a GameConfig path read by RebirthUI; nil draws a mark).
+	Keep = {
+		{ Text = "Speed", Icon = "SourceIcons.speed" },
+		{ Text = "Plot level", Icon = nil },
+		{ Text = "Plants", Icon = "Rail.GardenIcon" },
+		{ Text = "Pods", Icon = "Store.Icons.pod1" },
+		{ Text = "Weapons", Icon = nil },
+		{ Text = "Spin tickets", Icon = "SourceIcons.tickets" },
+		{ Text = "The Index", Icon = "Rail.IndexIcon" },
+		{ Text = "Passes", Icon = "Pass.BuffIcon" },
+		{ Text = "Boosts", Icon = "SourceIcons.chest" },
+	},
+	Lose = {
+		{ Text = "All cash", Art = "CashReset" },
+		{ Text = "Mill → Compost Walk", Art = "Mill" },
+	},
+	Words = {
+		Prompt = "Rebirth",
+		Title = "REBIRTH",
+		Current = "REBIRTH %d",
+		NotYet = "NOT REBORN YET",
+		Bonus = "Training x%s · Income x%s",
+		Next = "Rebirth %d: training x%s, income x%s",
+		Price = "Costs %s",
+		Needs = "Mill: %s or better",
+		-- The reworked body (2026-10-08).
+		Strip = "REBIRTH %d · %s",
+		NextStrip = "NEXT: REBIRTH %d · %s",
+		BonusTitle = "BONUS",
+		Training = "Training",
+		Income = "Income",
+		Step = "x%s → x%s",
+		NeedsTitle = "REQUIREMENTS",
+		CashLabel = "Cash",
+		CashBar = "%s / %s",
+		MillLabel = "Mill",
+		MillLine = "Your mill: %s (tier %d) → needs %s (tier %d)",
+		UnlocksTitle = "NEXT UNLOCKS",
+		FenceLine = "Fence: %s",
+		TitleLine = "Title: %s",
+		-- The TITLES view.
+		Help = "?",
+		TitlesTitle = "TITLES",
+		Back = "← BACK",
+		RowRebirth = "REBIRTH %d",
+		RowRebirths = "REBIRTH %d-%d",
+		RowRebirthFrom = "REBIRTH %d+",
+		RowBonus = "x%s training · x%s income",
+		Reached = "✓ REACHED",
+		NextChip = "NEXT",
+		Locked = "LOCKED",
+		KeepTitle = "YOU KEEP",
+		Keep = "Speed, your plot level, every plant (garden and Bag), pods, weapons, spin tickets, "
+			.. "the Index, passes and running boosts.",
+		LoseTitle = "YOU LOSE",
+		Lose = "All your cash. Your mill goes back to Compost Walk.",
+		Button = "REBIRTH",
+		Confirm = "ARE YOU SURE?",
+		Done = "REBORN! REBIRTH %d",
+		DoneDetail = "Training x%s · Income x%s",
+		Refused = {
+			DISABLED = "Rebirth is closed right now.",
+			NOT_READY = "Your save is still loading.",
+			COOLDOWN = "You were just reborn. One moment.",
+			BUSY = "Finish your purchase first.",
+			DEAD = "Respawn first.",
+			CARRYING = "Put the pod down first.",
+			CHASED = "Get away from your chaser first!",
+			OFFLINE = "Claim your offline earnings first.",
+			MILL = "Your mill must reach %s first.",
+			CASH = "You need %s.",
+			QUOTE = "Open the shrine again.",
+			FAR = "Walk back to the shrine.",
+		},
+	},
+}
+
+-- A rebirth count from anywhere -- a save, an attribute, a packet: whole and
+-- never below 0.
+function GameConfig.rebirthCount(raw: any): number
+	local n = tonumber(raw)
+	if not n or n ~= n or n < 0 or n == math.huge then
+		return 0
+	end
+	return math.floor(n)
+end
+
+--==============================================================================
+-- THE TRAINING SEAM. Everything that computes a training rate multiplies by
+-- this (trainingRateFor below): the payout, the mill sign, the shop and the
+-- client's displays, each with the same profile. +50% per rebirth, added up:
+-- x1.5 after one, x2 after two.
 --==============================================================================
 function GameConfig.rebirthMultiplierFor(profile: any): number
 	if type(profile) ~= "table" then
 		return 1
 	end
-	return 1
+	return 1 + GameConfig.Rebirth.TrainingPer * GameConfig.rebirthCount(profile.Rebirths)
+end
+
+-- The garden income bonus for a rebirth count: +25% each, added up. Permanent,
+-- so it rides with the x2 pass (EconomyService's withPass): the live garden
+-- and the offline claim, never a sale or a reward.
+function GameConfig.rebirthIncomeFor(rebirths: any): number
+	return 1 + GameConfig.Rebirth.IncomePer * GameConfig.rebirthCount(rebirths)
+end
+
+-- The same for a display, read off the player's published count.
+function GameConfig.rebirthIncomeOf(player: Player?): number
+	if not player then
+		return 1
+	end
+	return GameConfig.rebirthIncomeFor(player:GetAttribute(GameConfig.Rebirth.Attributes.Rebirths))
 end
 
 --==============================================================================
@@ -5968,6 +6715,20 @@ GameConfig.Rail = {
 	StuddedInviteArt = "rbxassetid://87744294855846",
 	StuddedInviteAspect = 1024 / 1024,
 	--==========================================================================
+	-- GARDEN AND THE BAG'S PICTURES (2026-10-09, the owner: "new garden
+	-- button, and inventory button"; owner-designated uploads "Plant-creatures"
+	-- and "inventory"). Each a whole studded button -- dark outline, teal
+	-- studded face, a purple paw / a brown satchel, no word -- so like Index and
+	-- Invite the picture IS the button (UIKit.railPicture), with GARDEN / BAG on
+	-- a plate until it has loaded. Measured in Studio Edit: both 1024 x 1024,
+	-- PreloadAsync Success, the opaque body 948 x 928 and 948 x 925, centred
+	-- within 2 px. ON THE TWO RAIL BUTTONS ONLY (the owner's call): GardenIcon
+	-- and BagIcon below stay everywhere else they are drawn (panel titles, the
+	-- teleport buttons, notices, the Bag's Plants box, the rebirth card).
+	--==========================================================================
+	StuddedGardenArt = "rbxassetid://80369422946168",
+	StuddedBagArt = "rbxassetid://100113253044275",
+	--==========================================================================
 	-- THE SHOP'S RAINBOW RIM
 	--
 	-- Geometry in the artwork's own 256 units (shop-base.svg). The band is the
@@ -6077,6 +6838,31 @@ GameConfig.Rail = {
 	UpdatesShade = Color3.fromRGB(22, 66, 100),
 	UpdatesWord = "UPDATES",
 	UpdatesDot = 14,
+	--==========================================================================
+	-- A WORD UNDER EVERY RAIL PICTURE UNTIL IT LOADS (2026-10-09, the owner:
+	-- "some buttons are invisible like the garden and inventory")
+	--
+	-- Garden, the Bag, Index, Shop and INVITE are pictures on a transparent
+	-- button, so one that does not load here -- a fetch that fails, a CDN
+	-- hiccup, an upload held in moderation -- drew nothing: the button was gone.
+	-- Each now stands its plain word on a slate plate (the dock tile's TileTop
+	-- and TileBottom, the rail's black Outline) UNDER its pictures
+	-- (UIKit.railFallback): shown until one of them has loaded HERE, and for
+	-- good if none ever does. Settings keeps its gear drawn from frames
+	-- instead; EVENTS (until its picture comes) and WHAT'S NEW are slabs with
+	-- their words on already. The hotbar's Bag cell says BAG the same way.
+	--==========================================================================
+	Words = {
+		Garden = "GARDEN",
+		Bag = "BAG",
+		Index = "INDEX",
+		Shop = "SHOP",
+		Invite = "INVITE",
+		Events = "EVENTS",
+	},
+	FallbackOutline = 2,
+	FallbackTextMax = 14,
+	FallbackTextMin = 7,
 }
 
 --==============================================================================
@@ -6906,15 +7692,17 @@ end
 --==============================================================================
 -- WHAT THIS PLAYER'S PASSIVE INCOME IS MULTIPLIED BY, FOR A DISPLAY
 --
--- The pass times the sum of active temporary income bonuses -- exactly what
--- EconomyService.RateFor pays. The offline card keeps cashMultiplier alone.
+-- The pass and the rebirths' bonus (the two permanent ones, as withPass pays
+-- them) times the sum of active temporary income bonuses -- exactly what
+-- EconomyService.RateFor pays. The offline card multiplies the same two
+-- permanent ones and nothing temporary.
 --==============================================================================
 function GameConfig.incomeMultiplier(player: Player?): number
 	-- Temporary income bonuses add their percentages before the pass. A chest
 	-- +25% and a sacrifice +50% therefore mean +75%, never a hidden compound.
 	-- THE RAIN (2026-10-02) is the weather's own factor, not a player's boost:
 	-- one x1.25 on the whole, exactly as EconomyService.RateFor applies it.
-	return GameConfig.cashMultiplier(player)
+	return GameConfig.cashMultiplier(player) * GameConfig.rebirthIncomeOf(player)
 		* (GameConfig.chestIncomeBoost(player) + GameConfig.sacrificeIncomeBoost(player) - 1)
 		* GameConfig.rainIncomeFactor()
 end
@@ -7190,11 +7978,14 @@ GameConfig.Hotbar = {
 	PreviewHeight = 56,
 	-- The silhouette's limiting axis spans this much of the glass.
 	PreviewFit = 0.96,
-	-- The Bag cell's icon and its count. BagIconImage (2026-10-03): the approved
-	-- satchel, art/icons/inventory/bag-256.png; the rail's own Bag artwork
-	-- (Rail.BagIcon) stands in until it loads, and stays if it never does or
-	-- this is "".
-	BagIconImage = "rbxassetid://129734693384327",
+	-- The Bag cell's icon and its count. BagIconImage (2026-10-09, the owner:
+	-- "yes, hotbar bag cell too"): the owner's studded "inventory" button, the
+	-- rail Bag's own picture (Rail.StuddedBagArt), drawn as the WHOLE cell; once
+	-- it has loaded the cell's own plate and edge go (the owner: drop it, "so
+	-- only the owner's tile shows"). The rail's satchel (Rail.BagIcon) on the
+	-- plate stands in until it loads, and stays if it never does or this is "".
+	-- Before: the satchel 129734693384327 (art/icons/inventory/bag-256.png).
+	BagIconImage = "rbxassetid://100113253044275",
 	BagIcon = 34,
 	BagIconTop = 5,
 	BagCountTop = 43,
@@ -7599,6 +8390,214 @@ GameConfig.BagLook = {
 --   sell       the cash pack's picture
 --   sacrifice  the pedestal's own source icon
 --==============================================================================
+--==============================================================================
+-- THE STUDDED UI KIT'S LOOK (2026-10-08, the owner: "restyle the shop and
+-- settings first")
+--
+-- Read off the owner's StuddedUI-Free.rbxm (RBLX Essentials; use in this game
+-- is allowed, the kit itself is never redistributed -- it is not in the repo):
+-- a menu is a coloured studded header band, a white studded body, an outline
+-- and a solid base in the band's dark tone, a red studded close, and a white
+-- title with a black line. Only the look is taken -- every control, layout and
+-- font stays the game's own. MenuKit.studdedTheme builds UIKit.modal's theme
+-- from these; each menu names its own band and edge.
+--
+--   Texture       the kit's stud tile (its rbxassetid), tiled at Tile px
+--   BandStuds     its transparency over a header band and the close
+--   BodyStuds     its transparency over the white body
+--   Base          the solid base under the panel, in px below the shell
+--==============================================================================
+GameConfig.StuddedLook = {
+	Texture = "rbxassetid://118347284107187",
+	Tile = 90,
+	BandStuds = 0.5,
+	BodyStuds = 0.85,
+	Body = Color3.fromRGB(255, 255, 255),
+	Base = 5,
+	Close = Color3.fromRGB(255, 32, 70),
+	CloseEdge = Color3.fromRGB(120, 10, 28),
+	Title = Color3.fromRGB(255, 255, 255),
+	TitleLine = Color3.fromRGB(0, 0, 0),
+	Shop = { Band = Color3.fromRGB(255, 53, 67), Edge = Color3.fromRGB(133, 13, 27) },
+	Settings = {
+		Band = Color3.fromRGB(24, 143, 255),
+		Edge = Color3.fromRGB(0, 57, 132),
+		-- Settings' rows: the kit's dark blue strips, white words.
+		Row = Color3.fromRGB(23, 89, 165),
+		RowEdge = Color3.fromRGB(0, 57, 132),
+		RowText = Color3.fromRGB(255, 255, 255),
+		RowDetail = Color3.fromRGB(196, 222, 255),
+		-- A muted row's state word ("MUTED", "OFF"), quieter but still light.
+		RowMuted = Color3.fromRGB(150, 178, 216),
+	},
+	-- The kit has no Index and no Bag (2026-10-08, the owner: "do the index and
+	-- bag next"): the Index wears the kit's Pets / collection green, the Bag its
+	-- Trade Inventory cyan.
+	Index = { Band = Color3.fromRGB(52, 217, 135), Edge = Color3.fromRGB(9, 106, 67) },
+	Bag = { Band = Color3.fromRGB(33, 187, 235), Edge = Color3.fromRGB(7, 87, 118) },
+	-- The Reward Wheel's chrome (2026-10-08, the owner: "let claude terminal do
+	-- the wheel too"), from the kit's Spin screen: its purple (SKIP, +10 SPINS)
+	-- for Reward info's band and the cards, its green SPIN for the buying and
+	-- spending buttons, and a dark purple strip under each prize row and the
+	-- footer so their light words read on the white studded body. The blue is
+	-- Settings', the red the kit's close. The wheel's own art is untouched.
+	Wheel = {
+		Band = Color3.fromRGB(169, 91, 255),
+		Edge = Color3.fromRGB(78, 28, 134),
+		Go = Color3.fromRGB(85, 255, 0),
+		Row = Color3.fromRGB(52, 32, 82),
+	},
+}
+
+--==============================================================================
+-- SPROUT DASH (2026-10-08, the owner: "when player rides the mill, a play
+-- minigame button appears, then when opened, a screen of the game will open,
+-- so it will not affect the jump" -- "let claude terminal build it")
+--
+-- A 2D runner played on the player's OWN mill (not the Disco Mill): the sprout
+-- runs a treadmill strip, a tap / click / Space / pad A hops it over rocks,
+-- weeds and logs, seed coins are picked up, the speed ramps, three hits end
+-- the run, and the next run is free. The DISTANCE earns a short +25% training
+-- boost of its own (Boost), added to the Bonus Chest's / the wheel's.
+--
+-- THE SERVER DECIDES (Shared/SproutDash, SproutDashService): it hands each run
+-- a seed; the client sends only the ticks it hopped on; the server replays the
+-- fixed-step simulation from the seed and those hops and pays what IT counts.
+-- A run counts only ridden on the player's own mill from start to end.
+--
+-- Values marked DEFAULT are the other session's proposals: owner calls.
+--==============================================================================
+GameConfig.SproutDash = {
+	Enabled = true,
+	-- The GameEvent action, and its two verbs (start, finish).
+	Action = "SproutDash",
+	Attributes = {
+		-- os.time() the minigame's own training boost runs out (server-written).
+		BoostEndsAt = "SproutBoostEndsAt",
+		-- True while this client has the game's screen open (client-local).
+		Open = "SproutDashOpen",
+	},
+	-- THE SIMULATION, in metres and seconds, stepped Hz times a second by the
+	-- client to draw it and by the server to count it -- identical steps.
+	Hz = 60,
+	Start = 8, -- m/s
+	Ramp = 0.15, -- m/s every second
+	Top = 18, -- m/s
+	Gravity = 40, -- m/s/s
+	Hop = 13.5, -- m/s up: 0.675 s in the air, 2.28 m high
+	Runner = { W = 0.8, H = 1.3 },
+	Obstacles = {
+		rock = { W = 1.0, H = 0.8 },
+		weed = { W = 0.6, H = 1.2 },
+		log = { W = 1.6, H = 0.6 },
+	},
+	-- THE COURSE, made from the seed a chunk at a time: one obstacle somewhere
+	-- in [Edge, Chunk - Edge] of each chunk past Lead, so two are never closer
+	-- than 2 * Edge (16 m: a hop at Top covers 12.2), and three seed coins.
+	Course = { Lead = 40, Chunk = 32, Edge = 8, CoinR = 0.4 },
+	Lives = 3, -- "until 3 hits, free replay"
+	HitGrace = 1.0, -- s the sprout passes through after a hit
+	-- CHEAP TO ASK, IMPOSSIBLE TO RUSH: a run is at most MaxSeconds of sim time
+	-- and never more than the wall clock allowed (FinishSlack s of network);
+	-- a new run at most every StartEvery s.
+	MaxSeconds = 300,
+	FinishSlack = 3,
+	StartEvery = 2,
+	-- THE REWARD (DEFAULT): +25% training for minutes by distance, at most
+	-- BankMax s banked and HourMax s earned in any hour.
+	Boost = {
+		Multiplier = 1.25,
+		Tiers = {
+			{ Distance = 250, Minutes = 1 },
+			{ Distance = 500, Minutes = 2 },
+			{ Distance = 1000, Minutes = 3 },
+			{ Distance = 2000, Minutes = 5 },
+		},
+		BankMax = 600,
+		HourMax = 900,
+	},
+	-- THE ART: the owner's uploads (2026-10-08, CrazyCozy Games group Images);
+	-- "" would bring back the frame stand-ins. Rects are in each STORED image's
+	-- pixels, measured on the upload itself (EditableImage, alpha), so a new
+	-- drop-in is config-only. The ground strip is the one layer that scrolls
+	-- and repeats (made to tile). The backdrop does NOT tile: it is drawn once,
+	-- still, behind the runner -- never scrolled, never repeated. Obstacles and
+	-- coins scroll as sprites.
+	Art = {
+		-- sprout-dash-runner-v1: 1024 x 512, 4 x 2 cells of 256 (run 1-4 on top;
+		-- hop, hit, ready, cheer below), facing right. The standing frames' feet
+		-- are 32 px over each cell's foot, the tucked hop's 72 -- each frame is
+		-- set down by its own feet. The standing drawing, feet to leaf tip, is
+		-- about 157 px: that height is CFG.Runner.H on screen.
+		Runner = {
+			Image = "rbxassetid://134371957887780",
+			Cell = 256,
+			Baseline = 32,
+			HopBaseline = 72,
+			Tall = 157,
+			Run = { Vector2.new(0, 0), Vector2.new(256, 0), Vector2.new(512, 0), Vector2.new(768, 0) },
+			Hop = Vector2.new(0, 256),
+			Hit = Vector2.new(256, 256),
+			Ready = Vector2.new(512, 256),
+			Cheer = Vector2.new(768, 256),
+		},
+		-- sprout-dash-props-v1-ORIGINAL (1774 x 887, stored 1024 x 512): the
+		-- generation, not the 256-cell atlas, so its drawings fill their cells
+		-- at their own sizes. Each is a tight rect (alpha > 10, a pixel spare);
+		-- a ground prop's rect ends at its lowest row, which stands on the belt.
+		-- An obstacle is drawn just big enough to cover its hitbox, so nothing
+		-- that hits is ever unseen. `pot` has no obstacle yet.
+		Props = {
+			Image = "rbxassetid://87208780933422",
+			rock = Rect.new(19, 66, 238, 240),
+			weed = Rect.new(264, 44, 498, 242),
+			log = Rect.new(517, 105, 766, 241),
+			pot = Rect.new(780, 74, 1007, 239),
+			heart = Rect.new(36, 301, 224, 464),
+			heartEmpty = Rect.new(289, 300, 478, 463),
+			dust = Rect.new(531, 339, 758, 466),
+			spark = Rect.new(794, 264, 1000, 475),
+		},
+		-- sprout-dash-ground-v1: 1024 x 256, opaque; the belt's top (where the
+		-- feet go) 48 px down.
+		Ground = { Image = "rbxassetid://107251527164014", Size = Vector2.new(1024, 256), Top = 48 },
+		-- sprout-dash-backdrop-v1: 1024 x 512, opaque, static.
+		Backdrop = { Image = "rbxassetid://122111644752248", Size = Vector2.new(1024, 512) },
+		-- The approved uploads already in the game.
+		Coin = "rbxassetid://97002362837712",
+		Burst = "rbxassetid://138957621639655",
+	},
+	-- The screen's band (DEFAULT: the kit's Upgrades orange).
+	Look = { Band = Color3.fromRGB(255, 154, 34), Edge = Color3.fromRGB(153, 81, 20) },
+	-- THE GAME'S OWN MUSIC (2026-10-09, the owner: "sprout rush"; an Audio
+	-- asset, Studio Edit: PreloadAsync Success, 182.81 s). While THIS player has
+	-- the screen open (Attributes.Open, client-local) Music.client crossfades
+	-- the bed to it over FadeSeconds, looping, and back to whatever the world
+	-- asks for on close. On the one music Sound and bus, so the player's music
+	-- level and mute and the chase bed's duck apply as to any bed. Volume is on
+	-- the same scale as Music.Volume (0.32: the beds' own level). "" keeps the
+	-- bed that was playing.
+	Music = { Id = "rbxassetid://111742643280141", Volume = 0.32, FadeSeconds = 1.5 },
+	Words = {
+		Button = "PLAY MINIGAME",
+		Title = "Sprout Dash",
+		Hint = "TAP or SPACE to hop",
+		Over = "RUN OVER",
+		Distance = "%s m",
+		Coins = "%d",
+		CoinTotal = "%d coins",
+		Best = "Best today: %s m",
+		Again = "PLAY AGAIN",
+		Close = "CLOSE",
+		Reward = "+%d min training boost!",
+		NoReward = "Run %d m for a training boost",
+		Capped = "Training boost full (10 min)",
+		HourCapped = "15 boost minutes an hour: try later",
+		Counting = "Counting...",
+		OffMill = "Off the mill: the run ended",
+	},
+}
+
 GameConfig.MenuIcons = {
 	shop = GameConfig.Rail.ShopIcon,
 	almanac = GameConfig.BagLook.IconImages.plants,
@@ -7676,6 +8675,19 @@ GameConfig.SourceIcons = {
 	disco = "rbxassetid://129016824458756",
 	coin = "rbxassetid://97002362837712",
 	milestone = "rbxassetid://101850589009212",
+	-- The owner's rebirth emblem (2026-10-09): the icon of the line everybody
+	-- else in the server reads when somebody is reborn.
+	rebirth = GameConfig.Rebirth.Art.Emblem,
+	-- The owner's POD RUSH icon (2026-10-09): its announcement, its boost icon
+	-- and its lines. Drawn by its crop (SourceIconCrops).
+	podrush = GameConfig.PodRush.Art.Icon,
+}
+
+-- A source picture uploaded with a clear margin round it is drawn by its crop
+-- wherever StatusText draws it (the notices, the boost icons): ImageRectOffset
+-- and ImageRectSize in the upload's stored pixels.
+GameConfig.SourceIconCrops = {
+	podrush = { Offset = GameConfig.PodRush.Art.CropOffset, Size = GameConfig.PodRush.Art.CropSize },
 }
 
 --==============================================================================
@@ -7728,6 +8740,8 @@ GameConfig.WheelPodArt = {
 --              or, for the pure DISCO ONLY, its movement boost
 --   tickets    a Ticket mode (Ticket Disco, Ticket Shower Only), with this
 --              player's count of the per-event limit on a small badge
+--   podrush    a POD RUSH (2026-10-09), with this player's count banked on
+--              its badge
 --   income     a +plant-income boost (the Bonus Chest's or the Reward Wheel's --
 --   training   a +training boost        one slot, the two cannot be told apart)
 --   sacrifice  the Sacrifice Pedestal's garden-income boost
@@ -7743,7 +8757,7 @@ GameConfig.WheelPodArt = {
 --==============================================================================
 GameConfig.BoostIcons = {
 	-- Left to right.
-	Order = { "weather", "disco", "tickets", "income", "training", "sacrifice" },
+	Order = { "weather", "disco", "tickets", "podrush", "income", "training", "sprout", "sacrifice" },
 	-- The drawn icon (px, safe space) by HUD mode; never smaller than Min,
 	-- however many there are. Gap between two.
 	Size = { Desktop = 40, Compact = 34, Phone = 30, Min = 24 },
@@ -7758,12 +8772,21 @@ GameConfig.BoostIcons = {
 	PadKey = Enum.KeyCode.DPadDown,
 	-- The popover over the icon.
 	Popover = { Width = 250, PhoneWidth = 214, Gap = 8 },
+	-- True on the LocalPlayer (client-local) while the open popover has no place
+	-- clear of the Pod Rush tracker too, and stands where it would without it:
+	-- the tracker steps aside until it closes (2026-10-09, seen on a 705 x 338
+	-- phone with the guide's card up).
+	CoversAttribute = "SeedBuffPopoverCovers",
 	Tints = {
 		weather = Color3.fromRGB(150, 196, 255),
 		disco = Color3.fromRGB(255, 160, 232),
 		tickets = Color3.fromRGB(255, 214, 92),
+		-- POD RUSH (2026-10-09): its gold.
+		podrush = Color3.fromRGB(255, 204, 64),
 		income = Color3.fromRGB(38, 255, 0),
 		training = Color3.fromRGB(25, 144, 255),
+		-- Sprout Dash's own training boost (2026-10-08): its screen's orange.
+		sprout = Color3.fromRGB(255, 154, 34),
 		sacrifice = Color3.fromRGB(38, 255, 0),
 	},
 	-- What each popover says. %d / %s are filled in from the configs the
@@ -7788,6 +8811,10 @@ GameConfig.BoostIcons = {
 		TicketsEffect = "Free Spin Tickets are falling all over the map.",
 		TicketsProgress = "Collected %d/%d this event. Walk over one to take it.",
 		TicketsCapped = "All %d collected this event. Leave the rest for others.",
+		-- POD RUSH (2026-10-09): the levels' pods, then this player's count.
+		PodRush = "Pod Rush",
+		PodRushEffect = "Bank pods taken from nests: %d bronze, %d silver, %d gold.",
+		PodRushProgress = "%d banked this rush.",
 		Boost = "Bonus Chest or Reward Wheel",
 		IncomeEffect = "+%d%% plant income",
 		TrainingEffect = "+%d%% treadmill training",
@@ -7795,6 +8822,9 @@ GameConfig.BoostIcons = {
 		Sacrifice = "Sacrifice Pedestal",
 		SacrificeEffect = "+%d%% garden income",
 		SacrificeHint = "Sacrifice at the pedestal again when it is ready.",
+		Sprout = "Sprout Dash",
+		SproutEffect = "+%d%% treadmill training",
+		SproutHint = "Play Sprout Dash on your own mill for more.",
 		EndsIn = "Ends in %s",
 	},
 }
@@ -8161,6 +9191,21 @@ GameConfig.Music = {
 		"rbxassetid://118716691317783", -- disco event sfx (CrazyCozy Games upload)
 	},
 	DiscoFadeSeconds = 3.0,
+
+	--==========================================================================
+	-- THE POD RUSH'S BED (2026-10-09; the owner: the rush needs music)
+	--
+	-- While a POD RUSH runs (GameConfig.MiniEvent State "running" and a mode
+	-- with PodRush) this ONE track takes the bed's place the way the disco's
+	-- does -- the two are both mini events and never run at once -- on the same
+	-- one Sound and Music bus, so the chase bed ducks it as it ducks any bed;
+	-- looping, faded in and out over PodRushFadeSeconds, and started at the
+	-- rush's own position. "" keeps the normal bed: the owner's Suno take goes
+	-- here once uploaded and measured (sfx/suno prompts.txt, entry 21). An id
+	-- that does not load is reported and skipped.
+	--==========================================================================
+	PodRushTrack = "",
+	PodRushFadeSeconds = 3.0,
 }
 
 --==============================================================================
@@ -8568,6 +9613,41 @@ GameConfig.Sfx = {
 		RevealEpic = { id = "rbxassetid://83653226797020", volume = 1.52, group = "UI" },
 		-- Peaks at 87%. Designed 0.55.
 		RevealLegendary = { id = "rbxassetid://73136314922937", volume = 0.64, group = "UI" },
+		--==================================================================
+		-- THE REBIRTH FANFARE (2026-10-09, Rebirth.Celebration.Cue and
+		-- NearbyCue)
+		--
+		-- The owner's "Triumphant Chime" (sfx/Triumphant Chime.mp3), 13.09 s:
+		-- a build to 2.4 s (rising hits at 0.48-1.87 s), the ARRIVAL HIT at
+		-- 2.41 s -- its brightest moment -- a sustained fanfare to 9.5 s and a
+		-- fade to 12.5 s. Peak 0.635 (-3.9 dBFS) in either channel at 48 kHz
+		-- (measured here 2026-10-09; the other session's own measure read
+		-- 0.501). Designed 0.60: 0.6 / 0.635.
+		--
+		-- THE WINDOW the owner was told: from 0.85 s for 3.4 s, so the hit
+		-- lands at 1.56 s -- on the celebration's burst at 1.6 s -- and the
+		-- last 1.2 s fades instead of being cut, ending with the card.
+		-- Rebirth is flat on the reborn player's own screen; RebirthNearby is
+		-- the same window from the body, heard within the celebration's
+		-- Range by everybody close.
+		--==================================================================
+		Rebirth = {
+			id = "rbxassetid://115254226875194",
+			volume = 0.94, start = 0.85, clip = 3.4, fadeOut = 1.2, group = "UI",
+		},
+		RebirthNearby = {
+			id = "rbxassetid://115254226875194",
+			volume = 0.94, start = 0.85, clip = 3.4, fadeOut = 1.2, range = 120, group = "World",
+		},
+
+		--==================================================================
+		-- THE POD RUSH'S STINGS (2026-10-09; PodRushUI): a short START with
+		-- its announcement and a FINISH with the end card, flat on the
+		-- player's own screen. Silent ("") until the owner's Suno takes are
+		-- uploaded and measured (sfx/suno prompts.txt, entry 22).
+		--==================================================================
+		PodRushStart = { id = "", volume = 0.6, group = "UI" },
+		PodRushFinish = { id = "", volume = 0.6, group = "UI" },
 
 		--======================================================================
 		-- THE MILL
@@ -9406,6 +10486,13 @@ GameConfig.Labels = {
 		-- pod's timer on touch, where the two are clamped onto the screen as one
 		-- group -- see ReachPoint.stack.
 		PanelHeight = 52,
+		-- ON A PHONE, THREE QUARTERS (the owner's call, 2026-10-08: "proximity
+		-- prompt on mobile looks too large"). A touch screen whose shorter side
+		-- is under PhoneShortSide pixels draws every prompt panel at PhoneScale
+		-- -- 170 x 52 becomes about 128 x 39. Tablets and every desktop keep 1.
+		-- ReachPoint.promptScale is the one answer PromptUI and PlantUI share.
+		PhoneScale = 0.75,
+		PhoneShortSide = 500,
 	},
 }
 
@@ -9705,8 +10792,22 @@ GameConfig.Save = {
 	-- The limit is asked when something is ADDED (CarryService.HeldRoom): a
 	-- hatch, a pickup or a pod past it is refused. Nothing is cut to it: since
 	-- 2026-09-29 ProfileSchema keeps every saved row, however many there are.
+	--
+	-- PLANTS ONLY SINCE 2026-10-09 (the owner's Phase 1, "More stealing, less
+	-- waiting"): hatched plants count here, pods against MaxPods below.
 	--==========================================================================
 	MaxHeld = 24,
+	--==========================================================================
+	-- HOW MANY PODS THE BAG HOLDS (2026-10-09, the owner's Phase 1)
+	--
+	-- Pods hatch in the Bag now (GameConfig.HatchInBag), so they have a room of
+	-- their own: a steal at the nest is refused only at this many pods, saved
+	-- and carried together. Every pod is still a saved row and a Tool, so the
+	-- cap keeps saves small and the Bag responsive; with the average pod ready
+	-- in about five minutes nobody should reach it. Asked when a pod is ADDED,
+	-- like MaxHeld; nothing is ever cut to it.
+	--==========================================================================
+	MaxPods = 60,
 
 	--==========================================================================
 	-- SESSION LOCK
@@ -9722,6 +10823,245 @@ GameConfig.Save = {
 	SessionLockSeconds = 120,
 	LoadAttempts = 5,
 	LoadRetryGap = 3,
+}
+
+--==============================================================================
+-- PODS HATCH IN THE BAG (2026-10-09, the owner's Phase 1, "More stealing, less
+-- waiting"; KB/STEAL-MORE-PLAN.md)
+--
+-- A pod's wait starts the moment it is BANKED: its deadline (os.time(),
+-- absolute) is stamped on its saved Bag row and on its Tool as `Attribute`, so
+-- it keeps running while the player is away, as planting did. Pods never take a
+-- garden bed: placing one is refused (ActionRefusal POD_IN_BAG). A ready pod
+-- says READY in the Bag and on the hotbar; HATCH there is the bed prompt's own
+-- 1.1 s hold (Plant.HatchHoldSeconds), and HATCH ALL hatches every ready pod.
+-- The plant goes straight into a free bed of the player's garden, or into the
+-- Bag when no bed is free. Pods planted before this keep growing and hatch
+-- where they stand, exactly as before (PlantService.hatch).
+--
+-- THE VERBS, client -> server on GameEvent; every argument is a claim
+-- (PlantService):
+--   Hatch      one ready pod, by its item id
+--   HatchAll   every ready pod
+--   Instant    Instant Hatch on one growing pod, by its item id: a saved credit
+--              is spent, else the purchase dialog opens -- the bed prompt's
+--              product, price and credits (Plant.InstantHatch)
+--   Reply      server -> the asking client: { op, ok, code, planted, bagged,
+--              left }
+--==============================================================================
+GameConfig.HatchInBag = {
+	Attribute = "HatchAt",
+	-- On the player: how many saved Instant Hatches they hold (PlantService),
+	-- so the Bag's Instant Hatch says FREE instead of a price.
+	CreditsAttribute = "InstantCredits",
+	Hatch = "BagHatch",
+	HatchAll = "BagHatchAll",
+	Instant = "BagInstantHatch",
+	Reply = "BagHatchResult",
+	-- One request per player this often; a second inside it is not heard.
+	Cooldown = 0.3,
+	-- HATCH ALL's reveals one after another, this far apart. Every plant is the
+	-- player's the moment the request lands; only the shows are spaced, so a
+	-- dozen shells do not burst on one frame.
+	AllGapSeconds = 0.4,
+	--==========================================================================
+	-- WHERE THE HATCH MOMENT PLAYS
+	--
+	-- At the bed the plant goes into, while the player stands within
+	-- RevealAtBedStuds of it. Otherwise -- away from home, or no free bed -- in
+	-- front of them, so the moment never plays where nobody sees it: past
+	-- Plant.Hatch.HearingStuds (240) a client draws nothing. In front means
+	-- FrontStuds ahead of the body plus the shell's own size, and a HATCH ALL
+	-- fans its plants across FanSlots places FanDegrees either side.
+	--==========================================================================
+	RevealAtBedStuds = 120,
+	FrontStuds = 9,
+	FanDegrees = 50,
+	FanSlots = 5,
+	Words = {
+		Ready = "READY",
+		Hatch = "HATCH",
+		HatchAll = "HATCH ALL",
+		HoldHatch = "HOLD TO HATCH",
+		Instant = "INSTANT HATCH",
+		SavedInstant = "FREE INSTANT HATCH",
+		-- A pod still growing, with its time left: "READY IN 2:05".
+		ReadyIn = "READY IN %s",
+		-- Said once a Bag hatch's plant has come up, by where the plants went:
+		-- one planted while its moment played away from its bed, one in the Bag
+		-- (the garden full), and a HATCH ALL of several.
+		PlantedTitle = "PLANTED!",
+		PlantedDetail = "It's growing in your garden now.",
+		BaggedTitle = "IN YOUR BAG",
+		BaggedDetail = "Your garden is full. Place it from your Bag.",
+		AllTitle = "%d HATCHED!",
+		AllPlanted = "All planted in your garden.",
+		AllBagged = "All in your Bag: your garden is full.",
+		AllSplit = "%d planted in your garden, %d in your Bag.",
+	},
+	--==========================================================================
+	-- THE OWNER'S ICONS (2026-10-09; each 512 x 512, ids checked by the peer
+	-- session). "" puts the drawn stand-in back -- never another upload
+	-- standing in. One crop fits all four: their drawn bounds are inside
+	-- (41, 41)-(471, 471), so under ScaleType Fit they fill their spots and
+	-- draw the same size.
+	--   Hatch         a pod cracking with a sprout: HATCH and HATCH ALL
+	--   InstantHatch  the pod with a lightning bolt: the Instant Hatch action
+	--   Timer         the hourglass, beside a growing pod's countdown
+	--   Ready         a green check badge, on a ready pod's tile
+	--==========================================================================
+	Icons = {
+		Hatch = "rbxassetid://70562570593192",
+		InstantHatch = "rbxassetid://111764150121238",
+		Timer = "rbxassetid://111370496768773",
+		Ready = "rbxassetid://131185686807584",
+	},
+	IconCropOffset = Vector2.new(41, 41),
+	IconCropSize = Vector2.new(430, 430),
+}
+
+--==============================================================================
+-- THE OWNER'S 25 PODS (2026-10-09; KB/POD-MODELS-PLAN.md, approved: "approve
+-- but let claude terminal build")
+--
+-- PodForms holds them as data, PodModel builds one at a tier's size for
+-- CreatureModel.BuildPod, and PodMotion (client) plays their idles.
+--==============================================================================
+GameConfig.PodModels = {
+	-- THE BOX, in D (SeedData.PodDiameter). A pod without the owner's designed
+	-- size is scaled until its wider footprint side reaches MaxWidth x D or its
+	-- height MaxHeight x D, whichever comes first; a lid pod keeps the owner's
+	-- designed ClosedWidth x D. The carry grip, the guardian haul and the nest
+	-- ring are built for this box (the old pods ran 1.21 to 1.46 D tall).
+	MaxWidth = 1.25,
+	MaxHeight = 1.45,
+	-- NO BASE AND NO RING (the owner, 2026-10-09: "remove the base if there is a
+	-- base below the pods"). The base each pod stood on is left out of its form
+	-- (PodForms), and a pod without a SizeSeam of its own (the 12 studded pods
+	-- and Bogbonnet) shows its size by its scale: a ring round its foot would
+	-- read as the base again. A lid pod's own SizeSeam takes the tier's colour.
+	--
+	-- THE COLOSSAL'S CORE, in D: a Neon ball at the Shell's centre, inside the
+	-- pod, so the owner's outline is unchanged. Its light and the stronger aura
+	-- hang on it and reach out through the shell; it shows through a lid's peek.
+	CoreDiameter = 0.34,
+	-- PALE PODS GLOW SOFTER (2026-10-09, the owner's approval: "approve your
+	-- suggestions"). A Colossal's two lights -- its core's and its aura's --
+	-- follow the pod's own brightness (PodModel.Brightness: its visible parts'
+	-- mean luminance, by area): full at From and under, Floor of their strength
+	-- and RangeFloor of their reach at To and over, straight between. Seen in
+	-- Play: those lights, not the aura's halo, washed the pale Greenhollow and
+	-- Dustbowl pods out white, and a neighbour's light added to it. The halo is
+	-- unchanged.
+	PaleGlow = { From = 0.42, To = 0.6, Floor = 0.15, RangeFloor = 0.5 },
+	-- On every pod PodModel builds, put on last: PodMotion animates by it.
+	Tag = "PodRig",
+	-- On the model: which of the owner's pods it is (CarryService drops the
+	-- owner's joints from a carried or held one by it).
+	FormAttribute = "PodForm",
+	-- POD MOTION (client). Only pods in the Workspace that are anchored (not
+	-- carried or hauled) and within Range studs of the camera move: a nest's or a
+	-- loose pod (SeedPod), a planted one (Planted), or one on a stand that sets
+	-- ShowcaseAttribute. Viewport copies stay still; REDUCED FX stills every one.
+	-- NOTHING BREATHES (the owner, 2026-10-09: "disable breathing animation on
+	-- pods"): no pod's body bobs; a studded pod's joints wave as its script
+	-- waved them, a lid pod's lid peeks, and both pulse their lights.
+	Motion = {
+		Range = 120,
+		-- HOW OFTEN A POD IS STEPPED. Moving anchored parts costs about 5 us a
+		-- part a frame (measured 2026-10-09, Studio Play), so only the parts a
+		-- joint moves are written, and a pod within NearStuds of the camera
+		-- steps every NearEvery frames, one further off every FarEvery, each on
+		-- its own frame so the cost is spread, never bunched.
+		NearStuds = 60,
+		NearEvery = 2,
+		FarEvery = 4,
+		ShowcaseAttribute = "PodShowcase",
+		-- A READY pod (an old save's planted pod with its Ready attribute): a
+		-- studded pod's idle runs ReadySpeed times faster; a lid pod's lid stands
+		-- ReadyOpen open (the owner's OpenAmount, 0..1), eased in over ReadyEase
+		-- seconds.
+		ReadySpeed = 2,
+		ReadyOpen = 0.45,
+		ReadyEase = 0.6,
+		-- A LID POD'S IDLE (new: the owner's lid pods had none): the lid peeking
+		-- open to PeekOpen and shut again over PeekSeconds, every PeekEvery
+		-- seconds, and its lights pulsing GlowPulse either side of their
+		-- brightness.
+		PeekOpen = 0.08,
+		PeekEvery = 5.5,
+		PeekSeconds = 1.4,
+		GlowPulse = 0.25,
+	},
+}
+
+--==============================================================================
+-- THE POD GUIDE (2026-10-09; KB/POD-GUIDE-PLAN.md, the owner's approval)
+--
+-- What a pod hatches, taught OUTSIDE the pod -- a pod carries no words at all
+-- (2026-09-17). One stand just inside each biome's arch, beside the road: the
+-- biome's five pods turning slowly on a carousel, and a board that pairs each
+-- pod with its plant (a "???" silhouette until grown), its rarity and how
+-- often a nest stocks it, over the seven sizes' odds and what each is worth.
+-- Every client builds the stands for itself (PodGuideUI; nothing replicates);
+-- every number is PodGuide's, from the rolls' own data.
+--==============================================================================
+GameConfig.PodGuide = {
+	-- WHERE, in each biome's own frame: X across the road (+ is the right going
+	-- in), In studs inside its arch. Clear of the racing line (|X| under 24)
+	-- and of the props near each arch (MapDecor, measured 2026-10-09):
+	-- Starbloom's right side is its fan trees', so its stand is on the left.
+	Spots = {
+		greenhollow = { X = 40, In = 9.5 },
+		dustbowl = { X = 40, In = 9.5 },
+		tanglemire = { X = 40, In = 9.5 },
+		emberroot = { X = 40, In = 9.5 },
+		starbloom = { X = -40, In = 9.5 },
+	},
+	-- THE CAROUSEL: the five pods at PodTier (Big), Radius from the centre of a
+	-- turntable TurntableRadius wide and TurntableHeight tall, each facing out;
+	-- one turn every TurnSeconds (held still for reduced motion). Built while
+	-- the camera is within BuildStuds of a stand, freed past FreeStuds; turned
+	-- only within TurnStuds.
+	PodTier = 2,
+	Radius = 3.7,
+	TurntableRadius = 5.6,
+	TurntableHeight = 1,
+	TurnSeconds = 40,
+	BuildStuds = 150,
+	FreeStuds = 180,
+	TurnStuds = 90,
+	-- THE BOARD: BoardBack studs behind the carousel's centre (away from the
+	-- road), facing the road, BoardSize at PixelsPerStud, its top BoardTopY over
+	-- the ground. Not drawn past MaxDistance; its pictures built within
+	-- PreviewNearStuds and freed past PreviewFarStuds, checked every
+	-- CheckSeconds (TOP CREATURES' own rule).
+	BoardBack = 8,
+	BoardSize = Vector3.new(15, 8.4, 0.46),
+	BoardTopY = 11.4,
+	PostWidth = 0.7,
+	RimStuds = 0.14,
+	PixelsPerStud = 60,
+	MaxDistance = 120,
+	PreviewNearStuds = 60,
+	PreviewFarStuds = 75,
+	CheckSeconds = 0.25,
+	Words = {
+		Title = "%s PODS",
+		Sub = "EACH POD HATCHES ITS OWN PLANT. HOW OFTEN A NEST HAS IT:",
+		Sizes = "SIZE",
+		SizeChance = "CHANCE",
+		SizeWorth = "INCOME",
+		Secret = "SECRET POD: %s CHANCE A NEST RAISES ONE",
+		-- The Bag: a pod's tile and its menu's way to the Almanac.
+		BagTitle = "%s pod",
+		WhatsInside = "WHAT'S INSIDE?",
+		-- The Almanac: a card's chance, its detail page's lines.
+		CardChance = "%s of pods",
+		HatchesFrom = "Hatches from its own pod: %s of %s nest pods",
+		IncomeTitle = "Income by size",
+		SizesTitle = "POD SIZES",
+	},
 }
 
 -- How deep a plot with this many bed rows has to be. One expression, read by

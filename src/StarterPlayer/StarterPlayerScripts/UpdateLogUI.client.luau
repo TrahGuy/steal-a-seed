@@ -362,6 +362,8 @@ local function relayout()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 		keyboardTop = keyboardTop(),
 	}, RAIL.OutlineThickness, contentHeight())
 	menu.place(p)

@@ -75,6 +75,9 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- Guis that run their own controller focus. Never touched here.
 local OWN_FOCUS: { [string]: boolean } = {
 	SeedAdmin = true,
+	-- Sprout Dash: A hops (and plays again), B closes, so nothing in it may be
+	-- selected -- a selection would take A from the hop.
+	SeedSproutDash = true,
 }
 
 --==============================================================================

@@ -158,7 +158,23 @@ local ok, err = pcall(function()
 			end
 		end
 		check(ok2 and titles == 2, "a group: one column per reward, each with its icon, name and amount")
-		check(ok2 and aboveCard, "every icon draws above the card's plate, whatever the gui's ZIndexBehavior")
+		check(ok2 and aboveCard, "every icon draws above the card, whatever the gui's ZIndexBehavior")
+		-- TRANSPARENT (the owner, 2026-10-09): no plate, corner or rim; the outlines carry the words.
+		local heading = ok2 and built.card:FindFirstChild("Heading")
+		local headEdge = heading and heading:FindFirstChildOfClass("UIStroke")
+		local detailEdges = 0
+		if ok2 then
+			for _, d in ipairs(built.card:GetDescendants()) do
+				local edge = d:IsA("TextLabel") and d.Name == "Detail" and d:FindFirstChildOfClass("UIStroke")
+				if edge and edge.Thickness >= 2 then
+					detailEdges += 1
+				end
+			end
+		end
+		check(ok2 and built.card.BackgroundTransparency == 1 and built.card:FindFirstChildOfClass("UICorner") == nil
+				and built.card:FindFirstChildOfClass("UIStroke") == nil and headEdge ~= nil and headEdge.Thickness >= 2
+				and detailEdges == 2,
+			"TRANSPARENT: no plate, corner or rim behind the rewards; the heading and the amounts outlined 2 px")
 		check(ok2 and built.card.Size.X.Offset * built.k <= view.X * S.MaxWidthShare + 0.5
 				and built.k <= S.scaleFor(view) + 1e-6,
 			"never wider than most of the screen", ok2 and string.format("%.0f of %.0f", built.card.Size.X.Offset * built.k,

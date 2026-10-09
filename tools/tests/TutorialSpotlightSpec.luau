@@ -248,10 +248,20 @@ local ok, err = pcall(function()
 			if math.max(c.W, c.H) * 1.5 < math.sqrt(farX * farX + farY * farY) then
 				table.insert(problems, tag .. ": the dim does not reach a corner")
 			end
-			local hand = Spot.handFor(window, scr, size)
+			-- Garden and the Bag, kept off where a side lets it (2026-10-09: at a
+			-- phone's left edge over the cash block, where the hand for SPEED stood).
+			local avoid = { toSpot(c, L.garden), toSpot(c, L.bag) }
+			local hand = Spot.handFor(window, scr, size, avoid)
 			if not hand then
 				table.insert(problems, tag .. ": no room for the hand")
 			else
+				if t.key == "speed" then
+					for _, a in ipairs(avoid) do
+						if Spot.overlaps(hand.rect, a) or Spot.overlaps(hand.tapped, a) then
+							table.insert(problems, tag .. ": the hand stands on Garden or the Bag")
+						end
+					end
+				end
 				if not (Spot.inside(hand.rect, scr, Spot.Margin) and Spot.inside(hand.tapped, scr, Spot.Margin)) then
 					table.insert(problems, tag .. ": the hand leaves the screen")
 				end
@@ -290,13 +300,15 @@ local ok, err = pcall(function()
 				local edge = math.ceil(6 * c.k)
 				local w = math.max(a.X, b.X) + edge
 				local h = a.Y + edge + (if spec.key then b.Y + 2 else 0)
-				local at = Spot.wordsFor(hand, window, scr, w, h)
+				local at = Spot.wordsFor(hand, window, scr, w, h, avoid)
 				local both = rect(math.min(hand.rect.x, hand.tapped.x), math.min(hand.rect.y, hand.tapped.y),
 					hand.rect.w + math.abs(hand.tapped.x - hand.rect.x), hand.rect.h + math.abs(hand.tapped.y - hand.rect.y))
 				if not Spot.inside(at, scr, 0) then
 					table.insert(problems, tag .. ": the words leave the screen")
 				elseif Spot.overlaps(at, window) or Spot.overlaps(at, both) then
 					table.insert(problems, tag .. ": the words stand over the window or the hand")
+				elseif t.key == "speed" and (Spot.overlaps(at, avoid[1]) or Spot.overlaps(at, avoid[2])) then
+					table.insert(problems, tag .. ": the words stand on Garden or the Bag")
 				end
 			end
 		end
@@ -316,6 +328,18 @@ local ok, err = pcall(function()
 			perTarget.speed or 0, perTarget.slot or 0, perTarget.biomes or 0, perTarget.obby or 0, #cases))
 	check(phoneCase ~= nil and phoneCase.n >= 4, "including Studio's 705 x 338 phone, notch and home bar and all",
 		phoneCase and phoneCase.n)
+	-- The words keep off `avoid` too (2026-10-09): a button where they would
+	-- stand, and they stand elsewhere beside the hand.
+	do
+		local scr = rect(0, 0, 800, 400)
+		local window = rect(380, 300, 60, 40)
+		local hand = Spot.handFor(window, scr, Spot.Hand.Size)
+		local first = hand and Spot.wordsFor(hand, window, scr, 120, 30)
+		local moved = hand and Spot.wordsFor(hand, window, scr, 120, 30, { first })
+		check(hand ~= nil and first ~= nil and moved ~= nil and not Spot.overlaps(moved, first),
+			"the hand's words keep off a button standing where they would go",
+			first and moved and string.format("(%g,%g) -> (%g,%g)", first.x, first.y, moved.x, moved.y))
+	end
 
 	-- THE LOCKED CHEST'S WORDS (the owner's words, 2026-10-08): on every listed
 	-- phone a notice's detail line (GothamBold 12, ActionToastUI's PHONE size)
@@ -526,8 +550,9 @@ local ok, err = pcall(function()
 		"PlotService tells only a SUCCESSFUL teleport home, after the move, and nothing else")
 	check(has(dataSrc, "PlotService.OnTeleportedHome(function(player: Player)")
 			and has(dataSrc, "PlayerDataService.RecordTutorial(player, \"travel\")"),
-		"PlayerDataService records travel from it (TutorialData refuses it before the hatch)")
-	check(TutorialData.Needs.travel == "hatch", "travel needs the hatch")
+		"PlayerDataService records travel from it (TutorialData refuses it before the first loop is done)")
+	check(TutorialData.Needs.travel == "place",
+		"travel needs the first loop done: its last step is placing the first plant since the hatch moved before it (2026-10-09)")
 end)
 
 if not ok then

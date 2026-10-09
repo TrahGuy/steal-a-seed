@@ -262,8 +262,22 @@ end
 -- as drawn; one in the bottom half from above. Then from the side with the more
 -- room, then the other. Nil only where no side has room -- the spec proves that
 -- never happens for a real target on a listed screen.
+--
+-- `avoid` (2026-10-09): buttons the hand keeps off where some side lets it --
+-- Garden and the Bag, which stand at a phone's left edge over the cash block
+-- now, right where the hand pointing down at SPEED stood. Where no side keeps
+-- off them the hand stands as it would without them.
 --==============================================================================
-function Spotlight.handFor(window: Rect, screen: Rect, size: number): Hand?
+local function clearOfAll(r: Rect, avoid: { Rect }?): boolean
+	for _, a in ipairs(avoid or {}) do
+		if Spotlight.overlaps(r, a) then
+			return false
+		end
+	end
+	return true
+end
+
+function Spotlight.handFor(window: Rect, screen: Rect, size: number, avoid: { Rect }?): Hand?
 	local cx, cy = window.x + window.w / 2, window.y + window.h / 2
 	local midX, midY = screen.x + screen.w / 2, screen.y + screen.h / 2
 	local first, last = "up", "down"
@@ -274,13 +288,17 @@ function Spotlight.handFor(window: Rect, screen: Rect, size: number): Hand?
 	if cx > midX then
 		near, far = "right", "left"
 	end
+	local fallback: Hand? = nil
 	for _, dir in ipairs({ first, near, far, last }) do
 		local hand = handAt(dir, window, screen, size)
 		if hand then
-			return hand
+			if clearOfAll(hand.rect, avoid) and clearOfAll(hand.tapped, avoid) then
+				return hand
+			end
+			fallback = fallback or hand
 		end
 	end
-	return nil
+	return fallback
 end
 
 --==============================================================================
@@ -288,9 +306,10 @@ end
 --
 -- A hand pointing up or down has its words to one side, the side with the more
 -- room first; a hand pointing sideways has them under it, else over it. `w` and
--- `h` are the words' own box. Clamped onto the screen as a last resort.
+-- `h` are the words' own box. Clamped onto the screen as a last resort. Each
+-- spot keeps off `avoid` too (handFor's), where one does.
 --==============================================================================
-function Spotlight.wordsFor(hand: Hand, window: Rect, screen: Rect, w: number, h: number): Rect
+function Spotlight.wordsFor(hand: Hand, window: Rect, screen: Rect, w: number, h: number, avoid: { Rect }?): Rect
 	local gap = Spotlight.Words.Gap * (hand.size / Spotlight.Hand.Size)
 	local m = Spotlight.Margin
 	local r = hand.rect
@@ -315,10 +334,12 @@ function Spotlight.wordsFor(hand: Hand, window: Rect, screen: Rect, w: number, h
 	else
 		order = { below, above, sides[1], sides[2] }
 	end
-	for _, spot in ipairs(order) do
-		if Spotlight.inside(spot, screen, m) and not Spotlight.overlaps(spot, window)
-			and not Spotlight.overlaps(spot, both) then
-			return spot
+	for _, clean in ipairs({ true, false }) do
+		for _, spot in ipairs(order) do
+			if Spotlight.inside(spot, screen, m) and not Spotlight.overlaps(spot, window)
+				and not Spotlight.overlaps(spot, both) and (not clean or clearOfAll(spot, avoid)) then
+				return spot
+			end
 		end
 	end
 	-- The last resort: the first choice, pulled onto the screen.

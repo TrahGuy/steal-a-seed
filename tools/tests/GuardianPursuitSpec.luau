@@ -480,8 +480,10 @@ local ok, err = pcall(function()
 			and string.find(body("takeNextThief"), "pinToServer(nest)", 1, true) ~= nil
 			and string.find(body("provoke"), "pinToServer(nest)", 1, true) ~= nil,
 		"the server owns every guardian: pinned at build and at the start of every chase")
-	check(string.find(src, "nest.busy = false\n\t\t\t\tif nest.target == victim or nest.target == nil then\n"
-			.. "\t\t\t\t\tendChase(nest)", 1, true) ~= nil,
+	-- Since 2026-10-09 the launch may already have handed the guardian on (GuardianHandOffSpec): only a throw
+	-- that did not still ends through endChase -- a hand-off too, the same raid.
+	check(string.find(src, "nest.busy = false\n\t\t\t\t\tif nest.target == victim or nest.target == nil then\n"
+			.. "\t\t\t\t\t\tendChase(nest, true)", 1, true) ~= nil,
 		"the throw's end goes through endChase, so the next thief comes before home")
 	check(string.find(src, "lastTargetAt", 1, true) == nil and string.find(src, "distanceToSegment(", 1, true) == nil,
 		"no player-keyed sample and no end-against-path sweep is left")

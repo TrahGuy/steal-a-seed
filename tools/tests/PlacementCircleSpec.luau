@@ -120,8 +120,9 @@ local ok, err = pcall(function()
 		table.insert(listed, code)
 	end
 	table.sort(listed)
+	-- POD since 2026-10-09: pods hatch in the Bag, and are never placed.
 	local want = { "BED_FULL", "NO_CHARACTER", "NO_PLOT", "NO_PROFILE", "NO_SOIL", "NO_TOOL", "OUT_OF_RANGE",
-		"UNKNOWN_SPECIES" }
+		"POD", "UNKNOWN_SPECIES" }
 	check(table.concat(listed, ",") == table.concat(want, ","),
 		"PlaceAt refuses for the plot, the profile, the soil, the character, the item, reach and room -- nothing else",
 		table.concat(listed, ","))
@@ -189,7 +190,9 @@ local ok, err = pcall(function()
 	check(built == 10 and solidParts == 0,
 		string.format("%d planted builds (both Secrets and the biggest ordinary plants, pods and plants): no part collides",
 			built), solidParts)
-	check(string.find(plantSrc, "CanCollide = true", 1, true) == nil,
+	-- A PART's CanCollide (".CanCollide"): the Bag hatch's ground probe sets a
+	-- RaycastParams' RespectCanCollide, which collides nothing (2026-10-09).
+	check(string.find(plantSrc, "%.CanCollide = true") == nil,
 		"PlantService never makes a planted part collide")
 
 	--==========================================================================
@@ -203,7 +206,7 @@ local ok, err = pcall(function()
 			and string.find(plantSrc, "then GameConfig.Secret.PodFacing\n\t\telse entry.facing", 1, true) ~= nil
 			and string.find(plantSrc, "not hatched then GameConfig.Secret.PodFacing else facingFor(id)", 1, true) ~= nil,
 		"a planted Secret pod still stands with its narrow side to the gate (kept; it decides no placement)")
-	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is still switched off")
+	check(GameConfig.Secret.Enabled == true, "natural Secret spawning is on (the owner, 2026-10-09)")
 end)
 
 scratch:Destroy()

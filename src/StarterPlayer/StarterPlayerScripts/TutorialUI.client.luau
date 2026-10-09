@@ -767,6 +767,38 @@ local function podIn(plot: Model): Model?
 end
 
 --==============================================================================
+-- PODS HATCH IN THE BAG (2026-10-09)
+--
+-- The soonest deadline of the pods in the Bag (their Tools' HatchAt, the
+-- server's os.time()), or nil with none; and the two doors the guide points at
+-- for a hatch: the Bag itself (the strip's Bag cell, else the rail's Bag button)
+-- and, with the Bag open, its HATCH ALL -- each only while it is on screen.
+--==============================================================================
+local function bagPodDue(): number?
+	local soonest: number? = nil
+	for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
+		if container then
+			for _, tool in container:GetChildren() do
+				local due = if tool:IsA("Tool") and tool:GetAttribute("Hatched") ~= true
+					then tonumber(tool:GetAttribute(Config.HatchInBag.Attribute)) else nil
+				if due and (soonest == nil or due < soonest) then
+					soonest = due
+				end
+			end
+		end
+	end
+	return soonest
+end
+
+local function bagGuiButton(name: string): GuiButton?
+	local found = playerGui:FindFirstChild(name, true)
+	if found and found:IsA("GuiButton") and found.Visible then
+		return found
+	end
+	return nil
+end
+
+--==============================================================================
 -- A FREE SPOT ON YOUR OWN SOIL
 --
 -- Sampled on the soil's own top face and rejected against whatever is already
@@ -1529,7 +1561,18 @@ local function placeHand()
 		shade.Thickness = math.max(view.X, view.Y) * 1.5
 	end
 	local size = Spot.Hand.Size * tutorialScale * k
-	local h = Spot.handFor(window, screen, size)
+	-- Garden and the Bag (2026-10-09: at a phone's left edge, over the cash block
+	-- the hand points at for SPEED): the hand and its words keep off them where
+	-- they can (TutorialSpotlight.handFor). Never the target itself.
+	local avoid: { Spot.Rect } = {}
+	local layer = playerGui:FindFirstChild("SeedRail")
+	for _, name in ipairs({ "GardenButton", "BagButton" }) do
+		local b = layer and layer:FindFirstChild(name, true)
+		if b and b:IsA("GuiObject") and b ~= target and shown(b) then
+			table.insert(avoid, rectOf(b))
+		end
+	end
+	local h = Spot.handFor(window, screen, size, avoid)
 	if not h then
 		hideHand()
 		return
@@ -1553,7 +1596,7 @@ local function placeHand()
 		local edge = math.ceil(6 * k)
 		local w = math.max(a.X, b.X) + edge
 		local tall = a.Y + edge + (if keyText ~= "" then b.Y + 2 else 0)
-		local at = Spot.wordsFor(h, window, screen, w, tall)
+		local at = Spot.wordsFor(h, window, screen, w, tall, avoid)
 		wordsAt = at
 		-- Read from the hand outward: left-aligned to its right, right-aligned to
 		-- its left, centred over or under it.
@@ -2155,44 +2198,48 @@ local function refresh()
 		return
 	end
 
-	--== 5: a free spot on your own soil =====================================
+	--== 6: the plant on your own soil (2026-10-09: by hand only when the hatch
+	-- found no free bed -- the hatch plants it otherwise) =====================
 	if id == "place" then
 		if not (soil and soil:IsA("BasePart")) then
 			subline.Text = "Looking for your soil..."
 			clearWorld()
 			return
 		end
-		local pod = toolOf(false)
-		if not pod then
+		local plantTool = toolOf(true)
+		if not plantTool then
 			-- Never point at soil with nothing to put in it.
-			if type(player:GetAttribute(ATTR.CarryingSpecies)) == "string" then
+			if bagPodDue() then
+				instruction.Text = "Hatch your first plant!"
+				subline.Text = "Open your Bag when your pod is ready."
+			elseif type(player:GetAttribute(ATTR.CarryingSpecies)) == "string" then
 				instruction.Text = "Bring it to your plot!"
 				subline.Text = "Cross the red line to bank it."
 			else
 				instruction.Text = "Take a pod!"
-				subline.Text = "Your pod is gone -- grab another from Greenhollow."
+				subline.Text = "Grab a pod from Greenhollow."
 			end
 			clearWorld()
 			return
 		end
 		local spot = freeSpot(plot, soil :: BasePart, here)
 		if not spot then
-			subline.Text = "Your plot is full -- hatch or lift a plant to make room."
+			subline.Text = "Your plot is full -- lift a plant or upgrade to make room."
 			clearWorld()
 			return
 		end
 		highlight.Adornee = soil
 		highlight.Enabled = true
-		if not pod.Parent or pod.Parent ~= player.Character then
-			-- Not in the hand yet: its hotbar slot, lit once -- "EQUIP YOUR POD".
-			local face = slotFaceFor(pod)
+		if not plantTool.Parent or plantTool.Parent ~= player.Character then
+			-- Not in the hand yet: its hotbar slot, lit once -- "EQUIP YOUR PLANT".
+			local face = slotFaceFor(plantTool)
 			if face then
-				pointAt(face, "EQUIP YOUR POD", "slot", face)
+				pointAt(face, "EQUIP YOUR PLANT", "slot", face)
 			else
-				pointAt(hotbarSlotFor(pod), "EQUIP YOUR POD")
+				pointAt(hotbarSlotFor(plantTool), "EQUIP YOUR PLANT")
 			end
 		else
-			-- In the hand: the hand over a free spot of soil (the old finger's job).
+			-- In the hand: the hand over a free spot of soil.
 			handOver(spot + Vector3.new(0, SOIL_TIP, 0))
 		end
 		if (here - spot).Magnitude > 14 then
@@ -2203,34 +2250,56 @@ local function refresh()
 		return
 	end
 
-	--== 6: the pod they planted =============================================
+	--== 5: hatch it -- in the Bag since 2026-10-09; an old save's pod in the
+	-- ground still hatches where it stands ===================================
 	if id == "hatch" then
 		local pod = podIn(plot)
-		if not pod then
-			instruction.Text = if toolOf(false) then "Place your pod here!" else "Take a pod!"
+		if pod then
+			local point = pod:GetPivot().Position
+			highlight.Adornee = pod
+			highlight.Enabled = true
+			local ready = tonumber(pod:GetAttribute("HatchAt"))
+				or ((tonumber(pod:GetAttribute("PlantedAt")) or os.time())
+					+ SeedData.GrowSeconds(pod:GetAttribute("Tier")))
+			local left = math.max(0, math.ceil(ready - os.time()))
+			if left > 0 then
+				subline.Text = "Ready in " .. left .. "s"
+			else
+				subline.Text = "Hold the Hatch prompt."
+			end
+			-- The hand over the pod: "HOLD HATCH" once it can be.
+			handOver(point + Vector3.new(0, POD_TIP, 0), if left > 0 then "READY IN " .. left .. "s" else "HOLD HATCH")
+			if (here - point).Magnitude > 14 then
+				requestRoute(here, point)
+			else
+				hideTrail()
+			end
+			return
+		end
+		local due = bagPodDue()
+		if not due then
+			instruction.Text = if type(player:GetAttribute(ATTR.CarryingSpecies)) == "string"
+				then "Bring it to your plot!" else "Take a pod!"
 			subline.Text = "Nothing is growing yet."
 			clearWorld()
 			return
 		end
-		local point = pod:GetPivot().Position
-		highlight.Adornee = pod
-		highlight.Enabled = true
-		local ready = tonumber(pod:GetAttribute("HatchAt"))
-			or ((tonumber(pod:GetAttribute("PlantedAt")) or os.time())
-				+ SeedData.GrowSeconds(pod:GetAttribute("Tier")))
-		local left = math.max(0, math.ceil(ready - os.time()))
-		if left > 0 then
-			subline.Text = "Ready in " .. left .. "s"
-		else
-			subline.Text = "Hold the Hatch prompt."
+		clearWorld()
+		local left = math.max(0, math.ceil(due - workspace:GetServerTimeNow()))
+		subline.Text = if left > 0 then "Your pod is growing in your Bag: ready in " .. left .. "s"
+			else "Open your Bag and hold HATCH."
+		-- The Bag open: its HATCH ALL once a pod is ready. Shut: its door.
+		local hatchAll = if left <= 0 then bagGuiButton("HatchAll") else nil
+		if hatchAll then
+			pointAt(hatchAll, "HOLD HATCH ALL", nil, hatchAll)
+			return
 		end
-		-- The hand over the pod: "HOLD HATCH" once it can be.
-		handOver(point + Vector3.new(0, POD_TIP, 0), if left > 0 then "READY IN " .. left .. "s" else "HOLD HATCH")
-		if (here - point).Magnitude > 14 then
-			requestRoute(here, point)
-		else
-			hideTrail()
-		end
+		local loadout = playerGui:FindFirstChild("SeedLoadout")
+		local chip = if loadout then loadout:FindFirstChild("BagChip", true) else nil
+		local chipFace = if chip then chip:FindFirstChild("Face") else nil
+		local door = if chipFace and chipFace:IsA("GuiButton") and shown(chipFace) then chipFace
+			else bagGuiButton("BagButton")
+		pointAt(door, if left > 0 then "READY IN " .. left .. "s" else "OPEN YOUR BAG", nil, door)
 		return
 	end
 

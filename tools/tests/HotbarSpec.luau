@@ -274,9 +274,11 @@ local ok, err = pcall(function()
 	check(holdCall ~= nil and arriveCall ~= nil and holdCall < arriveCall
 			and has(activate, "if not (done and ref) or HotbarSlots.slotOf(shownBar(), ref) then"),
 		"a tile press holds first, through the guards, and assigns only what was held and has no slot")
-	check(has(lo, "HotbarSlots.storage(rows,") and has(lo, "player:GetAttribute(ATTR.CarryingSpecies) ~= nil, GameConfig.Save.MaxHeld)")
-			and has(lo, "HOT.CountLoading"),
-		"the Bag cell counts the profile's saved rows plus a carried pod against Save.MaxHeld, and says nothing before the profile")
+	-- The PLANT rows since 2026-10-09: pods have a room of their own, and a pod
+	-- in the arms keeps its place there.
+	check(has(lo, "HotbarSlots.storage(rows, false, GameConfig.Save.MaxHeld)")
+			and has(lo, "row.Hatched == true then") and has(lo, "HOT.CountLoading"),
+		"the Bag cell counts the profile's plant rows against Save.MaxHeld, and says nothing before the profile")
 	check(has(lo, "announce(if item then visibleName(item) else HatchRoll.shownName(held), false)")
 			and has(lo, "button.MouseEnter:Connect(") and has(lo, "ReducedMotionEnabled")
 			and has(lo, 'player:GetAttribute("SeedAfterimageQuality") == "Off"'),

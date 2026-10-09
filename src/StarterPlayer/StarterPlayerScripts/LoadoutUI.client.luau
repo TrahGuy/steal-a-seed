@@ -79,6 +79,8 @@ local RarityFX = require(Shared:WaitForChild("RarityFX"))
 -- A trap's placements ("3x") and the REMOVE button over its slot (2026-10-04):
 -- the server's count off the owner's trap records, and the press.
 local TrapRemove = require(Shared:WaitForChild("TrapRemove"))
+-- What the Instant Hatch product costs THIS player (2026-10-09, the Bag's button).
+local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -86,6 +88,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 local RAIL = GameConfig.Rail
 local ATTR = GameConfig.Attributes
 local W = GameConfig.Weapon
+-- Pods hatch in the Bag (2026-10-09): the verbs, words and icons.
+local HATCH_BAG = GameConfig.HatchInBag
 local INV = GameConfig.Inventory
 local PANEL_NAME = "Bag"
 local CREAM = Color3.fromRGB(242, 238, 206)
@@ -243,6 +247,10 @@ local bar = { server = HotbarSlots.empty(), pending = nil :: { string }?, seq = 
 local favPending: { [string]: boolean } = {}
 local equipPending = { id = nil :: string?, untilAt = 0 }
 local assign = { ref = nil :: string?, name = "" }
+-- Pods hatch in the Bag (2026-10-09): the Instant Hatch product's price for THIS
+-- player (RobuxPrice; nil until Roblox has said, and then no price is shown),
+-- how many pods were READY at the last redraw, and whether any still grows.
+local podsNow = { price = nil :: number?, ready = 0, growing = false, readyKeys = "", nextTick = 0 }
 local sealedUntil: { [string]: number } = {}
 -- What the last redraw collected: every owned item, by ref, and the Bag's
 -- groups by key.
@@ -261,30 +269,33 @@ local function slotWord(i: number): string
 end
 
 --==============================================================================
--- THE BAG BUTTON (right rail, under the Garden), and THE PANEL
+-- THE BAG BUTTON (centre left, under Garden -- beside it on a phone), and THE PANEL
 --==============================================================================
 local bagButton = UIKit.railButton(playerGui, {
 	name = "BagButton",
 	icon = RAIL.BagIcon,
 	wide = false,
 	bare = true,
+	-- BAG on a plate until the satchel has loaded here (UIKit.railFallback).
+	fallback = RAIL.Words.Bag,
 })
--- ANCHORED RIGHT, the same way GardenUI anchors the button above this one.
+-- Anchored the way GardenUI anchors Garden's; HudLayout places both (layoutHud).
 bagButton.AnchorPoint = Vector2.new(1, 0)
 bagButton.Position = UDim2.new(1, -RAIL.Inset, 0,
 	RAIL.Inset + RAIL.SquareSize.Y + RAIL.Gap)
 
--- The Bag's shell is every menu's (the global UI pass, 2026-10-04): the white
--- studded rim with its title, the satchel and the red studded close standing
--- on its top edge, over a clean mint body (MenuKit.rimTheme). InventoryPanel
--- takes the rim's lift back off its own fixed layout.
+-- The Bag's shell is the studded kit's (2026-10-08, the owner: "do the index
+-- and bag next"): the kit's cyan Trade Inventory band with the satchel and a
+-- white title, a white studded body and a base in the band's edge colour
+-- (MenuKit.studdedTheme, GameConfig.StuddedLook.Bag). A band has no lift, so
+-- InventoryPanel's layout takes nothing back off its rects.
 local modal = UIKit.modal(gui, {
 	name = PANEL_NAME,
 	title = "Bag",
 	maxWidth = BAG.MaxW,
 	maxHeight = BAG.MaxH,
-	titleColour = GameConfig.BagLook.Title,
-	theme = MenuKit.rimTheme(),
+	titleColour = GameConfig.StuddedLook.Title,
+	theme = MenuKit.studdedTheme(GameConfig.StuddedLook.Bag),
 })
 
 --==============================================================================
@@ -337,10 +348,17 @@ local panel = InventoryPanel.build(gui, modal, GameConfig.Hotbar, {
 		local held = heldTool()
 		return group.face.name, InventoryModel.details(item, group.face, nil,
 			if item.ref then HotbarSlots.slotOf(shownBar(), item.ref) else nil,
-			held ~= nil and item.tool == held)
+			held ~= nil and item.tool == held, Workspace:GetServerTimeNow())
 	end,
 	changed = function()
 		redraw()
+	end,
+	-- HATCH ALL, held to the end (2026-10-09): every READY pod in the Bag.
+	hatchAll = function()
+		local remote = channel
+		if remote then
+			remote:FireServer(HATCH_BAG.HatchAll)
+		end
 	end,
 })
 
@@ -730,23 +748,54 @@ do
 	icon.ScaleType = Enum.ScaleType.Fit
 	icon.ZIndex = 8
 	icon.Parent = face
-	-- The satchel over the rail's art, which fades out once the satchel has
-	-- loaded here and stays if it never does (UIKit.whenPictureLoads), or if
-	-- the slot is "". The satchel is a child the same size, so the cell's
-	-- restyle moves both -- and one layer above the art, set AFTER the art's
-	-- own layer (measured: built first, it sat at 2, under the cell's plate).
+	-- BAG where the icon stands until a picture has loaded here (2026-10-09,
+	-- the owner: "some buttons are invisible like the garden and inventory"):
+	-- hidden once the rail's art or the satchel has loaded, kept for good if
+	-- neither ever does. A child the icon's size, so the restyle moves it too.
+	local iconWord = UIKit.outlined(icon, "Word", RAIL.FallbackTextMax, Color3.new(1, 1, 1), 1.5)
+	iconWord.Size = UDim2.fromScale(1, 1)
+	iconWord.TextScaled = true
+	iconWord.Text = RAIL.Words.Bag
+	iconWord.ZIndex = icon.ZIndex + 2
+	do
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = RAIL.FallbackTextMax
+		fit.MinTextSize = RAIL.FallbackTextMin
+		fit.Parent = iconWord
+	end
+	UIKit.whenPictureLoads(icon, function(loaded: boolean)
+		if loaded then
+			iconWord.Visible = false
+		end
+	end)
+	-- THE OWNER'S TILE IS THE CELL (2026-10-09, the owner: "yes, hotbar bag
+	-- cell too", and drop the cell's plate "so only the owner's tile shows").
+	-- BagIconImage is a whole studded button, so it is drawn square, centred
+	-- and as large as the cell, over the plate and the rail's satchel and under
+	-- the count and READY. Once it has loaded here the plate, its edge, the
+	-- satchel and BAG go; until then they stay, and for good if it never loads
+	-- or the slot is "" -- a picture is never hidden on a timeout. Sized off
+	-- the cell itself, so the restyle needs nothing more for it.
 	if HOT.BagIconImage ~= "" then
-		local satchel = Instance.new("ImageLabel")
-		satchel.Name = "Satchel"
-		satchel.Size = UDim2.fromScale(1, 1)
-		satchel.BackgroundTransparency = 1
-		satchel.Image = HOT.BagIconImage
-		satchel.ScaleType = Enum.ScaleType.Fit
-		satchel.ZIndex = icon.ZIndex + 1
-		satchel.Parent = icon
-		UIKit.whenPictureLoads(satchel, function(loaded: boolean)
+		local tile = Instance.new("ImageLabel")
+		tile.Name = "Satchel"
+		tile.AnchorPoint = Vector2.new(0.5, 0.5)
+		tile.Position = UDim2.fromScale(0.5, 0.5)
+		tile.Size = UDim2.fromScale(1, 1)
+		tile.BackgroundTransparency = 1
+		tile.Image = HOT.BagIconImage
+		tile.ScaleType = Enum.ScaleType.Fit
+		tile.ZIndex = icon.ZIndex - 1
+		tile.Parent = face
+		local square = Instance.new("UIAspectRatioConstraint")
+		square.AspectRatio = 1
+		square.Parent = tile
+		UIKit.whenPictureLoads(tile, function(loaded: boolean)
 			if loaded then
 				icon.ImageTransparency = 1
+				iconWord.Visible = false
+				face.BackgroundTransparency = 1
+				faceStroke.Transparency = 1
 			end
 		end)
 	end
@@ -769,6 +818,28 @@ do
 	countFit.MaxTextSize = HOT.BagCountSize
 	countFit.MinTextSize = 8
 	countFit.Parent = count
+
+	-- READY (2026-10-09, pods hatch in the Bag): the owner's green check on the
+	-- cell's top-right corner while a pod in the Bag can be hatched -- the door
+	-- to HATCH. A green disc while the icon's id is "".
+	local readyBadge = Instance.new("ImageLabel")
+	readyBadge.Name = "ReadyBadge"
+	readyBadge.AnchorPoint = Vector2.new(0.5, 0.5)
+	readyBadge.Position = UDim2.new(1, -3, 0, 3)
+	readyBadge.Size = UDim2.fromOffset(20, 20)
+	readyBadge.BackgroundColor3 = Color3.fromRGB(74, 158, 58)
+	readyBadge.BackgroundTransparency = if HATCH_BAG.Icons.Ready ~= "" then 1 else 0
+	readyBadge.ScaleType = Enum.ScaleType.Fit
+	readyBadge.Visible = false
+	readyBadge.ZIndex = 10
+	readyBadge.Parent = face
+	if HATCH_BAG.Icons.Ready ~= "" then
+		readyBadge.Image = HATCH_BAG.Icons.Ready
+		readyBadge.ImageRectOffset = HATCH_BAG.IconCropOffset
+		readyBadge.ImageRectSize = HATCH_BAG.IconCropSize
+	else
+		UIKit.corner(readyBadge, 10)
+	end
 
 	chip = { holder = holder, spacer = spacer, button = face, count = count, faceCorner = faceCorner,
 		faceStroke = faceStroke, rimCorner = rimCorner, icon = icon, bump = bump, bumpTween = nil }
@@ -923,6 +994,13 @@ local function refreshHotbar()
 				-- A trap's placements still available, the server's own count.
 				uses = if isTrap and traps and traps.known then WeaponData.TrapsLeftText(traps.left) else nil,
 				usesEmpty = isTrap and traps ~= nil and traps.left == 0,
+				-- A pod on the bar (2026-10-09): READY, or the time it has left.
+				podReady = item ~= nil and item.kind == "pod" and not item.hatched and item.hatchAt ~= nil
+					and Workspace:GetServerTimeNow() >= (item.hatchAt :: number),
+				podClock = if item and item.kind == "pod" and not item.hatched and item.hatchAt
+						and Workspace:GetServerTimeNow() < (item.hatchAt :: number)
+					then InventoryModel.clock((item.hatchAt :: number) - Workspace:GetServerTimeNow())
+					else nil,
 			})
 			RarityFX.setActive(slot.card.fxEdge, true)
 			HotbarCard.lift(slot.card, isHeld, still, HOT)
@@ -943,13 +1021,26 @@ local function refreshHotbar()
 	-- THE BAG CELL'S COUNT: plant storage, as the server counts it. Dropped
 	-- where HudLayout says the cell does not fit.
 	--==========================================================================
-	local rows = if prof.held then #(prof.held :: { any }) else nil
-	local text, full, known = HotbarSlots.storage(rows,
-		player:GetAttribute(ATTR.CarryingSpecies) ~= nil, GameConfig.Save.MaxHeld)
+	-- The PLANT rows (2026-10-09): pods have a room of their own, and a pod in
+	-- the arms keeps its place there, not in this count.
+	local rows: number? = nil
+	if prof.held then
+		rows = 0
+		for _, row in ipairs(prof.held :: { any }) do
+			if type(row) == "table" and row.Hatched == true then
+				rows = (rows :: number) + 1
+			end
+		end
+	end
+	local text, full, known = HotbarSlots.storage(rows, false, GameConfig.Save.MaxHeld)
 	chip.count.Text = text
 	chip.count.TextColor3 = if not known then HOT.CountLoading
 		elseif full then HOT.CountFull
 		else HOT.CountOpen
+	local badge = chip.button:FindFirstChild("ReadyBadge")
+	if badge and badge:IsA("GuiObject") then
+		badge.Visible = podsNow.ready > 0
+	end
 	local layout = hud
 	local camera = Workspace.CurrentCamera
 	local roomForBag = if layout then layout.chip
@@ -978,8 +1069,11 @@ local function refreshBag()
 	local state = panel.state
 	local list = InventoryModel.filter(groups, state.category, state.search, state.favouritesOnly)
 	local entries = {}
+	local now = Workspace:GetServerTimeNow()
 	for _, group in ipairs(list) do
 		local face = group.face
+		-- A pod tile's READY, or the time left on the pod due first (2026-10-09).
+		local podReady, podLeft = InventoryModel.podState(group, now)
 		table.insert(entries, {
 			key = group.key,
 			art = face.art,
@@ -997,25 +1091,40 @@ local function refreshBag()
 				rarity = face.rarity,
 				variantIsRarity = face.variantIsRarity,
 				studs = face.studs,
+				podReady = podReady == true,
+				podClock = if podReady == false and podLeft then InventoryModel.clock(podLeft) else nil,
 			},
 		})
 	end
 	local counts = InventoryModel.counts(view.items)
-	local rows = if prof.held then #(prof.held :: { any }) else nil
-	local text, full, known = InventoryModel.storage(rows, player:GetAttribute(ATTR.CarryingSpecies) ~= nil,
-		GameConfig.Save.MaxHeld, prof.waiting)
+	-- TWO ROOMS (2026-10-09): the plants' 24, which a carried pod no longer
+	-- takes, and the pods' own, where it keeps its place.
+	local plantRows, podRows = nil :: number?, nil :: number?
+	if prof.held then
+		plantRows, podRows = 0, 0
+		for _, row in ipairs(prof.held :: { any }) do
+			if type(row) == "table" and row.Hatched == true then
+				plantRows = (plantRows :: number) + 1
+			elseif type(row) == "table" then
+				podRows = (podRows :: number) + 1
+			end
+		end
+	end
+	local carrying = player:GetAttribute(ATTR.CarryingSpecies) ~= nil
+	local text, full, known = InventoryModel.storage(plantRows, false, GameConfig.Save.MaxHeld, prof.waiting)
+	local podText, podsFull = InventoryModel.podStorage(podRows, carrying, GameConfig.Save.MaxPods)
 	local filtered = state.search ~= "" or state.favouritesOnly
 	panel.paint({
 		entries = entries,
 		counts = counts,
-		footer = text,
-		footerColour = if not known then HOT.CountLoading elseif full then HOT.CountFull else HOT.CountOpen,
-		-- The bar beside the words: stored plus a carried pod, of the limit.
-		footerFill = if rows then (rows + (if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then 1 else 0))
-			/ GameConfig.Save.MaxHeld else nil,
+		footer = text .. "  ·  " .. podText,
+		footerColour = if not known then HOT.CountLoading elseif full or podsFull then HOT.CountFull else HOT.CountOpen,
+		-- The bar beside the words: the plants stored, of their limit.
+		footerFill = if plantRows then plantRows / GameConfig.Save.MaxHeld else nil,
 		empty = if #entries == 0 then InventoryModel.emptyText(state.category, counts[state.category] or 0, filtered)
 			else nil,
 		compact = hud ~= nil and (hud :: HudLayout.Layout).compact,
+		readyPods = podsNow.ready,
 	})
 end
 
@@ -1063,11 +1172,25 @@ redraw = function()
 			now = Workspace:GetServerTimeNow(),
 		})
 		table.clear(view.byRef)
+		-- The Bag's pods (2026-10-09): how many are READY, which ones (so the
+		-- clock below knows when one turns), and whether any still grows.
+		local now = Workspace:GetServerTimeNow()
+		local readyKeys = {}
+		podsNow.growing = false
 		for _, item in ipairs(view.items) do
 			if item.ref then
 				view.byRef[item.ref :: string] = item
 			end
+			if item.kind == "pod" and not item.hatched and item.hatchAt then
+				if now >= (item.hatchAt :: number) then
+					table.insert(readyKeys, tostring(item.ref))
+				else
+					podsNow.growing = true
+				end
+			end
 		end
+		podsNow.ready = InventoryModel.readyCount(view.items, now)
+		podsNow.readyKeys = table.concat(readyKeys, ",")
 		-- A weapon asked of the server goes into the hands once its Tool lands.
 		local waitingFor = equipPending.id
 		if waitingFor then
@@ -1229,6 +1352,16 @@ activateKey = function(key: string, by: string)
 	if not item then
 		return
 	end
+	-- A POD IN THE BAG OPENS ITS MENU (2026-10-09, pods hatch in the Bag): HATCH,
+	-- held, once it is READY; Instant Hatch while it grows; and "Hold in hands",
+	-- the tap's old job, for selling or a sacrifice.
+	local tile = if item.kind == "pod" and not item.hatched and by ~= "menu" then panel.tileButton(key) else nil
+	if tile then
+		local k = UIKit.scaleOf(gui)
+		openMenuFor(key, nil, { x = tile.AbsolutePosition.X / k, y = tile.AbsolutePosition.Y / k,
+			w = tile.AbsoluteSize.X / k, h = tile.AbsoluteSize.Y / k })
+		return
+	end
 	if item.kind == "trail" then
 		local WheelData = require(Shared:WaitForChild("WheelData"))
 		local remote = channel
@@ -1365,7 +1498,38 @@ openMenuFor = function(key: string?, slotIndex: number?, anchor: HudLayout.Rect)
 	if it.kind == "trail" then
 		table.insert(actions, { id = "wear", label = if it.worn then "Take off" else "Wear" })
 	end
-	local lines = InventoryModel.details(it, face, nil, slot, held ~= nil and it.tool == held)
+	--==========================================================================
+	-- A POD IN THE BAG (2026-10-09, pods hatch in the Bag)
+	--
+	-- READY: HOLD TO HATCH first -- the bed prompt's own hold, with the shell's
+	-- rattle. Still growing: Instant Hatch, FREE while a saved one is held, else
+	-- with THIS player's price (none shown until Roblox has said). And "Hold in
+	-- hands", which a tap on a pod no longer does.
+	--==========================================================================
+	local now = Workspace:GetServerTimeNow()
+	local podDue = if it.kind == "pod" and not it.hatched and it.ref and not it.restoring then it.hatchAt else nil
+	if podDue then
+		if now >= podDue then
+			table.insert(actions, 1, { id = "hatch", label = HATCH_BAG.Words.HoldHatch,
+				hold = GameConfig.Plant.HatchHoldSeconds, icon = HATCH_BAG.Icons.Hatch })
+		else
+			local credits = tonumber(player:GetAttribute(HATCH_BAG.CreditsAttribute)) or 0
+			local price = podsNow.price
+			table.insert(actions, 1, { id = "instant", icon = HATCH_BAG.Icons.InstantHatch,
+				label = if credits > 0 then HATCH_BAG.Words.SavedInstant
+					elseif price then string.format("%s  R$%s", HATCH_BAG.Words.Instant, RobuxPrice.format(price))
+					else HATCH_BAG.Words.Instant })
+		end
+		table.insert(actions, { id = "hold", label = "Hold in hands" })
+		-- WHAT'S INSIDE? (the Pod Guide, 2026-10-09): the Almanac at the plant
+		-- this pod's own look already shows -- an ordinary pod's only, one of
+		-- its biome's five (HatchRoll.candidates); never a Secret's or a Rain's.
+		local biomeFive = if it.speciesId then HatchRoll.candidates(it.speciesId) else {}
+		if #biomeFive > 1 and table.find(biomeFive, it.speciesId) then
+			table.insert(actions, { id = "inside", label = GameConfig.PodGuide.Words.WhatsInside })
+		end
+	end
+	local lines = InventoryModel.details(it, face, nil, slot, held ~= nil and it.tool == held, now)
 	--==========================================================================
 	-- A TRAP'S PLACEMENTS, AND REMOVE WHEREVER IT IS (2026-10-04)
 	--
@@ -1402,6 +1566,22 @@ openMenuFor = function(key: string?, slotIndex: number?, anchor: HudLayout.Rect)
 			activateKey(key, "menu")
 		elseif id == "removetrap" and trapRemove then
 			trapRemove.press()
+		elseif (id == "hatch" or id == "instant") and ref then
+			-- The pod's own item id; the server checks everything again.
+			local remote = channel
+			local item = string.match(ref, "^i:(.+)$")
+			if remote and item then
+				remote:FireServer(if id == "hatch" then HATCH_BAG.Hatch else HATCH_BAG.Instant, item)
+			end
+		elseif id == "hold" and ref then
+			holdRef(ref)
+		elseif id == "inside" and it.speciesId then
+			-- IndexUI's own OpenAt (one panel at a time: the Bag steps aside).
+			local almanac = playerGui:FindFirstChild("SeedIndex")
+			local openAt = almanac and almanac:FindFirstChild("OpenAt")
+			if openAt and openAt:IsA("BindableEvent") then
+				openAt:Fire(it.speciesId)
+			end
 		end
 	end)
 end
@@ -1694,7 +1874,7 @@ local function watchTools(container: Instance)
 			watched[child] = true
 			child.AttributeChanged:Connect(function(name: string)
 				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched" or name == "TicketCount"
-					or name == ATTR.ItemId or name == HatchRoll.Attribute then
+					or name == ATTR.ItemId or name == HATCH_BAG.Attribute or name == HatchRoll.Attribute then
 					redraw()
 				end
 			end)
@@ -1794,6 +1974,10 @@ local function layoutHud()
 		restyleHotbar()
 	end
 	bagButton.Position = HudLayout.place(layout.bag, bagButton.AnchorPoint, layout.safe)
+	-- The owner's studded Bag picture IS the button once it has loaded
+	-- (2026-10-09, GameConfig.Rail.StuddedBagArt); the satchel and BAG stay
+	-- under it until then, and for good if it never does.
+	UIKit.railPicture(bagButton, RAIL.StuddedBagArt, 1)
 	hotbar.Position = HudLayout.place(layout.hotbar, hotbar.AnchorPoint, layout.safe)
 	namePopup.Position = HudLayout.place(layout.namePopup, namePopup.AnchorPoint, layout.safe)
 	local remove = trapRemove
@@ -1836,6 +2020,8 @@ layoutBag = function()
 		hotTop = layout.namePopup.y,
 		stripHidden = layout.touch,
 		scale = UIKit.menuScale(),
+		-- A phone draws the Bag smaller, short of the edges (2026-10-08).
+		phone = UIKit.phoneMenuScale(),
 	})
 	modal.group.AnchorPoint = Vector2.new(0.5, 0.5)
 	modal.group.Position = UDim2.fromOffset(bag.centre.X, bag.centre.Y)
@@ -1939,6 +2125,42 @@ end
 bagButton.Activated:Connect(function()
 	setOpen(not open)
 end)
+
+--==============================================================================
+-- WHAT A BAG HATCH ANSWERED (2026-10-09, pods hatch in the Bag)
+--
+-- A HATCH, a HATCH ALL or an Instant Hatch that went through closes the Bag, so
+-- the hatch moment plays in the world -- at the bed the plant went into, or in
+-- front of the player -- and an Instant Hatch's purchase dialog is not stacked
+-- on it. A refusal is said INSIDE the Bag, where a toast would hide under the
+-- panel. What changed in the Bag arrives as Tools and the profile, as always.
+--==============================================================================
+if channel then
+	channel.OnClientEvent:Connect(function(action: any, reply: any)
+		if action ~= HATCH_BAG.Reply or type(reply) ~= "table" then
+			return
+		end
+		if reply.ok == true then
+			setOpen(false)
+		elseif reply.code == "STORAGE_FULL" then
+			panel.say("No free bed, and no room for another plant.", 3)
+		elseif reply.code == "NOT_READY" then
+			panel.say("Not ready yet.", 2)
+		end
+		redraw()
+	end)
+end
+
+-- The Instant Hatch product's price for THIS player (RobuxPrice), for the Bag's
+-- button; none is shown until Roblox has said.
+for _, item in ipairs(GameConfig.Store.InWorld or {}) do
+	local id = tonumber(item.product) or 0
+	if item.kind == "hatch" and id > 0 then
+		RobuxPrice.watch("product", id, function(state: RobuxPrice.State, price: number?)
+			podsNow.price = if state == "ready" then price else nil
+		end)
+	end
+end
 -- The strip's Bag cell is the same door, from where the player is looking.
 chip.button.Activated:Connect(function()
 	if not dragMoved then
@@ -2070,6 +2292,13 @@ end
 --==============================================================================
 RunService.Heartbeat:Connect(function()
 	RarityFX.step(os.clock())
+	-- Pods hatch in the Bag (2026-10-09): while one still grows, the strip and
+	-- an open Bag are drawn again once a second -- every countdown moves, and a
+	-- pod whose time has come says READY within the second.
+	if podsNow.growing and os.clock() >= (podsNow :: any).nextTick then
+		(podsNow :: any).nextTick = os.clock() + 1
+		redraw()
+	end
 	local now = Workspace:GetServerTimeNow()
 	local traps = if trapRemove then trapRemove.state() else nil
 	local trapLeft = if traps and traps.cooldownUntil then traps.cooldownUntil - now else 0

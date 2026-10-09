@@ -21,6 +21,9 @@
 -- pod", "Secret pod", a Rain pod's name), its group key, picture, search words
 -- and place in the order come from what the shell LOOKS like -- its biome (or
 -- its Secret or Rain pod) and its size -- never from the species id it holds.
+-- Since the owner's 25 pods (2026-10-09, one pod per plant, PodForms) the
+-- shell IS the species' own, so an ordinary pod's picture and group key are
+-- its species' pod; its name and words still say only "Unhatched pod".
 -- A plant still in its hatch roll (HatchRoll) is the pod it came out of.
 -- Plants are grouped by species ID, never by name: Puddlepod and Colossal
 -- Puddlepod share one.
@@ -34,6 +37,8 @@ local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 local HotbarSlots = require(Shared:WaitForChild("HotbarSlots"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
+-- The owner's pods, one per plant (2026-10-09): a pod's picture is its own.
+local PodForms = require(Shared:WaitForChild("PodForms"))
 
 local InventoryModel = {}
 
@@ -59,6 +64,11 @@ export type Item = {
 	worn: boolean,
 	favourite: boolean,
 	order: number,
+	-- A pod in the Bag (2026-10-09, pods hatch in the Bag): the server's
+	-- os.time() it may be hatched (its Tool's HatchAt, else its row's), and
+	-- whether that time has come. nil and false for anything else.
+	hatchAt: number?,
+	ready: boolean?,
 }
 
 export type Art = { kind: string, speciesId: string?, tier: number, weaponId: string? }
@@ -114,6 +124,10 @@ local QUIET = Color3.fromRGB(198, 176, 152)
 local CREAM = Color3.fromRGB(242, 238, 206)
 local KG = GameConfig.Attributes.CarryingKg
 local ITEM = GameConfig.Attributes.ItemId
+-- A pod's deadline on its Tool (2026-10-09, pods hatch in the Bag), and the
+-- green a READY pod is said in.
+local HATCH_AT = GameConfig.HatchInBag.Attribute
+local READY_GREEN = Color3.fromRGB(126, 214, 92)
 local WEAPON_ORDER: { [string]: number } = {}
 for index, item in ipairs(WeaponData.Items) do
 	WEAPON_ORDER[item.Id] = index
@@ -141,8 +155,15 @@ end
 --==============================================================================
 -- COLLECT
 --==============================================================================
-local function plantItem(speciesId: string, tier: number, hatched: boolean, revealAt: any, now: number): Item
+-- `hatchAt` (2026-10-09): a pod's deadline, read as a claim -- not a number,
+-- and the pod has none (it says nothing about when, and is never READY).
+local function plantItem(speciesId: string, tier: number, hatched: boolean, revealAt: any, now: number,
+	hatchAt: any): Item
 	local sealed = hatched and HatchRoll.hidden(revealAt, now)
+	local due = if hatched then nil else tonumber(hatchAt)
+	if due and due ~= due then
+		due = nil
+	end
 	return {
 		ref = nil,
 		kind = if hatched and not sealed then "plant" else "pod",
@@ -157,6 +178,8 @@ local function plantItem(speciesId: string, tier: number, hatched: boolean, reve
 		worn = false,
 		favourite = false,
 		order = math.huge,
+		hatchAt = due,
+		ready = due ~= nil and now >= due,
 	}
 end
 
@@ -217,7 +240,11 @@ function InventoryModel.collect(input: Input): { Item }
 				end
 				local revealAt = if tool then attr(tool, HatchRoll.Attribute)
 					elseif id then input.sealedUntil[id] else nil
-				local item = plantItem(species.Id, tier, hatched, revealAt, now)
+				-- A pod's deadline: its Tool's, which the server keeps in step with
+				-- the row; the row's while the Tool is being put back.
+				local due = if hatched then nil
+					else (if tool then attr(tool, HATCH_AT) else nil) or row.HatchAt
+				local item = plantItem(species.Id, tier, hatched, revealAt, now, due)
 				item.tool = tool
 				item.restoring = tool == nil
 				-- Only a Tool that knows its id may be assigned: holdRef finds it by it.
@@ -236,7 +263,7 @@ function InventoryModel.collect(input: Input): { Item }
 		if not used[tool] then
 			local species = attr(tool, "SpeciesId") :: string
 			local item = plantItem(species, tierOf(attr(tool, KG)), attr(tool, "Hatched") == true,
-				attr(tool, HatchRoll.Attribute), now)
+				attr(tool, HatchRoll.Attribute), now, attr(tool, HATCH_AT))
 			item.tool = tool
 			local id = attr(tool, ITEM)
 			item.order = 2e9 + #items
@@ -316,7 +343,9 @@ end
 -- FACE: VISIBLE FACTS ONLY
 --==============================================================================
 -- What a shell LOOKS like, and a species that draws exactly that shell: the
--- picture is built from the representative, never from what is inside.
+-- picture is built from the representative, never from what is inside --
+-- EXCEPT the owner's 25 pods (2026-10-09, PodForms): one pod per plant, so a
+-- pod's picture is its own species' pod, and two species' pods are two tiles.
 local function podVisual(species: SeedData.Species, tier: number): (string, string, number, number)
 	local rain = SeedData.RainPodOf(species)
 	if rain then
@@ -326,6 +355,9 @@ local function podVisual(species: SeedData.Species, tier: number): (string, stri
 	local order = BIOME_ORDER[biome] or 50
 	if species.Secret == true then
 		return "pod|s:" .. biome .. "|" .. tier, species.Id, 2, order
+	end
+	if PodForms.Has(species.Id) then
+		return "pod|p:" .. species.Id .. "|" .. tier, species.Id, 1, order
 	end
 	local shelf = SeedData.InBiome(biome)
 	local first = shelf[1]
@@ -435,6 +467,11 @@ function InventoryModel.groupKey(item: Item, face: Face, badge: number?): string
 	local key = face.visual
 	if item.sealed then
 		key ..= "|sealed"
+	end
+	-- A pod in the Bag (2026-10-09): its READY ones apart from those still
+	-- growing, so a tile is all one or the other.
+	if item.kind == "pod" and not item.hatched then
+		key ..= if item.ready then "|ready" else "|grow"
 	end
 	if item.favourite then
 		key ..= "|fav"
@@ -560,18 +597,77 @@ function InventoryModel.counts(items: { Item }): { [string]: number }
 end
 
 -- The copy a press means: the one in hand if it is in this group, else the
--- live copy with the lowest item id, else the first.
+-- live copy with the lowest item id, else the first. A tile of pods still
+-- growing (2026-10-09) means the one due first: its countdown is the tile's.
 function InventoryModel.pick(group: Group, heldRef: string?, heldTool: any?): Item?
 	local best: Item? = nil
 	for _, item in ipairs(group.items) do
 		if (heldRef ~= nil and item.ref == heldRef) or (heldTool ~= nil and item.tool ~= nil and item.tool == heldTool) then
 			return item
 		end
-		if not item.restoring and (best == nil or item.order < (best :: Item).order) then
-			best = item
+		if not item.restoring then
+			local b = best
+			if b == nil then
+				best = item
+			elseif item.hatchAt ~= nil and b.hatchAt ~= nil and not item.ready and item.hatchAt ~= b.hatchAt then
+				if item.hatchAt < (b.hatchAt :: number) then
+					best = item
+				end
+			elseif item.order < b.order then
+				best = item
+			end
 		end
 	end
 	return best or group.items[1]
+end
+
+--==============================================================================
+-- PODS HATCH IN THE BAG (2026-10-09; GameConfig.HatchInBag)
+--
+--   clock       whole seconds as the countdown says them: 0:45, 4:05, 1:12:30
+--   podState    a pod tile's: READY, or the countdown of the pod due first
+--   readyCount  how many pods in the Bag are READY (HATCH ALL's number)
+--==============================================================================
+function InventoryModel.clock(seconds: number): string
+	local s = math.max(0, math.ceil(seconds))
+	local h, m = s // 3600, (s % 3600) // 60
+	if h > 0 then
+		return string.format("%d:%02d:%02d", h, m, s % 60)
+	end
+	return string.format("%d:%02d", m, s % 60)
+end
+
+-- nil for a tile that is not pods in the Bag; else whether it is READY, and the
+-- seconds left on the pod due first.
+function InventoryModel.podState(group: Group, now: number): (boolean?, number?)
+	local soonest: number? = nil
+	local ready = false
+	local any = false
+	for _, item in ipairs(group.items) do
+		if item.kind == "pod" and not item.hatched and item.hatchAt then
+			any = true
+			if now >= (item.hatchAt :: number) then
+				ready = true
+			elseif soonest == nil or (item.hatchAt :: number) < soonest then
+				soonest = item.hatchAt
+			end
+		end
+	end
+	if not any then
+		return nil, nil
+	end
+	return ready, if soonest then math.max(0, soonest - now) else nil
+end
+
+function InventoryModel.readyCount(items: { Item }, now: number): number
+	local n = 0
+	for _, item in ipairs(items) do
+		if item.kind == "pod" and not item.hatched and not item.restoring and item.hatchAt
+			and now >= (item.hatchAt :: number) then
+			n += 1
+		end
+	end
+	return n
 end
 
 -- Every ref in a group, for a heart that favourites every copy.
@@ -591,7 +687,9 @@ end
 -- `rarity` on the Rarity line only: the id the panel styles that word by.
 export type Line = { key: string, value: string, colour: Color3?, rarity: string? }
 
-function InventoryModel.details(item: Item, face: Face, multiplier: number?, slot: number?, inHand: boolean): { Line }
+-- `now` (2026-10-09): the server's time, for a pod's countdown.
+function InventoryModel.details(item: Item, face: Face, multiplier: number?, slot: number?, inHand: boolean,
+	now: number?): { Line }
 	local lines: { Line } = {}
 	local function add(key: string, value: string, colour: Color3?, rarity: string?)
 		table.insert(lines, { key = key, value = value, colour = colour, rarity = rarity })
@@ -615,6 +713,12 @@ function InventoryModel.details(item: Item, face: Face, multiplier: number?, slo
 			add("Rarity", info.rarity, info.rarityColour, info.rarity)
 		end
 		add("Income", if item.sealed then "Hatching..." else PlantInfo.PodIncome)
+		-- When it may be hatched (2026-10-09, pods hatch in the Bag).
+		if not item.hatched and item.hatchAt then
+			local left = (item.hatchAt :: number) - (now or (item.hatchAt :: number))
+			add("Hatches", if left <= 0 then "Ready now" else "In " .. InventoryModel.clock(left),
+				if left <= 0 then READY_GREEN else nil)
+		end
 	elseif item.kind == "weapon" then
 		local weapon = WeaponData.Get(item.weaponId) :: WeaponData.Item
 		for _, stat in ipairs(WeaponData.StatLines(weapon)) do
@@ -671,6 +775,23 @@ function InventoryModel.storage(rows: number?, carrying: boolean, limit: number,
 	if owed >= 1 then
 		text ..= string.format(" · %d wheel prize%s waiting for room", owed, if owed == 1 then "" else "s")
 	end
+	return text, count >= limit, true
+end
+
+--==============================================================================
+-- THE POD ROOM (2026-10-09, pods hatch in the Bag): "Pods: 12/60", with a pod
+-- being carried home "Pods: 59+1/60" -- it keeps its place in this room, not the
+-- plants'. Answers the text, full, known.
+--==============================================================================
+function InventoryModel.podStorage(rows: number?, carrying: boolean, limit: number): (string, boolean, boolean)
+	if rows == nil then
+		return "Pods: …", false, false
+	end
+	local stored = math.max(0, math.floor(rows))
+	local count = stored + (if carrying then 1 else 0)
+	local text = if carrying
+		then string.format("Pods: %d+1/%d", stored, limit)
+		else string.format("Pods: %d/%d", count, limit)
 	return text, count >= limit, true
 end
 

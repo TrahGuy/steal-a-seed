@@ -308,15 +308,23 @@ local function countKey(list, read, key)
 	return n
 end
 
--- A record of `n` rows: plants and banked pods mixed, because the limit counts
--- both. Small ones, so that putting them back is quick.
+-- A record of `n` rows: PLANTS, because since 2026-10-09 the limit counts
+-- plants only (pods have a room of their own, Save.MaxPods: HatchInBagSpec and
+-- StorageDoorsSpec). Small ones, so that putting them back is quick.
 local POOL = { "nubkin", "petalpip", "spiretip", "dunebud" }
 local function rowsOf(n)
 	local rows = {}
 	for i = 1, n do
-		table.insert(rows, { Id = POOL[(i % #POOL) + 1], Tier = 1, Hatched = i % 3 ~= 0 })
+		table.insert(rows, { Id = POOL[(i % #POOL) + 1], Tier = 1, Hatched = true })
 	end
 	return rows
+end
+
+-- The last place taken in the same moment as something else: a PLANT given
+-- (an invite plant, a spawn), written down as its Tool is made. A pod given no
+-- longer takes a plant's place (2026-10-09).
+local function givePlant(w, p, speciesId)
+	return w.CarryService.GiveHatched(p, SeedData.Get(speciesId), 1, -1, nil, true)
 end
 
 --==============================================================================
@@ -1018,16 +1026,17 @@ local function body()
 			"24 Tools, the same 24 rows, and the second pod still planted and ready",
 			string.format("%d tools, %d rows", #plantsOf(q), #qProfile.Held))
 
-		-- A pod given and a hatch in the same moment: the pod's Tool is in the
-		-- bag and its row is not written yet when the hatch is asked for.
+		-- A plant given and a hatch in the same moment: the plant's Tool is in
+		-- the bag when the hatch is asked for (a pod given takes the pods' room
+		-- since 2026-10-09, not this one).
 		local r, rPlot, rProfile = w.arrive("GivenThenHatch", -603, {
 			{ id = "nubkin", tier = 1, ready = true },
 		}, rowsOf(MAX - 1))
-		local handed = w.CarryService.GivePod(r, "dunebud", 1)
+		local handed = givePlant(w, r, "dunebud")
 		local answered, why = w.PlantService.HatchByHand(r, rPlot, 1)
 		task.wait()
 		check(handed == true and answered == false and why == "STORAGE_FULL",
-			"a pod given in the same moment takes the last place: the hatch counts it, and is refused",
+			"a plant given in the same moment takes the last place: the hatch counts it, and is refused",
 			tostring(answered) .. " / " .. tostring(why))
 		check(#plantsOf(r) == MAX and #rProfile.Held == MAX
 				and census(rProfile.Held, rowKey) == census(plantsOf(r), toolKey) and stillReady(rPlot, 1),
@@ -1395,10 +1404,10 @@ local function body()
 	--==========================================================================
 	say("\n-- instant hatch: the record fills before the receipt --")
 	do
-		-- While the dialog is open, a pod is banked: the last place is taken.
-		check(w.CarryService.GivePod(buyer, "spiretip", 1) == true and #buyerProfile.Held == MAX
+		-- While the dialog is open, a plant is given: the last place is taken.
+		check(givePlant(w, buyer, "spiretip") == true and #buyerProfile.Held == MAX
 				and #plantsOf(buyer) == MAX,
-			"the dialog is open, and a banked pod takes the last place: 24 of 24")
+			"the dialog is open, and a plant given takes the last place: 24 of 24")
 		task.wait(2.1)
 		-- The free prompt on the ready pod, a moment before the receipt: refused
 		-- and said, so the receipt's own line is asked for inside the quiet time.
@@ -1505,7 +1514,7 @@ local function body()
 		}, rowsOf(MAX - 1))
 		check(w.PlantService.OfferInstantHatch(r, rPlot, 1) == true and stillGrowing(rPlot, 1),
 			"a purchase dialog opens, with room for one")
-		w.CarryService.GivePod(r, "spiretip", 1)
+		givePlant(w, r, "spiretip")
 		task.wait()
 		local decision, payload = w.deliver(r, "spec-leave-1")
 		local row = rowFor(rProfile, "bellchime", 4)
@@ -1588,7 +1597,7 @@ local function body()
 		}, rowsOf(MAX - 1))
 		local offered = w.PlantService.OfferInstantHatch(c, cPlot, 1)
 		check(offered == true, "a purchase dialog opens for a pod with seconds to go", tostring(offered))
-		w.CarryService.GivePod(c, "spiretip", 1)
+		givePlant(w, c, "spiretip")
 		task.wait(4.5)
 		check(stillReady(cPlot, 1) and #cProfile.Held == MAX and stillGrowing(cPlot, 3) and stillGrowing(cPlot, 4),
 			"while it is open the pod's own clock runs out, and the record fills")
@@ -1749,7 +1758,7 @@ local function body()
 			{ id = "dunebud", tier = 3, wait = 7000 },
 		}, rowsOf(MAX - 1))
 		check(w.PlantService.OfferInstantHatch(s, sPlot, 1) == true, "(a dialog opens for a pod with seconds to go)")
-		w.CarryService.GivePod(s, "spiretip", 1)
+		givePlant(w, s, "spiretip")
 		task.wait(4.5)
 		local kept = w.deliver(s, "spec-note-1")
 		check(kept == GRANTED and sProfile.InstantCredits == 1 and stillReady(sPlot, 1) and stillGrowing(sPlot, 2),
@@ -2120,7 +2129,7 @@ local function body()
 			{ id = "nubkin", tier = 1, wait = 8000 },
 		}, rowsOf(MAX - 1))
 		check(w.PlantService.OfferInstantHatch(f, fPlot, 1) == true, "a purchase dialog opens, with room for one")
-		w.CarryService.GivePod(f, "spiretip", 1)
+		givePlant(w, f, "spiretip")
 		task.wait()
 		local before = rowFor(fProfile, "bellchime", 2).HatchAt
 		local saidBefore, gardenBefore = saidTo(f.Name), gardenWrites(f.Name)
@@ -2215,7 +2224,7 @@ local function body()
 				{ id = "nubkin", tier = 2, wait = 800 },
 			}, rowsOf(MAX - 1))
 			check(off.PlantService.OfferInstantHatch(g, gPlot, 1) == true, "(the dialog opens, with room for one)")
-			off.CarryService.GivePod(g, "spiretip", 1)
+			givePlant(off, g, "spiretip")
 			task.wait()
 			local decision, payload = off.deliver(g, "spec-off-1")
 			check(decision == GRANTED and payload == nil and stillReady(gPlot, 1) and #gProfile.Receipts == 1
@@ -2227,26 +2236,36 @@ local function body()
 	end
 
 	--==========================================================================
-	-- 13. A POD GIVEN IS COUNTED TOO (2026-09-30)
+	-- 13. A POD GIVEN IS COUNTED -- IN THE POD ROOM (2026-09-30; 2026-10-09)
 	--
 	-- GivePod -- the wheel's pod prize, a paid pod -- used to hand a pod over
 	-- past the limit without writing it down. The owner's rule: "Ordinary
 	-- player actions must respect storage capacity without losing or
-	-- duplicating a pod." Its whole story is StorageDoorsSpec's (8b, 8c); here,
-	-- that a hatch's record and a given pod's are the same count.
+	-- duplicating a pod." Since 2026-10-09 pods have a room of their own
+	-- (Save.MaxPods), so 24 plants do not stop one: it is counted and written
+	-- down there. Its whole story is StorageDoorsSpec's (8b, 8c) and
+	-- HatchInBagSpec's.
 	--==========================================================================
-	say("\n-- a pod given is counted too --")
+	say("\n-- a pod given is counted in the pod room --")
 	do
 		local m, _, mProfile = w.arrive("PodGiven", -611, {}, rowsOf(MAX))
-		local toolsBefore = census(plantsOf(m), toolKey)
 		local given = w.CarryService.GivePod(m, "bellchime", 3)
 		task.wait()
-		check(given == false and #mProfile.Held == MAX and census(plantsOf(m), toolKey) == toolsBefore
-				and countKey(plantsOf(m), toolKey, "bellchime:3:false") == 0,
-			"at 24 a pod given is refused: no Tool, no row, the record at its limit", tostring(given))
+		local podRow = nil
+		for _, row in ipairs(mProfile.Held) do
+			if row.Id == "bellchime" and row.Hatched == false then
+				podRow = row
+			end
+		end
+		check(given == true and #mProfile.Held == MAX + 1 and countKey(plantsOf(m), toolKey, "bellchime:3:false") == 1
+				and podRow ~= nil and type(podRow.HatchAt) == "number",
+			"with 24 plants a pod given is taken and written down with its deadline: pods have their own room",
+			tostring(given))
 		local room, count = w.CarryService.HeldRoom(m)
-		check(room == 0 and count == #mProfile.Held,
-			"and the count is still the record's", count)
+		local podRoom, pods = w.CarryService.PodRoom(m)
+		check(room == 0 and count == MAX and podRoom == GameConfig.Save.MaxPods - 1 and pods == 1,
+			"and the plants are still 24 of 24, the pods 1 of 60",
+			string.format("%d/%d, %d/%d", count, room, pods, podRoom))
 	end
 
 	--==========================================================================

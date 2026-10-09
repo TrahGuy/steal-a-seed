@@ -192,7 +192,8 @@ local ok, err = pcall(function()
 		"the item id goes into the ground with a creature, is saved with it, and comes back on it")
 	check(has(schema, "if used[item] then\n\t\t\t\t\trow.Item = nil") and has(schema, "Item = item,\n\t\t\t\t\t})"),
 		"a saved planted id that a Bag row also has is dropped, never duplicated")
-	check(has(plant, "if not GardenPlan.fits(heldRows, CarryService.IsCarrying(player), #plan.plant, #plan.ret,")
+	-- The Bag's PLANT room since 2026-10-09: pods (and a pod in the arms) have their own.
+	check(has(plant, "if not GardenPlan.fits(plantRowsOf(player), false, #plan.plant, #plan.ret,")
 			and has(plant, "return false, \"STORAGE_FULL_ALL\", 0")
 			and has(plant, "if not CarryService.IsHeldRestored(player) then")
 			and has(plant, "tool:GetAttribute(HatchRoll.Attribute) == nil"),

@@ -257,7 +257,10 @@ local ok, err = pcall(function()
 		else
 			table.insert(still, tag)
 		end
-		check(L.bag.y + L.bag.h <= h.y, tag .. ": the panel under the Bag", r2s(L.bag) .. " " .. r2s(h))
+		-- Under Index since Garden and the Bag went to the left edge (2026-10-09):
+		-- the handle centred under it, in the corner's column where the Bag stood.
+		check(L.index.y + L.index.h <= h.y and math.abs((h.x + h.w / 2) - (L.index.x + L.index.w / 2)) < 1e-6,
+			tag .. ": the panel under Index", r2s(L.index) .. " " .. r2s(h))
 		-- Shut: only the handle.
 		local shutInput = table.clone(case.input)
 		shutInput.dockShut = true

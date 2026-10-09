@@ -142,7 +142,13 @@ local ok, err = pcall(function()
 			if case.phone and not p.covers then
 				table.insert(panelProblems, tag .. " is a phone panel that does not cover the rail")
 			end
-			if not case.phone then
+			-- A desktop window too small for the desktop's rail is compact (1000 x 609
+			-- since 2026-10-09, Garden and the Bag having no room under the rail):
+			-- its panels cover the rail as a phone's do.
+			if not case.phone and L.compact and not p.covers then
+				table.insert(panelProblems, tag .. " is a compact window's panel that does not cover the rail")
+			end
+			if not case.phone and not L.compact then
 				if p.covers then
 					table.insert(panelProblems, tag .. " covers the rail on a desktop")
 				end

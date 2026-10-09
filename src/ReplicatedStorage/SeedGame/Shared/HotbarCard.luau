@@ -52,6 +52,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local InventoryTile = require(Shared:WaitForChild("InventoryTile"))
@@ -60,6 +61,8 @@ local HotbarCard = {}
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
+-- A READY pod's word (2026-10-09, pods hatch in the Bag).
+local POD_READY = Color3.fromRGB(126, 214, 92)
 
 export type Card = {
 	holder: Frame,
@@ -120,6 +123,10 @@ export type Paint = {
 	-- and whether that is none (drawn in TrapCountEmpty). nil for everything else.
 	uses: string?,
 	usesEmpty: boolean?,
+	-- 2026-10-09 (pods hatch in the Bag): a pod's READY, or its time left
+	-- ("4:05"), where a trap's count goes. nil and false for anything else.
+	podReady: boolean?,
+	podClock: string?,
 }
 
 function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: number): Card
@@ -425,6 +432,13 @@ function HotbarCard.paint(card: Card, H: any, p: Paint)
 	if usesText then
 		card.uses.Text = usesText
 		card.uses.TextColor3 = if p.usesEmpty then H.TrapCountEmpty else H.TrapCountColour
+	end
+	-- A pod (2026-10-09): READY in green, or its time left, in the same place.
+	local podText = if p.podReady then GameConfig.HatchInBag.Words.Ready else p.podClock
+	if podText and not empty then
+		card.uses.Visible = true
+		card.uses.Text = podText
+		card.uses.TextColor3 = if p.podReady then POD_READY else WHITE
 	end
 	local accent = p.accent
 	card.accent.Visible = accent ~= nil and not empty

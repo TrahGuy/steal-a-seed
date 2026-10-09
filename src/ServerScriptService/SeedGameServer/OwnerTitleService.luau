@@ -3,12 +3,15 @@
 --
 -- THE OWNER'S "ADMIN" TITLE (2026-10-01, the owner's ask; GameConfig.OwnerTitle)
 --
--- One floating word over one account's head: the owner's, decided here on the
--- server by UserId (AdminService.IsOwner) -- never by a DisplayName or a
--- username, and never for the other admin or anybody else. Built on the Head of
--- every new character that account gets, so it follows them and comes back
--- after a respawn; whatever title a character already carries is taken off
--- first, so there is only ever one; an old one goes with its old body.
+-- One floating word over the head of the accounts that wear it, decided here on
+-- the server by UserId (AdminService.HasTitle) -- never by a DisplayName or a
+-- username. Until 2026-10-09 the owner's alone; since then (the owner: "add
+-- admin title to michael", "yes, Teambarnze825 is Michael") Teambarnze825's
+-- too -- the title only: he is not the owner (IsOwner), and the third admin,
+-- TappedYou, and anybody else get none. Built on the Head of every new
+-- character such an account gets, so it follows them and comes back after a
+-- respawn; whatever title a character already carries is taken off first, so
+-- there is only ever one; an old one goes with its old body.
 --
 -- Built HERE so every client receives it with the character; OwnerTitleUI only
 -- turns its rainbow (on each viewer's own screen, still for reduced motion).
@@ -29,7 +32,7 @@ local AdminService = require(script.Parent:WaitForChild("AdminService"))
 local TITLE = GameConfig.OwnerTitle
 
 local OwnerTitleService = {}
--- After AdminService (95), whose IsOwner decides.
+-- After AdminService (95), whose HasTitle decides.
 OwnerTitleService.Priority = 96
 
 local serviceConnections: { RBXScriptConnection } = {}
@@ -65,14 +68,14 @@ local function letters(parent: Instance, name: string, z: number): TextLabel
 end
 
 --==============================================================================
--- THE TITLE ON ONE CHARACTER: only the owner's, only one
+-- THE TITLE ON ONE CHARACTER: only a titled account's, only one
 --
--- Returns the title it built, or nil -- for anybody who is not the owner, or a
+-- Returns the title it built, or nil -- for anybody without the title, or a
 -- body with no Head yet. Clears the character either way.
 --==============================================================================
 function OwnerTitleService.Apply(player: any, character: Instance): BillboardGui?
 	clear(character)
-	if not AdminService.IsOwner(player) then
+	if not AdminService.HasTitle(player) then
 		return nil
 	end
 	local head = character:FindFirstChild("Head")
@@ -83,8 +86,10 @@ function OwnerTitleService.Apply(player: any, character: Instance): BillboardGui
 	gui.Name = TITLE.Name
 	gui.Size = UDim2.fromOffset(TITLE.Size.X, TITLE.Size.Y)
 	gui.StudsOffsetWorldSpace = Vector3.new(0, TITLE.Rise, 0)
-	-- Raised by its own height too, so it sits over the countdown and the name.
-	gui.SizeOffset = Vector2.new(0, TITLE.Lift)
+	-- Raised by its own height too, so it sits over the countdown and the name
+	-- -- and over a rebirth title when the character wears one (2026-10-08;
+	-- RebirthService restacks it the other way round).
+	gui.SizeOffset = Vector2.new(0, GameConfig.ownerTitleLift(head:FindFirstChild(GameConfig.Rebirth.Title.Name) ~= nil))
 	gui.MaxDistance = TITLE.MaxDistance
 	gui.LightInfluence = 0
 	gui.AlwaysOnTop = false
@@ -101,7 +106,7 @@ function OwnerTitleService.Apply(player: any, character: Instance): BillboardGui
 	local glow = letters(gui, "Glow", 1)
 	local glowEdge = Instance.new("UIStroke")
 	glowEdge.Color = Color3.new(1, 1, 1)
-	glowEdge.Thickness = 7
+	glowEdge.Thickness = TITLE.GlowThickness
 	glowEdge.Transparency = 0.55
 	glowEdge.Parent = glow
 	local glowRainbow = Instance.new("UIGradient")
@@ -111,7 +116,7 @@ function OwnerTitleService.Apply(player: any, character: Instance): BillboardGui
 	local word = letters(gui, "Letters", 2)
 	local edge = Instance.new("UIStroke")
 	edge.Color = FloatingSign.Outline
-	edge.Thickness = 3
+	edge.Thickness = TITLE.EdgeThickness
 	edge.Parent = word
 	local fill = Instance.new("UIGradient")
 	fill.Name = "Rainbow"
@@ -123,7 +128,7 @@ function OwnerTitleService.Apply(player: any, character: Instance): BillboardGui
 end
 
 local function watch(player: Player)
-	if not AdminService.IsOwner(player) then
+	if not AdminService.HasTitle(player) then
 		return
 	end
 	local function onCharacter(character: Model)
@@ -139,7 +144,8 @@ local function watch(player: Player)
 	if player.Character then
 		onCharacter(player.Character)
 	end
-	log(string.format("the owner (%d) is here; their ADMIN title follows them.", player.UserId))
+	log(string.format("%s (%d) is here; their ADMIN title follows them.",
+		if AdminService.IsOwner(player) then "the owner" else "a titled admin", player.UserId))
 end
 
 function OwnerTitleService.Init()
@@ -158,7 +164,7 @@ function OwnerTitleService.Start()
 	for _, player in ipairs(Players:GetPlayers()) do
 		watch(player)
 	end
-	log("Ready. One ADMIN title, the owner's, by UserId.")
+	log("Ready. The ADMIN title, by UserId: the owner's and Teambarnze825's (AdminService.HasTitle).")
 end
 
 return OwnerTitleService

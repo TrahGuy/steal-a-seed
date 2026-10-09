@@ -41,6 +41,7 @@ local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local ContextActionService = game:GetService("ContextActionService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -52,6 +53,7 @@ local PressGesture = require(Shared:WaitForChild("PressGesture"))
 local ItemArt = require(Shared:WaitForChild("ItemArt"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local InventoryPanel = {}
 
@@ -79,7 +81,133 @@ local MENU_FACE: { [string]: string } = {
 	remove = "sky",
 	favourite = "idle",
 	removetrap = "danger",
+	-- Pods hatch in the Bag (2026-10-09): HATCH green, Instant Hatch premium.
+	hatch = "go",
+	instant = "premium",
+	hold = "idle",
 }
+
+--==============================================================================
+-- A HOLD, NOT A PRESS (2026-10-09, pods hatch in the Bag)
+--
+-- HATCH and HATCH ALL are the bed prompt's own hold (`seconds`,
+-- GameConfig.Plant.HatchHoldSeconds): a finger or the mouse holds the button
+-- down while its face fills and the shell's rattle plays, and letting go early
+-- -- anywhere on the screen -- does nothing at all. A controller's A or Enter
+-- (Activated with no press under way) starts the same fill, which closing the
+-- menu stops. Answers a function that stops a hold under way.
+--==============================================================================
+local RATTLE: string = GameConfig.Plant.Hatch.Sounds.Rattle
+-- Tweened, so nothing here runs per frame: the face fills over the hold, and
+-- the plate rocks a few degrees while it does.
+local ROCK = TweenInfo.new(0.07, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+
+local function holdButton(mb: MenuKit.Button, seconds: number, done: () -> ()): () -> ()
+	local fill = Instance.new("Frame")
+	fill.Name = "HoldFill"
+	fill.BackgroundColor3 = WHITE
+	fill.BackgroundTransparency = 0.55
+	fill.BorderSizePixel = 0
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.ZIndex = mb.label.ZIndex - 1
+	fill.Active = false
+	fill.Parent = mb.plate
+	UIKit.corner(fill, 10)
+	local hold = 0
+	local filling: Tween? = nil
+	local rocking: Tween? = nil
+	local letGo: RBXScriptConnection? = nil
+	local pressing = false
+	local lastEnded = 0
+	local function stop()
+		hold += 1
+		pressing = false
+		if filling then
+			filling:Cancel()
+			filling = nil
+		end
+		if rocking then
+			rocking:Cancel()
+			rocking = nil
+		end
+		if letGo then
+			letGo:Disconnect()
+			letGo = nil
+		end
+		fill.Size = UDim2.fromScale(0, 1)
+		mb.plate.Rotation = 0
+	end
+	local function begin()
+		if filling then
+			return
+		end
+		hold += 1
+		local this = hold
+		if RATTLE ~= "" and SoundKit.has(RATTLE) then
+			SoundKit.play(RATTLE)
+		end
+		mb.plate.Rotation = -3
+		local rock = TweenService:Create(mb.plate, ROCK, { Rotation = 3 })
+		rocking = rock
+		rock:Play()
+		local tween = TweenService:Create(fill, TweenInfo.new(seconds, Enum.EasingStyle.Linear),
+			{ Size = UDim2.fromScale(1, 1) })
+		filling = tween
+		tween.Completed:Connect(function(state: Enum.PlaybackState)
+			-- Only this hold, run to its end, on a button still in the game.
+			if state ~= Enum.PlaybackState.Completed or hold ~= this or not mb.hit:IsDescendantOf(game) then
+				return
+			end
+			stop()
+			done()
+		end)
+		tween:Play()
+	end
+	mb.hit.InputBegan:Connect(function(input: InputObject)
+		local kind = input.UserInputType
+		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
+			pressing = true
+			begin()
+			-- Let go anywhere and the hold is off, not only over the button.
+			if letGo then
+				letGo:Disconnect()
+			end
+			letGo = UserInputService.InputEnded:Connect(function(ended: InputObject)
+				if ended.UserInputType == kind then
+					lastEnded = os.clock()
+					stop()
+				end
+			end)
+		end
+	end)
+	mb.hit.Activated:Connect(function()
+		if pressing or filling or os.clock() - lastEnded < 0.4 then
+			return
+		end
+		begin()
+	end)
+	return stop
+end
+
+-- A small icon on the left of a button's face (the owner's HatchInBag icons,
+-- cut by their shared crop); none for an id that is "".
+local function buttonIcon(mb: MenuKit.Button, id: string?)
+	if not id or id == "" then
+		return
+	end
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.BackgroundTransparency = 1
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 6, 0.5, -2)
+	icon.Size = UDim2.fromOffset(24, 24)
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = mb.label.ZIndex
+	icon.Parent = mb.plate
+	InventoryTile.bagIcon(icon, id)
+	mb.label.Position = UDim2.fromOffset(30, 1)
+	mb.label.Size = UDim2.new(1, -36, 1 - LOOK.FootShare, 0)
+end
 local TIP_W = 210
 -- The Bag's own approved satchel beside the title (GameConfig.Rail.BagIcon,
 -- the global UI pass), and the room it takes before the title's words.
@@ -218,12 +346,17 @@ export type View = {
 	footerFill: number?,
 	empty: string?,
 	compact: boolean,
+	-- How many pods in the Bag are READY (2026-10-09): HATCH ALL shows while
+	-- there is one.
+	readyPods: number?,
 }
 
+-- `hold` (2026-10-09): seconds the action must be held (HATCH); `icon`: an
+-- owner's icon on its face.
 export type MenuSpec = {
 	title: string,
 	lines: { InventoryModel.Line },
-	actions: { { id: string, label: string } },
+	actions: { { id: string, label: string, hold: number?, icon: string? } },
 }
 
 export type Callbacks = {
@@ -233,6 +366,8 @@ export type Callbacks = {
 	dragBegin: (key: string, input: InputObject) -> (),
 	describe: (key: string) -> (string?, { InventoryModel.Line }?),
 	changed: () -> (),
+	-- HATCH ALL held to the end (2026-10-09).
+	hatchAll: (() -> ())?,
 }
 
 type Rect = HudLayout.Rect
@@ -536,6 +671,30 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	end
 	footer:GetPropertyChangedSignal("TextBounds"):Connect(placeBar)
 
+	--==========================================================================
+	-- HATCH ALL (2026-10-09, pods hatch in the Bag)
+	--
+	-- In the grid's bottom-right corner while a pod in the Bag is READY, with
+	-- how many: held to the end like HATCH (holdButton), it hatches every one.
+	-- The grid's bottom padding grows by its height while it shows, so the last
+	-- row of tiles can always be scrolled clear of it.
+	--==========================================================================
+	local BAG = GameConfig.HatchInBag
+	local hatchAll = MenuKit.button(body, "HatchAll", 30, BAG.Words.HatchAll, 15, { studs = true })
+	hatchAll.style("go")
+	buttonIcon(hatchAll, BAG.Icons.Hatch)
+	hatchAll.hit.AnchorPoint = Vector2.new(1, 1)
+	hatchAll.hit.Size = UDim2.fromOffset(150, 46)
+	hatchAll.hit.Visible = false
+	UIKit.clicks(hatchAll.hit)
+	local HATCH_ALL_ROOM = 50
+	local stopHatchAll = holdButton(hatchAll, GameConfig.Plant.HatchHoldSeconds, function()
+		local fn = cb.hatchAll
+		if fn then
+			fn()
+		end
+	end)
+
 	-- Assign mode's dim: a sheet over the whole shell, not the modal's
 	-- GroupTransparency -- measured in Play, the Bag's CanvasGroup drew fully
 	-- opaque at 0.4 and at 0.85 while a fresh one beside it faded. Never Active,
@@ -751,7 +910,14 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	end
 
 	local menuPick: ((string) -> ())? = nil
+	-- The menu's HATCH holds (2026-10-09): stopped when it closes, so a hold a
+	-- controller started can never finish behind a closed menu.
+	local menuHolds: { () -> () } = {}
 	local function closeMenu()
+		for _, stopHold in ipairs(menuHolds) do
+			stopHold()
+		end
+		table.clear(menuHolds)
 		menuPick = nil
 		menu.Visible = false
 		backdrop.Visible = false
@@ -772,19 +938,27 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			-- off, quiet for a favourite, red to remove a placed trap.
 			local mb = MenuKit.button(menu, "Action" .. action.id, 84, action.label, 15)
 			mb.style(MENU_FACE[action.id] or "go")
+			buttonIcon(mb, action.icon)
 			local b = mb.hit
 			b.Size = UDim2.new(1, 0, 0, 44)
 			b.LayoutOrder = 100 + i
 			UIKit.clicks(b)
 			first = first or b
 			local id = action.id
-			b.Activated:Connect(function()
+			local function chosen()
 				local pick = menuPick
 				closeMenu()
 				if pick then
 					pick(id)
 				end
-			end)
+			end
+			local hold = action.hold
+			if hold and hold > 0 then
+				-- HATCH (2026-10-09): held to the end, never a tap.
+				table.insert(menuHolds, holdButton(mb, hold, chosen))
+			else
+				b.Activated:Connect(chosen)
+			end
 		end
 		menuPick = onPick
 		backdrop.Visible = true
@@ -1086,6 +1260,19 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		barFill.Visible = fill ~= nil
 		barFill.Size = UDim2.fromScale(math.clamp(fill or 0, 0, 1), 1)
 		barFill.BackgroundColor3 = view.footerColour
+		-- HATCH ALL, with the count of READY pods (2026-10-09).
+		local readyPods = view.readyPods or 0
+		local showAll = readyPods > 0
+		if hatchAll.hit.Visible ~= showAll then
+			if not showAll then
+				stopHatchAll()
+			end
+			hatchAll.hit.Visible = showAll
+			gridPad.PaddingBottom = UDim.new(0, gridPad.PaddingTop.Offset + (if showAll then HATCH_ALL_ROOM else 0))
+		end
+		if showAll then
+			hatchAll.set(string.format("%s (%d)", BAG.Words.HatchAll, readyPods))
+		end
 		paintCategories(view.counts)
 		task.defer(buildVisible)
 	end
@@ -1157,7 +1344,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		gridPad.PaddingLeft = UDim.new(0, bag.pad)
 		gridPad.PaddingRight = UDim.new(0, bag.pad)
 		gridPad.PaddingTop = UDim.new(0, bag.pad)
-		gridPad.PaddingBottom = UDim.new(0, bag.pad)
+		gridPad.PaddingBottom = UDim.new(0, bag.pad + (if hatchAll.hit.Visible then HATCH_ALL_ROOM else 0))
+		hatchAll.hit.Position = UDim2.fromOffset(bag.grid.x + bag.grid.w - 8, bag.grid.y + bag.grid.h - 6)
 		gridLayout.CellSize = UDim2.fromOffset(bag.tile.X, bag.tile.Y)
 		gridLayout.CellPadding = UDim2.fromOffset(bag.gap, bag.gap)
 		gridLayout.FillDirectionMaxCells = if bag.horizontal then bag.rows else 0
@@ -1223,6 +1411,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			end, false, 2600, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1, Enum.KeyCode.ButtonR2)
 		else
 			ContextActionService:UnbindAction("SeedBagPad")
+			-- A HATCH ALL held as the Bag shuts goes nowhere (2026-10-09).
+			stopHatchAll()
 		end
 		-- Closed, every tile's light stops now; open, buildVisible starts the
 		-- ones in view.

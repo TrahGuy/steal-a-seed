@@ -140,6 +140,36 @@ local function publish(phase: string, seconds: number)
 end
 
 --==============================================================================
+-- A POD RUSH HOLDS DUSK (2026-10-09; GameConfig.PodRush, the owner's call)
+--
+-- Dusk clears every pod and forfeits every carry, so it waits: while the
+-- Workspace says a rush holds it (PodRush.Attributes.Until, written by
+-- PodRushService: the rush's end and its grace), a day due to end before that
+-- -- and DuskMarginSeconds more -- is stretched to it, at once, so the clock
+-- shows the longer day and its warning never comes mid-rush. Read here, not
+-- asked of PodRushService: this file requires nothing new. A day that already
+-- ends later is left alone, and a night is never touched. Answers whether the
+-- day was stretched.
+--==============================================================================
+function WorldCycleService.HoldForRush(): boolean
+	if not WorldCycleService.IsDay() then
+		return false
+	end
+	local rush = GameConfig.PodRush
+	local holdUntil = Workspace:GetAttribute(rush.Attributes.Until)
+	if type(holdUntil) ~= "number" or holdUntil ~= holdUntil then
+		return false
+	end
+	local want = holdUntil + rush.DuskMarginSeconds - Workspace:GetServerTimeNow()
+	if want <= WorldCycleService.SecondsLeft() + 0.5 then
+		return false
+	end
+	publish(CYCLE.PhaseDay, want)
+	log(string.format("A Pod Rush holds dusk: the day now ends in %ds.", math.ceil(want)))
+	return true
+end
+
+--==============================================================================
 -- LOOSE PODS
 --
 -- The nests clear themselves; this is for the ones lying on the road -- dropped
@@ -335,6 +365,13 @@ local function runLoop()
 			if not running or generation ~= mine then
 				return
 			end
+			-- The deadline moved while this slept (a Pod Rush stretched the day,
+			-- HoldForRush): sleep on the new one. And a rush still holding dusk
+			-- stretches it now rather than letting the night in.
+			if WorldCycleService.SecondsLeft() > 0.25
+				or (WorldCycleService.IsDay() and WorldCycleService.HoldForRush()) then
+				continue
+			end
 			local _, why = transition(WorldCycleService.IsDay())
 			if why == "BUSY" then
 				-- A forced change is part-way through. It starts its own loop when
@@ -425,6 +462,13 @@ function WorldCycleService.Start()
 
 	-- The loop, on the deadline just published. See ONE LOOP, AND IT SLEEPS.
 	runLoop()
+
+	-- A Pod Rush starting (or ending early) re-asks at once, so the day is
+	-- stretched before its warning could show (HoldForRush).
+	table.insert(serviceConnections, Workspace:GetAttributeChangedSignal(GameConfig.PodRush.Attributes.Until)
+		:Connect(function()
+			WorldCycleService.HoldForRush()
+		end))
 end
 
 -- The command bar's old name for whichever of the two is next. It used to run

@@ -9,16 +9,20 @@
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
 --     print(run("DustbowlPodSpec"))
 --
--- WHY IT READS LIKE A REVERSION. On 2026-09-15 Dustbowl's pods were rebuilt from
--- two imported AI meshes (commit 5a91e16) on a width ladder of their own. The
--- owner dropped that on 2026-09-17 and asked for the procedural urn back, exactly
--- as it stood at 6c1f228. So half the assertions here are NEGATIVE: no MeshPart,
--- no mesh template, no biome ladder, no pod-pulse tag, no mesh service. A pod
--- that waits for an asset is a pod that can arrive late, and a boot that waited
--- for one is what cost the owner their garden.
+-- REWRITTEN 2026-10-09 for the owner's pods. Until then every Dustbowl species
+-- wore one procedural clay urn (6c1f228, 9 or 10 parts, a cylinder shell). Now
+-- each of the five wears its own pod, modelled by the owner and replayed from
+-- PodForms by PodModel (KB/POD-MODELS-PLAN.md). What has NOT changed is why this
+-- spec exists: on 2026-09-15 the pods were rebuilt from imported AI meshes, the
+-- owner dropped that on 2026-09-17, and a pod that waits for an asset is a pod
+-- that can arrive late. So the negative half stays: no MeshPart, no file mesh,
+-- no template, no PodPulse tag, no mesh service. The owner's pods draw their
+-- spheres and cylinders with SpecialMesh primitives, which need no asset.
 --
--- The real SeedData, GameConfig and CreatureModel, fresh-required. Everything
--- this builds goes in one folder in ReplicatedStorage and is destroyed.
+-- The real SeedData, GameConfig, PodForms and CreatureModel, fresh-required.
+-- Everything this builds goes in one folder in ReplicatedStorage and is
+-- destroyed. PodModelsSpec covers all 25 pods; this is Dustbowl's five, tier by
+-- tier.
 --
 -- Not here: how it LOOKS (Studio), the carry grip and the take range (Play), and
 -- the hatch clock (the plant specs).
@@ -31,6 +35,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+local PodForms = require(Shared:WaitForChild("PodForms"))
 
 local out = {}
 local pass, fail = 0, 0
@@ -63,34 +68,41 @@ end
 -- nothing else.
 local SHEET = { 1.66, 2.59, 3.66, 4.87, 6.09, 7.94, 9.04 }
 
---==============================================================================
--- WHAT THE URN MEASURES, AS A MULTIPLE OF ITS OWN DIAMETER
---
--- Measured off the production builder at 6c1f228 on 2026-09-17, which is the
--- behaviour the owner asked to have back:
---
---     T1..T5   1.1100 D wide   1.2140 D tall   1.2489 D deep    9 parts
---     T6       1.1803 D wide   1.2140 D tall   1.2489 D deep   10 parts
---     T7       1.3030 D wide   1.2140 D tall   1.2489 D deep   10 parts
---
--- The first five are the SAME SHAPE at five sizes -- that is the ladder doing the
--- work -- and the top two are wider for their crowns without being taller. Pinned
--- to four decimals because this is the reference: if a pod's proportions move
--- again, this is the line that says so.
---==============================================================================
-local WIDE = { 1.1100, 1.1100, 1.1100, 1.1100, 1.1100, 1.1803, 1.3030 }
-local TALL = 1.2140
-local DEEP = 1.2489
-local PARTS = { 9, 9, 9, 9, 9, 10, 10 }
+-- The owner's five, by their folder ("dustbowl pods").
+local FIVE = { "dunebud", "paddlehop", "thornwhorl", "raincup", "suncrown" }
 
-local DUSTBOWL_BODY = Color3.fromRGB(132, 74, 45)
+-- The box every pod fills (GameConfig.PodModels), in D.
+local BOX_W, BOX_H = 1.25, 1.45
 
 local fixture = Instance.new("Folder")
 fixture.Name = "DustbowlPodSpecFixture"
 fixture.Parent = ReplicatedStorage
 
-local dunebud = SeedData.Get("dunebud")
 local petalpip = SeedData.Get("petalpip")
+
+-- A pod's drawn extents in its base frame (visible parts only: the Shell is
+-- invisible), as width (the wider footprint side) and height, and its lowest
+-- point.
+local function drawn(pod, cf)
+	local lo = Vector3.new(math.huge, math.huge, math.huge)
+	local hi = -lo
+	for _, d in ipairs(pod:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 0.99 then
+			local h = d.Size / 2
+			for _, sx in ipairs({ -1, 1 }) do
+				for _, sy in ipairs({ -1, 1 }) do
+					for _, sz in ipairs({ -1, 1 }) do
+						local c = cf:PointToObjectSpace((d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position)
+						lo = lo:Min(c)
+						hi = hi:Max(c)
+					end
+				end
+			end
+		end
+	end
+	local size = hi - lo
+	return math.max(size.X, size.Z), size.Y, lo.Y
+end
 
 --==============================================================================
 -- 1. ONE LADDER, SHARED BY EVERY BIOME
@@ -162,6 +174,9 @@ do
 	check(model ~= nil and not model:find("122574206027033")
 			and not model:find("116363561995758"),
 		"and neither imported asset id appears in it")
+	local podModel = sourceOf(Shared:FindFirstChild("PodModel"))
+	check(podModel ~= nil and not podModel:find("MeshPart") and not podModel:find("rbxassetid"),
+		"the owner's pods' builder names no MeshPart and no asset")
 
 	local nest = sourceOf(server and server:FindFirstChild("NestService"))
 	check(nest ~= nil and not nest:find("RebuildPods"),
@@ -177,45 +192,61 @@ do
 end
 
 --==============================================================================
--- 3. SEVEN PART-BUILT PODS
+-- 3. FIVE OWNER'S PODS, SEVEN TIERS EACH, ALL PART-BUILT
 --==============================================================================
-say("\n-- seven procedural tiers --")
+say("\n-- the owner's five, part-built --")
 local pods = {}
 do
-	local allParts, primaryOk, noMesh, assembledOk = true, true, true, true
+	local allParts, noFile, primaryOk, assembledOk, ownOk = true, true, true, true, true
 	local detail = ""
-	for tier = 1, 7 do
-		local pod = CreatureModel.BuildPod(dunebud, tier, CFrame.new(0, tier * 40, 0), fixture)
-		pods[tier] = pod
-		local parts = 0
-		for _, d in ipairs(pod:GetDescendants()) do
-			if d:IsA("BasePart") then
-				parts += 1
-				if d.ClassName ~= "Part" and d.ClassName ~= "WedgePart" then
-					allParts = false
-					detail ..= string.format(" T%d=%s", tier, d.ClassName)
+	for _, id in ipairs(FIVE) do
+		local sp = SeedData.Get(id)
+		pods[id] = {}
+		ownOk = ownOk and sp ~= nil and sp.Biome == "dustbowl" and PodForms.Has(id)
+		for tier = 1, 7 do
+			local cf = CFrame.new(0, tier * 40, 0)
+			local pod = CreatureModel.BuildPod(sp, tier, cf, fixture)
+			pods[id][tier] = pod
+			local parts = 0
+			for _, d in ipairs(pod:GetDescendants()) do
+				if d:IsA("BasePart") then
+					parts += 1
+					if d.ClassName ~= "Part" and d.ClassName ~= "WedgePart" then
+						allParts = false
+						detail ..= string.format(" %s T%d=%s", id, tier, d.ClassName)
+					end
+				end
+				-- A SpecialMesh IS a FileMesh to IsA: only its type and id tell them apart.
+				if d:IsA("MeshPart") then
+					noFile = false
+					detail ..= string.format(" %s MeshPart", id)
+				elseif d:IsA("DataModelMesh") and not (d:IsA("SpecialMesh") and d.MeshId == ""
+					and (d.MeshType == Enum.MeshType.Sphere or d.MeshType == Enum.MeshType.Cylinder)) then
+					noFile = false
+					detail ..= string.format(" %s %s", id, d.ClassName)
 				end
 			end
-			if d:IsA("MeshPart") or d:IsA("SpecialMesh") or d:IsA("FileMesh") then
-				noMesh = false
+			local primary = pod.PrimaryPart
+			local D = SHEET[tier]
+			if not primary or primary.Name ~= "Shell" or primary.ClassName ~= "Part" or primary.Transparency < 1
+				or not near(cf:ToObjectSpace(primary.CFrame).Position.Y, D * 0.5, 0.001)
+				or (cf:ToObjectSpace(primary.CFrame).Rotation.UpVector - Vector3.yAxis).Magnitude > 1e-4 then
+				primaryOk = false
+				detail ..= string.format(" %s T%d primary", id, tier)
+			end
+			-- The owner's parts (less the base each stood on), the Shell, and the Colossal's core.
+			local want = PodForms.Pods[id].PartCount + 1 + (if tier == 7 then 1 else 0)
+			if parts ~= want then
+				assembledOk = false
+				detail ..= string.format(" %s T%d parts=%d want %d", id, tier, parts, want)
 			end
 		end
-		local primary = pod.PrimaryPart
-		if not primary or primary.Name ~= "Shell" or primary.ClassName ~= "Part"
-			or primary.Shape ~= Enum.PartType.Cylinder then
-			primaryOk = false
-			detail ..= string.format(" T%d primary=%s", tier,
-				if primary then primary.Name .. "/" .. primary.ClassName else "nil")
-		end
-		if parts ~= PARTS[tier] then
-			assembledOk = false
-			detail ..= string.format(" T%d parts=%d want %d", tier, parts, PARTS[tier])
-		end
 	end
+	check(ownOk, "each of Dustbowl's five species has the owner's own pod")
 	check(allParts, "every piece of every tier is a Part or a WedgePart", detail)
-	check(noMesh, "no MeshPart, SpecialMesh or FileMesh anywhere in the seven")
-	check(primaryOk, "PrimaryPart is the built cylinder shell, tier by tier", detail)
-	check(assembledOk, "each is assembled from its own 9 pieces, or 10 for the top two", detail)
+	check(noFile, "no MeshPart and no file mesh: only the owner's sphere and cylinder SpecialMeshes", detail)
+	check(primaryOk, "PrimaryPart is an invisible upright Shell half a diameter up, tier by tier", detail)
+	check(assembledOk, "each is the owner's parts, less its base, plus the Shell, and the Colossal's core", detail)
 
 	-- A template sitting where the mesh service used to put one must now be
 	-- ignored. That is the proof that no code path looks for one.
@@ -239,9 +270,9 @@ do
 	decoy.Name = "Dustbowl_T1to5"
 	decoy.Size = Vector3.new(99, 99, 99)
 	decoy.Parent = podsFolder
-	local withDecoy = CreatureModel.BuildPod(dunebud, 3, CFrame.new(0, 400, 0), fixture)
+	local withDecoy = CreatureModel.BuildPod(SeedData.Get("dunebud"), 3, CFrame.new(0, 400, 0), fixture)
 	check(withDecoy.PrimaryPart ~= nil and withDecoy.PrimaryPart.ClassName == "Part"
-			and near(withDecoy:GetExtentsSize().X, pods[3]:GetExtentsSize().X, 0.01),
+			and near(withDecoy:GetExtentsSize().X, pods.dunebud[3]:GetExtentsSize().X, 0.01),
 		"a pod template dropped into ReplicatedStorage changes nothing")
 	withDecoy:Destroy()
 	decoy:Destroy()
@@ -254,46 +285,69 @@ do
 end
 
 --==============================================================================
--- 4. THE SIZES ARE THE ONES FROM BEFORE THE MESHES
+-- 4. THE SIZES: EACH FILLS ITS TIER'S BOX, IN ITS OWN PROPORTIONS
+--
+-- At most 1.25 D wide and 1.45 D tall, and touching one of the two -- the box
+-- the carry, the haul and the nest ring are built for (the urn was 1.11-1.30 D
+-- wide and 1.21 D tall). Its proportions are the owner's at every tier: the same
+-- shape at seven sizes.
 --==============================================================================
 say("\n-- sizes --")
 do
-	local wideOk, tallOk, risesOk, matchesGreen = true, true, true, true
+	local fitOk, fillOk, shapeOk, risesOk, groundOk, greenOk = true, true, true, true, true, true
 	local detail = ""
+	local measured = {}
+	for _, id in ipairs(FIVE) do
+		local ratio = nil
+		local lastW = 0
+		for tier = 1, 7 do
+			local D = SHEET[tier]
+			local w, h, bottom = drawn(pods[id][tier], CFrame.new(0, tier * 40, 0))
+			if w / D > BOX_W + 0.002 or h / D > BOX_H + 0.002 then
+				fitOk = false
+				detail ..= string.format(" %s T%d %.3fx%.3f", id, tier, w / D, h / D)
+			end
+			if not near(math.max(w / D / BOX_W, h / D / BOX_H), 1, 0.002) then
+				fillOk = false
+				detail ..= string.format(" %s T%d fills %.3f", id, tier, math.max(w / D / BOX_W, h / D / BOX_H))
+			end
+			ratio = ratio or h / w
+			if not near(h / w, ratio, 0.002) then
+				shapeOk = false
+			end
+			if w <= lastW then
+				risesOk = false
+			end
+			lastW = w
+			if not near(bottom, 0, 0.002) then
+				groundOk = false
+				detail ..= string.format(" %s T%d bottom %.3f", id, tier, bottom)
+			end
+			if tier == 4 then
+				table.insert(measured, string.format("%s %.2fx%.2f D", id, w / D, h / D))
+			end
+		end
+	end
 	for tier = 1, 7 do
+		-- A Greenhollow species of the same tier fills the same box, because the
+		-- ladder belongs to the tier and not to the biome.
+		local cf = CFrame.new(200, tier * 40, 0)
+		local green = CreatureModel.BuildPod(petalpip, tier, cf, fixture)
+		local w, h = drawn(green, cf)
 		local D = SHEET[tier]
-		local ext = pods[tier]:GetExtentsSize()
-		if not near(ext.X / D, WIDE[tier], 0.002) or not near(ext.Z / D, DEEP, 0.002) then
-			wideOk = false
-			detail ..= string.format(" T%d w=%.4f d=%.4f", tier, ext.X / D, ext.Z / D)
-		end
-		if not near(ext.Y / D, TALL, 0.002) then
-			tallOk = false
-			detail ..= string.format(" T%d h=%.4f", tier, ext.Y / D)
-		end
-		if tier > 1 and ext.X <= pods[tier - 1]:GetExtentsSize().X then
-			risesOk = false
-		end
-		-- A Greenhollow species of the same tier is built to the same diameter,
-		-- because the ladder belongs to the tier and not to the biome.
-		local green = CreatureModel.BuildPod(petalpip, tier, CFrame.new(200, tier * 40, 0), fixture)
-		if not near(green:GetExtentsSize().X / D, 1.0, 0.25) then
-			matchesGreen = false
-			detail ..= string.format(" green T%d=%.2f", tier, green:GetExtentsSize().X / D)
+		if not near(math.max(w / D / BOX_W, h / D / BOX_H), 1, 0.002) then
+			greenOk = false
+			detail ..= string.format(" green T%d", tier)
 		end
 		green:Destroy()
 	end
-	check(wideOk, "every tier measures 1.11 of its diameter across, 1.18 and 1.30 for the "
-		.. "crowned top two, and 1.2489 deep", detail)
-	check(tallOk, "and every one of the seven stands 1.2140 of its own diameter tall", detail)
+	check(fitOk, "every tier of every one fits 1.25 of its diameter across and 1.45 tall", detail)
+	check(fillOk, "and fills that box: it reaches the width or the height", detail)
+	check(shapeOk, "the owner's proportions are kept at all seven sizes")
 	check(risesOk, "so the seven silhouettes step up in size")
-	check(matchesGreen, "a Greenhollow pod of the same tier is built to the same diameter", detail)
-	local measured = {}
-	for tier = 1, 7 do
-		local e = pods[tier]:GetExtentsSize()
-		measured[#measured + 1] = string.format("T%d %.2fx%.2f", tier, e.X, e.Y)
-	end
-	say("  ..    measured: " .. table.concat(measured, "  "))
+	check(groundOk, "and every one stands on its base, its lowest point at the ground", detail)
+	check(greenOk, "a Greenhollow pod of the same tier fills the same box", detail)
+	say("  ..    at Mega: " .. table.concat(measured, "  "))
 end
 
 --==============================================================================
@@ -301,39 +355,23 @@ end
 --==============================================================================
 say("\n-- the tier readout --")
 do
-	local bodyOk, crownOk = true, true
+	-- NO BASE AND NO RING (the owner, 2026-10-09: "remove the base if there is a base below the pods"). The
+	-- five are studded pods with no seam of their own, so their size shows by their scale alone.
+	local bareOk = true
 	local detail = ""
-	for tier = 1, 5 do
-		if not sameColor(pods[tier].PrimaryPart.Color, DUSTBOWL_BODY) then
-			bodyOk = false
-			detail ..= string.format(" T%d", tier)
-		end
-	end
-	local function mixDistance(tier)
-		local c = pods[tier].PrimaryPart.Color
-		return math.abs(c.R - DUSTBOWL_BODY.R) + math.abs(c.G - DUSTBOWL_BODY.G)
-			+ math.abs(c.B - DUSTBOWL_BODY.B)
-	end
-	for tier = 1, 7 do
-		local tierColor = SeedData.ColorForTier(tier)
-		local found = false
-		for _, d in ipairs(pods[tier]:GetDescendants()) do
-			if d:IsA("BasePart") and sameColor(d.Color, tierColor) then
-				found = true
+	for _, id in ipairs(FIVE) do
+		for tier = 1, 7 do
+			local pod = pods[id][tier]
+			if pod:FindFirstChild("FlatBase", true) or pod:FindFirstChild("SeamRing", true) then
+				bareOk = false
+				detail ..= string.format(" %s T%d", id, tier)
 			end
 		end
-		if not found then
-			crownOk = false
-			detail ..= string.format(" T%d has no tier colour", tier)
-		end
 	end
-	check(bodyOk, "tiers 1 to 5 all wear the Dustbowl body colour on the shell", detail)
-	check(mixDistance(6) > 0.02 and mixDistance(7) > mixDistance(6),
-		"a Titan's shell is mixed toward its tier, and a Colossal's further")
-	check(crownOk, "every tier puts its own colour somewhere on the pod", detail)
+	check(bareOk, "no base under any of them, and no ring: the size shows by the pod's scale", detail)
 
 	--==========================================================================
-	-- NOT ONE WORD ON ANY OF THE SEVEN
+	-- NOT ONE WORD ON ANY OF THEM
 	--
 	-- The Colossal used to wear the word COLOSSAL over its crown -- the single
 	-- exception to "a pod says nothing about itself". The owner had it removed on
@@ -341,22 +379,27 @@ do
 	-- that keeps it that way: no billboard, no text, on any tier.
 	--==========================================================================
 	local labels, words = 0, {}
-	for tier = 1, 7 do
-		for _, d in ipairs(pods[tier]:GetDescendants()) do
-			if d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
-				labels += 1
-				table.insert(words, string.format("T%d %s", tier, d.Name))
+	local soundOk = true
+	for _, id in ipairs(FIVE) do
+		for tier = 1, 7 do
+			for _, d in ipairs(pods[id][tier]:GetDescendants()) do
+				if d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
+					labels += 1
+					table.insert(words, string.format("%s T%d %s", id, tier, d.Name))
+				end
+				if d:IsA("TextLabel") and d.Text ~= "" then
+					table.insert(words, string.format("%s T%d %q", id, tier, d.Text))
+				end
 			end
-			if d:IsA("TextLabel") and d.Text ~= "" then
-				table.insert(words, string.format("T%d %q", tier, d.Text))
+			local sound = pods[id][tier]:GetAttribute("PickupSound")
+			if (tier == 7) ~= (sound == "ColossalPickup") then
+				soundOk = false
 			end
 		end
 	end
 	check(labels == 0, "no pod carries a label of any kind", table.concat(words, ", "))
 	check(#words == 0, "and no pod carries any text at all", table.concat(words, ", "))
-	check(pods[7]:GetAttribute("PickupSound") == "ColossalPickup"
-			and pods[6]:GetAttribute("PickupSound") == nil,
-		"the Colossal still asks for its own pickup sound, which is not a label")
+	check(soundOk, "the Colossal still asks for its own pickup sound, which is not a label")
 end
 
 --==============================================================================
@@ -364,41 +407,56 @@ end
 --==============================================================================
 say("\n-- the contract --")
 do
-	local attrsOk, auraOk, ventOk = true, true, false
+	local attrsOk, quietOk, ventOk, coreOk, inertOk, nameOk = true, true, true, true, true, true
 	local detail = ""
-	for tier = 1, 7 do
-		local pod = pods[tier]
-		if pod:GetAttribute("SpeciesId") ~= "dunebud" or pod:GetAttribute("Tier") ~= tier
-			or pod:GetAttribute("Rarity") ~= dunebud.Rarity
-			or pod:GetAttribute("Stage") ~= CreatureModel.STAGE_POD then
-			attrsOk = false
-			detail ..= string.format(" T%d", tier)
-		end
-		local emitters, lights = 0, 0
-		for _, d in ipairs(pod:GetDescendants()) do
-			if d:IsA("ParticleEmitter") then
-				emitters += 1
-			elseif d:IsA("PointLight") then
-				lights += 1
+	for _, id in ipairs(FIVE) do
+		local sp = SeedData.Get(id)
+		for tier = 1, 7 do
+			local pod = pods[id][tier]
+			if pod:GetAttribute("SpeciesId") ~= id or pod:GetAttribute("Tier") ~= tier
+				or pod:GetAttribute("Rarity") ~= sp.Rarity
+				or pod:GetAttribute("Stage") ~= CreatureModel.STAGE_POD then
+				attrsOk = false
+				detail ..= string.format(" %s T%d", id, tier)
 			end
-		end
-		if tier <= 5 and (emitters > 0 or lights > 0) then
-			auraOk = false
-			detail ..= string.format(" T%d lit", tier)
-		elseif tier >= 6 and (emitters == 0 or lights == 0) then
-			auraOk = false
-			detail ..= string.format(" T%d dark", tier)
-		end
-		if tier == 6 then
-			local vent = pod.PrimaryPart:FindFirstChild("EmberVent")
-			ventOk = vent ~= nil and vent:FindFirstChild("EmberTrail") ~= nil
+			if pod.Name ~= "Pod_" .. id then
+				nameOk = false
+			end
+			local emitters, added = 0, 0
+			for _, d in ipairs(pod:GetDescendants()) do
+				if d:IsA("ParticleEmitter") then
+					emitters += 1
+				elseif d:IsA("PointLight") and (d.Name == "AuraGlow" or d.Name == "CoreGlow") then
+					added += 1
+				end
+				if d:IsA("BasePart") and (not d.Anchored or d.CanCollide or d.CanQuery or d.CanTouch) then
+					inertOk = false
+				end
+			end
+			-- The owner's own lights burn at every tier; the tier adds nothing below Titan.
+			if tier <= 5 and (emitters > 0 or added > 0) then
+				quietOk = false
+				detail ..= string.format(" %s T%d lit", id, tier)
+			elseif tier >= 6 and (emitters == 0 or added == 0) then
+				quietOk = false
+				detail ..= string.format(" %s T%d dark", id, tier)
+			end
+			if tier == 6 then
+				local vent = pod.PrimaryPart:FindFirstChild("EmberVent")
+				ventOk = ventOk and vent ~= nil and vent:FindFirstChild("EmberTrail") ~= nil
+			elseif tier == 7 then
+				local core = pod:FindFirstChild("Core")
+				coreOk = coreOk and core ~= nil and core.Material == Enum.Material.Neon
+					and core:FindFirstChild("CoreGlow") ~= nil and core:FindFirstChild("AuraAttachment") ~= nil
+			end
 		end
 	end
 	check(attrsOk, "species, rarity, tier and stage are on the model for the services to read", detail)
-	check(auraOk, "tiers 1 to 5 are quiet; the Titan and the Colossal glow", detail)
-	check(ventOk, "the Titan's vent still trails embers off its cleft")
-	check(pods[1].Name == "Pod_dunebud" and pods[7].Name == "Pod_dunebud",
-		"the model name is the one CarryService and NestService look for")
+	check(nameOk, "the model name is the one CarryService and NestService look for")
+	check(inertOk, "every part is anchored, with collide, query and touch off")
+	check(quietOk, "tiers 1 to 5 add no glow of their own; the Titan and the Colossal do", detail)
+	check(ventOk, "the Titan's vent still trails embers off its top")
+	check(coreOk, "the Colossal burns a Neon core with its light and its aura")
 end
 
 --==============================================================================

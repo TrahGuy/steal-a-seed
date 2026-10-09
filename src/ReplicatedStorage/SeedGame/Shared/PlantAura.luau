@@ -309,6 +309,11 @@ local function eligible(p: BasePart): boolean
 			return false
 		end
 	end
+	-- Nothing nobody can see: an arc from an invisible part starts in mid-air
+	-- (the owner's pods' Shell and hinge parts, 2026-10-09).
+	if p.Transparency >= 0.99 then
+		return false
+	end
 	-- Big enough to hang something off. A four-inch decoration would put the
 	-- arc's root in a place the eye cannot connect to the creature.
 	return p.Size.Magnitude > 0.35

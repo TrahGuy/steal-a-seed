@@ -979,6 +979,9 @@ export type RailOptions = {
 	-- picture whose rim band was cut out for it: the Shop's.
 	art: string?,
 	rim: boolean?,
+	-- Bare and art buttons: the plain word drawn under the picture until a
+	-- picture of the button's has loaded here (UIKit.railFallback).
+	fallback: string?,
 }
 
 --==============================================================================
@@ -1036,7 +1039,9 @@ local tenFootWatch: RBXScriptConnection? = nil
 -- EITHER WAY IT FITS. menuScaleFor takes the smaller of the chosen size and
 -- what the usable screen allows the menu's minimum panel, so a larger choice on
 -- a short phone is as large as that phone allows and no panel leaves the glass.
--- At the default size nothing is made at all.
+-- At the default size nothing is made at all -- except on a phone, where every
+-- menu is drawn at GameConfig.MenuSize.PhoneScale times the chosen size
+-- (2026-10-08): smaller, and short of the screen's edges.
 --==============================================================================
 local menuGuis: { [LayerCollector]: Vector2 } = setmetatable({}, { __mode = "k" }) :: any
 local pendingMenuSize: string? = nil
@@ -1058,22 +1063,42 @@ function UIKit.menuScale(): number
 	return GameConfig.menuSizeScale(UIKit.menuSizeId()) or 1
 end
 
--- What `gui` may actually be drawn at: the chosen scale, no more than keeps its
--- minimum panel inside 90% x 86% of the screen -- the same fractions UIKit.modal
--- sizes panels by -- in the gui's own TV units (`k`). Never below 1.
+-- What a phone draws every menu at (GameConfig.MenuSize.PhoneScale), 1 on
+-- anything else -- a TV is never a phone.
+function UIKit.phoneMenuScale(): number
+	if HudLayout.isTenFoot() then
+		return 1
+	end
+	local camera = Workspace.CurrentCamera
+	return GameConfig.menuPhoneScale(if camera then camera.ViewportSize else nil, UserInputService.TouchEnabled)
+end
+
+-- What `gui` may actually be drawn at: the chosen scale (times the phone's,
+-- UIKit.phoneMenuScale), no more than keeps its minimum panel inside 90% x 86%
+-- of the screen -- the same fractions UIKit.modal sizes panels by -- in the
+-- gui's own TV units (`k`). Never below the phone's scale: 1 off a phone.
+--
+-- BELOW 1 ON A PHONE the gui's canvas is that much larger than the screen, and
+-- each menu's panel takes only that share of it (MenuLayout's `fill`, the
+-- modal's `share`), so the panel keeps the room it had and is drawn smaller,
+-- short of the screen's edges.
 function UIKit.menuScaleFor(gui: LayerCollector, k: number): number
 	local need = menuGuis[gui]
-	local want = UIKit.menuScale()
-	if not need or want <= 1 then
+	if not need then
 		return 1
+	end
+	local phone = UIKit.phoneMenuScale()
+	local want = UIKit.menuScale() * phone
+	if want <= phone then
+		return phone
 	end
 	local size = gui.AbsoluteSize
 	if size.X <= 0 or size.Y <= 0 then
-		return 1
+		return phone
 	end
 	local fitW = (size.X / k) * 0.9 / need.X
 	local fitH = (size.Y / k) * 0.86 / need.Y
-	return math.max(1, math.min(want, fitW, fitH))
+	return math.max(phone, math.min(want, fitW, fitH))
 end
 
 local function applyTenFoot(gui: LayerCollector)
@@ -1082,7 +1107,7 @@ local function applyTenFoot(gui: LayerCollector)
 	local k = 1
 	if not (camera and HudLayout.isTenFoot()) then
 		-- Off a TV: no UIScale at all, unless this is a menu's own gui and the
-		-- player has chosen bigger menus.
+		-- player has chosen bigger menus, or the screen is a phone's.
 		k = 1
 	else
 		k = HudLayout.tenFootScale((camera :: Camera).ViewportSize)
@@ -1342,6 +1367,35 @@ function UIKit.dockBadge(name: string, kind: string?)
 	if me then
 		me:SetAttribute(UIKit.DockBadgePrefix .. name, kind)
 	end
+end
+
+--==============================================================================
+-- THE BEGINNER'S GUIDE CARD, SHOWING (2026-10-09)
+--
+-- Whether TutorialUI's card stands under the top row now -- its banner, its
+-- SKIP, or its RESUME in the banner's place, all inside its Words frame --
+-- shown only while every frame up to the gui is. What the Pod Rush tracker and
+-- the buff popover keep clear of (HudLayout's banner and skip rects).
+--==============================================================================
+function UIKit.guideShowing(playerGui: Instance): boolean
+	local guide = playerGui:FindFirstChild("SeedBeginnerGuide")
+	if not (guide and guide:IsA("ScreenGui") and guide.Enabled) then
+		return false
+	end
+	for _, name in ipairs({ "Instruction", "Resume", "Skip" }) do
+		local node: Instance? = guide:FindFirstChild(name, true)
+		local shown = node ~= nil and node:IsA("GuiObject")
+		while shown and node and node ~= guide do
+			if node:IsA("GuiObject") and not node.Visible then
+				shown = false
+			end
+			node = node.Parent
+		end
+		if shown then
+			return true
+		end
+	end
+	return false
 end
 
 --==============================================================================
@@ -1839,6 +1893,152 @@ function UIKit.rainbowRim(box: GuiObject): Frame
 	return rim
 end
 
+--==============================================================================
+-- A WORD UNDER THE PICTURE UNTIL IT LOADS (2026-10-09, the owner: "some
+-- buttons are invisible like the garden and inventory")
+--
+-- A bare or art button is a transparent square with a picture in it, so a
+-- picture that did not load here -- a fetch that fails, a CDN hiccup, an
+-- upload held in moderation -- left nothing to see or to find: Garden and the
+-- Bag were gone. Such a button now stands its plain word on a slate plate
+-- UNDER its pictures (GameConfig.Rail.Words), hidden once one of them has
+-- loaded HERE and is shown -- its own (a bare button's Icon, an art button's
+-- Art) or a railPicture over it -- and kept for good if none ever does. Not
+-- Active, so the press is still the button's; under the badge.
+--
+-- LOADED IS WRITTEN DOWN WHEN IT IS ANSWERED. UIKit.whenPictureLoads answers
+-- it; the picture keeps the id that loaded (RailLoaded) and is asked about
+-- once per id (RailWatching), so a relayout never piles up watches and a
+-- picture given a new id is asked about again.
+--==============================================================================
+local FALLBACK_NAME = "WordFallback"
+local LOADED_ATTR = "RailLoaded"
+local WATCH_ATTR = "RailWatching"
+
+--==============================================================================
+-- ASKED A MOMENT AFTER THE ID IS SET
+--
+-- Right after an ImageLabel's id changes, IsLoaded still answers for the
+-- picture it had: measured in Play 2026-10-09, the live Garden icon switched
+-- to an id that never loads read IsLoaded true at once and false 0.6 s later
+-- -- so asking at once took a failed picture for a loaded one and hid the
+-- word over nothing. The first question waits this long; a spec sets it to 0.
+--==============================================================================
+UIKit.PictureSettleSeconds = 0.3
+
+local function pictureLoaded(picture: ImageLabel): boolean
+	return picture.Image ~= "" and picture:GetAttribute(LOADED_ATTR) == picture.Image
+end
+
+local function watchPicture(picture: ImageLabel, onLoaded: () -> ())
+	local image = picture.Image
+	if image == "" or pictureLoaded(picture) or picture:GetAttribute(WATCH_ATTR) == image then
+		return
+	end
+	picture:SetAttribute(WATCH_ATTR, image)
+	local function ask()
+		-- Given another id meanwhile: that one's own watch asks.
+		if picture.Image ~= image then
+			return
+		end
+		UIKit.whenPictureLoads(picture, function(loaded: boolean)
+			if loaded and picture.Image == image then
+				picture:SetAttribute(LOADED_ATTR, image)
+				onLoaded()
+			end
+		end)
+	end
+	local settle = UIKit.PictureSettleSeconds
+	if settle > 0 then
+		task.delay(settle, ask)
+	else
+		ask()
+	end
+end
+
+-- A picture of the button's that draws over its word: loaded, and shown with
+-- the box it stands in (if any).
+local function coversWord(picture: Instance?, box: Instance?): boolean
+	if not (picture and picture:IsA("ImageLabel")) then
+		return false
+	end
+	if box and box:IsA("GuiObject") and not box.Visible then
+		return false
+	end
+	return picture.Visible and pictureLoaded(picture)
+end
+
+local function refreshFallback(button: GuiObject)
+	local plate = button:FindFirstChild(FALLBACK_NAME)
+	if not (plate and plate:IsA("GuiObject")) then
+		return
+	end
+	local artBox = button:FindFirstChild("ArtBox")
+	local art = if artBox then artBox:FindFirstChild("Art") else nil
+	local pictureBox = button:FindFirstChild("PictureBox")
+	plate.Visible = not (coversWord(button:FindFirstChild("Icon"), nil)
+		or coversWord(art, artBox)
+		or coversWord(if pictureBox then pictureBox:FindFirstChild("Picture") else nil, pictureBox))
+	-- The Shop's rim turns behind its picture's cut band; with no picture it is a
+	-- rainbow square over the word (seen in Edit), so it waits for the picture.
+	local rim = if artBox then artBox:FindFirstChild("Rim") else nil
+	if rim and rim:IsA("GuiObject") and art and art:IsA("ImageLabel") then
+		rim.Visible = pictureLoaded(art)
+	end
+end
+
+-- The plate and its word, under a bare or art button's pictures. railButton
+-- calls it for `fallback`; found rather than rebuilt if called again.
+function UIKit.railFallback(button: GuiObject, word: string): Frame
+	local plate = button:FindFirstChild(FALLBACK_NAME)
+	if not (plate and plate:IsA("Frame")) then
+		local made = Instance.new("Frame")
+		made.Name = FALLBACK_NAME
+		made.Size = UDim2.fromScale(1, 1)
+		made.BackgroundColor3 = WHITE
+		made.BorderSizePixel = 0
+		made.Active = false
+		made.ZIndex = 1
+		made.Parent = button
+		UIKit.corner(made, RAIL.Radius)
+		UIKit.stroke(made, RAIL.Outline, RAIL.FallbackOutline)
+		UIKit.gradient(made, RAIL.TileTop, RAIL.TileBottom)
+		local label = UIKit.outlined(made, "Word", RAIL.FallbackTextMax, WHITE, 1.5)
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromScale(0.5, 0.5)
+		label.Size = UDim2.new(1, -6, 0.6, 0)
+		label.TextScaled = true
+		label.Active = false
+		label.ZIndex = 1
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = RAIL.FallbackTextMax
+		fit.MinTextSize = RAIL.FallbackTextMin
+		fit.Parent = label
+		-- The button's own picture: a bare button's Icon, an art button's Art.
+		local artBox = button:FindFirstChild("ArtBox")
+		local own = button:FindFirstChild("Icon") or (if artBox then artBox:FindFirstChild("Art") else nil)
+		if own and own:IsA("ImageLabel") then
+			local function refresh()
+				refreshFallback(button)
+			end
+			watchPicture(own, refresh)
+			-- An id swapped later is asked about again.
+			own:GetPropertyChangedSignal("Image"):Connect(function()
+				watchPicture(own, refresh)
+				refresh()
+			end)
+		end
+		plate = made
+	end
+	local frame = plate :: Frame
+	local label = frame:FindFirstChild("Word")
+	if label and label:IsA("TextLabel") then
+		label.Text = word
+	end
+	refreshFallback(button)
+	return frame
+end
+
 function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButton
 	local wide = options.wide ~= false
 	local size = if wide then RAIL.WideSize else RAIL.SquareSize
@@ -1933,6 +2133,9 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 		if options.rim then
 			UIKit.rainbowRim(box)
 		end
+		if options.fallback then
+			UIKit.railFallback(button, options.fallback)
+		end
 
 		hoverPop(button)
 		return button
@@ -1941,6 +2144,9 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	local iconSize = if options.bare then RAIL.IconBare else RAIL.IconSize
 	if options.icon then
 		UIKit.railIcon(button, options.icon, iconSize)
+	end
+	if options.bare and options.fallback then
+		UIKit.railFallback(button, options.fallback)
 	end
 
 	if options.label then
@@ -2350,6 +2556,15 @@ end
 -- draws under the badge (6) and is not Active: the press is still the
 -- button's. `image` nil puts the button back as railShape left it -- the
 -- picture hidden, the art box and the icon shown -- so call it after railShape.
+--
+-- ONLY ONCE IT HAS LOADED HERE (2026-10-09, the owner: "some buttons are
+-- invisible like the garden and inventory"). Hiding everything of ours the
+-- moment an id was set left a button whose picture never loaded with nothing
+-- on it at all. Until the picture has loaded (UIKit.whenPictureLoads, written
+-- down by watchPicture) the button keeps what railShape and its owner drew,
+-- and its word if it has one, with the picture over them drawing nothing yet
+-- -- never hidden, because a hidden picture is never loaded. Never loaded,
+-- they stay.
 --==============================================================================
 local PICTURE_Z = 5
 
@@ -2365,6 +2580,7 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
 				child.Visible = true
 			end
 		end
+		refreshFallback(button)
 		return
 	end
 	if not (box and box:IsA("Frame")) then
@@ -2397,16 +2613,29 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
 	if shape then
 		shape.AspectRatio = aspect or 1
 	end
+	-- Everything of ours under the picture, once it has loaded and while it is
+	-- still the button's picture.
+	local function hideOurs()
+		if not frame.Visible then
+			return
+		end
+		for _, name in ipairs({ "ArtBox", "Icon", "GearDrawn", "Label", "Tile", "TileLabel", "Plate" }) do
+			local child = button:FindFirstChild(name)
+			if child and child:IsA("GuiObject") then
+				child.Visible = false
+			end
+		end
+		refreshFallback(button)
+	end
 	local picture = frame:FindFirstChild("Picture")
 	if picture and picture:IsA("ImageLabel") then
 		picture.Image = image
-	end
-	for _, name in ipairs({ "ArtBox", "Icon", "GearDrawn", "Label", "Tile", "TileLabel", "Plate" }) do
-		local child = button:FindFirstChild(name)
-		if child and child:IsA("GuiObject") then
-			child.Visible = false
+		watchPicture(picture, hideOurs)
+		if pictureLoaded(picture) then
+			hideOurs()
 		end
 	end
+	refreshFallback(button)
 end
 
 --==============================================================================
@@ -2417,15 +2646,19 @@ end
 -- would reach 13 px past both -- up out of the safe area and over the next
 -- button -- so there it hangs HudLayout.Config.BadgeHang past the corner
 -- instead: on the glass, clear of its neighbour, on the corner a player reads.
--- `side` is the corner it belongs to: Index's is its right, Garden's its left.
+-- `side` is the corner it belongs to: Index's is its right, Garden's its right
+-- too since Garden stands at the left edge (2026-10-09; its left before).
+-- `flush` keeps it level with the button's top -- Garden's on a phone, whose
+-- pair fills the gap it stands in to the pixel (HudLayout.badges).
 --==============================================================================
-function UIKit.railBadge(badge: GuiObject, compact: boolean, side: string)
+function UIKit.railBadge(badge: GuiObject, compact: boolean, side: string, flush: boolean?)
 	local right = side == "right"
 	local edge = if right then 1 else 0
 	if compact then
 		local hang = HudLayout.Config.BadgeHang
 		badge.AnchorPoint = Vector2.new(edge, 0)
-		badge.Position = UDim2.new(edge, if right then hang else -hang, 0, -hang)
+		-- Flush: its 2.5-px stroke (UIKit.badge) drawn level with the top, not over it.
+		badge.Position = UDim2.new(edge, if right then hang else -hang, 0, if flush then 2.5 else -hang)
 	else
 		badge.AnchorPoint = Vector2.new(0.5, 0.5)
 		badge.Position = UDim2.new(edge, 0, 0, 0)
@@ -4313,6 +4546,21 @@ export type ModalTheme = {
 	lift: number?,
 	closeStuds: StudOptions?,
 	titleSize: number?,
+	--==========================================================================
+	-- THE STUDDED KIT'S BAND (2026-10-08, GameConfig.StuddedLook)
+	--
+	-- `band`: no lift and no rim. The header is the coloured banner
+	-- (headerTop / headerBottom) with `texture` tiled over it; the body is
+	-- `fill` with the same texture fainter; the close plate wears it too. `base`
+	-- px of the outline colour stand under the shell as a solid foot (the
+	-- shell is that much shorter). `closeEdge` is the close plate's own keyline
+	-- and `closeMarkLine` its X's.
+	--==========================================================================
+	band: boolean?,
+	texture: { image: string, tile: number, band: number, body: number }?,
+	base: number?,
+	closeEdge: Color3?,
+	closeMarkLine: Color3?,
 }
 
 export type ModalOptions = {
@@ -4348,10 +4596,14 @@ export type Modal = {
 	-- The player's menu size on THIS panel, for one that cannot take it on its
 	-- gui (see UIKit.menuGui). The caller keeps the footprint.
 	setUserScale: (number) -> (),
-	-- What the panel is drawn at on its own: 1 unless setUserScale said more.
+	-- What the panel is drawn at on its own: 1 unless setUserScale said more
+	-- (or, on a phone, less).
 	userScale: () -> number,
 	-- For a panel sharing its gui with HUD: take the menu size on the panel.
 	followMenuSize: () -> (),
+	-- For a panel sized by the screen's fractions alone: size it again, after
+	-- its gui's scale changed (a phone: UIKit.menuScaleFor).
+	fitScreen: () -> (),
 	-- How tall content may be on this screen before fitContent has to cut the
 	-- panel short. For a panel that can lay itself out smaller instead.
 	contentRoom: () -> number,
@@ -4369,6 +4621,26 @@ local FADE = 0.16
 -- What the shell puts round a panel's content: the title bar, the body's own
 -- margins and the outline. fitContent adds it; contentRoom takes it off.
 local MODAL_CHROME = 82
+
+-- The studded kit's stud tile over a surface (a band theme's header, body and
+-- close), rounded like the surface. Never takes a press.
+local function studTexture(parent: GuiObject, texture: { image: string, tile: number }, transparency: number,
+	radius: number, zIndex: number): ImageLabel
+	local t = Instance.new("ImageLabel")
+	t.Name = "StudTexture"
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.BorderSizePixel = 0
+	t.Image = texture.image
+	t.ScaleType = Enum.ScaleType.Tile
+	t.TileSize = UDim2.fromOffset(texture.tile, texture.tile)
+	t.ImageTransparency = transparency
+	t.Active = false
+	t.ZIndex = zIndex
+	t.Parent = parent
+	UIKit.corner(t, radius)
+	return t
+end
 
 function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- Every centre panel is drawn bigger on a TV (see UIKit.tenFoot).
@@ -4419,14 +4691,33 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- gui (setUserScale, below). Declared here: the header's padding reads it.
 	local userScale = 1
 
+	-- The share of the screen this panel's fractions are of: 1, except on a
+	-- phone (2026-10-08, UIKit.phoneMenuScale), where the panel is drawn smaller
+	-- -- on its gui (UIKit.menuGui) or on itself (followMenuSize) -- and takes
+	-- that much less of the screen, so it keeps the room it had and stops short
+	-- of the screen's edges. Never on a TV.
+	local function share(): number
+		if HudLayout.isTenFoot() then
+			return 1
+		end
+		return math.min(1, HudLayout.scaleOf(gui) * userScale)
+	end
+
 	local shell = Instance.new("Frame")
 	shell.Name = "Shell"
 	-- A lifted rim (theme.lift) starts the shell that much lower; its foot stays.
-	local lift = math.max(0, theme.lift or 0)
+	-- A band (the studded kit) has no lift; its solid base takes `base` px
+	-- off the shell's foot instead.
+	local lift = if theme.band then 0 else math.max(0, theme.lift or 0)
+	local base = if theme.band then math.max(0, theme.base or 0) else 0
 	if lift > 0 then
 		shell.AnchorPoint = Vector2.new(0.5, 1)
 		shell.Position = UDim2.new(0.5, 0, 1, -outline)
 		shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - lift)
+	elseif base > 0 then
+		shell.AnchorPoint = Vector2.new(0.5, 0)
+		shell.Position = UDim2.new(0.5, 0, 0, outline)
+		shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - base)
 	else
 		shell.AnchorPoint = Vector2.new(0.5, 0.5)
 		shell.Position = UDim2.fromScale(0.5, 0.5)
@@ -4460,6 +4751,28 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	UIKit.stroke(shell, keyline, outline)
 	UIKit.gradient(shell, fill, shade)
 
+	-- THE STUDDED KIT'S BODY AND BASE: the stud tile faint over the body, and
+	-- a solid foot in the keyline colour standing `base` px out under it (a
+	-- child at ZIndex 0, which under GLOBAL ZIndexBehavior draws below the
+	-- shell, so it moves and sizes with it).
+	local texture = theme.texture
+	if theme.band and texture then
+		studTexture(shell, texture, texture.body, 16, 1)
+	end
+	if base > 0 then
+		local foot = Instance.new("Frame")
+		foot.Name = "Base"
+		foot.Position = UDim2.fromOffset(0, base)
+		foot.Size = UDim2.fromScale(1, 1)
+		foot.BackgroundColor3 = keyline
+		foot.BorderSizePixel = 0
+		foot.Active = false
+		foot.ZIndex = 0
+		foot.Parent = shell
+		UIKit.corner(foot, 16)
+		UIKit.stroke(foot, keyline, outline)
+	end
+
 	--==========================================================================
 	-- THE SAME LATTICE AS THE RAIL, AND YOU CAN ACTUALLY SEE IT
 	--
@@ -4476,8 +4789,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- desktop, and a lattice built for the larger one overhangs the smaller by
 	-- ninety pixels in every direction.
 	--==========================================================================
-	-- The studded rim is the texture now: a rimmed panel's body stays clean.
-	if not theme.rim then
+	-- The studded rim is the texture now: a rimmed panel's body stays clean, and
+	-- a band's body wears the kit's studs instead.
+	if not theme.rim and not theme.band then
 		UIKit.lattice(shell, {
 			spacing = PANEL.LatticeSpacing,
 			thickness = 2,
@@ -4548,6 +4862,11 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		rule.ZIndex = 3
 		rule.Parent = banner
 
+		-- A band wears the kit's stud tile over its colour, under the rule.
+		if theme.band and texture then
+			studTexture(banner, texture, texture.band, 16, 2)
+		end
+
 		-- The rim's studs, quiet, clear of the rounded corners and the rule.
 		local rimStuds = theme.studs
 		if theme.rim and rimStuds then
@@ -4589,9 +4908,10 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- line it was not using.
 	--
 	-- BOTH SIDES, because the rail has two. The left pair are 130 wide and the
-	-- right pair 50, and at narrower widths still it is the CLOSE BUTTON that
-	-- meets the Garden and Bag buttons -- the same fix moves it in, because it
-	-- is anchored to this bar's right edge.
+	-- right edge's column 50 (WHAT'S NEW in the corner, or EVENTS in compact,
+	-- since Garden and the Bag moved to the left edge on 2026-10-09), and at
+	-- narrower widths still it is the CLOSE BUTTON that meets it -- the same fix
+	-- moves it in, because it is anchored to this bar's right edge.
 	--
 	-- COMPUTED, not measured off the rail's instances. This module is required
 	-- by the rail as well as by every panel, and reaching across to another
@@ -4621,9 +4941,10 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- 1 everywhere else -- and never the menu size, which the rail does not
 		-- take. The title bar is read in those units below; the padding it needs
 		-- is handed back in the panel's own, which a larger menu size makes
-		-- `menu` times larger again.
+		-- `menu` times larger again (and a phone smaller: share).
 		local k = if HudLayout.isTenFoot() then HudLayout.tenFootScale(camera.ViewportSize) else 1
-		local menu = math.max(1, HudLayout.scaleOf(gui) / k) * userScale
+		local menu = (if HudLayout.isTenFoot() then math.max(1, HudLayout.scaleOf(gui) / k)
+			else HudLayout.scaleOf(gui)) * userScale
 		local viewportX = camera.ViewportSize.X / k
 		-- The rail's own footprint, in the same gui space AbsolutePosition uses.
 		local railTop = RAIL.Inset
@@ -4777,9 +5098,14 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	closePlate.Active = false
 	closePlate.Parent = close
 	UIKit.corner(closePlate, theme.closeRadius or 10)
-	UIKit.stroke(closePlate, keyline, outline)
+	UIKit.stroke(closePlate, theme.closeEdge or keyline, outline)
 	UIKit.gradient(closePlate, theme.closeTop or PANEL.CloseTop,
 		theme.closeBottom or PANEL.CloseBottom)
+	-- A band's close wears the kit's stud tile, as its header does.
+	local closeTexture: ImageLabel? = nil
+	if theme.band and texture then
+		closeTexture = studTexture(closePlate, texture, texture.band, theme.closeRadius or 10, closePlate.ZIndex)
+	end
 
 	local closeShade = Instance.new("Frame")
 	closeShade.Name = "Shade"
@@ -4810,10 +5136,10 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- plate including the shade it stands on.
 	closeMark.Position = UDim2.new(0, 0, 0, -2)
 	closeMark.Text = "X"
-	if theme.outline then
+	if theme.outline or theme.closeMarkLine then
 		local markLine = closeMark:FindFirstChildOfClass("UIStroke")
 		if markLine then
-			markLine.Color = keyline
+			markLine.Color = theme.closeMarkLine or keyline
 		end
 	end
 
@@ -4831,6 +5157,10 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		closePlate.ZIndex = close.ZIndex + 1
 		closeShade.ZIndex = close.ZIndex + 2
 		closeMark.ZIndex = close.ZIndex + 3
+		local tex = closeTexture
+		if tex then
+			tex.ZIndex = close.ZIndex + 1
+		end
 		local studField = closeStuds
 		if studField then
 			studField.ZIndex = close.ZIndex + 1
@@ -4899,11 +5229,39 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		layoutHeader()
 	end
 
+	--==========================================================================
+	-- ON A COMPACT SCREEN OR A PHONE THE PANEL COVERS THE RAIL (2026-10-09)
+	--
+	-- Garden and the Bag stand at the left edge's middle since the owner moved
+	-- them there, and a panel of 90% of a compact screen (most of a phone's)
+	-- reaches under them, where the rail layer would draw them over its body
+	-- and take its taps. So while it is open there the layer steps under the
+	-- dimmer (UIKit.coverRail), as MenuLayout's panels already do on those
+	-- screens -- MenuKit's own (fixedHeader) ask for that themselves. A
+	-- desktop's panels stand between the rails and keep them pressable.
+	--==========================================================================
+	local coverKey = "modal:" .. tostring(options.name)
+	local function coverRail(want: boolean)
+		local playerGui = gui.Parent
+		if options.fixedHeader or not playerGui then
+			return
+		end
+		local covers = false
+		if want and gui.AbsoluteSize.X > 0 then
+			covers = HudLayout.solve(HudLayout.measure(gui)).compact == true
+		end
+		UIKit.coverRail(playerGui, coverKey, covers)
+	end
+	-- A script that re-runs (a Studio sync) builds its panel again shut: never
+	-- a rail left under a panel that is gone.
+	coverRail(false)
+
 	local function setOpen(want: boolean)
 		if open == want then
 			return
 		end
 		open = want
+		coverRail(want)
 		-- Guarded by the equality check above, so a panel asked to open twice
 		-- makes one sound. Two scripts both closing the same panel -- which is
 		-- exactly what OpenPanel does when the Index and the Shop trade places
@@ -4955,8 +5313,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	local lastContent: number? = nil
 	local function fitContent(contentHeight: number)
 		lastContent = contentHeight
-		-- The gui's own units, which on a TV are its pixels / its TenFoot scale.
-		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui)
+		-- The gui's own units, which on a TV are its pixels / its TenFoot scale:
+		-- of the share of the screen the panel takes (a phone's is less).
+		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui) * share()
 		if screen <= 0 then
 			return
 		end
@@ -4982,7 +5341,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- ceiling rather than the call blowing up and abandoning the layout.
 		--======================================================================
 		local want = math.clamp(contentHeight + MODAL_CHROME, math.min(240, ceiling), ceiling)
-		group.Size = UDim2.new(0.9 / userScale, 0, 0, want)
+		group.Size = UDim2.new(0.9 * share() / userScale, 0, 0, want)
 	end
 
 	--==========================================================================
@@ -4996,7 +5355,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- in the same units; huge before the screen has a size.
 	--==========================================================================
 	local function contentRoom(): number
-		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui)
+		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui) * share()
 		if screen <= 0 then
 			return math.huge
 		end
@@ -5019,14 +5378,17 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		if size.X <= 0 or size.Y <= 0 then
 			return
 		end
-		local s = math.max(1, math.min(UIKit.menuScale(),
+		-- On a phone, the phone's scale times the chosen one (UIKit.menuScaleFor).
+		local phone = UIKit.phoneMenuScale()
+		local s = math.max(phone, math.min(UIKit.menuScale() * phone,
 			(size.X / k) * 0.9 / limit.MinSize.X, (size.Y / k) * 0.86 / limit.MinSize.Y))
 		setUserScale(s)
 		local content = lastContent
 		if content then
 			fitContent(content)
 		else
-			group.Size = UDim2.fromScale(0.9 / s, 0.82 / s)
+			local part = share()
+			group.Size = UDim2.fromScale(0.9 * part / s, 0.82 * part / s)
 		end
 	end
 	local function followMenuSize()
@@ -5037,6 +5399,14 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		UIKit.onMenuSize(applyFollow)
 		gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyFollow)
 		applyFollow()
+	end
+
+	-- A panel sized by the screen's fractions alone (no fitContent, no size of
+	-- its caller's): those fractions again, of the share it takes now -- for a
+	-- menu gui whose scale has just changed (a phone: UIKit.menuScaleFor).
+	local function fitScreen()
+		local part = share()
+		group.Size = UDim2.fromScale(0.9 * part / userScale, 0.82 * part / userScale)
 	end
 
 	return {
@@ -5053,6 +5423,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			return userScale
 		end,
 		followMenuSize = followMenuSize,
+		fitScreen = fitScreen,
 		contentRoom = contentRoom,
 		lift = lift,
 	}

@@ -116,6 +116,8 @@ local button = UIKit.railButton(playerGui, {
 	name = "ShopButton",
 	art = RAIL.ShopArt,
 	rim = true,
+	-- SHOP on a plate until a picture has loaded here (UIKit.railFallback).
+	fallback = RAIL.Words.Shop,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
 
@@ -141,8 +143,11 @@ placeButton()
 --==============================================================================
 -- THE PANEL
 --==============================================================================
--- The approved Shop picture beside the title on the rim (GameConfig.MenuIcons).
-local menu = MenuKit.modal(gui, PANEL_NAME, "Shop", GameConfig.MenuIcons.shop, nil)
+-- The approved Shop picture beside the title (GameConfig.MenuIcons), on the
+-- studded kit's red band (2026-10-08, the owner: "restyle the shop and settings
+-- first"; MenuKit.studdedTheme).
+local menu = MenuKit.modal(gui, PANEL_NAME, "Shop", GameConfig.MenuIcons.shop, nil, nil, nil,
+	MenuKit.studdedTheme(GameConfig.StuddedLook.Shop))
 -- This gui holds only the panel, so it takes the player's menu size whole.
 UIKit.menuGui(gui, Vector2.new(300, 220))
 local modal = menu.modal
@@ -197,8 +202,13 @@ odds.hit.Activated:Connect(openOdds)
 -- and under it a grid of its cards; the shelves follow one another down one
 -- scrolling list. Behind the list, still while it scrolls, the studded
 -- baseplate (MenuKit.baseplate) where a plain light well stood.
+--
+-- THE STUDDED KIT'S SHOP HAS NO PLATE (2026-10-08, the restyle): its cards
+-- stand on the panel's own white studded body, so the green plate is kept --
+-- it is still placed with the page -- but not drawn.
 --==============================================================================
 local plate = MenuKit.baseplate(body, Z - 1)
+plate.Visible = false
 local grid = Instance.new("ScrollingFrame")
 grid.Name = "Products"
 grid.BackgroundTransparency = 1
@@ -854,7 +864,7 @@ local function closeDetail()
 	detailKey = nil
 	detail.Visible = false
 	grid.Visible = true
-	plate.Visible = true
+	-- The plate stays hidden: the studded kit's Shop has none (THE PAGE, above).
 	MenuKit.unbind(backName)
 	local card = cards[key]
 	if card and MenuKit.onPad() and card.holder.Visible then
@@ -969,6 +979,8 @@ relayout = function()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 		keyboardTop = keyboardTop(),
 	}, RAIL.OutlineThickness, counts)
 	menu.place(p)
@@ -1156,6 +1168,35 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	if open and holder ~= PANEL_NAME then
 		setOpen(false)
 	end
+end)
+
+--==============================================================================
+-- OPENED AT A SHELF (the owner, 2026-10-08: the HUD Speed shoe's "+" opens the
+-- Shop at SPEED). Another script fires OpenAt with a shelf's category id
+-- (GameConfig.Store.Sections: "Passes", "Speed", "Cash"). The panel opens if it
+-- is shut, and the page puts that shelf's heading at its top, as LB / RB do,
+-- once the open's layout has placed the shelves. An unknown or hidden shelf
+-- just opens the page.
+--==============================================================================
+local openAt = Instance.new("BindableEvent")
+openAt.Name = "OpenAt"
+openAt.Parent = gui
+openAt.Event:Connect(function(categoryId: any)
+	setOpen(true)
+	local section = sections[tostring(categoryId)]
+	if not section then
+		return
+	end
+	task.spawn(function()
+		task.wait()
+		task.wait()
+		if not open or detailKey ~= nil or not section.frame.Visible then
+			return
+		end
+		local k = math.max(HudLayout.scaleOf(grid), 1e-3)
+		local y = (section.frame.AbsolutePosition.Y - grid.AbsolutePosition.Y) / k + grid.CanvasPosition.Y - GRID_INSET
+		grid.CanvasPosition = Vector2.new(0, math.max(0, y))
+	end)
 end)
 gui.Destroying:Connect(function()
 	UIKit.coverRail(playerGui, PANEL_NAME, false)

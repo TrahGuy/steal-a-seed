@@ -132,6 +132,12 @@ function PlantInfo.Describe(speciesId: any, tier: any, hatched: boolean,
 		sell = nil,
 		sellValue = nil,
 	}
+	-- An ordinary pod is named by its biome (2026-10-09, the Pod Guide:
+	-- "Greenhollow pod", GameConfig.PodGuide.Words.BagTitle) -- what its own
+	-- look already says. Still no plant and no rarity.
+	if biome and not secret and not rainPod then
+		info.title = string.format(GameConfig.PodGuide.Words.BagTitle, biome.DisplayName)
+	end
 	if secret and not hatched then
 		-- A Secret's pod is its own model: its look already says what it is, so
 		-- it reads Secret -- never a size, and never pretends to be ???.

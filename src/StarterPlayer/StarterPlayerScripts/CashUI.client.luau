@@ -239,14 +239,21 @@ stripe.BorderSizePixel = 0
 stripe.Parent = drawn
 corner(stripe, 2)
 
--- The owner's shoe: square, at the box's left so the badge covers as little of
--- it as it covered of the sneaker.
+-- The owner's shoe, BIGGER (the owner, 2026-10-08: the shoe, not the number).
+-- The art fills only 88% x 68% of its square (x 32-485, y 84-431 of 512), so
+-- the old 38 box drew a 33 x 26 shoe. A PICTURE box at the box's left,
+-- hanging PICTURE_DROP under it -- the clear rows under the sole -- draws it
+-- about 48 x 37: as tall as the Speed line, its toe short of the number, and
+-- inside the block on every face (SpeedShoeSpec). The 50 x 38 box, the
+-- numbers and every HUD rect are as they were.
+local PICTURE, PICTURE_DROP = 54, 8
 local shoePicture = Instance.new("ImageLabel")
 shoePicture.Name = "Picture"
-shoePicture.Size = UDim2.fromOffset(38, 38)
+shoePicture.Position = UDim2.fromOffset(0, 38 + PICTURE_DROP - PICTURE)
+shoePicture.Size = UDim2.fromOffset(PICTURE, PICTURE)
 shoePicture.BackgroundTransparency = 1
 shoePicture.ScaleType = Enum.ScaleType.Fit
-shoePicture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, 38 * style.ShoeScale)
+shoePicture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, PICTURE * style.ShoeScale)
 shoePicture.ZIndex = 2
 shoePicture.Parent = shoe
 SizedIcon.follow(shoePicture)
@@ -257,9 +264,11 @@ UIKit.whenPictureLoads(shoePicture, function(loaded: boolean)
 end)
 
 --== the gold plus badge ==--
+-- Over the bigger shoe's bottom-right, its right edge 2 px short of the
+-- Speed number on every face (SpeedShoeSpec).
 local badge = Instance.new("Frame")
 badge.Name = "Badge"
-badge.Position = UDim2.fromOffset(26, 15)
+badge.Position = UDim2.fromOffset(31, 15)
 badge.Size = UDim2.fromOffset(23, 23)
 badge.BackgroundColor3 = BADGE_GOLD
 badge.BorderSizePixel = 0
@@ -287,6 +296,37 @@ for _, bar in ipairs({
 	piece.Parent = badge
 	corner(piece, 1)
 end
+
+--==============================================================================
+-- THE "+" OPENS THE SHOP AT SPEED (the owner, 2026-10-08)
+--
+-- One clear button over the shoe and its badge -- the press, never the picture.
+-- It reaches from 8 px above and left of the block (inside the 8 px HudLayout
+-- keeps clear round it) to 2 px short of the Speed number and down to the
+-- shoe's foot. That is at least the x2 card's touch area (BuffHit, 44 on the
+-- compact and phone faces). There it reaches a few px over the number and the
+-- top of the cash line, neither of which takes a press. Sized in applyStyle.
+-- It fires ShopUI's OpenAt with the Speed shelf's id: the Shop opens at SPEED.
+--==============================================================================
+local SPEED_SHELF = "Speed" -- GameConfig.Store.Sections' id for SPEED
+local speedHit = Instance.new("TextButton")
+speedHit.Name = "SpeedShop"
+speedHit.Position = UDim2.fromOffset(-8, -8)
+speedHit.BackgroundTransparency = 1
+speedHit.BorderSizePixel = 0
+speedHit.AutoButtonColor = false
+speedHit.Selectable = false
+speedHit.Text = ""
+speedHit.ZIndex = 6
+speedHit.Parent = root
+table.insert(connections, speedHit.Activated:Connect(function()
+	local shop = playerGui:FindFirstChild("SeedShop")
+	local openAt = shop and shop:FindFirstChild("OpenAt")
+	if openAt and openAt:IsA("BindableEvent") then
+		SoundKit.play("CardClick")
+		openAt:Fire(SPEED_SHELF)
+	end
+end))
 
 --==============================================================================
 -- THE NUMBERS
@@ -543,6 +583,10 @@ local function applyStyle(want: HudLayout.CashStyle)
 	root.Size = UDim2.fromOffset(want.Root.X, want.Root.Y)
 	shoe.Position = UDim2.new(0, 0, 0, want.ShoeBottom)
 	shoeScale.Scale = want.ShoeScale
+	-- The "+"'s press: 2 px short of the number and down to the shoe's foot, or
+	-- the x2 card's touch area where that is more (THE "+" OPENS THE SHOP).
+	speedHit.Size = UDim2.fromOffset(math.max(want.SpeedX - 2, want.BuffHit - 8) + 8,
+		math.max(want.ShoeBottom, want.BuffHit - 8) + 8)
 	speed.TextSize = want.SpeedSize
 	speed.Position = UDim2.new(0, want.SpeedX, 0, want.SpeedBottom)
 	speed.Size = UDim2.fromOffset(want.SpeedW, want.SpeedSize + 4)

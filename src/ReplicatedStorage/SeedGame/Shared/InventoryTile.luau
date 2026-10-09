@@ -14,6 +14,9 @@
 --   badge       top left, on a phone: the hidden slot (6-0) this copy is on
 --   heart       bottom right of the preview: a favourite
 --   accent      a thin bar on the bottom edge, a grown plant's rarity colour
+--   clock       (2026-10-09, pods hatch in the Bag) a pill along the bottom of
+--               a pod's picture: the owner's hourglass and the time left on
+--               the pod due first, or the owner's green check and READY
 --
 -- IN YOUR HANDS it wears the strip's held look -- the warm amber-to-green edge,
 -- the lit plate, an amber name -- and the strip's small amber diamond on the
@@ -129,7 +132,31 @@ export type Tile = {
 	pop: UIKit.CardPop,
 	compact: boolean,
 	shownKey: string,
+	-- The pod's pill (2026-10-09): its frame, icon and words.
+	clock: Frame,
+	clockIcon: ImageLabel,
+	clockText: TextLabel,
 }
+
+--==============================================================================
+-- THE POD'S PILL (2026-10-09, pods hatch in the Bag)
+--
+-- The owner's icons (GameConfig.HatchInBag.Icons: the hourglass while it grows,
+-- the green check once READY), cut by the one crop that fits all four. An id
+-- that is "" draws no icon -- the words alone are the stand-in, never another
+-- upload.
+--==============================================================================
+local BAG = GameConfig.HatchInBag
+local READY_FILL = Color3.fromRGB(74, 158, 58)
+local CLOCK_FILL = Color3.fromRGB(24, 32, 30)
+
+local function bagIcon(image: ImageLabel, id: string)
+	image.Image = id
+	image.ImageRectOffset = if id ~= "" then BAG.IconCropOffset else Vector2.zero
+	image.ImageRectSize = if id ~= "" then BAG.IconCropSize else Vector2.zero
+	image.Visible = id ~= ""
+end
+InventoryTile.bagIcon = bagIcon
 
 export type Paint = {
 	name: string,
@@ -146,6 +173,10 @@ export type Paint = {
 	variantIsRarity: boolean?,
 	-- 2026-10-04: its studded background (InventoryModel.face's `studs`).
 	studs: string?,
+	-- 2026-10-09: a pod tile's countdown ("4:05") or READY (`podReady`); nil
+	-- for anything that is not pods in the Bag.
+	podClock: string?,
+	podReady: boolean?,
 }
 
 function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
@@ -313,6 +344,47 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 	local fxText = RarityFX.text(variant, variantLine)
 	local marker = InventoryTile.marker(button, T.MarkerSize, T.Marker, T.Ink, zIndex + 6)
 
+	-- The pod's pill (2026-10-09): placed by `shape`, painted by `paint`.
+	local clock = Instance.new("Frame")
+	clock.Name = "PodClock"
+	clock.AnchorPoint = Vector2.new(0.5, 1)
+	clock.Size = UDim2.fromOffset(66, 18)
+	clock.BackgroundColor3 = CLOCK_FILL
+	clock.BackgroundTransparency = 0.18
+	clock.BorderSizePixel = 0
+	clock.Visible = false
+	clock.Active = false
+	clock.ZIndex = zIndex + 5
+	clock.Parent = button
+	UIKit.corner(clock, 9)
+	UIKit.stroke(clock, T.Ink, 1, 0.2)
+	local clockIcon = Instance.new("ImageLabel")
+	clockIcon.Name = "Icon"
+	clockIcon.BackgroundTransparency = 1
+	clockIcon.AnchorPoint = Vector2.new(0, 0.5)
+	clockIcon.Position = UDim2.new(0, 3, 0.5, 0)
+	clockIcon.Size = UDim2.fromOffset(15, 15)
+	clockIcon.ScaleType = Enum.ScaleType.Fit
+	clockIcon.ZIndex = zIndex + 6
+	clockIcon.Parent = clock
+	local clockText = Instance.new("TextLabel")
+	clockText.Name = "Words"
+	clockText.BackgroundTransparency = 1
+	clockText.AnchorPoint = Vector2.new(1, 0.5)
+	clockText.Position = UDim2.new(1, -5, 0.5, 0)
+	clockText.Size = UDim2.new(1, -24, 1, -2)
+	clockText.Font = Enum.Font.FredokaOne
+	clockText.TextScaled = true
+	clockText.TextColor3 = LOOK.Cream
+	clockText.Text = ""
+	clockText.ZIndex = zIndex + 6
+	clockText.Parent = clock
+	local clockFit = Instance.new("UITextSizeConstraint")
+	clockFit.MaxTextSize = 12
+	clockFit.MinTextSize = 8
+	clockFit.Parent = clockText
+	UIKit.stroke(clockText, T.Ink, 1)
+
 	local press = Instance.new("UIScale")
 	press.Parent = button
 	local pop = UIKit.cardPop(button, press, {
@@ -348,6 +420,9 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 		pop = pop,
 		compact = false,
 		shownKey = "",
+		clock = clock,
+		clockIcon = clockIcon,
+		clockText = clockText,
 	}
 	InventoryTile.shape(tile, false)
 	return tile
@@ -374,6 +449,8 @@ function InventoryTile.shape(tile: Tile, compact: boolean)
 	tile.heart.frame.Position = UDim2.fromOffset(92, 3 + previewH)
 	tile.words.Position = UDim2.fromOffset(3, nameTop - 1)
 	tile.words.Size = UDim2.fromOffset(90, nameH + variantH + 3)
+	-- Along the bottom of the picture, clear of the heart in its corner.
+	tile.clock.Position = UDim2.fromOffset(44, 3 + previewH)
 end
 
 -- On screen with the Bag open, or not: only then does a light move.
@@ -420,6 +497,25 @@ function InventoryTile.paint(tile: Tile, T: any, p: Paint)
 	tile.plate.Transparency = if p.held then 0 elseif rare then 0.05 elseif studded then 0 else T.EdgeTransparency
 	tile.marker.Visible = p.held
 	RarityFX.setEdge(tile.fxEdge, p.rarity, not p.held and not p.restoring)
+	-- The pod's pill (2026-10-09): READY in green with the check, else the
+	-- hourglass and the time left.
+	local podClock = p.podClock
+	local ready = p.podReady == true
+	tile.clock.Visible = (ready or podClock ~= nil) and not p.restoring
+	if tile.clock.Visible then
+		tile.clock.BackgroundColor3 = if ready then READY_FILL else CLOCK_FILL
+		tile.clockText.Text = if ready then BAG.Words.Ready else (podClock :: string)
+		bagIcon(tile.clockIcon, if ready then BAG.Icons.Ready else BAG.Icons.Timer)
+		tile.clockText.Size = if tile.clockIcon.Visible then UDim2.new(1, -24, 1, -2) else UDim2.new(1, -8, 1, -2)
+	end
+end
+
+-- The countdown alone, written only when it changes: what a Bag that is open
+-- does every second, between the paints that rebuild the grid.
+function InventoryTile.tick(tile: Tile, podClock: string?)
+	if podClock and tile.clock.Visible and tile.clockText.Text ~= podClock then
+		tile.clockText.Text = podClock
+	end
 end
 
 return InventoryTile

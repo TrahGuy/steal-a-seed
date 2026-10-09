@@ -32,6 +32,11 @@
 -- the rig is the same rig, bigger. Surface studs and stud textures are left at
 -- the world's size, as every other plant's are. Secret and Rain forms pass no
 -- factor and replay at 1, exactly as before.
+--
+-- AND THE OWNER'S 25 PODS (PodForms, 2026-10-09), replayed by PodModel at their
+-- tier's size: the same replay, plus each part's SpecialMesh (sphere,
+-- cylinder), the owner's folder and fixed parts as part attributes, and stud
+-- textures that grow with the pod (`scaleStuds`), as the owner built them.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -69,6 +74,10 @@ SecretModel.ROOT_ATTRIBUTE = "RigRoot"
 -- The whole-model factor a PlantForms rig was built at (BuildPlantForm), for the
 -- client animator, whose distances grow with it. Absent means 1.
 SecretModel.SCALE_ATTRIBUTE = "RigScale"
+-- PodForms (2026-10-09): on a replayed part, the owner's folder it sat in
+-- (SizeSeam, GlowAccents), and whether it stood still in the owner's idle.
+SecretModel.GROUP_ATTRIBUTE = "FormGroup"
+SecretModel.FIXED_ATTRIBUTE = "FormFixed"
 
 local SHAPES: { [string]: Enum.PartType } = {
 	Block = Enum.PartType.Block,
@@ -149,6 +158,42 @@ local function makePart(spec: SecretForms.PartSpec, cf: CFrame, parent: Instance
 			part:SetAttribute(key, value)
 		end
 	end
+	-- PodForms (2026-10-09): the owner's folder, and a part that stood still in the owner's idle, as
+	-- attributes on the part (the replay keeps every part a direct child of the model).
+	if spec.g then
+		part:SetAttribute(SecretModel.GROUP_ATTRIBUTE, spec.g)
+	end
+	if spec.an == true then
+		part:SetAttribute(SecretModel.FIXED_ATTRIBUTE, true)
+	end
+	-- The SpecialMesh a sphere or cylinder is drawn with. A primitive mesh's Scale is a share of the part's
+	-- size, which already grew; its Offset is in studs and grows with the factor (a file mesh's Scale too).
+	local sm = spec.sm
+	if sm then
+		local mesh = Instance.new("SpecialMesh")
+		mesh.Name = if type(sm.n) == "string" then sm.n else "Mesh"
+		local kind = (Enum.MeshType :: any)[sm.t]
+		if kind then
+			mesh.MeshType = kind
+		end
+		if type(sm.id) == "string" then
+			mesh.MeshId = sm.id
+		end
+		if type(sm.tx) == "string" then
+			mesh.TextureId = sm.tx
+		end
+		local file = mesh.MeshType == Enum.MeshType.FileMesh
+		if typeof(sm.s) == "Vector3" then
+			mesh.Scale = if file then sm.s * scale else sm.s
+		end
+		if typeof(sm.o) == "Vector3" then
+			mesh.Offset = sm.o * scale
+		end
+		if typeof(sm.vc) == "Vector3" then
+			mesh.VertexColor = sm.vc
+		end
+		mesh.Parent = part
+	end
 	part.Parent = parent
 	return part
 end
@@ -174,7 +219,7 @@ local EMITTER_FIELDS: { { string } } = {
 -- the model's own attributes. Returns the parts, index-aligned with the spec.
 --==============================================================================
 function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model, loose: boolean?,
-	scale: number?): { BasePart }
+	scale: number?, scaleStuds: boolean?): { BasePart }
 	local s = scale or 1
 	local parts: { BasePart } = table.create(#spec.Parts)
 	for i, p in ipairs(spec.Parts) do
@@ -306,22 +351,29 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 		end
 	end
 	-- Stud textures (PlantForms): drawn at the world's stud size, like the
-	-- surface studs under them, whatever the factor.
+	-- surface studs under them, whatever the factor. A pod's (PodForms,
+	-- 2026-10-09, `scaleStuds`) grow with it: the owner's pod, only bigger. A
+	-- PodForms record lists its faces and names each texture after its face.
+	local tile = if scaleStuds == true then s else 1
 	for _, tx in ipairs(spec.Textures or {}) do
 		local host = parts[tx.p]
 		if host then
-			local texture = Instance.new("Texture")
-			texture.Name = tx.n
-			texture.Face = tx.face
-			texture.Texture = tx.texture
-			texture.StudsPerTileU = tx.u
-			texture.StudsPerTileV = tx.v
-			texture.OffsetStudsU = tx.ou
-			texture.OffsetStudsV = tx.ov
-			texture.Color3 = tx.color
-			texture.Transparency = tx.t
-			texture.ZIndex = tx.z
-			texture.Parent = host
+			local faces = if type(tx.faces) == "table" then tx.faces else { tx.face }
+			for _, face in ipairs(faces) do
+				local normal = if typeof(face) == "EnumItem" then face else (Enum.NormalId :: any)[face]
+				local texture = Instance.new("Texture")
+				texture.Name = if string.find(tx.n, "%s", 1, true) then string.format(tx.n, normal.Name) else tx.n
+				texture.Face = normal
+				texture.Texture = tx.texture
+				texture.StudsPerTileU = tx.u * tile
+				texture.StudsPerTileV = tx.v * tile
+				texture.OffsetStudsU = tx.ou * tile
+				texture.OffsetStudsV = tx.ov * tile
+				texture.Color3 = tx.color
+				texture.Transparency = tx.t
+				texture.ZIndex = tx.z
+				texture.Parent = host
+			end
 		end
 	end
 	for key, value in pairs(spec.Attributes) do

@@ -191,6 +191,9 @@ type Panel = {
 	panel: TextButton,
 	adornee: BasePart,
 	scale: UIScale?,
+	-- The UIScale's resting value: ReachPoint.promptScale (3/4 on a phone, else
+	-- 1). The touch tracker places and culls the panel at `size` times this.
+	rest: number,
 	fill: Frame,
 	cap: Frame,
 	tween: Tween?,
@@ -323,6 +326,65 @@ local function reservedForSomebodyElse(prompt: ProximityPrompt): boolean
 	return owner ~= nil and owner ~= player.UserId
 end
 
+--==============================================================================
+-- ANOTHER PLAYER'S PLOT IS NOT YOURS TO PRESS (2026-10-08, the owner's report)
+--
+-- A pod's Hatch, the mill's Upgrade and the plot board's prompt stand on every
+-- plot, and the server refuses all three to anybody but the plot's owner. They
+-- were drawn for everybody walking past -- and one of them could be the
+-- best-placed prompt for E and hide the player's own. So a prompt under
+-- anything that carries a PlotId (the plot, its mill and its boards) other
+-- than this player's OwnPlotId is never drawn, and is put out of reach ON THIS
+-- CLIENT -- its reach set to 0, as PromptHoldLock does -- so no key or tap
+-- lands on it. Given back when this player's plot changes; a reach the server
+-- writes again is put out again the next time the prompt shows. Courtesy, not
+-- enforcement: the server's checks stand.
+--==============================================================================
+local PLOT_ID = GameConfig.Attributes.PlotId
+local OWN_PLOT = GameConfig.Attributes.OwnPlotId
+local foreignReach: { [ProximityPrompt]: number } = {}
+
+local function onSomebodyElsesPlot(prompt: ProximityPrompt): boolean
+	local at = prompt.Parent
+	while at and at ~= Workspace do
+		local id = at:GetAttribute(PLOT_ID)
+		if id ~= nil then
+			return tonumber(id) ~= tonumber(player:GetAttribute(OWN_PLOT))
+		end
+		at = at.Parent
+	end
+	return false
+end
+
+local function putOutOfReach(prompt: ProximityPrompt)
+	local reach = prompt.MaxActivationDistance
+	if reach <= 0 then
+		return
+	end
+	if foreignReach[prompt] == nil then
+		local gone: RBXScriptConnection? = nil
+		gone = prompt.AncestryChanged:Connect(function()
+			if not prompt:IsDescendantOf(game) then
+				foreignReach[prompt] = nil
+				if gone then
+					gone:Disconnect()
+				end
+			end
+		end)
+	end
+	foreignReach[prompt] = reach
+	prompt.MaxActivationDistance = 0
+end
+
+player:GetAttributeChangedSignal(OWN_PLOT):Connect(function()
+	for prompt, reach in pairs(foreignReach) do
+		if prompt.Parent and prompt.MaxActivationDistance == 0 then
+			prompt.MaxActivationDistance = reach
+		end
+	end
+	table.clear(foreignReach)
+end)
+
 local function carrying(): boolean
 	return player:GetAttribute(CARRYING) ~= nil
 end
@@ -403,6 +465,15 @@ local function build(prompt: ProximityPrompt): Panel?
 	local root: Instance
 	local scale: UIScale? = nil
 	local billboard: BillboardGui? = nil
+	-- Three quarters on a phone (GameConfig.Labels.Prompt.PhoneScale); 1 on a
+	-- tablet and on every desktop, whose billboard is not touched.
+	local rest = 1
+	if TOUCH then
+		local camera = Workspace.CurrentCamera
+		if camera then
+			rest = ReachPoint.promptScale(camera.ViewportSize, true, PROMPT.PhoneShortSide, PROMPT.PhoneScale)
+		end
+	end
 	--==========================================================================
 	-- TEN-FOOT: THE BILLBOARD IS DRAWN BIGGER ON A TV
 	--
@@ -468,7 +539,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		panel.Parent = layer
 		root = panel
 		local made = Instance.new("UIScale")
-		made.Scale = 1
+		made.Scale = rest
 		made.Parent = panel
 		scale = made
 	else
@@ -699,6 +770,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		panel = panel,
 		adornee = adornee,
 		scale = scale,
+		rest = rest,
 		fill = fill,
 		cap = cap,
 		tween = nil,
@@ -785,9 +857,9 @@ local function build(prompt: ProximityPrompt): Panel?
 	end
 
 	if scale then
-		scale.Scale = 0.82
+		scale.Scale = 0.82 * rest
 		TweenService:Create(scale, TweenInfo.new(0.16, Enum.EasingStyle.Back,
-			Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			Enum.EasingDirection.Out), { Scale = rest }):Play()
 	else
 		panel.Size = UDim2.fromScale(0.82, 0.82)
 		TweenService:Create(panel, TweenInfo.new(0.16, Enum.EasingStyle.Back,
@@ -842,7 +914,7 @@ local function hide(prompt: ProximityPrompt)
 	-- shrink cannot be re-placed on top of the object it is fading off.
 	entry.panel.Active = false
 	if entry.scale then
-		TweenService:Create(entry.scale, TweenInfo.new(0.10), { Scale = 0.8 }):Play()
+		TweenService:Create(entry.scale, TweenInfo.new(0.10), { Scale = 0.8 * entry.rest }):Play()
 		TweenService:Create(entry.panel, TweenInfo.new(0.10),
 			{ BackgroundTransparency = 1 }):Play()
 	else
@@ -857,6 +929,10 @@ local function hide(prompt: ProximityPrompt)
 end
 
 local function show(prompt: ProximityPrompt)
+	if onSomebodyElsesPlot(prompt) then
+		putOutOfReach(prompt)
+		return
+	end
 	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt) then
 		return
 	end
@@ -953,7 +1029,7 @@ if TOUCH then
 				entry.panel.Visible = inFront
 				if inFront then
 					local _, promptAt = ReachPoint.stack(Vector2.new(at.X, at.Y), viewport,
-						inset.Y, POD_SIZE, entry.size, PROMPT.StackGap, POD.ScreenMargin)
+						inset.Y, POD_SIZE, entry.size * entry.rest, PROMPT.StackGap, POD.ScreenMargin)
 					entry.panel.Position = UDim2.fromOffset(math.round(promptAt.X),
 						math.round(promptAt.Y))
 				end
@@ -963,7 +1039,7 @@ if TOUCH then
 			-- over a billboard label, which is the axis that label is lifted on.
 			local up = if entry.cameraLift then camera.CFrame.UpVector else Vector3.yAxis
 			local at, inFront = camera:WorldToViewportPoint(adornee.Position + up * entry.lift)
-			local half = entry.size * 0.5
+			local half = entry.size * entry.rest * 0.5
 			local centreY = at.Y - entry.raise
 			-- Behind the lens still returns an X and a Y, on the wrong side of
 			-- the screen, so `inFront` has to be the first question.

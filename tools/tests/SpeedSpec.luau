@@ -340,9 +340,12 @@ do
 
 	local treadmill = ServerScriptService:WaitForChild("SeedGameServer"):FindFirstChild("TreadmillService")
 	local src = if treadmill then (treadmill :: any).Source else ""
-	ok("the payout is the rate x the chest's training reward x the Disco Mill x the tick -- no rush term",
-		string.find(src, 'local paid = rate * BonusChestService.Multiplier(player, "training") * discoFactor * dt', 1, true)
-			~= nil and string.find(src, "consumeRush(", 1, true) == nil and string.find(src, "publishRush(", 1, true) == nil)
+	-- `training` is the chest's (or wheel's) reward plus Sprout Dash's +25%, a
+	-- second boost source (2026-10-08) -- still no rush term.
+	ok("the payout is the rate x the training boosts x the Disco Mill x the tick -- no rush term",
+		string.find(src, 'local training = BonusChestService.Multiplier(player, "training")', 1, true) ~= nil
+			and string.find(src, "local paid = rate * training * discoFactor * dt", 1, true) ~= nil
+			and string.find(src, "consumeRush(", 1, true) == nil and string.find(src, "publishRush(", 1, true) == nil)
 	-- One format since 2026-10-06: the overclock branch that had the other is gone.
 	ok("and the upgrade sign still labels both of its rates as BASE",
 		select(2, string.gsub(src, 'string.format%("BASE %%s/s  >  %%s/s"', "")) == 1)

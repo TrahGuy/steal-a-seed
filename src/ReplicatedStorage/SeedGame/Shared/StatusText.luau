@@ -155,6 +155,13 @@ function StatusText.icon(parent: GuiObject, kind: string, tint: Color3, size: nu
 		-- A picture with a small version (the Speed shoe) draws it at 40 px or
 		-- less: chosen at the box's size, then kept to the size it is drawn at.
 		image.Image = SizedIcon.at(picture, size)
+		-- A picture uploaded with a clear margin is drawn by its crop
+		-- (GameConfig.SourceIconCrops: the POD RUSH icon's, 2026-10-09).
+		local crop = if source then (GameConfig.SourceIconCrops :: any)[source] else nil
+		if crop then
+			image.ImageRectOffset = crop.Offset
+			image.ImageRectSize = crop.Size
+		end
 		image.ScaleType = Enum.ScaleType.Fit
 		image.ZIndex = 3
 		image.Parent = box

@@ -599,13 +599,31 @@ local heldRestored = true
 -- A pod being carried home keeps a place in the saved record (2026-09-30), and
 -- CarryService.HeldRoom counts it; this stands in for one in the arms.
 local carryingPod = false
-local CarryService = {
+-- TWO ROOMS SINCE 2026-10-09 (pods hatch in the Bag): pod rows and a pod in the
+-- arms against Save.MaxPods, plant rows against Save.MaxHeld -- CarryService's
+-- PodRoom and HeldRoom. Built in a closure, so the counter is no top-level
+-- local: this file is at Luau's limit of them.
+local CarryService = (function()
+local function rowsOf(player, pods)
+		local n = 0
+		for _, row in ipairs(profiles[player].Held) do
+			if (row.Hatched ~= true) == pods then
+				n += 1
+			end
+		end
+		return n
+end
+return {
 	IsHeldRestored = function()
 		return heldRestored
 	end,
 	HeldRoom = function(player)
-		local count = #profiles[player].Held + (if carryingPod then 1 else 0)
+		local count = rowsOf(player, false)
 		return math.max(GameConfig.Save.MaxHeld - count, 0), count, true
+	end,
+	PodRoom = function(player)
+		local count = rowsOf(player, true) + (if carryingPod then 1 else 0)
+		return math.max(GameConfig.Save.MaxPods - count, 0), count, true
 	end,
 	GivePod = function(player, species, tier)
 		record("GivePod", player, species, tier)
@@ -615,7 +633,7 @@ local CarryService = {
 	-- An invite plant, grown, onto the record (2026-10-08): the Bag's room
 	-- counted, or nothing.
 	GiveHatched = function(player, species, tier, equipAfter, revealAt, onRecord)
-		local count = #profiles[player].Held + (if carryingPod then 1 else 0)
+		local count = rowsOf(player, false)
 		if onRecord and GameConfig.Save.MaxHeld - count < 1 then
 			record("GiveHatchedFull", player, species.Id)
 			return false, "STORAGE_FULL"
@@ -625,6 +643,7 @@ local CarryService = {
 		return true
 	end,
 }
+end)()
 local BonusChestService = {
 	GrantBoost = function(player, id)
 		record("GrantBoost", player, id)
@@ -959,8 +978,9 @@ check(titan and titan[2] == "paddlehop" and titan[3] == 6 and rare and rare[3] =
 	"a Titan pod is always Titan-sized, and a Rare pod always a Rare species -- even when told otherwise",
 	rare and rare[2])
 
--- A full bag: owed, never discarded.
-while #pr.Held < GameConfig.Save.MaxHeld do
+-- A full bag -- the POD room, since pods have their own (2026-10-09): owed,
+-- never discarded.
+while (CarryService.PodRoom(sp)) > 0 do
 	table.insert(pr.Held, { Id = "nubkin", Tier = 1, Hatched = false })
 end
 table.clear(trace)
@@ -992,7 +1012,7 @@ W.DebugForce(sp, "pod_common")
 W.Spin(sp, "earned")
 check(last().owed == true and #pr.WheelPending == 1, "a pod won while the bag is between bodies waits owed")
 heldRestored = true
-while #pr.Held >= GameConfig.Save.MaxHeld do
+while (CarryService.PodRoom(sp)) < 1 do
 	table.remove(pr.Held)
 end
 local landed, left = W.DeliverPending(sp)
@@ -1003,18 +1023,19 @@ check(landed == 1 and left == 0 and #pr.WheelPending == 0, "and the next deliver
 -- carried pod nowhere to bank. In a block of its own: the file is at Luau's
 -- limit of top-level locals.
 do
-	while #pr.Held >= GameConfig.Save.MaxHeld do
+	while (CarryService.PodRoom(sp)) < 1 do
 		table.remove(pr.Held)
 	end
 	local heldBeforeCarry = #pr.Held
+	local podsBeforeCarry = select(2, CarryService.PodRoom(sp))
 	carryingPod = true
 	table.insert(pr.WheelPending, { Id = "carry-1", Rolled = "pod_common", Prize = "pod_common", Species = "nubkin",
 		Source = "earned", At = clock })
 	table.clear(trace)
 	local landedCarry, leftCarry = W.DeliverPending(sp)
-	check(heldBeforeCarry == GameConfig.Save.MaxHeld - 1 and landedCarry == 0 and leftCarry == 1
+	check(podsBeforeCarry == GameConfig.Save.MaxPods - 1 and landedCarry == 0 and leftCarry == 1
 		and count("GivePod") == 0 and #pr.Held == heldBeforeCarry,
-		"with 23 saved and a pod being carried home, an owed pod waits: the carried pod's place is not taken")
+		"with 59 pods saved and a pod being carried home, an owed pod waits: the carried pod's place is not taken")
 	table.clear(replies)
 	W.Claim(sp)
 	check(last().claim == true and last().ok == false and last().reason == "NO_ROOM" and #pr.WheelPending == 1

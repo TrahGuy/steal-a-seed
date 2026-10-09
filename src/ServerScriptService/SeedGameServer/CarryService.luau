@@ -74,6 +74,10 @@ local ITEM_ID: string = ATTR.ItemId
 -- On the player: whether the record is armed (THE GATE, below) -- what the
 -- hotbar waits on before it lets a shortcut go.
 local HELD_RESTORED: string = ATTR.HeldRestored
+-- On a POD Tool and its saved row (2026-10-09, pods hatch in the Bag): the
+-- os.time() it may be hatched, stamped when it is banked or given and kept by
+-- every rebuild. Read back by rowOf, so a row made from the Tool keeps it.
+local HATCH_AT: string = GameConfig.HatchInBag.Attribute
 
 local CarryService = {}
 -- After NestService (40), which owns the pods being taken.
@@ -129,6 +133,24 @@ export type Held = {
 	-- runs. Gone at banking, where the pod stops being on the road.
 	--==========================================================================
 	eventId: number?,
+	--==========================================================================
+	-- WHEN IT WAS TAKEN FROM A NEST (2026-10-09, POD RUSH)
+	--
+	-- The server time (workspace:GetServerTimeNow(), the mini events' clock) of
+	-- the take, set ONLY when the pod came off a nest itself -- never carried
+	-- through a drop, so a pod picked back up has none. A Pod Rush counts a
+	-- banked pod by it (Shared/PodRush.counts): a nest theft during the rush,
+	-- banked by the same player.
+	--==========================================================================
+	stolenAt: number?,
+}
+
+-- What a bank tells its listeners (CarryService.OnBanked), after it is done.
+export type Banked = {
+	species: SeedData.Species,
+	tier: number,
+	fromNest: string?,
+	stolenAt: number?,
 }
 
 -- The attribute a Rain event pod carries, on the nest, in the arms and on the
@@ -475,6 +497,17 @@ local function attachInFront(model: Model, root: BasePart, tier: number, species
 	local primary = model.PrimaryPart
 	if not primary then
 		return
+	end
+	-- THE OWNER'S PODS (2026-10-09, PodModel) arrive with the owner's Motor6Ds
+	-- and Welds. In the arms they hold nothing the WeldConstraints below do not,
+	-- and this model goes inside the character, where the Animator looks for
+	-- joints by part name -- so they go, as giveTool's held rigs' do.
+	if model:GetAttribute(GameConfig.PodModels.FormAttribute) ~= nil then
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("Motor6D") or d:IsA("Weld") then
+				d:Destroy()
+			end
+		end
 	end
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
@@ -906,12 +939,14 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- review. It is not "full", so nothing is said; the take works the moment
 	-- the save is in.
 	--==========================================================================
-	local room, _, known = CarryService.HeldRoom(player)
+	-- THE POD ROOM (2026-10-09): pods have a room of their own, Save.MaxPods,
+	-- and a take is refused only when it is full. Plants never stop a steal.
+	local room, _, known = CarryService.PodRoom(player)
 	if not known then
 		return refuseTake(player, pod, "NO_RECORD")
 	end
 	if room < 1 then
-		tellStorageFull(player, "STORAGE_FULL", STORAGE_QUIET_SECONDS)
+		tellStorageFull(player, "POD_STORAGE_FULL", STORAGE_QUIET_SECONDS)
 		return refuseTake(player, pod, "STORAGE_FULL")
 	end
 
@@ -1026,6 +1061,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			guardianAbandoned = abandoned,
 			secretId = secretId,
 			eventId = eventId,
+			-- A nest theft's time, and only a nest theft's (Held.stolenAt).
+			stolenAt = nestTheft and workspace:GetServerTimeNow() or nil,
 		}
 	end)
 
@@ -1298,7 +1335,7 @@ end
 -- other part is welded to it.
 --==============================================================================
 local function giveTool(player: Player, model: Model, species: SeedData.Species,
-	tier: number, grip: CFrame, hatched: boolean, revealAt: number?): Tool?
+	tier: number, grip: CFrame, hatched: boolean, revealAt: number?, hatchAt: number?): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	local handle = model.PrimaryPart
 	if not (backpack and handle) then
@@ -1391,6 +1428,11 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	if hatched and revealAt then
 		tool:SetAttribute(REVEAL_AT, revealAt)
 	end
+	-- A POD'S DEADLINE (2026-10-09), stamped before the Tool is parented for the
+	-- same reason: no client ever sees a pod in the Bag without its timer.
+	if not hatched and hatchAt then
+		tool:SetAttribute(HATCH_AT, math.floor(hatchAt))
+	end
 
 	--==========================================================================
 	-- A SUPPLIED RIG IS HELD AS ONE PIECE (2026-10-03)
@@ -1403,8 +1445,14 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- the held copy keeps its parts and drops its joints. The planted copy is
 	-- always rebuilt from data and keeps them.
 	--==========================================================================
+	-- The owner's pods (2026-10-09, PodModel) arrive with the owner's joints too,
+	-- and are held the same way.
 	local form = model:GetAttribute("SecretForm")
+	local ownJoints = model:GetAttribute(GameConfig.PodModels.FormAttribute) ~= nil
 	if type(form) == "string" and PlantForms.Plants[form] then
+		ownJoints = true
+	end
+	if ownJoints then
 		for _, d in ipairs(model:GetDescendants()) do
 			if d:IsA("Motor6D") or d:IsA("Weld") then
 				d:Destroy()
@@ -1874,6 +1922,32 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	return true, nil
 end
 
+--==============================================================================
+-- WHO HEARS ABOUT A BANK (2026-10-09, POD RUSH)
+--
+-- Called after the bank is done -- the Tool given, its row written, the arms
+-- empty -- each on its own thread under a pcall, so a listener can neither
+-- un-bank a pod nor hold up the Safe Zone's poll. Answers the unhook.
+--==============================================================================
+local onBanked: { (Player, Banked) -> () } = {}
+
+function CarryService.OnBanked(fn: (Player, Banked) -> ()): () -> ()
+	table.insert(onBanked, fn)
+	return function()
+		local i = table.find(onBanked, fn)
+		if i then
+			table.remove(onBanked, i)
+		end
+	end
+end
+
+-- When the pod in this player's arms was taken from a nest, or nil: nothing
+-- carried, or a pod picked back up (Held.stolenAt).
+function CarryService.CarriedTheft(player: Player): number?
+	local held = carried[player]
+	return if held then held.stolenAt else nil
+end
+
 local function bank(player: Player): boolean
 	local held = carried[player]
 	local character = player.Character
@@ -1892,14 +1966,15 @@ local function bank(player: Player): boolean
 	-- Safe Zone. The moment there is room it is banked, with nothing pressed.
 	--
 	-- A take is refused at the nest for the same reason (TryTake), and a pod in
-	-- the arms keeps its place against a hatch, a pickup and a pod given
-	-- (HeldRoom), so this is the backstop: the record filling some other way on
-	-- the run home, such as a save that already held more than the limit.
+	-- the arms keeps its place against a pod given (PodRoom: since 2026-10-09
+	-- pods have their own room, Save.MaxPods, and plants never take it), so this
+	-- is the backstop: the record filling some other way on the run home, such
+	-- as a save that already held more than the limit.
 	--
 	-- No record yet -- the save still arriving -- is not room either: the pod
 	-- waits in the arms for it, and nothing is said.
 	--==========================================================================
-	local room, _, known = CarryService.HeldRoom(player, true)
+	local room, _, known = CarryService.PodRoom(player, true)
 	if not known then
 		return false
 	end
@@ -1914,7 +1989,15 @@ local function bank(player: Player): boolean
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false)
+	--==========================================================================
+	-- THE WAIT STARTS HERE (2026-10-09, the owner's Phase 1: pods hatch in the
+	-- Bag). The deadline is absolute, so it runs on while the player is away,
+	-- and it is the approved ladder's own (SeedData.GrowSecondsFor): the same
+	-- wait a planted pod of this species and size was given. Stamped on the Tool
+	-- before it is parented, and onto its row by the record below (rowOf).
+	--==========================================================================
+	local hatchAt = os.time() + SeedData.GrowSecondsFor(species, tier)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false, nil, hatchAt)
 	if not tool then
 		return false
 	end
@@ -1950,6 +2033,15 @@ local function bank(player: Player): boolean
 	log(string.format("%s banked a %s (%d tier).", player.Name, species.Name, tier))
 	PlayerDataService.RecordTutorial(player, "bank")
 	Metrics.raidEnded(player, "banked")
+	local info: Banked = { species = species, tier = tier, fromNest = held.fromNest, stolenAt = held.stolenAt }
+	for _, listener in ipairs(table.clone(onBanked)) do
+		task.spawn(function()
+			local ok, err = pcall(listener, player, info)
+			if not ok then
+				warn("[Seed/CarryService] a bank listener failed: " .. tostring(err))
+			end
+		end)
+	end
 	return true
 end
 
@@ -2317,15 +2409,42 @@ local function rowOf(tool: Instance): { any }?
 	local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
 	if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
 		local item = tool:GetAttribute(ITEM_ID)
+		local hatched = tool:GetAttribute("Hatched") == true
+		local hatchAt = if hatched then nil else tonumber(tool:GetAttribute(HATCH_AT))
 		return {
 			Id = id,
 			Tier = math.floor(tier),
-			Hatched = tool:GetAttribute("Hatched") == true,
+			Hatched = hatched,
 			-- Which saved row this Tool is, when it has been told (2026-10-03).
 			Item = if type(item) == "string" and item ~= "" then item else nil,
+			-- A pod's deadline (2026-10-09), so a row made from its Tool keeps it.
+			HatchAt = if hatchAt and hatchAt == hatchAt then math.floor(hatchAt) else nil,
 		}
 	end
 	return nil
+end
+
+-- Which room a row (saved, or rowOf's) takes: a pod's, or a plant's (2026-10-09).
+local function isPodRow(row: any): boolean
+	return type(row) == "table" and row.Hatched ~= true
+end
+
+-- How many rows of `rows` take the same room as a pod (pods) or a plant (not).
+local function countKind(rows: { any }?, pods: boolean): number
+	local n = 0
+	if type(rows) == "table" then
+		for _, row in ipairs(rows) do
+			if type(row) == "table" and isPodRow(row) == pods then
+				n += 1
+			end
+		end
+	end
+	return n
+end
+
+-- The limit of a room: Save.MaxPods for pods, Save.MaxHeld for plants.
+local function limitOf(pods: boolean): number
+	return if pods then SAVE.MaxPods else SAVE.MaxHeld
 end
 
 local function heldSnapshot(player: Player): { any }
@@ -2339,13 +2458,22 @@ local function heldSnapshot(player: Player): { any }
 	-- be holding -- which is the single most likely thing to be lost, because it
 	-- is the thing they just picked up.
 	--==========================================================================
+	-- Each room is read up to its own limit (2026-10-09): pods to Save.MaxPods,
+	-- plants to Save.MaxHeld.
+	local pods, plants = 0, 0
 	local function collect(container: Instance?)
 		if not container then
 			return
 		end
 		for _, tool in ipairs(container:GetChildren()) do
 			local row = rowOf(tool)
-			if row and #rows < SAVE.MaxHeld then
+			local pod = row ~= nil and isPodRow(row)
+			if row and (if pod then pods < SAVE.MaxPods else plants < SAVE.MaxHeld) then
+				if pod then
+					pods += 1
+				else
+					plants += 1
+				end
 				-- The Tool rides along (never saved): a row the merge makes for it
 				-- stamps its new id back onto it (2026-10-03).
 				row.tool = tool
@@ -2482,7 +2610,7 @@ end
 -- Tool the void had just eaten -- that row's id, its shortcut and its heart --
 -- and one of the two plants would be gone at the next respawn.
 --==============================================================================
-type Stamp = { tool: Instance, item: string }
+type Stamp = { tool: Instance, item: string?, hatchAt: number? }
 
 local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fresh: Instance?): ({ any }, { Stamp })
 	local merged = {}
@@ -2527,37 +2655,68 @@ local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fr
 		if found then
 			claimed[found] = true
 			local item = merged[found].Item
-			if type(item) == "string" and row.tool and row.Item ~= item then
-				table.insert(stamps, { tool = row.tool, item = item })
+			-- A pod takes its row's deadline too (2026-10-09): the saved one is
+			-- the truth, and the Tool is the same pod from now on.
+			local due = if isPodRow(merged[found]) then tonumber(merged[found].HatchAt) else nil
+			local renamed = type(item) == "string" and row.Item ~= item
+			if row.tool and (renamed or (due ~= nil and row.HatchAt ~= due)) then
+				table.insert(stamps, { tool = row.tool, item = if renamed then item else nil, hatchAt = due })
 			end
 		else
 			table.insert(leftover, row)
 		end
 	end
-	-- 3. What is left is new: a row of its own, while there is room.
+	-- 3. What is left is new: a row of its own, while there is room -- in ITS
+	-- room (2026-10-09): a pod while the pods are under Save.MaxPods, a plant
+	-- while the plants are under Save.MaxHeld. One room full skips its own
+	-- kind and still takes the other.
+	local podRows, plantRows = countKind(merged, true), countKind(merged, false)
 	for _, row in ipairs(leftover) do
-		if #merged >= SAVE.MaxHeld then
-			break
+		local pod = isPodRow(row)
+		if (if pod then podRows else plantRows) >= limitOf(pod) then
+			continue
+		end
+		if pod then
+			podRows += 1
+		else
+			plantRows += 1
 		end
 		local item = if row.Item and byItem[row.Item] == nil then row.Item else mint()
-		local fresh = { Id = row.Id, Tier = row.Tier, Hatched = row.Hatched, Item = item }
+		-- A POD WITHOUT A DEADLINE (2026-10-09) -- a Tool some older path made --
+		-- starts its wait now, the ladder's own, and its Tool is told.
+		local due: number? = nil
+		if pod then
+			due = tonumber(row.HatchAt)
+			if due == nil then
+				local species = SeedData.Get(tostring(row.Id))
+				due = os.time() + (if species then SeedData.GrowSecondsFor(species, row.Tier) else 0)
+			end
+		end
+		local fresh = { Id = row.Id, Tier = row.Tier, Hatched = row.Hatched, Item = item, HatchAt = due }
 		table.insert(merged, fresh)
 		claimed[#merged] = true
 		if item then
 			byItem[item] = #merged
-			if row.tool and row.Item ~= item then
-				table.insert(stamps, { tool = row.tool, item = item })
-			end
+		end
+		local renamed = item ~= nil and row.Item ~= item
+		if row.tool and (renamed or (due ~= nil and row.HatchAt ~= due)) then
+			table.insert(stamps, { tool = row.tool, item = if renamed then item else nil, hatchAt = due })
 		end
 	end
 	return merged, stamps
 end
 
--- Tells each Tool its row's id, once the record holding it has been written.
+-- Tells each Tool its row's id -- and a pod its row's deadline (2026-10-09) --
+-- once the record holding it has been written.
 local function applyStamps(stamps: { Stamp })
 	for _, stamp in ipairs(stamps) do
-		if stamp.tool.Parent ~= nil and stamp.tool:GetAttribute(ITEM_ID) ~= stamp.item then
-			stamp.tool:SetAttribute(ITEM_ID, stamp.item)
+		if stamp.tool.Parent ~= nil then
+			if stamp.item and stamp.tool:GetAttribute(ITEM_ID) ~= stamp.item then
+				stamp.tool:SetAttribute(ITEM_ID, stamp.item)
+			end
+			if stamp.hatchAt and stamp.tool:GetAttribute(HATCH_AT) ~= stamp.hatchAt then
+				stamp.tool:SetAttribute(HATCH_AT, stamp.hatchAt)
+			end
 		end
 	end
 end
@@ -2717,23 +2876,83 @@ end
 -- Answers how many more rows fit, how many there are, and whether there is a
 -- record at all -- a player whose profile has not arrived has room for nothing,
 -- and that is not "full".
+--
 --==============================================================================
-function CarryService.HeldRoom(player: Player, own: boolean?): (number, number, boolean)
+-- TWO ROOMS SINCE 2026-10-09 (the owner's Phase 1: pods hatch in the Bag)
+--
+-- Pods and plants no longer share the 24. `kind` "pod" counts the POD rows
+-- against Save.MaxPods (60) -- a take at a nest, a bank at the red line, a pod
+-- given (PodRoom) -- and anything else counts the PLANT rows against
+-- Save.MaxHeld (24): a hatch, a pickup, the Instant Hatch prompt. A pod in the
+-- arms keeps its place in the POD room only; it is a pod, and nothing hatched
+-- or picked up on the run home can take a place it needs. `own` therefore
+-- means something for pods alone. Everything else above still holds, room by
+-- room.
+--==============================================================================
+function CarryService.HeldRoom(player: Player, own: boolean?, kind: string?): (number, number, boolean)
 	local profile = PlayerDataService.Get(player)
 	if not profile then
 		return 0, 0, false
 	end
-	local kept = if carried[player] ~= nil and own ~= true then 1 else 0
-	local count = (if type(profile.Held) == "table" then #profile.Held else 0) + kept
-	if count < SAVE.MaxHeld and armedFor(player) then
+	local pods = kind == "pod"
+	local limit = limitOf(pods)
+	local kept = if pods and carried[player] ~= nil and own ~= true then 1 else 0
+	local count = countKind(profile.Held, pods) + kept
+	if count < limit and armedFor(player) then
 		recordHeld(player)
 		profile = PlayerDataService.Get(player)
 		if not profile then
 			return 0, 0, false
 		end
-		count = (if type(profile.Held) == "table" then #profile.Held else 0) + kept
+		count = countKind(profile.Held, pods) + kept
 	end
-	return math.max(SAVE.MaxHeld - count, 0), count, true
+	return math.max(limit - count, 0), count, true
+end
+
+-- The POD room (2026-10-09): HeldRoom for pods. `own` is the pod in the arms
+-- asking at the red line, whose own place is not counted against it.
+function CarryService.PodRoom(player: Player, own: boolean?): (number, number, boolean)
+	return CarryService.HeldRoom(player, own, "pod")
+end
+
+--==============================================================================
+-- A BAG POD'S DEADLINE, MOVED (2026-10-09)
+--
+-- Its saved row and its Tool together, in one call with no yield, so the two
+-- never disagree: what an Instant Hatch receipt that found no room for the plant
+-- does (the pod is made ready instead), and a Studio test's DebugReady. Only
+-- ever a pod still in the Bag, by its item id. False when there is no such row
+-- or the record would not take the write; nothing changed then.
+--==============================================================================
+function CarryService.SetPodDeadline(player: Player, item: string, hatchAt: number): boolean
+	local profile = PlayerDataService.Get(player)
+	if not (profile and type(profile.Held) == "table") or type(item) ~= "string"
+		or type(hatchAt) ~= "number" or hatchAt ~= hatchAt then
+		return false
+	end
+	local kept = table.clone(profile.Held)
+	for i, row in ipairs(kept) do
+		if isPodRow(row) and row.Item == item then
+			local due = math.floor(hatchAt)
+			local moved = table.clone(row)
+			moved.HatchAt = due
+			kept[i] = moved
+			if PlayerDataService.SetHeld(player, kept) ~= true then
+				return false
+			end
+			for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
+				if container then
+					for _, tool in ipairs((container :: Instance):GetChildren()) do
+						if tool:IsA("Tool") and tool:GetAttribute(ITEM_ID) == item then
+							tool:SetAttribute(HATCH_AT, due)
+						end
+					end
+				end
+			end
+			return true
+		end
+	end
+	return false
 end
 
 --==============================================================================
@@ -2827,11 +3046,25 @@ local function recordOne(player: Player, species: SeedData.Species, tier: number
 		return rows >= 1 and rows >= toolsOfKind(player, key)
 	end
 	local kept = if type(profile.Held) == "table" then table.clone(profile.Held) else {}
-	if #kept >= SAVE.MaxHeld then
+	-- Its own room (2026-10-09): a pod against the pods, a plant against the plants.
+	if countKind(kept, not hatched) >= limitOf(not hatched) then
 		return false
 	end
 	local item = PlayerDataService.MintItem(player)
-	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = hatched, Item = item })
+	-- A pod's deadline rides from its Tool onto its row (2026-10-09); a pod made
+	-- without one starts its wait now.
+	local due: number? = nil
+	if not hatched then
+		due = if tool then tonumber(tool:GetAttribute(HATCH_AT)) else nil
+		if due == nil then
+			due = os.time() + SeedData.GrowSecondsFor(species, tier)
+			if tool then
+				tool:SetAttribute(HATCH_AT, due)
+			end
+		end
+	end
+	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = hatched, Item = item,
+		HatchAt = due })
 	if PlayerDataService.SetHeld(player, kept) ~= true then
 		return false
 	end
@@ -2945,13 +3178,16 @@ CarryService.WatchHeld = watchHeld
 --==============================================================================
 -- A pod's Tool in the bag: the same builder, grip and reach as every other pod.
 -- Answers the Tool, or nil with nothing left behind.
-local function givePodTool(player: Player, species: SeedData.Species, tier: number, item: string?): Tool?
+-- `hatchAt` (2026-10-09): the pod's deadline -- its saved row's for a rebuild,
+-- a fresh one for a pod given -- stamped before the Tool is parented.
+local function givePodTool(player: Player, species: SeedData.Species, tier: number, item: string?,
+	hatchAt: number?): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return nil
 	end
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false, nil, hatchAt)
 	if not tool then
 		return nil
 	end
@@ -2965,7 +3201,7 @@ local function givePodTool(player: Player, species: SeedData.Species, tier: numb
 end
 
 local function restoreOne(player: Player, species: SeedData.Species, tier: number,
-	hatched: boolean, item: string?): boolean
+	hatched: boolean, item: string?, hatchAt: number?): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
@@ -2984,7 +3220,7 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 		end
 		return given
 	end
-	return givePodTool(player, species, tier, item) ~= nil
+	return givePodTool(player, species, tier, item, hatchAt) ~= nil
 end
 
 --==============================================================================
@@ -3018,11 +3254,13 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 		return false
 	end
 	local size = math.clamp(math.floor(n), 1, SeedData.TierCount)
-	local room, _, known = CarryService.HeldRoom(player)
+	-- The POD room (2026-10-09), and the pod's wait starts as it is given, as a
+	-- banked pod's does.
+	local room, _, known = CarryService.PodRoom(player)
 	if not known or room < 1 then
 		return false
 	end
-	local tool = givePodTool(player, species, size)
+	local tool = givePodTool(player, species, size, nil, os.time() + SeedData.GrowSecondsFor(species, size))
 	if not tool then
 		return false
 	end
@@ -3144,6 +3382,8 @@ local function rebuildOnce(player: Player): boolean
 				local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
 				local tier = if type(row) == "table" then tonumber(row.Tier) else nil
 				local item = if type(row) == "table" and type(row.Item) == "string" then row.Item else nil
+				-- A pod's saved deadline (2026-10-09), which its Tool wears.
+				local due = if type(row) == "table" and row.Hatched ~= true then tonumber(row.HatchAt) else nil
 				if species and tier and tier >= 1 then
 					local key = heldKey(species.Id, math.floor(tier), row.Hatched == true)
 					local spare = unnamed[key]
@@ -3152,8 +3392,11 @@ local function rebuildOnce(player: Player): boolean
 						if item and tool:GetAttribute(ITEM_ID) ~= item then
 							tool:SetAttribute(ITEM_ID, item)
 						end
+						if due and tool:GetAttribute(HATCH_AT) ~= due then
+							tool:SetAttribute(HATCH_AT, due)
+						end
 						kept += 1
-					elseif restoreOne(player, species, tier, row.Hatched == true, item) then
+					elseif restoreOne(player, species, tier, row.Hatched == true, item, due) then
 						restored += 1
 					else
 						dropped += 1

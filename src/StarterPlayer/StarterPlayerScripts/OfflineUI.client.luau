@@ -569,6 +569,13 @@ local function multiplier(): number
 	return if type(v) == "number" and v == v and v > 0 then v else 1
 end
 
+-- What the claim pays: the pending cash times the two permanent multipliers,
+-- the pass and the rebirths' income bonus (2026-10-08) -- exactly as
+-- EconomyService's withPass pays it.
+local function claimed(): number
+	return math.floor(pendingBase() * multiplier() * GameConfig.rebirthIncomeOf(player))
+end
+
 local function setAmount(n: number)
 	shownValue = n
 	amount.Text = "+" .. money(n)
@@ -703,7 +710,7 @@ local function open()
 		if not reduced() then
 			SoundKit.play("HatchTimeSkip", { volume = 0.55 })
 		end
-		countTo(math.floor(pendingBase() * multiplier()))
+		countTo(claimed())
 	end)
 end
 
@@ -859,7 +866,7 @@ local function consider()
 	if isOpen then
 		fillWords()
 		if not claiming then
-			countTo(math.floor(pendingBase() * multiplier()))
+			countTo(claimed())
 		end
 		return
 	end

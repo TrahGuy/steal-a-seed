@@ -12,14 +12,18 @@
 --             pass, the boosts and the rain multiply the whole garden, so no
 --             boost is counted twice). The plot's capacity less its growing
 --             pods is how many may stand; the best that many stay or go in,
---             the rest of the planted come out.
+--             the rest of the planted come out. Since 2026-10-09 pods hatch
+--             in the Bag, so the only growing pods are an old save's, which
+--             still stand in their beds until they hatch.
 --   ties      equal incomes keep what is already planted, then the lower item
 --             id, then the lower placement id -- so pressing EQUIP BEST again
 --             on an unchanged lineup moves nothing.
 --   room      a whole change is checked against the plot AND the bag before
 --             anything moves: the bag after the change (stored rows, less what
 --             goes in, plus what comes out, plus a raid pod's kept place) must
---             fit, or the change is refused whole.
+--             fit, or the change is refused whole. Since 2026-10-09 the rows
+--             are the PLANT rows and there is no raid pod to keep a place for:
+--             pods have a room of their own (PlantService passes false).
 --   spots     where newcomers stand: points on the player's own beds, spread
 --             out (each the free point farthest from everything standing),
 --             deterministic for the same garden. The small base circle is the

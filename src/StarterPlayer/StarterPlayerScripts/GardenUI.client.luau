@@ -103,14 +103,17 @@ gui.DisplayOrder = 31
 gui.Parent = playerGui
 
 --==============================================================================
--- THE BUTTON: the pot, bare, top right (HudLayout's `garden`), and its badge
--- counting the pods still growing.
+-- THE BUTTON: the owner's studded Garden picture (the pot under it until that
+-- loads), centre left (HudLayout's `garden`; top right until 2026-10-09), and
+-- its badge counting the pods still growing.
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "GardenButton",
 	icon = RAIL.GardenIcon,
 	wide = false,
 	bare = true,
+	-- GARDEN on a plate until the pot has loaded here (UIKit.railFallback).
+	fallback = RAIL.Words.Garden,
 })
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
@@ -124,7 +127,16 @@ local function placeButton()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	button.Position = HudLayout.place(layout.garden, button.AnchorPoint, layout.safe)
-	UIKit.railBadge(badge, layout.compact, "left")
+	-- The owner's studded Garden picture IS the button once it has loaded
+	-- (2026-10-09, GameConfig.Rail.StuddedGardenArt); the pot and GARDEN stay
+	-- under it until then, and for good if it never does.
+	UIKit.railPicture(button, RAIL.StuddedGardenArt, 1)
+	-- On its top-RIGHT corner since the button stands at the left edge
+	-- (2026-10-09): tucked in level with its top where Garden and the Bag stand
+	-- side by side (a phone); on its top-LEFT corner where a small window keeps
+	-- them top right (HudLayout.badges).
+	local row = layout.pairRow == true
+	UIKit.railBadge(badge, layout.compact or row, if layout.gardenRight then "left" else "right", row)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 placeButton()
@@ -791,6 +803,8 @@ local function relayout()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 		keyboardTop = nil,
 	}, RAIL.OutlineThickness)
 	menu.place(p)

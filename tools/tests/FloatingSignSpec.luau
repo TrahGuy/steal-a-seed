@@ -2,7 +2,10 @@
 --==============================================================================
 -- Steal a Seed :: FloatingSignSpec
 --
--- The words that float over the Bonus Chest and the Sacrifice Pedestal
+-- The words that float over the Bonus Chest, the Sacrifice Pedestal and, since
+-- 2026-10-08, Marigold's stall ("BAT SHOP!" over "BATS & TRAPS", in a red
+-- orange of its own, clear of the awning, her head, her prompt and every other
+-- sign in the square)
 -- (2026-09-30, the owner's ask; reworked 2026-10-01): "FREE CHEST" in warm gold
 -- with that player's state under it -- READY TO CLAIM! only when they can claim,
 -- the time left on cooldown, nothing at all while it is locked to them -- and
@@ -297,6 +300,156 @@ local function body()
 	end
 	check(serverHits == 0 and not has(both, "Remote") and not has(both, "Teleport") and not has(both, "Prompt"),
 		"a teaser only: no server, remote, teleport or prompt has anything to do with it")
+
+	--==========================================================================
+	-- MARIGOLD'S "BAT SHOP!" (2026-10-08, the owner: "new players dont know
+	-- about where to buy bats, we will add a shop text above marigold like
+	-- spinwheel")
+	--==========================================================================
+	say("\n-- Marigold's BAT SHOP! --")
+	local M = GameConfig.Weapon.FloatingWords
+	local function apart(a, b)
+		return math.sqrt(((a.R - b.R) * 255) ^ 2 + ((a.G - b.G) * 255) ^ 2 + ((a.B - b.B) * 255) ^ 2)
+	end
+	local nearest = math.huge
+	for _, c in ipairs({ C.Colour, P.Colour, T.Colour, T.SubColour, Color3.new(1, 1, 1) }) do
+		nearest = math.min(nearest, apart(M.Colour, c))
+	end
+	check(M.Text == "BAT SHOP!" and M.SubText == "BATS & TRAPS" and nearest >= 100,
+		"BAT SHOP! over BATS & TRAPS, in a colour no other sign in the square wears (gold, lime, lavender, the "
+			.. "wheel's white)", string.format("%s, %.0f from the nearest", hex(M.Colour), nearest))
+	local shopLetters, shopSub = letters(M.Text, M.Width, M.Height), letters(M.SubText, M.Width, M.SubHeight)
+	check(shopLetters >= wheelLetters and shopLetters <= wheelLetters * 1.2 and shopSub >= 0.7
+			and shopSub < shopLetters * 0.75,
+		"letters a touch over the wheel's, for the square's one shop; the second line clearly smaller",
+		string.format("%.2f / %.2f studs (the wheel's %.2f)", shopLetters, shopSub, wheelLetters))
+
+	-- Where the stall's numbers come from: MapService builds it, so its source
+	-- is pinned and the awning's top and front edge worked out from it.
+	local mapSrc = sourceOf(Server, "MapService") or ""
+	check(has(mapSrc, "local stallCF = CFrame.new(0, Y, 15) * CFrame.Angles(0, math.pi, 0)")
+			and has(mapSrc, "local counter = build({ name = MAP.SellStandName, size = Vector3.new(20, 3.6, 6),")
+			and has(mapSrc, "cframe = stallCF * CFrame.new(0, 2.4, 0), color = WOOD,")
+			and has(mapSrc, 'build({ name = "Awning", size = Vector3.new(3.4, 0.6, 12),')
+			and has(mapSrc, "cframe = stallCF * CFrame.new(-10.2 + i * 3.4, 13.4, -1.5)")
+			and has(mapSrc, "* CFrame.Angles(math.rad(-17), 0, 0),")
+			and has(mapSrc, "HubFairy.build(stallCF * CFrame.new(0, 2, -5.5) * CFrame.Angles(0, math.pi, 0), hub)"),
+		"(the stall is still: the counter's middle 2.4 up, the awning 13.4 up and tilted 17 degrees, Marigold on the "
+			.. "riser 2 up)")
+	-- Over the counter's middle. The awning's HIGH edge is its front one, the
+	-- customers' side (its slats tilt up toward them): the words hang under it.
+	local tilt = math.rad(17)
+	local lipUnder = 13.4 + 6 * math.sin(tilt) - 0.3 * math.cos(tilt) - 2.4
+	local awningFront = -1.5 + 6 * math.cos(tilt) + 0.3 * math.sin(tilt)
+	local foot = M.Above - (M.Height + M.SubHeight) / 2
+	local head = M.Above + (M.Height + M.SubHeight) / 2
+	check(head <= lipUnder - 1 and math.abs(M.Front - awningFront) <= 1,
+		"under the awning's front lip, a stud and more clear of it, at the lip's own reach toward the customers",
+		string.format("top %.2f over the counter's middle, the lip's underside %.2f; %.2f out, the lip %.2f", head,
+			lipUnder, M.Front, awningFront))
+	-- Marigold is 5.5 studs tall (measured, Edit, 2026-10-08), standing on the
+	-- riser 2 up; her prompt hangs off her Torso and PromptUI lifts its panel
+	-- 2.4 over that, reaching `reach` either side on a phone up close (and a
+	-- prompt is drawn over the world anyway).
+	local herTop = 2 + 5.5 - 2.4
+	local promptTop = 2 + 3 + 2.4 + reach - 2.4
+	check(foot >= herTop + 1 and foot >= promptTop + 0.3,
+		"over Marigold's head and over her Open Shop prompt, even on a phone",
+		string.format("foot %.2f; her head %.2f, the prompt to %.2f", foot, herTop, promptTop))
+	-- THE WHEEL STANDS STRAIGHT BEHIND THE STALL, so from the square and the
+	-- road -- all of it on that line -- words over the roof sat right on top of
+	-- "SPIN THE WHEEL!" (Play, 2026-10-08). Its words, measured in that Play:
+	-- middle (0, 24.3, 36.4), 2.8 studs tall. Every eye on the line from the
+	-- road to ten studs short of the counter, 6 to 16 studs up, must see these
+	-- words wholly under those.
+	check(has(wheel, "at(0, archTop + 3.4, -1.6)") and WheelData.Place.Position == Vector3.new(0, 0.9, 38),
+		"(the wheel's words still stand 3.4 over its arch, 1.6 behind its middle, at (0, 0.9, 38))")
+	local spinY, spinZ, spinHalf = 24.3, 36.4, 1.4
+	local shopY, shopZ = GameConfig.Map.GroundY + 2.4 + M.Above, 15 - M.Front
+	local shopHalf = (M.Height + M.SubHeight) / 2
+	local overlaps, firstOverlap = 0, nil
+	for z = -170, -10, 2 do
+		for y = 6, 16, 1 do
+			local function elev(h, at)
+				return math.deg(math.atan2(h - y, at - z))
+			end
+			if elev(shopY + shopHalf, shopZ) > elev(spinY - spinHalf, spinZ)
+				and elev(shopY - shopHalf, shopZ) < elev(spinY + spinHalf, spinZ) then
+				overlaps += 1
+				firstOverlap = firstOverlap or string.format("eye at z %d, %d up", z, y)
+			end
+		end
+	end
+	check(overlaps == 0, "below SPIN THE WHEEL! for every eye from the road to the counter: never over it",
+		firstOverlap or "")
+	local shopXZ = Vector2.new(0, 15 - M.Front)
+	local worst, worstName = math.huge, ""
+	for _, o in ipairs({
+		{ "the wheel", WheelData.Place.Position, 15 / 2 },
+		{ "FREE CHEST", GameConfig.BonusChest.Position, C.Width / 2 },
+		{ "SACRIFICE A POD!", GameConfig.Sacrifice.Position, P.Width / 2 },
+		{ "the community chest", GameConfig.Community.Position, GameConfig.Community.SignWidth / 2 },
+		{ "the invite pedestal", GameConfig.InviteRewards.Position, 5 },
+	}) do
+		local gap = (Vector2.new(o[2].X, o[2].Z) - shopXZ).Magnitude - M.Width / 2 - o[3]
+		if gap < worst then
+			worst, worstName = gap, o[1]
+		end
+	end
+	check(worst >= 4, "clear of every other sign in the square", string.format("nearest: %s, %.1f studs between",
+		worstName, worst))
+	-- The Edit preview of the map, when it is there, agrees with the numbers.
+	local hubModel = workspace:FindFirstChild(GameConfig.Map.FolderName)
+	hubModel = hubModel and hubModel:FindFirstChild(GameConfig.Map.PropsFolderName)
+	hubModel = hubModel and hubModel:FindFirstChild("Hub")
+	local stand = hubModel and hubModel:FindFirstChild(GameConfig.Map.SellStandName)
+	if stand and stand:IsA("BasePart") then
+		-- The words' box in the world, and every part of the real stall's box:
+		-- none may reach into it.
+		local at = stand.Position + Vector3.yAxis * M.Above - stand.CFrame.LookVector * M.Front
+		local lo = at - Vector3.new(M.Width / 2, shopHalf, 0.1)
+		local hi = at + Vector3.new(M.Width / 2, shopHalf, 0.1)
+		local inside = {}
+		for _, d in ipairs(hubModel:GetDescendants()) do
+			if d:IsA("BasePart") then
+				local cf, size = d.CFrame, d.Size
+				local pLo, pHi = Vector3.new(math.huge, math.huge, math.huge), -Vector3.new(math.huge, math.huge, math.huge)
+				for _, sx in ipairs({ -0.5, 0.5 }) do
+					for _, sy in ipairs({ -0.5, 0.5 }) do
+						for _, sz in ipairs({ -0.5, 0.5 }) do
+							local p = cf:PointToWorldSpace(Vector3.new(sx * size.X, sy * size.Y, sz * size.Z))
+							pLo, pHi = pLo:Min(p), pHi:Max(p)
+						end
+					end
+				end
+				if pLo.X < hi.X and pHi.X > lo.X and pLo.Y < hi.Y and pHi.Y > lo.Y and pLo.Z < hi.Z and pHi.Z > lo.Z then
+					table.insert(inside, d.Name)
+				end
+			end
+		end
+		check(#inside == 0 and math.abs(at.Z - shopZ) < 0.01 and math.abs(at.Y - shopY) < 0.01,
+			"(the Edit preview's real stall agrees: no part of it inside the words' box)",
+			string.format("words at %s; in the way: %s", tostring(at), table.concat(inside, ", ")))
+	end
+	-- The real FloatingSign, from these numbers.
+	local shop = FloatingSign.new({
+		name = "SpecShop", parent = scratch, at = CFrame.new(0, 20, 0), text = M.Text, colour = M.Colour,
+		width = M.Width, height = M.Height, subText = M.SubText, subHeight = M.SubHeight,
+	})
+	check(shop.gui.Size == UDim2.fromScale(M.Width, M.Height + M.SubHeight) and shop.words.Text == M.Text
+			and shop.sub ~= nil and shop.sub.Text == M.SubText and shop.sub.TextColor3 == M.Colour
+			and shop.words.TextColor3 == M.Colour and shop.note == nil,
+		"drawn by FloatingSign: the two lines, one colour, no third line")
+	shop.destroy()
+	local markSrc = sourceOf(Scripts, "MarigoldSign") or ""
+	local shopServer = sourceOf(Server, "WeaponShopService") or ""
+	check(has(markSrc, "local W = GameConfig.Weapon.FloatingWords") and has(markSrc, "FloatingSign.new({")
+			and has(markSrc, "subText = W.SubText") and has(markSrc, "sign.setShown(true)")
+			and has(markSrc, "- counter.CFrame.LookVector * W.Front") and not has(markSrc, "RenderStepped")
+			and not has(markSrc, "Heartbeat") and not has(markSrc, "TweenService") and not has(markSrc, "setShown(false)"),
+		"MarigoldSign puts it up for everybody, all the time, steady: anyone can buy")
+	check(#shopServer > 0 and not has(shopServer, "FloatingSign") and not has(shopServer, "FloatingWords"),
+		"each client makes its own: the shop's server never builds it")
 end
 
 local ok, err = pcall(body)

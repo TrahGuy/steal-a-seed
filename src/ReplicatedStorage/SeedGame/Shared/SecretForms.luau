@@ -45,6 +45,12 @@ export type PartSpec = {
 	-- Every face's SurfaceType by name -- Top, Bottom, Left, Right, Front, Back -- when they are not all
 	-- one kind (PlantForms, 2026-10-03: an Inlet underside, a smooth eye front). Absent: `st` decides.
 	sf: { string }?,
+	-- PodForms (2026-10-09), the owner's 25 pods: the folder the part sat in (SizeSeam, GlowAccents), a part
+	-- the owner anchored besides the root (it stands still in the idle), and the SpecialMesh it is drawn with
+	-- (t = MeshType name, s = Scale, o = Offset, and vc / id / tx / n when set).
+	g: string?,
+	an: boolean?,
+	sm: { [string]: any }?,
 }
 
 export type JointSpec = {
@@ -100,6 +106,12 @@ export type FormSpec = {
 	Unit: number?,
 	ModelScale: number?,
 	Textures: { TextureSpec }?,
+	-- PodForms (2026-10-09): the index of the owner's root part (the one its idle moved), and the owner's
+	-- model attributes, kept apart from `Attributes` (which the replay writes onto the built model).
+	Root: number?,
+	Owner: { [string]: any }?,
+	-- The base the owner's pod stood on, left out of the form by name (the owner, 2026-10-09).
+	Removed: { string }?,
 }
 
 local SecretForms = {}

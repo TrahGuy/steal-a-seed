@@ -81,6 +81,12 @@ export type Screen = {
 	rightLeft: number,
 	-- The top of the on-screen keyboard in safe space, while it shows.
 	keyboardTop: number?,
+	-- The share of the safe area a covering panel takes, nil for all of it. A
+	-- menu drawn smaller than 1:1 -- a phone's (2026-10-08, UIKit.menuScaleFor)
+	-- -- sees a safe area that much larger, so taking only that share keeps the
+	-- room it had at 1:1, centred, and on screen it stops short of the edges:
+	-- pass math.min(1, the gui's scale).
+	fill: number?,
 }
 
 export type Panel = {
@@ -110,6 +116,14 @@ function MenuLayout.panel(s: Screen, maxW: number, maxH: number, outline: number
 	local covers = s.compact or right - left < C.MinBetween
 	if covers then
 		left, right = gap, sw - gap
+		local fill = s.fill
+		if fill and fill > 0 and fill < 1 then
+			-- Only the middle `fill` of the safe area, each way.
+			local mx, my = sw * (1 - fill) / 2, sh * (1 - fill) / 2
+			left, right = mx + gap, sw - mx - gap
+			top = my + gap
+			bottom = math.min(bottom, sh - my - gap)
+		end
 	end
 	local width = math.max(0, math.min(maxW, right - left))
 	-- Centred on the screen when that still clears both rails; else centred

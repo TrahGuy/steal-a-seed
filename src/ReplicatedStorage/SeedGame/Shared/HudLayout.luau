@@ -64,8 +64,9 @@
 -- narrow window is never a phone: only TouchEnabled makes one.
 --
 --   top left      Index, Shop, Settings: one row of 50 x 50 buttons
---   (Walk Mode's horizontal switch stands left of EVENTS, under Garden)
---   top right     Garden and the Bag: one row, the Bag in the corner
+--   top right     EVENTS in the corner, Walk Mode's horizontal switch under it
+--   centre left   Garden above the Bag at the left edge (2026-10-09, the
+--                 owner: "put them on center left"; one row top right before)
 --   bottom        the hotbar, five slots, centred between the two thumbs
 --   bottom left   cash and speed, above the thumbstick and the hotbar line (in
 --                 sidebars: in the corner itself, on the thumbstick's ring)
@@ -104,6 +105,8 @@
 --==============================================================================
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
+-- Its nearest-clear-place search, for the buff popover (HudLayout.popoverRect).
+local SpeedMilestones = require(script.Parent:WaitForChild("SpeedMilestones"))
 
 local RAIL = GameConfig.Rail
 local HOT = GameConfig.Hotbar
@@ -185,24 +188,28 @@ export type Layout = {
 	-- THE OTHER PLANTS SWITCH (OtherPlantsUI, 2026-10-05): Walk Mode's twin, a
 	-- display preference -- OTHER PLANTS: ON over its track. On a desktop the
 	-- rail's fifth row, under WALK MODE, the rail's 130 x 46; in compact as
-	-- wide as its longer label (OthersCompact), at the right edge under EVENTS;
-	-- on a phone a see-through row under Shop, over WALK MODE's (2026-10-05).
+	-- wide as its longer label (OthersCompact), at the right edge under WALK
+	-- MODE (under EVENTS until 2026-10-09, and again where a window keeps
+	-- Garden and the Bag top right); on a phone a see-through row under Shop,
+	-- over WALK MODE's (2026-10-05).
 	-- A group of its own everywhere but the desktop's rail (groups).
 	others: Rect,
 	-- THE EVENTS BUTTON (EventsUI, 2026-10-04), placed where nothing that shipped
 	-- moves: on a desktop (and a TV) beside Settings, inside the rail's own
-	-- band; in compact under the Bag at the right edge, 8 px under the top row,
-	-- where nothing else stands. Not in the compact row or beside WALK MODE:
-	-- either narrows the band the clock's row, TELEPORT, the boosts and the
-	-- notices are centred in (HudLayoutSpec measured TELEPORT 38 px off centre
-	-- in a 700 x 400 window). On a phone the first square of the panel under
-	-- the Bag (2026-10-05). Off a desktop it hides while a centre panel is open
-	-- (EventsUI), as the phone's panel does.
+	-- band; in compact in the top-right corner since Garden and the Bag went to
+	-- the left edge (2026-10-09) -- under the Bag at the right edge, 8 px under
+	-- the top row, before that and still where a window keeps them top right.
+	-- Not beside WALK MODE: that narrows the band the clock's row, TELEPORT,
+	-- the boosts and the notices are centred in (HudLayoutSpec measured
+	-- TELEPORT 38 px off centre in a 700 x 400 window). On a phone the second
+	-- square of the panel under Index. Off a desktop it hides while a centre
+	-- panel is open (EventsUI), as the phone's panel does.
 	events: Rect,
 	-- THE WHAT'S NEW BUTTON (UpdateLogUI, 2026-10-05): the update log's square,
-	-- placed where nothing that shipped moves. On a desktop (and a TV) under the
-	-- Bag at the right edge, 8 px under it; in compact under OTHER PLANTS or
-	-- under EVENTS at the right edge, else under Index -- 50 x 50, or the touch
+	-- placed where nothing that shipped moves. On a desktop (and a TV) in the
+	-- top-right corner (under the Bag until 2026-10-09); in compact under OTHER
+	-- PLANTS, or under WALK MODE (EVENTS where Garden and the Bag stay top
+	-- right) at the right edge, else under Index -- 50 x 50, or the touch
 	-- floor's 44 x 44 where only that fits; an EMPTY rect where no spot clears
 	-- everything, and the button then stays hidden, as OBBY does. A group of its
 	-- own there. On a phone the second square of the panel under the Bag
@@ -225,8 +232,18 @@ export type Layout = {
 	dockView: Rect?,
 	dockCanvas: number?,
 	dockShut: boolean?,
+	-- GARDEN AND THE BAG (2026-10-09, the owner: "put them on center left"):
+	-- at the left edge's middle, Garden over the Bag -- or side by side
+	-- (`pairRow`: a phone, or a desktop short of the room for one over the
+	-- other), Garden's badge then tucked level with its top. `gardenRight`: a
+	-- window too small for either keeps the top-right row they had before
+	-- (the Bag in the corner, Garden's badge on its top-LEFT corner).
 	garden: Rect,
 	bag: Rect,
+	pairRow: boolean?,
+	gardenRight: boolean?,
+	-- Compact only: whether the pair has its room at the left edge (solve).
+	pairFits: boolean?,
 	-- The two top groups' band, for the things that have to step round them.
 	railTop: number,
 	railBottom: number,
@@ -605,7 +622,8 @@ local CONFIG = {
 		Handle = Vector2.new(18, 34),
 		Hit = 44,
 	},
-	-- Between the x2 button and Garden: room for Garden's tucked badge.
+	-- Between the x2 button and Garden: room for Garden's tucked badge. (Neither
+	-- stands in the phone's top row since 2026-10-09; kept for the readers.)
 	BoostGap = 8,
 	--==========================================================================
 	-- TOAST AND TELEPORT
@@ -926,7 +944,7 @@ end
 -- A button anchored to the right edge stays measured from the right edge, so a
 -- window that resizes between two relayouts never throws it off the screen.
 -- The desktop answers come out as exactly the UDim2s the owners used to write:
--- the hotbar is (0.5, 0, 1, -10), the Garden button (1, -12, 0, 12).
+-- the hotbar is (0.5, 0, 1, -10), WHAT'S NEW's button (1, -12, 0, 12).
 --==============================================================================
 function HudLayout.place(r: Rect, anchor: Vector2, safe: Vector2): UDim2
 	local px = r.x + r.w * anchor.X
@@ -1160,7 +1178,14 @@ local function iconsOver(input: Input, L: Layout, band: Rect, beside: { Rect }?)
 	local size, columns, rows = HudLayout.iconGrid(count, math.max(hotbar.w, CONFIG.Toast.MinWidth), base)
 	local w = columns * size + (columns - 1) * ICONS.Gap
 	local h = rows * size + (rows - 1) * ICONS.Gap
-	local x = hotbar.x + hotbar.w / 2 - w / 2
+	-- ON A PHONE, OVER THE STRIP'S RIGHT END (2026-10-09, the owner: move it off
+	-- the middle of the screen). Centred over the strip it stood on the
+	-- character -- a short phone's strip is a hand under the middle -- and,
+	-- with no disc behind its pictures any more, read like a crosshair there.
+	-- Right-aligned with the strip's right end it stands beside the character,
+	-- at the same height and on the same rules; its popover opens away from
+	-- the beginner's guide card, which stands left (HudLayout.popoverRect).
+	local x = if L.sidebar then hotbar.x + hotbar.w - w else hotbar.x + hotbar.w / 2 - w / 2
 	local row = rect(x, band.y - G - h, w, h)
 	if beside then
 		for _ = 1, 3 do
@@ -1489,6 +1514,10 @@ local function biomesBeside(input: Input, L: Layout): (Rect, boolean)
 	return rect(0, 0, 0, 0), false
 end
 
+-- Every rail badge's box: 26 px and the 2.5-px stroke round it (UIKit.badge,
+-- HudLayout.badges).
+local BADGE_BOX = 26 + 2.5 * 2
+
 --==============================================================================
 -- DESKTOP: THE GEOMETRY THAT SHIPPED
 --==============================================================================
@@ -1518,14 +1547,12 @@ local function desktop(input: Input): Layout
 	-- INVITE (2026-10-06): the top row's right end, the band's own width over
 	-- Shop -- 30 px off Index, clear of Index's badge (HudLayout.badges).
 	local invite = rect(I + wide.X - square.X, I, square.X, square.Y)
-	local garden = rect(sw - I - square.X, I, square.X, square.Y)
-	local bag = rect(sw - I - square.X, I + square.Y + RAIL.Gap, square.X, square.Y)
-	-- WHAT'S NEW (2026-10-05): under the Bag at the right edge, 8 px under it --
-	-- a group of its own, in the right column's free length. A desktop panel
+	-- WHAT'S NEW: the top-right corner, where Garden stood until 2026-10-09 (it
+	-- stood under the Bag before that) -- a group of its own. A desktop panel
 	-- stops 8 px short of that column (rightLeft), so none ever covers it, and
 	-- the left rail, its band and everything placed round them are what they were.
 	local US = CONFIG.Updates.Size
-	local updates = rect(bag.x + bag.w - US, bag.y + bag.h + G, US, US)
+	local updates = rect(sw - I - US, I, US, US)
 
 	-- Ten shortcuts, keyboard or not: a console reaches them with LB and RB.
 	local slots = CONFIG.DesktopSlots
@@ -1546,6 +1573,45 @@ local function desktop(input: Input): Layout
 	end
 	local cashRoot = rect(cx, rootBottom - style.Root.Y, style.Root.X, style.Root.Y)
 	local cash = rect(cx, cashRoot.y, cw, style.Root.Y + style.Drop)
+
+	--==========================================================================
+	-- GARDEN ABOVE THE BAG, CENTRE LEFT (2026-10-09, the owner: "also lower the
+	-- garden and inventory, put them on center left")
+	--
+	-- At the left edge, on the safe area's middle -- stepped down where the
+	-- middle would meet the rail's last row (OTHER PLANTS), to 8 px under it and
+	-- Garden's badge (half off its top-right corner); and up off the cash block
+	-- where it would meet that. Measured off the cash block as a trap's REMOVE
+	-- row lifts it (worstBand's sum), so the pair never moves when a trap comes
+	-- out.
+	--
+	-- SIDE BY SIDE where one over the other has no room there (a 720p TV with
+	-- its title-safe frame), Garden first as on a phone, its badge tucked level
+	-- with its top (HudLayout.badges). A desktop where neither fits falls back to
+	-- compact (HudLayout.problems), as any desktop that cannot hold its groups
+	-- does -- the 1024 x 600 class, whose cash block stands 30-40 px under
+	-- OTHER PLANTS.
+	--==========================================================================
+	local worstCashTop = cash.y
+	if cx + cw + G > hotbar.x then
+		local worst = HudLayout.hotbarBand(hotbar, HudLayout.removeRowHeight(input.touch) + HOT.RemoveGap)
+		worstCashTop = math.min(cash.y, worst.y - G - style.Drop - style.Root.Y)
+	end
+	local pairH = square.Y * 2 + RAIL.Gap
+	local lowest = others.y + others.h + G + BADGE_BOX / 2
+	local pairRow = worstCashTop - G - pairH < lowest
+	local garden: Rect, bag: Rect
+	if not pairRow then
+		local gy = math.max(lowest, math.min(worstCashTop - G - pairH, math.floor(sh / 2 - pairH / 2)))
+		garden = rect(I, gy, square.X, square.Y)
+		bag = rect(I, gy + square.Y + RAIL.Gap, square.X, square.Y)
+	else
+		local top = others.y + others.h + G
+		local gy = math.max(top, math.min(worstCashTop - G - square.Y,
+			math.floor((top + worstCashTop - G) / 2 - square.Y / 2)))
+		garden = rect(I, gy, square.X, square.Y)
+		bag = rect(I + square.X + RAIL.Gap, gy, square.X, square.Y)
+	end
 
 	local banner = rect(sw / 2 - CONFIG.BannerSize.X / 2, CONFIG.BannerTop,
 		CONFIG.BannerSize.X, CONFIG.BannerSize.Y)
@@ -1568,10 +1634,14 @@ local function desktop(input: Input): Layout
 		invite = invite,
 		garden = garden,
 		bag = bag,
+		pairRow = pairRow,
+		gardenRight = false,
 		railTop = I,
 		railBottom = walk.y + walk.h,
 		railRight = I + wide.X,
-		rightLeft = garden.x,
+		-- The right edge's column is WHAT'S NEW alone since Garden and the Bag
+		-- moved to the left (2026-10-09): the same x Garden's was.
+		rightLeft = updates.x,
 		hotbar = hotbar,
 		chip = chip,
 		namePopup = HudLayout.namePopupOver(hotbar, removeLift(input)),
@@ -1817,28 +1887,37 @@ end
 --==============================================================================
 -- COMPACT
 --==============================================================================
-local function compact(input: Input): Layout
+local function compact(input: Input, keepRight: boolean?): Layout
 	local sw, sh = input.safe.X, input.safe.Y
 	local M, G = CONFIG.Margin, CONFIG.Gap
 	local B, g = RAIL.SquareSize.X, RAIL.Gap
 	local fits = true
 
 	--==========================================================================
-	-- THE TWO TOP ROWS
+	-- THE TOP ROWS
 	--
-	-- Four 50 x 50 buttons across the top left, in the order they used to run
-	-- down it, at the rail's own 6 px gap -- 226 px of width and 50 of height
-	-- where the column took 214 of height. Garden and the Bag mirror them top
-	-- right, the Bag in the corner.
+	-- Three 50 x 50 buttons across the top left, in the order they used to run
+	-- down it, at the rail's own 6 px gap. Top right, since Garden and the Bag
+	-- went to the left edge (2026-10-09, below): EVENTS in the corner, where the
+	-- Bag stood -- it stood under the Bag, 8 px under the row, before that.
+	--
+	-- `keepRight` (HudLayout.solve): a window too small for Garden and the Bag
+	-- at the left edge keeps the top-right row they had until 2026-10-09 --
+	-- Garden and the Bag in it, the Bag in the corner, EVENTS under the Bag.
 	--==========================================================================
 	local function cell(i: number): Rect
 		return rect(M + (i - 1) * (B + g), M, B, B)
 	end
 	local index, shop, settings = cell(1), cell(2), cell(3)
-	local bag = rect(sw - M - B, M, B, B)
-	local garden = rect(bag.x - g - B, M, B, B)
-	-- EVENTS (2026-10-04): under the Bag, 8 px under the row (see Layout).
-	local events = rect(bag.x, M + B + G, B, B)
+	local garden, bag = rect(0, 0, 0, 0), rect(0, 0, 0, 0)
+	local events: Rect
+	if keepRight then
+		bag = rect(sw - M - B, M, B, B)
+		garden = rect(bag.x - g - B, M, B, B)
+		events = rect(bag.x, M + B + G, B, B)
+	else
+		events = rect(sw - M - B, M, B, B)
+	end
 	--==========================================================================
 	-- WALK MODE, THE HORIZONTAL SWITCH (2026-10-04, the global UI pass)
 	--
@@ -1846,14 +1925,20 @@ local function compact(input: Input): Layout
 	-- squares where the switch was one. In the row it pushed TELEPORT 32 px
 	-- off the clock's centre in a 700 x 400 window and left OBBY no room, as a
 	-- fifth cell once did; under Index it stood where a short window lifts the
-	-- cash block over the strip. So it stands LEFT OF EVENTS, 8 px under the
-	-- row and 8 px off EVENTS: a group of its own like EVENTS, and like EVENTS
-	-- it steps aside while a panel is open (WalkModeUI), the Bag's panel
-	-- taking the whole width here. The row keeps its ends: railRight is
-	-- Settings' edge.
+	-- cash block over the strip. So it stands UNDER EVENTS at the right edge,
+	-- 8 px under the row -- left of EVENTS in that row until EVENTS went up to
+	-- the corner (2026-10-09), and still where Garden and the Bag stay top
+	-- right -- a group of its own like EVENTS, and like EVENTS it steps aside
+	-- while a panel is open (WalkModeUI), the Bag's panel taking the whole
+	-- width here. The row keeps its ends: railRight is Settings' edge.
 	--==========================================================================
-	local walk = rect(events.x - G - CONFIG.WalkCompact.X, M + B + G,
-		CONFIG.WalkCompact.X, CONFIG.WalkCompact.Y)
+	local walk = if keepRight
+		then rect(events.x - G - CONFIG.WalkCompact.X, M + B + G, CONFIG.WalkCompact.X, CONFIG.WalkCompact.Y)
+		else rect(sw - M - CONFIG.WalkCompact.X, events.y + events.h + G, CONFIG.WalkCompact.X, CONFIG.WalkCompact.Y)
+	-- The right edge's second row: WALK MODE under EVENTS, or EVENTS under the
+	-- Bag where Garden and the Bag stay top right. OTHER PLANTS and WHAT'S NEW
+	-- stand under it.
+	local second = if keepRight then events else walk
 	local railBottom = M + B
 
 	local thumb: Rect?, jump: Rect? = nil, nil
@@ -1903,35 +1988,67 @@ local function compact(input: Input): Layout
 	local cashRoot = rect(cx, limit - style.Drop - style.Root.Y, style.Root.X, style.Root.Y)
 
 	--==========================================================================
-	-- OTHER PLANTS (2026-10-05): AT THE RIGHT EDGE UNDER EVENTS
+	-- GARDEN ABOVE THE BAG, CENTRE LEFT (2026-10-09, the owner: "also lower the
+	-- garden and inventory, put them on center left")
 	--
-	-- Its longer label (OthersCompact) left of WALK MODE would meet TELEPORT
-	-- and OBBY's band; under WALK MODE it narrows the tutorial banner, which
-	-- already stops 8 px short of WALK MODE. So: under EVENTS, 8 px under it on
-	-- the safe edge -- clear of all three and of the banner -- and, in a window
-	-- too short for that over the belt's name band (560 x 320), under WALK
-	-- MODE, right-aligned with it. A group of its own; it steps aside with WALK
-	-- MODE while a panel is open.
+	-- At the left edge, on the safe area's middle -- stepped down where the
+	-- middle would meet the top row (8 px under it and Garden's tucked badge),
+	-- and up off the cash block where it would meet that -- the block as a
+	-- trap's REMOVE row lifts it, so the pair never moves when a trap comes
+	-- out. INVITE and WHAT'S NEW, placed below, keep clear of the pair. A
+	-- window that leaves no room is not a fit, and HudLayout.solve keeps that
+	-- window's pair top right instead (keepRight).
+	--==========================================================================
+	local pairFits = true
+	if not keepRight then
+		local worstCashTop = cash.y
+		if hotbar.x < cx + cw + G then
+			worstCashTop = math.min(cash.y, worstBand(input, hotbar).y - G - ch)
+		end
+		local pairH = B * 2 + g
+		local lowest = railBottom + G + CONFIG.BadgeHang + 2.5
+		local highest = worstCashTop - G - pairH
+		if highest < lowest then
+			fits = false
+			pairFits = false
+		end
+		local gy = math.max(lowest, math.min(highest, math.floor(sh / 2 - pairH / 2)))
+		garden = rect(M, gy, B, B)
+		bag = rect(M, gy + B + g, B, B)
+	end
+
+	--==========================================================================
+	-- OTHER PLANTS (2026-10-05): AT THE RIGHT EDGE UNDER THE SECOND ROW
+	--
+	-- Its longer label (OthersCompact) in the top row would meet TELEPORT and
+	-- OBBY's band. So: at the right edge under the second row's button (WALK
+	-- MODE; EVENTS where Garden and the Bag stay top right), 8 px under it on
+	-- the safe edge -- clear of both and of the tutorial banner -- and, in a
+	-- window too short for that over the belt's name band (560 x 320), beside
+	-- WALK MODE in its row, or under it where Garden and the Bag stay top
+	-- right. A group of its own; it steps aside with WALK MODE while a panel is
+	-- open.
 	--==========================================================================
 	local OC = CONFIG.OthersCompact
 	local others = firstClear({
-		rect(sw - M - OC.X, events.y + events.h + G, OC.X, OC.Y),
-		rect(walk.x + walk.w - OC.X, walk.y + walk.h + G, OC.X, OC.Y),
+		rect(sw - M - OC.X, second.y + second.h + G, OC.X, OC.Y),
+		if keepRight
+			then rect(walk.x + walk.w - OC.X, walk.y + walk.h + G, OC.X, OC.Y)
+			else rect(walk.x - G - OC.X, walk.y, OC.X, OC.Y),
 	}, { walk, events, HudLayout.union(garden, bag), cash }, worstBand(input, hotbar),
 		HudLayout.hotbarBand(hotbar, 0))
 
 	--==========================================================================
 	-- WHAT'S NEW (2026-10-05): THE RIGHT EDGE, ELSE UNDER INDEX
 	--
-	-- Under OTHER PLANTS at the right edge, 8 px under it; under EVENTS where
-	-- OTHER PLANTS stands under WALK MODE instead (560 x 320). In a window where
-	-- the belt's band, a trap's REMOVE row up, comes within 8 px of that spot
-	-- (700 x 400, 640 x 400: 58 px between OTHER PLANTS and the band, a square
-	-- and two gaps need 60), under Index, below the row's first cell, where the
-	-- cash block stands well under it; it is lifted there in a shorter window,
-	-- whose right edge has the room (600 x 348, at the touch floor). Not in the
-	-- row (TELEPORT off the clock's centre, as EVENTS measured), and not beside
-	-- WALK MODE or OTHER PLANTS (TELEPORT and OBBY's band, the tutorial banner).
+	-- Under OTHER PLANTS at the right edge, 8 px under it; under WALK MODE where
+	-- OTHER PLANTS stands beside it instead (560 x 320) -- under EVENTS, the
+	-- squares' column, until the corner took EVENTS (2026-10-09). In a window
+	-- where the belt's band, a trap's REMOVE row up, comes within 8 px of that
+	-- spot, under Index, below the row's first cell, wherever Garden and the Bag
+	-- leave it room. Not in the row (TELEPORT off the clock's centre, as EVENTS
+	-- measured), and not beside WALK MODE or OTHER PLANTS (TELEPORT and OBBY's
+	-- band, the tutorial banner).
 	--==========================================================================
 	local updatesKeep: { Rect } = { HudLayout.union(HudLayout.union(index, shop), settings),
 		HudLayout.union(garden, bag), events, walk, others, cash, worstBand(input, hotbar) }
@@ -1946,7 +2063,7 @@ local function compact(input: Input): Layout
 			return rect(others.x + others.w - s, others.y + others.h + G, s, s)
 		end,
 		function(s: number): Rect
-			return rect(events.x + events.w - s, events.y + events.h + G, s, s)
+			return rect(second.x + second.w - s, second.y + second.h + G, s, s)
 		end,
 		function(s: number): Rect
 			return rect(index.x, index.y + index.h + G, s, s)
@@ -2013,10 +2130,15 @@ local function compact(input: Input): Layout
 		invite = invite,
 		garden = garden,
 		bag = bag,
+		pairRow = false,
+		gardenRight = keepRight == true,
+		pairFits = pairFits,
 		railTop = M,
 		railBottom = railBottom,
 		railRight = settings.x + settings.w,
-		rightLeft = garden.x,
+		-- The row's right end: EVENTS alone since 2026-10-09; Garden where a
+		-- window keeps Garden and the Bag top right.
+		rightLeft = if keepRight then garden.x else events.x,
 		hotbar = hotbar,
 		chip = chip,
 		namePopup = HudLayout.namePopupOver(hotbar, removeLift(input)),
@@ -2282,10 +2404,13 @@ end
 --   top left      SHOP, the owner's wide studded picture, in the corner, and
 --                 under it OTHER PLANTS and WALK MODE as two see-through rows:
 --                 high on the edge, well clear of the movement stick.
---   top right     INDEX (the square picture), Garden, the Bag in the corner.
---   under the Bag a slim panel down the right edge: EVENTS, WHAT'S NEW and
---                 Settings (the third picture). RailDrawerUI draws it and hides
---                 it, with what stands in it, while a centre panel is open.
+--   top right     INDEX (the square picture) in the corner (Index, Garden and
+--                 the Bag in one row until 2026-10-09).
+--   under Index   a slim panel down the right edge: INVITE, EVENTS, WHAT'S NEW
+--                 and Settings (the third picture). RailDrawerUI draws it and
+--                 hides it, with what stands in it, while a centre panel is open.
+--   centre left   Garden and the Bag side by side between WALK MODE and the
+--                 thumbstick (2026-10-09, the owner: "put them on center left").
 --   bottom        the belt, five freely assigned slots (2026-10-03; the BATS
 --                 / TRAPS panel and its chooser went: a bat is any slot's).
 --   bottom left   cash and speed in the phone's face (compact at 0.85), in the
@@ -2305,26 +2430,27 @@ local function sidebars(input: Input): Layout
 	local thumb, jump = HudLayout.touchZones(input.safe)
 
 	--==========================================================================
-	-- THE TOP-RIGHT ROW: INDEX, GARDEN, THE BAG IN THE CORNER
+	-- THE TOP-RIGHT CORNER: INDEX
 	--
-	-- Index has the row's left end, where WHAT'S NEW stood (and the x2 card
-	-- before it), BoostGap off Garden -- room for Garden's tucked badge -- and
-	-- centred on the row's height. Its own count badge is tucked into its
-	-- top-LEFT corner here (HudLayout.badges), away from Garden's.
+	-- Index alone since Garden and the Bag went to the left edge (2026-10-09,
+	-- below): centred in the corner's 50 x 50 cell, where the Bag stood -- the
+	-- row was Index, Garden and the Bag before that -- so the panel under it and
+	-- everything measured off the row's foot stand where they did. Its count
+	-- badge is tucked into its top-LEFT corner (HudLayout.badges).
 	--==========================================================================
-	local bag = rect(sw - M - B, M, B, B)
-	local garden = rect(bag.x - g - B, M, B, B)
-	local index = rect(garden.x - CONFIG.BoostGap - P.Index, M + (B - P.Index) / 2, P.Index, P.Index)
+	local corner = rect(sw - M - B, M, B, B)
+	local index = rect(corner.x + (B - P.Index) / 2, M + (B - P.Index) / 2, P.Index, P.Index)
 	local railBottom = M + B
-	local topRight = HudLayout.union(HudLayout.union(index, garden), bag)
+	local topRight = index
 
 	--==========================================================================
-	-- THE PANEL UNDER THE BAG: EVENTS, WHAT'S NEW, SETTINGS
+	-- THE PANEL UNDER INDEX: EVENTS, WHAT'S NEW, SETTINGS
 	--
-	-- 8 px under the row and centred under the Bag: three Panel.Tile squares
-	-- down it, Pad inside and Gap apart. The jump button stands under the same
-	-- column on every phone, so the panel ends 8 px above it; on a short phone
-	-- the squares give up size for that, never below Panel.MinTile.
+	-- 8 px under the row and centred under the corner's cell (under the Bag
+	-- until 2026-10-09; Index stands centred in that cell now): three Panel.Tile
+	-- squares down it, Pad inside and Gap apart. The jump button stands under
+	-- the same column on every phone, so the panel ends 8 px above it; on a
+	-- short phone the squares give up size for that, never below Panel.MinTile.
 	--==========================================================================
 	--==========================================================================
 	-- SINCE 2026-10-06 (the owner): INVITE first, then EVENTS, WHAT'S NEW and
@@ -2340,8 +2466,8 @@ local function sidebars(input: Input): Layout
 	if jump then
 		floor = math.min(floor, jump.y - G)
 	end
-	-- And 8 px over the belt's band where the two share the Bag's column (a narrow
-	-- phone): the belt as it will stand -- slid for the x2 card where that shows --
+	-- And 8 px over the belt's band where the two share the corner's column (a
+	-- narrow phone): the belt as it will stand -- slid for the x2 card where that shows --
 	-- with its name band and a trap's REMOVE row up (worstBand). Worked out here
 	-- with CASH AND SPEED's own sums (below), which the panel does not change.
 	do
@@ -2356,7 +2482,7 @@ local function sidebars(input: Input): Layout
 			then (beltBetween(input, thumb, jump, CONFIG.MobileSlots, CONFIG.CashLeft + cw + G))
 			else (beltBetween(input, thumb, jump, CONFIG.MobileSlots))
 		local band = worstBand(input, belt)
-		local lo, hi = bag.x + B / 2 - PP.Tile / 2 - PP.Pad, bag.x + B / 2 + PP.Tile / 2 + PP.Pad
+		local lo, hi = corner.x + B / 2 - PP.Tile / 2 - PP.Pad, corner.x + B / 2 + PP.Tile / 2 + PP.Pad
 		if band.x < hi + G and band.x + band.w + G > lo then
 			floor = math.min(floor, band.y - G)
 		end
@@ -2372,7 +2498,7 @@ local function sidebars(input: Input): Layout
 		viewH = tileSize + PP.Pad * 2
 	end
 	local panelW = tileSize + PP.Pad * 2
-	local dockX = bag.x + (B - panelW) / 2
+	local dockX = corner.x + (B - panelW) / 2
 	local handle = rect(dockX, panelTop, panelW, PP.HandleH)
 	local dockView = rect(dockX, tilesTop, panelW, viewH)
 	local shut = input.dockShut == true
@@ -2485,6 +2611,33 @@ local function sidebars(input: Input): Layout
 	end
 
 	--==========================================================================
+	-- GARDEN AND THE BAG, SIDE BY SIDE, CENTRE LEFT (2026-10-09, the owner:
+	-- "also lower the garden and inventory, put them on center left")
+	--
+	-- At the left edge between WALK MODE and the thumbstick's zone (and the
+	-- cash block, where that stands higher), 8 px off each, on that gap's
+	-- middle. Side by side, Garden first: one over the other needs 106 px of
+	-- height there and the listed phones leave 51 (705 x 338) to 106 -- the
+	-- owner's call. Garden's badge stays inside the pair's height here (tucked
+	-- into its top-right corner, HudLayout.badges), so 51 holds a button. A
+	-- phone whose gap is shorter than a button is not a fit.
+	--==========================================================================
+	local pairTop = walk.y + walk.h + G
+	local pairFloor = math.min(thumb.y, cash.y) - G
+	-- And over the belt's band, a trap's REMOVE row up, where the two share
+	-- columns (a narrow phone, the belt slid for an x2 card).
+	local worst = worstBand(input, hotbar)
+	if worst.x < M + B * 2 + g + G then
+		pairFloor = math.min(pairFloor, worst.y - G)
+	end
+	if pairFloor - pairTop < B then
+		fits = false
+	end
+	local gy = math.max(pairTop, math.floor((pairTop + pairFloor) / 2 - B / 2))
+	local garden = rect(M, gy, B, B)
+	local bag = rect(M + B + g, gy, B, B)
+
+	--==========================================================================
 	-- THE PHONE'S CENTRE COLUMN, AND THE GUIDE'S WORDS BESIDE IT (2026-09-29)
 	--
 	-- With the buttons up on the clock's row, the column under it is the safe
@@ -2581,6 +2734,8 @@ local function sidebars(input: Input): Layout
 		updates = updates,
 		garden = garden,
 		bag = bag,
+		pairRow = true,
+		gardenRight = false,
 		railTop = M,
 		railBottom = railBottom,
 		railRight = railRight,
@@ -2706,21 +2861,40 @@ export type Group = { name: string, rect: Rect }
 
 function HudLayout.badges(L: Layout): (Rect, Rect)
 	local stroke = 2.5
-	local size = 26 + stroke * 2
-	-- On a phone Index stands just left of Garden (2026-10-05), so its badge is
-	-- tucked into its top-LEFT corner: two red badges side by side read as one.
+	local size = BADGE_BOX
+	--==========================================================================
+	-- GARDEN'S ON ITS TOP-RIGHT CORNER (2026-10-09): Garden stands at the left
+	-- edge now, where its top-left corner's badge would hang off the glass. On
+	-- a phone it is tucked in level with Garden's top, its right edge in the gap
+	-- before the Bag -- the pair fills the gap it stands in to the pixel there
+	-- (705 x 338), so nothing may hang above it.
+	--
+	-- On a phone Index stands alone in the top-right corner (2026-10-09); its
+	-- badge stays tucked into its top-LEFT corner, as it was beside Garden.
+	--==========================================================================
+	local hang = CONFIG.BadgeHang + stroke
+	local index: Rect
 	if L.sidebar then
-		local hang = CONFIG.BadgeHang + stroke
-		return rect(L.index.x - hang, L.index.y - hang, size, size),
-			rect(L.garden.x - hang, L.garden.y - hang, size, size)
+		index = rect(L.index.x - hang, L.index.y - hang, size, size)
+	elseif L.compact then
+		index = rect(L.index.x + L.index.w + hang - size, L.index.y - hang, size, size)
+	else
+		index = rect(L.index.x + L.index.w - size / 2, L.index.y - size / 2, size, size)
 	end
-	if L.compact then
-		local hang = CONFIG.BadgeHang + stroke
-		return rect(L.index.x + L.index.w + hang - size, L.index.y - hang, size, size),
-			rect(L.garden.x - hang, L.garden.y - hang, size, size)
+	local g = L.garden
+	local garden: Rect
+	if L.gardenRight then
+		-- Top right still (a window too small for the left edge): tucked into
+		-- its top-LEFT corner, toward the middle, as it always was there.
+		garden = rect(g.x - hang, g.y - hang, size, size)
+	elseif L.pairRow then
+		garden = rect(g.x + g.w + hang - size, g.y, size, size)
+	elseif L.compact then
+		garden = rect(g.x + g.w + hang - size, g.y - hang, size, size)
+	else
+		garden = rect(g.x + g.w - size / 2, g.y - size / 2, size, size)
 	end
-	return rect(L.index.x + L.index.w - size / 2, L.index.y - size / 2, size, size),
-		rect(L.garden.x - size / 2, L.garden.y - size / 2, size, size)
+	return index, garden
 end
 
 --==============================================================================
@@ -2800,23 +2974,28 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	-- ON A PHONE (2026-10-05)
 	--
 	-- Shop in the top-left corner is a group, and each switch row under it
-	-- another ("others", and "rail" for WALK MODE, as it always was). Index
-	-- joins Garden and the Bag in their row, with both badges. The panel under
-	-- the Bag -- EVENTS, WHAT'S NEW and Settings in it -- is "dock".
+	-- another ("others", and "rail" for WALK MODE, as it always was). Index in
+	-- the top-right corner is "index", with its badge; Garden and the Bag at the
+	-- left edge are "garden+bag", with Garden's (2026-10-09 -- the three were
+	-- one row, one group, before). The panel under Index -- INVITE, EVENTS,
+	-- WHAT'S NEW and Settings in it -- is "dock".
 	--==========================================================================
 	local dock = L.dock
 	if L.sidebar and dock then
-		local right = HudLayout.union(HudLayout.union(L.index, L.garden), L.bag)
+		local corner = L.index
+		local pair = HudLayout.union(L.garden, L.bag)
 		if withBadges then
 			local indexBadge, gardenBadge = HudLayout.badges(L)
-			right = HudLayout.union(HudLayout.union(right, indexBadge), gardenBadge)
+			corner = HudLayout.union(corner, indexBadge)
+			pair = HudLayout.union(pair, gardenBadge)
 		end
 		local phoneList: { Group } = {
 			{ name = "shop", rect = L.shop },
 			{ name = "others", rect = L.others },
 			{ name = "rail", rect = L.walk },
 			{ name = "dock", rect = dock },
-			{ name = "garden+bag", rect = right },
+			{ name = "index", rect = corner },
+			{ name = "garden+bag", rect = pair },
 			{ name = "hotbar", rect = L.hotbar },
 			{ name = "cash", rect = L.cash },
 		}
@@ -2831,16 +3010,16 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	if not L.compact and L.invite.w > 0 then
 		rail = HudLayout.union(rail, L.invite)
 	end
-	-- WALK MODE: down the rail's column on a desktop; in compact left of
-	-- EVENTS, under the row, a group of its own there (2026-10-04).
+	-- WALK MODE: down the rail's column on a desktop; in compact under EVENTS at
+	-- the right edge (left of it until 2026-10-09), a group of its own there.
 	local walkAlone = L.compact
 	if not walkAlone then
 		rail = HudLayout.union(rail, L.walk)
 		-- OTHER PLANTS: the rail's fifth row on a desktop (2026-10-05).
 		rail = HudLayout.union(rail, L.others)
 	end
-	-- EVENTS: inside that band on a desktop; under the Bag in compact, a
-	-- group of its own there.
+	-- EVENTS: inside that band on a desktop; in the top-right corner in compact
+	-- (under the Bag until 2026-10-09), a group of its own there.
 	local events = L.events.w > 0 and L.compact
 	if L.events.w > 0 and not L.compact then
 		rail = HudLayout.union(rail, L.events)
@@ -2862,11 +3041,12 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	end
 	if walkAlone then
 		table.insert(list, { name = "walk", rect = L.walk })
-		-- OTHER PLANTS under EVENTS in compact: a group of its own too.
+		-- OTHER PLANTS under WALK MODE in compact: a group of its own too.
 		table.insert(list, { name = "others", rect = L.others })
 	end
-	-- WHAT'S NEW (2026-10-05): under the Bag on a desktop, by EVENTS or under
-	-- Index in compact -- a group of its own in both.
+	-- WHAT'S NEW (2026-10-05): in the top-right corner on a desktop (under the
+	-- Bag until 2026-10-09), by WALK MODE or under Index in compact -- a group
+	-- of its own in both.
 	if L.updates.w > 0 then
 		table.insert(list, { name = "updates", rect = L.updates })
 	end
@@ -3080,7 +3260,16 @@ function HudLayout.solve(input: Input): Layout
 			return L
 		end
 	end
-	return compact(input)
+	-- A window too small for Garden and the Bag at the left edge (640 x 400 and
+	-- smaller: the cash block stands within two buttons' height of the top row)
+	-- keeps them in the top-right row they had until 2026-10-09. Decided by the
+	-- pair alone, measured with a trap's REMOVE row up, so the arrangement never
+	-- changes when a trap comes out.
+	local L = compact(input)
+	if L.pairFits == false then
+		return compact(input, true)
+	end
+	return L
 end
 
 --==============================================================================
@@ -3232,11 +3421,24 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 		return 0, top
 	end
 	local centre = L.safe.X / 2
-	-- Measured to the badges as well as the buttons: Garden's hangs 4.5 px
-	-- off its left corner in compact, toward the middle.
+	-- Measured to the badges as well as the buttons -- each on the side its
+	-- button stands, and only a button in the rows' band: Garden left the top
+	-- right for the left edge's middle (2026-10-09), where its badge is nothing
+	-- to a band at the top.
 	local indexBadge, gardenBadge = HudLayout.badges(L)
-	local lo = math.max(L.railRight, indexBadge.x + indexBadge.w) + G
-	local hi = math.min(L.rightLeft, gardenBadge.x) - G
+	local lo, hi = L.railRight, L.rightLeft
+	for _, pair in ipairs({ { L.index, indexBadge }, { L.garden, gardenBadge } }) do
+		local button, badge = pair[1], pair[2]
+		if button.w > 0 and button.y < L.railBottom then
+			if button.x + button.w / 2 < centre then
+				lo = math.max(lo, badge.x + badge.w)
+			else
+				hi = math.min(hi, badge.x)
+			end
+		end
+	end
+	lo += G
+	hi -= G
 	for _, b in ipairs(inRows) do
 		if b.x + b.w / 2 < centre then
 			lo = math.max(lo, b.x + b.w + G)
@@ -3464,6 +3666,8 @@ export type BagInput = {
 	stripHidden: boolean,
 	-- The player's chosen menu size (UIKit.menuScale); nil or 1 is today's.
 	scale: number?,
+	-- A phone's menu scale (UIKit.phoneMenuScale, 2026-10-08); nil or 1 off one.
+	phone: number?,
 }
 
 export type Bag = {
@@ -3490,7 +3694,9 @@ export type Bag = {
 	-- The menu size the panel is actually drawn at: the chosen one, or less if
 	-- that would not fit. The group is sized panel / scale and drawn `scale`
 	-- times larger, so `panel` stays its footprint on screen; `body` and what is
-	-- in it describe the panel at that smaller logical size.
+	-- in it describe the panel at that smaller logical size. On a phone both
+	-- carry the phone's scale too: the panel is that share of the free space,
+	-- centred, drawn that much smaller, with the same insides.
 	scale: number,
 }
 
@@ -3504,9 +3710,12 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 	if frame then
 		ox, oy, sw, sh = frame.x, frame.y, frame.w, frame.h
 	end
+	-- The band the right column's buttons took (Garden over the Bag until
+	-- 2026-10-09; WHAT'S NEW alone in the corner since, inside it).
 	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
 	local leftEdge = RAIL.Inset + RAIL.WideSize.X + B.EdgeGap
-	-- Short of the right rail's buttons (Garden and the Bag), 8 px off them.
+	-- Short of the right edge's column (rightLeft), 8 px off it. Garden and the
+	-- Bag stand at the left edge, left of leftEdge.
 	local rightEdge = L.rightLeft - ox - B.EdgeGap
 	local top = B.EdgeGap
 	local bottom = input.hotTop - oy - B.EdgeGap
@@ -3612,6 +3821,20 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 	end
 	local it = inner(scale)
 	local body = it.body
+
+	--==========================================================================
+	-- ON A PHONE (2026-10-08, the owner: "make the ui smaller on phones")
+	--
+	-- The panel is drawn `phone` times smaller and takes that share of its
+	-- footprint, centred where it was: the same logical panel -- the insides
+	-- above, unchanged -- short of the screen's edges, the HUD showing round it.
+	--==========================================================================
+	local phone = input.phone
+	if type(phone) == "number" and phone == phone and phone > 0 and phone < 1 then
+		local w, h = width * phone, height * phone
+		panel = rect(centre.X - w / 2, centre.Y - h / 2, w, h)
+		scale *= phone
+	end
 
 	if frame then
 		panel = shifted(panel, ox, oy)
@@ -3791,6 +4014,54 @@ function HudLayout.occupied(L: Layout): { Rect }
 	add(L.biomes)
 	add(L.returnPlot)
 	return out
+end
+
+--==============================================================================
+-- THE BUFF POPOVER'S PLACE (2026-10-09, the owner: "place it CLEAR of the guide
+-- card and other HUD words, still transparent")
+--
+-- Over its icon, on the icon's middle and `popGap` above the row, as it always
+-- stood -- wherever that keeps 8 px off every group and badge, the status rows
+-- (the chase warning, the biome name, the sale line) and, while it shows, the
+-- beginner's guide card. With no sheet behind it any
+-- more a word under it shows through its own: seen on a 705 x 338 phone, the
+-- guide card's. Else the nearest place inside the margin that does
+-- (SpeedMilestones.clearOf); with none, over the icon after all. Safe space;
+-- `size` is the popover's, `insetTop` HudLayout.measure's. `extra`: other
+-- words standing now that are not HudLayout's (the Pod Rush tracker, seen in
+-- Play under the popover on a 705 x 338 phone). Answers the place and whether
+-- it is clear of everything.
+--==============================================================================
+function HudLayout.popoverRect(L: Layout, cx: number, size: Vector2, popGap: number, insetTop: number,
+	guide: boolean, extra: { Rect }?): (Rect, boolean)
+	local M, G = CONFIG.Margin, CONFIG.Gap
+	local row = L.icons or rect(cx, L.safe.Y / 2, 0, 0)
+	local want = rect(math.clamp(cx - size.X / 2, M, math.max(M, L.safe.X - M - size.X)), row.y - popGap - size.Y,
+		size.X, size.Y)
+	local blocked: { Rect } = {}
+	for _, r in ipairs(HudLayout.occupied(L)) do
+		-- Not the notices' line: it is theirs only while one passes (a short
+		-- phone has no 100 px clear of it beside the row: 705 x 338).
+		if r ~= L.toast then
+			table.insert(blocked, r)
+		end
+	end
+	local status, notice = HudLayout.statusRows(L, insetTop)
+	table.insert(blocked, status)
+	table.insert(blocked, notice)
+	if guide then
+		table.insert(blocked, L.banner)
+		table.insert(blocked, L.skip)
+	end
+	for _, r in ipairs(extra or {}) do
+		table.insert(blocked, r)
+	end
+	local bounds = rect(M, M, L.safe.X - M * 2, L.safe.Y - M * 2)
+	local found = SpeedMilestones.clearOf(want, blocked, bounds, G)
+	if found then
+		return rect(found.x, found.y, found.w, found.h), true
+	end
+	return want, false
 end
 
 return HudLayout

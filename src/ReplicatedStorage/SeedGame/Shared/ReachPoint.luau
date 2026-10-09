@@ -136,6 +136,21 @@ function ReachPoint.stack(anchor: Vector2, viewport: Vector2, topInset: number,
 end
 
 --==============================================================================
+-- HOW BIG A PROMPT IS DRAWN ON THIS SCREEN (2026-10-08)
+--
+-- `phoneScale` on a touch screen whose shorter side is under `shortSide`
+-- pixels -- a phone -- and 1 everywhere else. PromptUI draws the panel at this
+-- and PlantUI reserves this much of its height above a pod's timer, so the
+-- stacked pair still agree to the pixel (GameConfig.Labels.Prompt).
+--==============================================================================
+function ReachPoint.promptScale(viewport: Vector2, touch: boolean, shortSide: number, phoneScale: number): number
+	if touch and math.min(viewport.X, viewport.Y) < shortSide then
+		return phoneScale
+	end
+	return 1
+end
+
+--==============================================================================
 -- WHICH SIDE OF THE PLANT, WITHOUT FLICKING
 --
 -- `prev` is the bearing the button is on now and `want` is the bearing to the

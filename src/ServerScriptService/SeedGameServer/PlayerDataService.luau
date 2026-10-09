@@ -101,6 +101,7 @@ type Stats = {
 	folder: Folder,
 	speed: StringValue,
 	cash: StringValue,
+	rebirths: StringValue,
 }
 local stats: { [Player]: Stats } = {}
 local serviceConnections: { RBXScriptConnection } = {}
@@ -190,6 +191,20 @@ function PlayerDataService.RecordStarter(player: Player, plantedAt: number): boo
 	local profile = entry.profile :: any
 	if (tonumber(profile.StarterAt) or 0) > 0 then return false end
 	profile.StarterAt = math.floor(plantedAt)
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE BAT HINT (2026-10-08; BatHintService): shown once per profile, ever.
+-- Answers true only the first time, and marks it in the same step.
+--==============================================================================
+function PlayerDataService.MarkBatHintShown(player: Player): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then return false end
+	local profile = entry.profile :: any
+	if profile.BatHintShown == true then return false end
+	profile.BatHintShown = true
 	touch(player)
 	return true
 end
@@ -467,6 +482,84 @@ end
 
 -- The three numbers every invite screen reads (GameConfig.InviteRewards.Attributes):
 -- friends counted, forms given, and whether the panel has been seen since.
+--==============================================================================
+-- SPROUT DASH'S FIELDS (2026-10-08; SproutDashService)
+--
+-- `change` edits SproutBoostEndsAt / SproutEarned / SproutBest(Day) in one
+-- resumption and answers whether it changed anything; only then is the profile
+-- marked for saving and the boost's end published (GameConfig.SproutDash).
+--==============================================================================
+function PlayerDataService.UpdateSprout(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		PlayerDataService.PublishSprout(player)
+		return true
+	end
+	return false
+end
+
+--==============================================================================
+-- POD RUSH'S ROW (2026-10-09; PodRushService, ProfileSchema PodRush)
+--
+-- `change` edits the row in one resumption and answers whether it changed
+-- anything; only then is the profile marked for saving. PodRushService is the
+-- only caller and publishes the player's attributes itself.
+--==============================================================================
+function PlayerDataService.UpdatePodRush(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		return true
+	end
+	return false
+end
+
+--==============================================================================
+-- REBIRTH (2026-10-08): the count and when it last happened. RebirthService is
+-- the only caller -- it decides, this keeps the save dirty-flagged, the count
+-- published for every client (the panel, the displays' income) and the
+-- player-list column current.
+--==============================================================================
+function PlayerDataService.UpdateRebirth(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		PlayerDataService.PublishRebirth(player)
+		PlayerDataService.PublishStats(player)
+		return true
+	end
+	return false
+end
+
+function PlayerDataService.PublishRebirth(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local n = GameConfig.rebirthCount((entry.profile :: any).Rebirths)
+	player:SetAttribute(GameConfig.Rebirth.Attributes.Rebirths, if n > 0 then n else nil)
+end
+
+-- The boost's end while it runs (BoostIconsUI draws it), nil once it is over.
+function PlayerDataService.PublishSprout(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local endsAt = (entry.profile :: any).SproutBoostEndsAt or 0
+	player:SetAttribute(GameConfig.SproutDash.Attributes.BoostEndsAt, if endsAt > os.time() then endsAt else nil)
+end
+
 function PlayerDataService.PublishInvites(player: Player)
 	local entry = entries[player]
 	if not entry then
@@ -692,6 +785,11 @@ local function spellStats(mounted: Stats, profile: Profile)
 	if mounted.cash.Value ~= cash then
 		mounted.cash.Value = cash
 	end
+	-- The third column (2026-10-08): how many times this player was reborn.
+	local rebirths = tostring(GameConfig.rebirthCount((profile :: any).Rebirths))
+	if mounted.rebirths.Value ~= rebirths then
+		mounted.rebirths.Value = rebirths
+	end
 end
 
 -- Built, filled, THEN parented, so the list's first sight of the folder already
@@ -711,7 +809,10 @@ function PlayerDataService.MountStats(holder: Instance, profile: Profile): Stats
 	local cash = Instance.new("StringValue")
 	cash.Name = "Cash"
 	cash.Parent = folder
-	local mounted: Stats = { folder = folder, speed = speed, cash = cash }
+	local rebirths = Instance.new("StringValue")
+	rebirths.Name = "Rebirths"
+	rebirths.Parent = folder
+	local mounted: Stats = { folder = folder, speed = speed, cash = cash, rebirths = rebirths }
 	spellStats(mounted, profile)
 	folder.Parent = holder
 	return mounted
@@ -1181,6 +1282,8 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,
 		-- And the community chest's spins stay claimed (2026-10-01).
 		CommunityClaimed = profile.CommunityClaimed == true,
+		-- And the bat hint stays shown (2026-10-08): once per profile, ever.
+		BatHintShown = profile.BatHintShown == true,
 		-- And the starter pod stays given (2026-10-08): one per profile, ever.
 		StarterAt = math.max(0, math.floor(tonumber(profile.StarterAt) or 0)),
 		-- And treadmill fun's marks (2026-10-08): a milestone is paid once ever,
@@ -1198,9 +1301,19 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		-- (2026-10-08): neither is ever paid twice.
 		InviteOwned = table.clone(profile.InviteOwned or {}),
 		InviteReturnIds = table.clone(profile.InviteReturnIds or {}),
+		-- And Sprout Dash's running boost and the hour's earned log (2026-10-08):
+		-- a reset must not reopen the hourly cap.
+		SproutBoostEndsAt = profile.SproutBoostEndsAt or 0,
+		SproutEarned = table.clone(profile.SproutEarned or {}),
+		-- And the rebirths (2026-10-08): a progress reset is not an un-rebirth.
+		Rebirths = GameConfig.rebirthCount(profile.Rebirths),
+		RebirthAt = GameConfig.rebirthCount(profile.RebirthAt),
 		-- And a global mini event's tickets stay counted (2026-10-03): a reset
 		-- mid-event must not reopen its per-player cap. A setting stays too.
 		EventClaims = table.clone(profile.EventClaims or {}),
+		-- And a Pod Rush's row (2026-10-09): a reset mid-rush must not pay a
+		-- level again, nor forget a Titan pod still owed.
+		PodRush = table.clone(profile.PodRush or { Id = "", Count = 0, Paid = 0, Top = 0, PodOwed = "" }),
 		DiscoDance = profile.DiscoDance ~= false,
 		LikeReminder = if profile.LikeReminder == "pending" or profile.LikeReminder == "shown"
 			then profile.LikeReminder else "",
@@ -1228,6 +1341,8 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 	PlayerDataService.PublishDiscoDance(player)
 	PlayerDataService.PublishOffline(player)
 	PlayerDataService.PublishInvites(player)
+	PlayerDataService.PublishSprout(player)
+	PlayerDataService.PublishRebirth(player)
 	log(string.format("%s's progress was reset in memory (%d receipt(s) kept).", player.Name,
 		#keep.Receipts))
 	return true
@@ -1411,6 +1526,11 @@ local function onPlayerAdded(player: Player)
 		-- And Invite a Friend's count, forms and "!" (2026-10-06): the pedestal shows
 		-- the right form from the first frame, with no evolve.
 		PlayerDataService.PublishInvites(player)
+		-- And Sprout Dash's boost, if one is still running (2026-10-08).
+		PlayerDataService.PublishSprout(player)
+		-- And the rebirth count (2026-10-08): the title, the fence and the
+		-- displays' income read it.
+		PlayerDataService.PublishRebirth(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)

@@ -182,7 +182,9 @@ end
 --==============================================================================
 -- THE BUTTON AND ITS "!"
 --==============================================================================
-local button = UIKit.railButton(playerGui, { name = "InviteButton", art = RAIL.StuddedInviteArt })
+-- INVITE on a plate until the picture has loaded here (UIKit.railFallback).
+local button = UIKit.railButton(playerGui, { name = "InviteButton", art = RAIL.StuddedInviteArt,
+	fallback = RAIL.Words.Invite })
 button.Visible = false
 
 local bang = Instance.new("TextLabel")
@@ -839,6 +841,8 @@ local function relayout()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 	}, RAIL.OutlineThickness)
 	menu.place(p)
 	local main = MenuLayout.blocks(p).main

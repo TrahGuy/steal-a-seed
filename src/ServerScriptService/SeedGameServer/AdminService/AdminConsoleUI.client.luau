@@ -152,6 +152,10 @@ local MODE_WORDS: { [string]: string } = {
 		.. "one free spin, up to %d per player per event (across servers).", MINI.Tickets.PerPlayerCap),
 	tickets = string.format("TICKET SHOWER ONLY: the tickets alone, up to %d per player per event.",
 		MINI.Tickets.PerPlayerCap),
+	podrush = string.format("POD RUSH: nests regrow every %ds and guardians build no rage; pods stolen and banked "
+		.. "count -- %d BRONZE, %d SILVER, %d GOLD. Dusk waits. Its length is %d s.",
+		GameConfig.PodRush.RegrowSeconds, GameConfig.PodRush.Levels[1].Pods, GameConfig.PodRush.Levels[2].Pods,
+		GameConfig.PodRush.Levels[3].Pods, MINI.Modes.podrush.Seconds),
 }
 -- Inside every page and card: the list's padding, the card's, the scroll bar.
 local PAGE_PAD, CARD_PAD, BAR = 8, 10, 6
@@ -779,8 +783,9 @@ local function statsLine(row: any): string
 	if row.ready ~= true then
 		return "PROFILE LOADING"
 	end
-	return string.format("$%s  \u{00B7}  %s SPEED  \u{00B7}  BAG %d/%d", GameConfig.money(tonumber(row.cash) or 0),
-		GameConfig.compact(tonumber(row.speed) or 0), tonumber(row.held) or 0, MAX_HELD)
+	return string.format("$%s  \u{00B7}  %s SPEED  \u{00B7}  PLANTS %d/%d  \u{00B7}  PODS %d/%d",
+		GameConfig.money(tonumber(row.cash) or 0), GameConfig.compact(tonumber(row.speed) or 0),
+		tonumber(row.held) or 0, MAX_HELD, tonumber(row.pods) or 0, GameConfig.Save.MaxPods)
 end
 
 local function readRoster()
@@ -1110,12 +1115,14 @@ do
 	local modes = build.buttons(mCard, 2, 140, "full", {
 		{ "DiscoOnly", "DISCO ONLY" }, { "DiscoMill", "DISCO + MILL" },
 		{ "TicketDisco", "TICKET DISCO" }, { "TicketShowerOnly", "TICKET SHOWER ONLY" },
+		{ "PodRush", "POD RUSH" },
 	}, 38)
 	ui.miniChoices = {
 		{ verb = "party", button = modes[1] },
 		{ verb = "disco", button = modes[2] },
 		{ verb = "ticketdisco", button = modes[3] },
 		{ verb = "tickets", button = modes[4] },
+		{ verb = "podrush", button = modes[5] },
 	}
 	ui.miniHelp = build.line(mCard, "ModeWords", 12, TEXT)
 	build.line(mCard, "DurationCaption", 12, LOOK.Muted).Text =
@@ -1469,8 +1476,10 @@ function paint.spawn()
 	local species = state.species
 	local p = currentTarget()
 	local row = rowOf(p.UserId)
-	local most = Model.quantityMax(row.room)
-	state.quantity = Model.clampQuantity(state.quantity, row.room)
+	-- The room of the form chosen (2026-10-09): pods have their own.
+	local room = if state.form == "pod" then row.podRoom else row.room
+	local most = Model.quantityMax(room)
+	state.quantity = Model.clampQuantity(state.quantity, room)
 	ui.pickPod.style(if state.form == "pod" then "on" else "idle")
 	ui.pickGrown.style(if state.form == "plant" then "on" else "idle")
 	if not species then
@@ -1505,7 +1514,7 @@ function paint.spawn()
 	end
 	ui.count.set(tostring(state.quantity))
 	ui.room.Text = if row.ready ~= true then "BAG: LOADING"
-		else string.format("MAX %d  \u{00B7}  %d FREE IN %s BAG", math.max(most, 0), tonumber(row.room) or 0,
+		else string.format("MAX %d  \u{00B7}  %d FREE IN %s BAG", math.max(most, 0), tonumber(room) or 0,
 			if p == player then "YOUR" else string.upper(p.Name) .. "'S")
 	-- The button: the question for anybody else; else SPAWN, its wait or its resend.
 	local asking = state.asking == "give"
@@ -1964,6 +1973,11 @@ end)
 for _, choice in ipairs(ui.miniChoices) do
 	choice.button.hit.Activated:Connect(function()
 		state.miniMode = choice.verb
+		-- A mode with its own length (POD RUSH's five minutes) puts it in the box.
+		local own = tonumber(((MINI.Modes :: any)[choice.verb] or {}).Seconds)
+		if own then
+			ui.miniBox.Text = tostring(own)
+		end
 		paint.all()
 	end)
 end

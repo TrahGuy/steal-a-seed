@@ -69,9 +69,12 @@ Metrics.Onboarding = {
 	{ step = 1, name = "Session Ready" },
 	{ step = 2, name = "First Pod Stolen", milestone = "steal" },
 	{ step = 3, name = "First Pod Banked", milestone = "bank", after = "steal" },
-	{ step = 4, name = "First Pod Planted", milestone = "place", after = "bank" },
-	{ step = 5, name = "First Plant Hatched", milestone = "hatch", after = "place" },
-	{ step = 6, name = "First Plant Income", after = "hatch" },
+	-- SWAPPED 2026-10-09 (pods hatch in the Bag; the plant is placed after): step
+	-- 4 is the hatch and step 5 the first plant placed. Before and after the
+	-- update cannot be compared at these two steps (KB/ANALYTICS.md).
+	{ step = 4, name = "First Plant Hatched", milestone = "hatch", after = "bank" },
+	{ step = 5, name = "First Plant Placed", milestone = "place", after = "hatch" },
+	{ step = 6, name = "First Plant Income", after = "place" },
 } :: { OnboardingRow }
 
 Metrics.RaidFunnel = "GuardianRaid"
@@ -89,6 +92,8 @@ Metrics.Events = {
 	-- The reward wheel's (2026-09-27, see THE WHEEL below).
 	WheelSpinEarned = "WheelSpinEarned",
 	WheelSpun = "WheelSpun",
+	-- The Pod Rush's (2026-10-09, see THE POD RUSH below).
+	PodRushEnded = "PodRushEnded",
 }
 
 -- The custom-field keys Roblox reads (Enum.AnalyticsCustomFieldKeys), by name.
@@ -321,11 +326,11 @@ end
 -- THE ONBOARDING FUNNEL (one per user; Roblox ignores a repeated step)
 --
 -- ORDER IS ENFORCED HERE, NOT LEFT TO ROBLOX. A funnel credits every step below
--- one that is logged, so logging "First Pod Planted" for somebody who never
+-- one that is logged, so logging "First Plant Hatched" for somebody who never
 -- banked would imply they did. So when a milestone is recorded for the first
 -- time, the chain is walked from step 2: each step goes out while every
 -- milestone up to it is done in the player's own profile, and the walk stops
--- at the first gap. A plant that came BEFORE any bank (a pod from elsewhere)
+-- at the first gap. A hatch that came BEFORE any bank (a pod from elsewhere)
 -- is therefore reported when the bank catches up, never ahead of it. A step
 -- already sent this session is not sent again; one sent in an earlier session
 -- may be, and Roblox counts only a user's first instance of a step.
@@ -381,16 +386,18 @@ function Metrics.milestone(player: any, milestone: string, progress: any)
 				onboard(player, index)
 			end
 		end
-		-- Step 5 went out this session (whichever milestone completed the chain):
-		-- the first income from here on is the funnel's last step.
+		-- Step 5 went out this session (whichever milestone completed the chain;
+		-- since 2026-10-09 it is the first plant PLACED): the first income from
+		-- here on is the funnel's last step.
 		if s.onboarded[5] then
 			s.hatchedThisSession = true
 		end
 		local who = audience(player)
 		if who == "count" then
 			send("custom", player, Metrics.Events.TutorialStep, 1, { [F1] = milestone })
-			-- THE FIRST LOOP, train through hatch (2026-10-08): Version 2's whole
-			-- guide, so the series keeps its meaning and nothing is renumbered.
+			-- THE FIRST LOOP, train through place (2026-10-08; the hatch before the
+			-- place since 2026-10-09): Version 2's whole guide, the same six steps,
+			-- so the series keeps its meaning and nothing is renumbered.
 			-- The guide's step 7, `travel`, goes out as its own TutorialStepDone
 			-- above and never sends this a second time.
 			if TutorialData.InFirstLoop(milestone) and TutorialData.FirstLoopDone(progress) then
@@ -403,7 +410,7 @@ function Metrics.milestone(player: any, milestone: string, progress: any)
 end
 
 -- Garden income landed (EconomyService, the one positive AddCash). The funnel's
--- last step: only in the session the first plant hatched, once.
+-- last step: only in the session the first plant was placed, once.
 function Metrics.income(player: any)
 	pcall(function()
 		local s = states[player]
@@ -520,6 +527,28 @@ function Metrics.chestClaimed(player: any, rewardId: string)
 			send("custom", player, Metrics.Events.ChestClaimed, 1, { [F1] = reward })
 		elseif who == "validate" then
 			validation(player, "chest " .. reward)
+		end
+	end)
+end
+
+--==============================================================================
+-- THE POD RUSH (2026-10-09; PodRushService): once per player per rush, at
+-- their end card -- the pods counted as the value, the level reached as a
+-- fixed word ("none", "bronze", "silver", "gold"). No names and no ids.
+--==============================================================================
+local RUSH_LEVELS: { [string]: boolean } = { none = true, bronze = true, silver = true, gold = true }
+
+function Metrics.podRushEnded(player: any, count: number, level: string)
+	pcall(function()
+		if not RUSH_LEVELS[level] then
+			return
+		end
+		local banked = if type(count) == "number" and count == count then math.clamp(math.floor(count), 0, 9999) else 0
+		local who = audience(player)
+		if who == "count" then
+			send("custom", player, Metrics.Events.PodRushEnded, banked, { [F1] = level })
+		elseif who == "validate" then
+			validation(player, "pod rush " .. level)
 		end
 	end)
 end

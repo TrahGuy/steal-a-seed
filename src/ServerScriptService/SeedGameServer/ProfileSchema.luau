@@ -88,6 +88,9 @@ export type Profile = {
 	--==========================================================================
 	HatchBonusClaimed: boolean,
 	LikeReminder: string,
+	-- BatHintShown: the one-time "Buy a bat at Marigold's stall to fight back!"
+	-- (BatHintService, 2026-10-08) has been shown. An old save has none: false.
+	BatHintShown: boolean,
 	--==========================================================================
 	-- THE FIRST MINUTE (2026-10-08; FirstMinute)
 	--
@@ -155,6 +158,23 @@ export type Profile = {
 	InviteOwned: { string },
 	InviteReturnIds: { number },
 	--==========================================================================
+	-- SPROUT DASH (2026-10-08; SproutDashService, GameConfig.SproutDash): the
+	-- minigame's own +25% training boost (os.time() it runs out), the boost
+	-- seconds earned in the last hour (its cap; trimmed on every grant) and
+	-- today's best distance. Old saves: 0, {}, 0, 0.
+	--==========================================================================
+	SproutBoostEndsAt: number,
+	SproutEarned: { { At: number, Seconds: number } },
+	SproutBestDay: number,
+	SproutBest: number,
+	--==========================================================================
+	-- REBIRTH (2026-10-08; RebirthService, GameConfig.Rebirth): how many times
+	-- this save has been reborn, and when it last was (os.time(); the cooldown
+	-- reads it). Kept through an admin progress reset. Old saves: 0, 0.
+	--==========================================================================
+	Rebirths: number,
+	RebirthAt: number,
+	--==========================================================================
 	-- GLOBAL MINI-EVENT TICKETS (2026-10-03; MiniEventService, GameConfig.MiniEvent)
 	--
 	-- Tickets collected per GLOBAL event, by its id: Count of them (never past
@@ -167,6 +187,19 @@ export type Profile = {
 	-- Old saves have none.
 	--==========================================================================
 	EventClaims: { { Id: string, Count: number, At: number } },
+	--==========================================================================
+	-- POD RUSH (2026-10-09; PodRushService, GameConfig.PodRush)
+	--
+	-- The latest rush's numbers, under its global event id: the pods counted,
+	-- the levels paid (0..3; each pays once per rush) and the highest biome
+	-- Order banked from (the GOLD pod's biome). A rejoin -- on any server --
+	-- meets the same row; a new rush id starts it again. PodOwed is the biome
+	-- ids of GOLD Titan pods not yet given (the Bag was full), oldest first and
+	-- comma-joined, at most PodRush.MaxOwed, "" for none; it outlives the rush
+	-- they were won in. Kept by a progress reset, so a reset cannot repay a
+	-- level. Old saves: an empty row.
+	--==========================================================================
+	PodRush: { Id: string, Count: number, Paid: number, Top: number, PodOwed: string },
 	-- DISCO DANCING (2026-10-03): the third stored setting -- dance at the hub
 	-- while a disco runs. ON unless the player switched it off; an old save
 	-- with no key reads ON. Kept by a progress reset, like Walk Mode.
@@ -225,6 +258,11 @@ export type Profile = {
 	-- it across a respawn, and a sale takes exactly that row off. Minted from
 	-- NextItem below; a row saved without one (any save from before this) is
 	-- given one on load, and nothing is dropped for lacking it.
+	--
+	-- A POD ROW CARRIES ITS DEADLINE (2026-10-09, pods hatch in the Bag):
+	-- `HatchAt`, the os.time() it may be hatched, stamped when it is banked or
+	-- given. A pod row saved before then is given now + its grow time on load.
+	-- Plant rows have none.
 	--==========================================================================
 	Held: { any },
 	-- The next Item id to hand out. Only ever raised -- a progress reset keeps
@@ -411,6 +449,7 @@ function ProfileSchema.Default(): Profile
 		Receipts = {},
 		InstantCredits = 0,
 		HatchBonusClaimed = false,
+		BatHintShown = false,
 		LikeReminder = "",
 		StarterAt = 0,
 		FirstCatchSpecies = "",
@@ -425,7 +464,14 @@ function ProfileSchema.Default(): Profile
 		InviteSeen = false,
 		InviteOwned = {},
 		InviteReturnIds = {},
+		SproutBoostEndsAt = 0,
+		SproutEarned = {},
+		SproutBestDay = 0,
+		SproutBest = 0,
+		Rebirths = 0,
+		RebirthAt = 0,
 		EventClaims = {},
+		PodRush = { Id = "", Count = 0, Paid = 0, Top = 0, PodOwed = "" },
 		DiscoDance = true,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
@@ -756,11 +802,29 @@ function ProfileSchema.Sanitise(raw: any): Profile
 							p.NextItem = math.floor(n) + 1
 						end
 					end
+					--==================================================
+					-- A BAG POD'S DEADLINE (2026-10-09, pods hatch in the Bag)
+					--
+					-- os.time() it may be hatched, stamped when it was banked
+					-- or given. A pod saved before then has none, and its
+					-- wait starts at this load: now plus the ladder's own
+					-- time for it (SeedData.GrowSecondsFor), as the owner
+					-- approved. A saved one is kept, never further off than
+					-- a whole wait from now.
+					--==================================================
+					local hatched = row.Hatched == true
+					local hatchAt: number? = nil
+					if not hatched then
+						local grow = SeedData.GrowSecondsFor(SeedData.Get(row.Id), math.floor(tier))
+						local saved = number(row.HatchAt, 0, 0, now + grow)
+						hatchAt = math.floor(if saved > 0 then saved else now + grow)
+					end
 					table.insert(p.Held, {
 						Id = row.Id,
 						Tier = math.floor(tier),
-						Hatched = row.Hatched == true,
+						Hatched = hatched,
 						Item = item,
+						HatchAt = hatchAt,
 					})
 				end
 			end
@@ -1029,6 +1093,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.InstantCredits = math.floor(number(raw.InstantCredits, 0, 0, SAVE.MaxInstantCredits))
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
+	p.BatHintShown = raw.BatHintShown == true
 	p.LikeReminder = if raw.LikeReminder == "pending" or raw.LikeReminder == "shown" then raw.LikeReminder else ""
 	-- The first minute (2026-10-08): a whole timestamp or 0; a caught species
 	-- only if the sheet still has it, with a real size, else nothing waiting.
@@ -1101,6 +1166,29 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			table.remove(p.InviteReturnIds, 1)
 		end
 	end
+	-- Sprout Dash (2026-10-08): whole, non-negative times and distances; the
+	-- earned log's rows well-formed, at most 60 of them (an hour holds 15 at
+	-- the most a run pays).
+	local function wholeOrZero(v: any): number
+		return if type(v) == "number" and v == v and v >= 0 and v < 2 ^ 53 then math.floor(v) else 0
+	end
+	p.SproutBoostEndsAt = wholeOrZero(raw.SproutBoostEndsAt)
+	p.SproutBestDay = wholeOrZero(raw.SproutBestDay)
+	p.SproutBest = wholeOrZero(raw.SproutBest)
+	p.SproutEarned = {}
+	if type(raw.SproutEarned) == "table" then
+		for _, row in ipairs(raw.SproutEarned) do
+			if type(row) == "table" and wholeOrZero(row.At) > 0 and wholeOrZero(row.Seconds) > 0 then
+				table.insert(p.SproutEarned, { At = wholeOrZero(row.At), Seconds = wholeOrZero(row.Seconds) })
+			end
+		end
+		while #p.SproutEarned > 60 do
+			table.remove(p.SproutEarned, 1)
+		end
+	end
+	-- Rebirth (2026-10-08): whole and never below 0, like the times above.
+	p.Rebirths = wholeOrZero(raw.Rebirths)
+	p.RebirthAt = wholeOrZero(raw.RebirthAt)
 	-- Global mini-event claims: well-formed rows only, one per id, counts
 	-- whole and within the cap, the newest ClaimsKept kept.
 	p.EventClaims = {}
@@ -1126,6 +1214,27 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			table.remove(rows, 1)
 		end
 		p.EventClaims = rows
+	end
+	-- Pod Rush (2026-10-09): an id like an event claim's (or ""), whole counts
+	-- in range, and owed pods only for biomes that exist, MaxOwed at most.
+	do
+		local row = if type(raw.PodRush) == "table" then raw.PodRush else {}
+		local id = row.Id
+		local owed: { string } = {}
+		if type(row.PodOwed) == "string" then
+			for biomeId in string.gmatch(row.PodOwed, "[^,]+") do
+				if BiomeData.ById[biomeId] ~= nil and #owed < GameConfig.PodRush.MaxOwed then
+					table.insert(owed, biomeId)
+				end
+			end
+		end
+		p.PodRush = {
+			Id = if type(id) == "string" and #id <= 40 and string.match(id, "^[%w_%-]*$") ~= nil then id else "",
+			Count = math.floor(number(row.Count, 0, 0, 9999)),
+			Paid = math.floor(number(row.Paid, 0, 0, #GameConfig.PodRush.Levels)),
+			Top = math.floor(number(row.Top, 0, 0, #BiomeData.Biomes)),
+			PodOwed = table.concat(owed, ","),
+		}
 	end
 	-- ON unless saved false: an old save with no key dances.
 	p.DiscoDance = raw.DiscoDance ~= false

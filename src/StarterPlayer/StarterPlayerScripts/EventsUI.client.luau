@@ -114,7 +114,8 @@ gui.Parent = playerGui
 --==============================================================================
 local button: ImageButton
 if RAIL.EventsArt ~= "" then
-	button = UIKit.railButton(playerGui, { name = "EventsButton", art = RAIL.EventsArt, wide = false })
+	button = UIKit.railButton(playerGui, { name = "EventsButton", art = RAIL.EventsArt, wide = false,
+		fallback = RAIL.Words.Events })
 else
 	button = UIKit.railButton(playerGui, {
 		name = "EventsButton",
@@ -777,6 +778,8 @@ relayout = function()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 		keyboardTop = keyboardTop(),
 	}, RAIL.OutlineThickness)
 	menu.place(p)

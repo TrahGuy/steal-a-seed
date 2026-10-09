@@ -100,8 +100,10 @@ local OLD = {
 	shop = UDim2.new(0, I, 0, I + W.Y + G6),
 	settings = UDim2.new(0, I, 0, I + (W.Y + G6) * 2),
 	walk = UDim2.new(0, I, 0, I + (W.Y + G6) * 3),
-	garden = UDim2.new(1, -I, 0, I),
-	bag = UDim2.new(1, -I, 0, I + S.Y + G6),
+	-- WHAT'S NEW in Garden's old place since Garden and the Bag moved to the
+	-- left edge (2026-10-09, the owner: "put them on center left"); the pair is
+	-- checked on its own below.
+	updates = UDim2.new(1, -I, 0, I),
 	hotbar = UDim2.new(0.5, 0, 1, -HOT.BottomGap),
 	cash = UDim2.new(0, 12, 1, -10),
 	banner = UDim2.new(0.5, 0, 0, 84),
@@ -116,13 +118,26 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 		and udimEq(HudLayout.place(L.shop, Vector2.zero, L.safe), OLD.shop)
 		and udimEq(HudLayout.place(L.settings, Vector2.zero, L.safe), OLD.settings)
 		and udimEq(HudLayout.place(L.walk, Vector2.zero, L.safe), OLD.walk)
-		and udimEq(HudLayout.place(L.garden, Vector2.new(1, 0), L.safe), OLD.garden)
-		and udimEq(HudLayout.place(L.bag, Vector2.new(1, 0), L.safe), OLD.bag)
+		and udimEq(HudLayout.place(L.updates, Vector2.new(1, 0), L.safe), OLD.updates)
 		and udimEq(HudLayout.place(L.hotbar, Vector2.new(0.5, 1), L.safe), OLD.hotbar)
 		and udimEq(HudLayout.place(L.cashRoot, Vector2.new(0, 1), L.safe), OLD.cash)
 		and udimEq(HudLayout.place(L.banner, Vector2.new(0.5, 0), L.safe), OLD.banner)
 		and udimEq(HudLayout.place(L.skip, Vector2.new(0.5, 0), L.safe), OLD.skip)
-	check(same, tag .. ": desktop, ten slots (2026-10-03), and every group at the UDim2 it always had")
+	check(same, tag .. ": desktop, ten slots (2026-10-03), and every group at the UDim2 it always had -- WHAT'S "
+		.. "NEW in Garden's old corner")
+	-- GARDEN ABOVE THE BAG, CENTRE LEFT (2026-10-09): at the left edge, on the
+	-- safe area's middle, or stepped 8 px under OTHER PLANTS and Garden's badge
+	-- (half off its top-right corner); 8 px over the cash block.
+	do
+		local floor = L.others.y + L.others.h + CFG.Gap + 15.5
+		local middle = (L.garden.y + L.bag.y + L.bag.h) / 2
+		local pairOk = L.pairRow ~= true and L.gardenRight ~= true and L.garden.x == I and L.bag.x == I
+			and L.garden.w == S.X and L.bag.w == S.X and L.bag.y == L.garden.y + S.Y + G6
+			and L.garden.y >= floor - 1e-6 and L.bag.y + L.bag.h + CFG.Gap <= L.cash.y + 1e-6
+			and (math.abs(middle - L.safe.Y / 2) <= 1 or math.abs(L.garden.y - floor) < 1e-6)
+		check(pairOk, tag .. ": Garden above the Bag at the left edge, on the middle or stepped 8 px under OTHER "
+			.. "PLANTS and Garden's badge, 8 px over the cash block", r2s(L.garden) .. " " .. r2s(L.bag))
+	end
 	check(L.hot == HOT and L.cashStyle == CFG.CashStyle.Desktop
 			and L.hotbar.w == 750 and L.hotbar.h == 64
 			and L.cashRoot.w == 316 and L.cashRoot.h == 108 and L.cash.h == 110,
@@ -203,22 +218,31 @@ check(#cashDiff == 0 and DESK.Root == Vector2.new(316, 108) and CFG.CashRoot == 
 	table.concat(cashDiff, ", "))
 
 -- A narrow desktop window: the old overlap is the cash block beside the strip.
+-- SINCE 2026-10-09 the 1024 x 600 class goes compact: with the ten-slot strip
+-- the desktop's cash block lifts over the name band there, 30-40 px under OTHER
+-- PLANTS, and Garden and the Bag have no room at the left edge between them.
+-- Compact keeps ten slots and the pair at the left edge, clean.
 local narrow = HudLayout.solve(screen(1000, 609))
-check(not narrow.compact and narrow.slots == 10
+check(narrow.compact and narrow.slots == 10 and narrow.gardenRight ~= true
 		and (narrow.cash.y + narrow.cash.h + CFG.Gap <= narrow.hotbar.y or narrow.cash.x + narrow.cash.w + CFG.Gap <= narrow.hotbar.x)
 		and #HudLayout.problems(narrow) == 0,
-	"a 1000x609 desktop window keeps its rail and ten slots, and the cash block clears the strip",
+	"a 1000x609 desktop window goes compact (no room for Garden and the Bag under the rail), keeps ten slots, "
+		.. "the pair at the left edge, and the cash block clears the strip",
 	r2s(narrow.cash) .. " vs " .. r2s(narrow.hotbar))
 check(HudLayout.solve(screen(1268, 720)).cash.y == HudLayout.solve(screen(1920, 720)).cash.y,
 	"from 1268 px wide the cash block never moves off its corner")
--- With the ten-slot strip the cash block lifts over the name band below about
--- 1254 px -- 1024 x 600 among them -- and still clears everything.
 do
 	local small = HudLayout.solve(screen(1024, 600))
-	check(not small.compact and small.slots == 10 and small.cash.y + small.cash.h + CFG.Gap <= small.namePopup.y
+	check(small.compact and small.slots == 10 and small.gardenRight ~= true
+			and (small.cash.y + small.cash.h + CFG.Gap <= small.namePopup.y
+				or small.cash.x + small.cash.w + CFG.Gap <= small.hotbar.x)
 			and #HudLayout.problems(small) == 0,
-		"a 1024x600 desktop keeps ten slots, the cash block lifted over the name band, nothing overlapping",
+		"a 1024x600 desktop goes compact too, ten slots, the cash block clear of the strip, nothing overlapping",
 		r2s(small.cash) .. " " .. table.concat(HudLayout.problems(small), "; "))
+	-- Where the desktop still stands: 1024 x 768, its cash block lifted, Garden over the Bag under the rail.
+	local tall = HudLayout.solve(screen(1024, 768))
+	check(not tall.compact and tall.pairRow ~= true and #HudLayout.problems(tall) == 0,
+		"a 1024x768 desktop keeps the desktop, Garden over the Bag under the rail", r2s(tall.garden))
 end
 local short = HudLayout.solve(screen(1400, 400))
 check(short.compact and short.slots == 10 and #HudLayout.problems(short) == 0,
@@ -293,8 +317,13 @@ for _, case in ipairs(cases) do
 		column = column and c.w == tiles[1].w and c.w >= PP.MinTile and c.w <= PP.Tile
 			and (i == 1 or c.y - (tiles[i - 1].y + tiles[i - 1].h) == PP.Gap)
 	end
-	check(column and L.invite.y == view.y + PP.Pad and L.handle.y == L.bag.y + L.bag.h + CFG.Gap,
-		tag .. ": the panel under the Bag: its handle 8 px under the row, INVITE first, never under MinTile",
+	-- Under Index since 2026-10-09, centred on the corner's 50-px cell where the
+	-- Bag stood: the handle 8 px under the row's foot, where it always was.
+	local cellMid = sw - CFG.Margin - S.X / 2
+	check(column and L.invite.y == view.y + PP.Pad and L.handle.y == L.railBottom + CFG.Gap
+			and L.railBottom == CFG.Margin + S.Y and math.abs((L.handle.x + L.handle.w / 2) - cellMid) < 1e-6,
+		tag .. ": the panel under Index: its handle 8 px under the row, centred on the corner's cell, INVITE "
+			.. "first, never under MinTile",
 		dock and r2s(dock))
 	check(dock ~= nil and dock.y + dock.h + 8 <= L.jump.y,
 		tag .. ": the panel ends 8 px above the jump button", dock and (L.jump.y - dock.y - dock.h))
@@ -316,23 +345,41 @@ for _, case in ipairs(cases) do
 				.. "apart, ending 8 px above the thumbstick",
 			r2s(L.others) .. " " .. r2s(L.walk))
 	end
-	check(L.garden.w >= 44 and L.bag.w >= 44 and L.garden.y == L.bag.y
-			and L.bag.x + L.bag.w == sw - CFG.Margin,
-		tag .. ": Garden and the Bag in one row, the Bag in the corner")
-	-- Index stands where WHAT'S NEW stood (2026-10-05): the row's left end,
-	-- BoostGap off Garden, centred on the row -- the band the row bounds unchanged.
+	-- GARDEN AND THE BAG, SIDE BY SIDE, CENTRE LEFT (2026-10-09, the owner: "put
+	-- them on center left"): at the left edge, Garden first, the rail's 6 px
+	-- apart, 8 px under WALK MODE and 8 px over the thumbstick's zone, the cash
+	-- block and the belt's band (a trap's REMOVE row up), on that gap's middle.
+	do
+		local worst = HudLayout.hotbarBand(L.hotbar, HudLayout.removeRowHeight(true) + HOT.RemoveGap)
+		local floorY = math.min(L.thumb.y, L.cash.y)
+		if worst.x < L.bag.x + L.bag.w + CFG.Gap then
+			floorY = math.min(floorY, worst.y)
+		end
+		local top = L.walk.y + L.walk.h + CFG.Gap
+		local middle = L.garden.y + L.garden.h / 2
+		check(L.pairRow == true and L.garden.w == S.X and L.bag.w == S.X and L.garden.x == CFG.Margin
+				and L.bag.x == L.garden.x + S.X + G6 and L.garden.y == L.bag.y and L.garden.y >= top - 1e-6
+				and L.garden.y + L.garden.h + CFG.Gap <= floorY + 1e-6
+				and math.abs(middle - (top + floorY - CFG.Gap) / 2) <= 1,
+			tag .. ": Garden and the Bag side by side at the left edge, between WALK MODE and the thumbstick on "
+				.. "the gap's middle, 8 px off each",
+			r2s(L.garden) .. " " .. r2s(L.bag) .. string.format(" gap %.0f..%.0f", top, floorY - CFG.Gap))
+	end
+	-- Index alone in the top-right corner (2026-10-09), centred in the 50-px cell
+	-- the Bag had -- the band the row bounds unchanged.
 	check(L.index.w == CFG.Phone.Index and L.index.h == CFG.Phone.Index
-			and L.index.x + L.index.w + CFG.BoostGap == L.garden.x
-			and math.abs((L.index.y + L.index.h / 2) - (L.garden.y + L.garden.h / 2)) < 1e-6
+			and math.abs((L.index.x + L.index.w / 2) - cellMid) < 1e-6
+			and math.abs((L.index.y + L.index.h / 2) - (CFG.Margin + S.Y / 2)) < 1e-6
 			and L.rightLeft == L.index.x,
-		tag .. ": Index stands immediately left of Garden, where WHAT'S NEW stood, centred on the row -- and "
-			.. "the row's band ends there",
+		tag .. ": Index stands alone in the top-right corner, centred in the Bag's old cell -- and the row's band "
+			.. "ends there",
 		r2s(L.index))
 	local indexBadge, gardenBadge = HudLayout.badges(L)
 	check(indexBadge.y >= 0 and gardenBadge.y >= 0 and indexBadge.x < L.index.x
-			and HudLayout.gap(indexBadge, gardenBadge) >= 8 and HudLayout.gap(gardenBadge, L.index) > 0,
-		tag .. ": both badges on the glass -- Index's tucked into its top-LEFT corner, 8 px clear of Garden's, "
-			.. "and Garden's clear of Index",
+			and gardenBadge.y == L.garden.y and gardenBadge.x + gardenBadge.w == L.garden.x + L.garden.w + 4.5
+			and gardenBadge.x + gardenBadge.w < L.bag.x,
+		tag .. ": both badges on the glass -- Index's tucked into its top-LEFT corner, Garden's into its "
+			.. "top-RIGHT corner level with its top, short of the Bag",
 		r2s(indexBadge) .. " " .. r2s(gardenBadge))
 
 	-- the hotbar
@@ -944,9 +991,9 @@ local function bagHolds(tag, L, bag)
 end
 
 -- Desktops: downward, above the strip and its name band; the review's numbers.
+-- (1024 x 600, 1169 x 609 and 1000 x 609 go compact since 2026-10-09, below.)
 local DESKTOP_GRIDS = {
-	{ 1366, 768, 6, 4 }, { 1280, 720, 6, 3 }, { 1024, 600, 5, 2 }, { 1169, 609, nil, nil },
-	{ 1920, 1080, nil, nil }, { 1000, 609, nil, nil },
+	{ 1366, 768, 6, 4 }, { 1280, 720, 6, 3 }, { 1024, 768, nil, nil }, { 1920, 1080, nil, nil },
 }
 for _, case in ipairs(DESKTOP_GRIDS) do
 	local L = HudLayout.solve(screen(case[1], case[2]))
@@ -987,11 +1034,16 @@ end
 -- A small desktop window is compact without touch: the strip stays, so the Bag
 -- still stops above it.
 do
-	local L = HudLayout.solve(screen(860, 700, { touch = false }))
-	local bag = HudLayout.bag(L, { hotTop = L.namePopup.y, stripHidden = L.touch })
-	bagHolds("860x700 window", L, bag)
-	check(L.compact and not L.touch and L.slots == 10 and bag.panel.y + bag.panel.h + 8 <= L.namePopup.y,
-		"a small desktop window keeps its strip, ten slots of it, and the Bag stops above it", r2s(bag.panel))
+	-- And the 1024 x 600 class, compact since Garden and the Bag moved to the
+	-- left edge (2026-10-09).
+	for _, size in ipairs({ { 860, 700 }, { 1024, 600 }, { 1169, 609 }, { 1000, 609 } }) do
+		local tag = string.format("%dx%d window", size[1], size[2])
+		local L = HudLayout.solve(screen(size[1], size[2], { touch = false }))
+		local bag = HudLayout.bag(L, { hotTop = L.namePopup.y, stripHidden = L.touch })
+		bagHolds(tag, L, bag)
+		check(L.compact and not L.touch and L.slots == 10 and bag.panel.y + bag.panel.h + 8 <= L.namePopup.y,
+			tag .. ": a small desktop window keeps its strip, ten slots of it, and the Bag stops above it", r2s(bag.panel))
+	end
 end
 
 -- Every name a tile shows, in two lines at the smallest size it is drawn: 10 pt
@@ -1002,6 +1054,11 @@ do
 	local WheelData = require(Shared:WaitForChild("WheelData"))
 	local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 	local names = { PlantInfo.PodTitle, "Secret pod", GameConfig.Community.TicketName .. "s", WheelData.Trail.Name }
+	-- An ordinary pod is named by its biome since the Pod Guide (2026-10-09).
+	local BiomeData = require(Shared:WaitForChild("BiomeData"))
+	for _, biome in ipairs(BiomeData.Biomes) do
+		table.insert(names, string.format(GameConfig.PodGuide.Words.BagTitle, biome.DisplayName))
+	end
 	for _, list in ipairs({ SeedData.Species, SeedData.SecretSpecies, SeedData.RainSpecies }) do
 		for _, species in ipairs(list) do
 			table.insert(names, species.Name)
@@ -1244,7 +1301,8 @@ do
 				and body:find("shape.AspectRatio = aspect or 1", 1, true) ~= nil
 				and body:find("\"ArtBox\", \"Icon\", \"GearDrawn\", \"Label\", \"Tile\", \"TileLabel\", \"Plate\"", 1, true) ~= nil
 				and body:find("made.Active = false", 1, true) ~= nil and body:find("picture.Active = false", 1, true) ~= nil,
-			"UIKit.railPicture draws the picture whole at its aspect, hides everything of ours under it, and takes no press")
+			"UIKit.railPicture draws the picture whole at its aspect, hides everything of ours under it once it "
+				.. "has loaded here (RailFallbackSpec), and takes no press")
 	end
 	check(kit:find("function UIKit.rainbowRim", 1, true) ~= nil
 			and select(2, kit:gsub("RunService%.RenderStepped:Connect%(step%)", "")) == 1
@@ -2438,6 +2496,150 @@ for name, src in pairs({ AlertUI = alertSrc, ObbyUI = obbySrc }) do
 			and not src:find("HudLayout.notice(", 1, true),
 		name .. " draws its indicator as a StatusText line in its statusRows band: no corner, no padding, no plate")
 end
+--==============================================================================
+-- THE BUFF ROW ON A PHONE, AND ITS POPOVER (2026-10-09, the owner: move the
+-- row off the middle of the screen, and the popover CLEAR of the guide card and
+-- the HUD's words, still transparent -- seen on a 705 x 338 phone: the row on
+-- the character, the popover's words through the guide card's)
+--==============================================================================
+say("\n-- the buff row on a phone, and its popover --")
+do
+	local rowBad, popBad, moved = {}, {}, 0
+	local POP = GameConfig.BoostIcons.Popover
+	for _, case in ipairs(everyScreen) do
+		for _, n in ipairs({ 1, 3 }) do
+			local input = table.clone(case.input)
+			input.icons = n
+			local L = HudLayout.solve(input)
+			local row = L.icons
+			if not row then
+				table.insert(rowBad, case.tag .. ": no row")
+			else
+				local tag = string.format("%s, %d buff(s)", case.tag, n)
+				if L.sidebar then
+					-- Over the strip's right end, and right of the character's band.
+					if math.abs(row.x + row.w - (L.hotbar.x + L.hotbar.w)) > 1e-6
+						or row.x < L.safe.X / 2 + CFG.Phone.Guide.Clear - 1e-6 then
+						table.insert(rowBad, tag .. " " .. r2s(row) .. " strip " .. r2s(L.hotbar))
+					end
+				end
+				local inset = case.input.insetTop or 0
+				for _, guide in ipairs({ false, true }) do
+					local size = Vector2.new(if L.sidebar then POP.PhoneWidth else POP.Width, 100)
+					local cx = row.x + row.w - L.iconSize / 2
+					local r = HudLayout.popoverRect(L, cx, size, POP.Gap, inset, guide)
+					local why = nil
+					if r.x < CFG.Margin - 1e-6 or r.y < CFG.Margin - 1e-6 or r.x + r.w > L.safe.X - CFG.Margin + 1e-6
+						or r.y + r.h > L.safe.Y - CFG.Margin + 1e-6 then
+						why = "outside the margin"
+					end
+					-- The notices' line is theirs only while one passes (HudLayout.popoverRect).
+					local blocked = {}
+					for _, b in ipairs(HudLayout.occupied(L)) do
+						if b ~= L.toast then
+							table.insert(blocked, b)
+						end
+					end
+					local status, notice = HudLayout.statusRows(L, inset)
+					table.insert(blocked, status)
+					table.insert(blocked, notice)
+					if guide then
+						table.insert(blocked, L.banner)
+						table.insert(blocked, L.skip)
+					end
+					for _, b in ipairs(blocked) do
+						if not why and b.w > 0 and b.h > 0 and HudLayout.gap(r, b) < CFG.Gap - 1e-6 then
+							why = "near " .. r2s(b)
+						end
+					end
+					if r.y + r.h + POP.Gap ~= row.y then
+						moved += 1
+					end
+					-- The one screen with no clear place for it: a 700 x 400 desktop window
+					-- under the guide's banner, where it stands over its icon after all.
+					local noRoom = guide and case.tag == "700x400 window"
+					if why and not noRoom then
+						table.insert(popBad, string.format("%s%s %s: %s", tag, if guide then " (guide)" else "", r2s(r), why))
+					elseif noRoom and not (why and r.y + r.h + POP.Gap == row.y) then
+						table.insert(popBad, tag .. " (guide): expected over its icon, with no clear place")
+					end
+				end
+			end
+		end
+	end
+	check(#rowBad == 0, "every phone's buff row stands over the strip's right end, right of the character's band -- "
+		.. "never centred over it", table.concat(rowBad, "; "))
+	check(#popBad == 0, "the buff popover stands inside the margin, 8 px clear of every group and badge, the "
+		.. "status rows and, while it shows, the guide card -- on every listed screen with one and with three "
+		.. "buffs (over its icon on a 700 x 400 window under the guide's banner, which leaves it no room)",
+		table.concat(popBad, "; "))
+	say(string.format("  (the popover stood elsewhere than over its icon in %d of the %d cases)", moved,
+		#everyScreen * 4))
+	-- The guide card and the status rows are what it keeps off: put the card,
+	-- then a status band, where it would stand over its icon, and it moves;
+	-- with the card down it stands there again.
+	do
+		-- A desktop: room all round its icon to move to.
+		local L = HudLayout.solve((function()
+			local input = screen(1366, 768)
+			input.icons = 1
+			return input
+		end)())
+		local row = L.icons
+		local size = Vector2.new(POP.Width, 100)
+		local cx = row.x + row.w - L.iconSize / 2
+		local want = HudLayout.popoverRect(L, cx, size, POP.Gap, TOPBAR, false)
+		local carded = table.clone(L)
+		carded.banner = rect(want.x, want.y, want.w, want.h)
+		local away = HudLayout.popoverRect(carded, cx, size, POP.Gap, TOPBAR, true)
+		local still = HudLayout.popoverRect(carded, cx, size, POP.Gap, TOPBAR, false)
+		check(HudLayout.gap(away, carded.banner) >= CFG.Gap - 1e-6 and r2s(still) == r2s(want)
+				and want.y + want.h + POP.Gap == row.y,
+			"the popover stands over its icon, keeps off the guide card only while the card shows, and moves for it",
+			r2s(want) .. " " .. r2s(away) .. " " .. r2s(still))
+	end
+	local popSrc = sourceOf("BoostIconsUI") or ""
+	-- The Pod Rush tracker's words too (seen in Play: the popover on it): kept
+	-- off where a place lets it; where none does the popover stands where it
+	-- would without them and the tracker steps aside until it closes.
+	do
+		local L = HudLayout.solve((function()
+			local input = screen(1366, 768)
+			input.icons = 1
+			return input
+		end)())
+		local row = L.icons
+		local size = Vector2.new(POP.Width, 100)
+		local cx = row.x + row.w - L.iconSize / 2
+		local want, clear0 = HudLayout.popoverRect(L, cx, size, POP.Gap, TOPBAR, false)
+		local tracker = rect(want.x, want.y, want.w, want.h)
+		local moved, clear1 = HudLayout.popoverRect(L, cx, size, POP.Gap, TOPBAR, false, { tracker })
+		local wall = rect(CFG.Margin, CFG.Margin, L.safe.X - CFG.Margin * 2, L.safe.Y - CFG.Margin * 2)
+		local _, clear2 = HudLayout.popoverRect(L, cx, size, POP.Gap, TOPBAR, false, { wall })
+		check(clear0 and clear1 and HudLayout.gap(moved, tracker) >= CFG.Gap - 1e-6 and clear2 == false,
+			"the popover keeps off the Pod Rush tracker's words where a place lets it, and says when none does",
+			r2s(want) .. " " .. r2s(moved))
+	end
+	local rushSrc = sourceOf("PodRushUI") or ""
+	check(rushSrc:find("player:GetAttribute(GameConfig.BoostIcons.CoversAttribute) ~= true", 1, true) ~= nil
+			and popSrc:find("local covers = coversFor == id or (not clear and #rush > 0)", 1, true) ~= nil
+			and popSrc:find("setCovers(covers)", 1, true) ~= nil,
+		"with no place clear of the tracker the popover sends it aside until it closes (BoostIconsUI, PodRushUI)")
+	check(popSrc:find("\tlocal at, clear = HudLayout.popoverRect(L, cx, Vector2.new(width, height), CFG.Popover.Gap, "
+				.. "lastInsetTop,\n\t\tguide, rush)\n", 1, true) ~= nil
+			and popSrc:find("local guide = UIKit.guideShowing(playerGui)", 1, true) ~= nil
+			and popSrc:find("popover.Position = HudLayout.place(HudLayout.rect(at.x, at.y + at.h, width, 0)", 1, true) ~= nil,
+		"BoostIconsUI places the popover through HudLayout.popoverRect, with the guide card's state")
+	-- The panels that cover the rail where Garden and the Bag stand under them:
+	-- every UIKit.modal but MenuKit's own, on a compact screen or a phone.
+	local kitSrc = Shared:FindFirstChild("UIKit").Source
+	check(kitSrc:find("covers = HudLayout.solve(HudLayout.measure(gui)).compact == true", 1, true) ~= nil
+			and kitSrc:find("if options.fixedHeader or not playerGui then", 1, true) ~= nil
+			and kitSrc:find("\t\topen = want\n\t\tcoverRail(want)\n", 1, true) ~= nil,
+		"a UIKit.modal panel covers the rail while it is open on a compact screen or a phone (not MenuKit's: they "
+			.. "do it themselves); a desktop's stand between the rails")
+end
+
 -- The boosts are icons over the hotbar now (2026-10-04): BoostIconsUI places
 -- them in the layout's own `icons` rect, publishes how many stand, and the
 -- chest's script draws no line of its own.
@@ -2994,14 +3196,49 @@ end
 -- a 640-px phone; a fourth dock tile has no 44-px room on the 772 x 360,
 -- 705 x 338 and 640 x 360 phones.)
 --==============================================================================
+-- Garden and the Bag never move when a trap comes out (their room is
+-- measured with its REMOVE row up), on any listed screen or TV.
+do
+	local movedFor = {}
+	local all = table.clone(everyScreen)
+	-- 800 x 440 to 760 x 448: windows on the edge between the pair at the left
+	-- and the top-right row, which a REMOVE row's lift would tip over.
+	for _, size in ipairs({ { 1024, 600 }, { 640, 400 }, { 560, 320 }, { 1400, 400 }, { 800, 440 }, { 860, 445 },
+		{ 760, 448 } }) do
+		table.insert(all, { tag = string.format("%dx%d window", size[1], size[2]),
+			input = screen(size[1], size[2], { touch = false }) })
+	end
+	for _, tv in ipairs(tvCases) do
+		table.insert(all, { tag = "TV " .. tv.tag, input = (tvCase(tv.w, tv.h, tv.inset, tv.keyboard)) })
+	end
+	for _, case in ipairs(all) do
+		local L = HudLayout.solve(case.input)
+		local withRow = table.clone(case.input)
+		withRow.removeRow = true
+		local R = HudLayout.solve(withRow)
+		if r2s(L.garden) ~= r2s(R.garden) or r2s(L.bag) ~= r2s(R.bag) or L.pairRow ~= R.pairRow
+			or L.gardenRight ~= R.gardenRight then
+			table.insert(movedFor, case.tag .. " " .. r2s(L.garden) .. " -> " .. r2s(R.garden))
+		end
+	end
+	check(#movedFor == 0, "Garden and the Bag stand where they stand with or without a trap's REMOVE row, on "
+		.. "every listed screen, small window and TV", table.concat(movedFor, "; "))
+end
+
 say("-- the walk mode switch --")
 do
 	-- 2026-10-04, the horizontal switch: label-wide (WalkCompact) off a desktop.
 	-- In compact it stands LEFT OF EVENTS, 8 px off it and 8 px under the row --
 	-- in the row it pushed TELEPORT off the clock's centre, under Index a short
 	-- window's lifted cash block met it -- a group of its own, clear of all.
+	-- SINCE 2026-10-09 (Garden and the Bag at the left edge, EVENTS in the
+	-- corner): under EVENTS at the right edge, 8 px under it -- and still left
+	-- of EVENTS under the Bag in a window too small for the pair at the left
+	-- edge, which keeps the top-right row it had (gardenRight).
 	local ok, notes = true, {}
-	local windows = { { 860, 700 }, { 700, 400 }, { 1400, 400 }, { 899, 700 }, { 560, 320 }, { 640, 400 } }
+	local kept, moved = 0, 0
+	local windows = { { 860, 700 }, { 700, 400 }, { 1400, 400 }, { 899, 700 }, { 560, 320 }, { 640, 400 },
+		{ 1024, 600 }, { 600, 348 } }
 	for _, size in ipairs(windows) do
 		local L = HudLayout.solve(screen(size[1], size[2], { touch = false }))
 		local w, e = L.walk, L.events
@@ -3011,8 +3248,15 @@ do
 				named = true
 			end
 		end
-		local placed = L.compact and w.w == CFG.WalkCompact.X and w.h == CFG.WalkCompact.Y
-			and w.x + w.w + CFG.Gap == e.x and w.y == e.y and w.y == L.railBottom + CFG.Gap
+		local sized = L.compact and w.w == CFG.WalkCompact.X and w.h == CFG.WalkCompact.Y
+		local placed
+		if L.gardenRight then
+			kept += 1
+			placed = sized and w.x + w.w + CFG.Gap == e.x and w.y == e.y and w.y == L.railBottom + CFG.Gap
+		else
+			moved += 1
+			placed = sized and w.x + w.w == L.safe.X - CFG.Margin and w.y == e.y + e.h + CFG.Gap
+		end
 		local clear = #HudLayout.problems(L) == 0
 		if not (placed and named and clear) then
 			ok = false
@@ -3021,8 +3265,9 @@ do
 				if clear then "" else " " .. table.concat(HudLayout.problems(L), "; ")))
 		end
 	end
-	check(ok, "compact: WALK MODE's switch stands left of EVENTS, 8 px off it and 8 px under the row, label-wide, "
-		.. "a group of its own, and nothing overlaps", table.concat(notes, "; "))
+	check(ok and kept > 0 and moved > 0, "compact: WALK MODE's switch stands under EVENTS at the right edge (left of "
+		.. "it where a small window keeps Garden and the Bag top right), label-wide, a group of its own, and "
+		.. "nothing overlaps", table.concat(notes, "; ") .. string.format(" (%d moved, %d kept)", moved, kept))
 end
 
 say("-- the events button --")
@@ -3060,14 +3305,17 @@ do
 		if L.compact then
 			local e = L.events
 			local M8 = CFG.Margin
-			-- On a phone the SECOND square of the panel under the Bag (INVITE first
+			-- On a phone the SECOND square of the panel under Index (INVITE first
 			-- since 2026-10-06), which is its group -- in its scrolling canvas; in a
-			-- small window 50 x 50 under the Bag.
+			-- small window 50 x 50 in the top-right corner (2026-10-09), or under the
+			-- Bag where a window keeps Garden and the Bag top right.
 			local view = L.dockView
 			local placed = if L.sidebar
 				then view ~= nil and e.x == view.x + PP.Pad and e.y == view.y + PP.Pad + e.h + PP.Gap and e.w == e.h
 					and e.w <= PP.Tile and e.w >= PP.MinTile
-				else e.w == S.X and e.h == S.Y and e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+				elseif L.gardenRight
+				then e.w == S.X and e.h == S.Y and e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+				else e.w == S.X and e.h == S.Y and e.x == L.safe.X - CFG.Margin - S.X and e.y == CFG.Margin
 			-- A square scrolled out of the viewport is clipped by it: only the part that
 			-- shows is measured (the viewport itself is the dock's group).
 			if L.sidebar and view and e.y + e.h > view.y + view.h then
@@ -3099,16 +3347,18 @@ do
 			-- ends at the switch rows under Shop, its right one at Index.
 			local ends = if L.sidebar
 				then L.railRight == L.walk.x + L.walk.w and L.rightLeft == L.index.x
-				else L.railRight == L.settings.x + L.settings.w and L.rightLeft == L.garden.x
+				else L.railRight == L.settings.x + L.settings.w
+					and L.rightLeft == (if L.gardenRight then L.garden.x else e.x)
 			if not (placed and inside and clear and ends) then
 				offOk = false
 				table.insert(offNotes, case.tag .. " " .. r2s(e))
 			end
 		end
 	end
-	check(offOk, "compact: EVENTS stands 50 x 50 under the Bag, 8 px under the row; every phone: the second square "
-		.. "of the panel under the Bag -- inside the margin, 8 px clear of every other group, both thumbs, TELEPORT, "
-		.. "OBBY and BIOMES, and the rows ending where the layout says", table.concat(offNotes, "; "))
+	check(offOk, "compact: EVENTS stands 50 x 50 in the top-right corner (under the Bag where a small window keeps "
+		.. "Garden and the Bag top right); every phone: the second square of the panel under Index -- inside the "
+		.. "margin, 8 px clear of every other group, both thumbs, TELEPORT, OBBY and BIOMES, and the rows ending "
+		.. "where the layout says", table.concat(offNotes, "; "))
 
 	local tvOk, tvNotes = true, {}
 	for _, case in ipairs(tvCases) do
@@ -3116,7 +3366,8 @@ do
 		local L = HudLayout.solve(input)
 		local e = L.events
 		local ok = if L.compact
-			then e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+			then (if L.gardenRight then e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+				else e.x + e.w == (L.frame and L.frame.x + L.frame.w or L.safe.X) - CFG.Margin)
 			else e.x == L.settings.x + S.X + G6 and e.y == L.settings.y
 		if not (ok and e.w == S.X and e.h == S.Y) then
 			tvOk = false
@@ -3172,8 +3423,9 @@ do
 	end
 
 	local deskOk, deskNotes = true, {}
+	-- (1000 x 609 goes compact since 2026-10-09; 1024 x 768 keeps the desktop.)
 	for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.new(1600, 900),
-		Vector2.new(1920, 1080), Vector2.new(2560, 1440), Vector2.new(1000, 609) }) do
+		Vector2.new(1920, 1080), Vector2.new(2560, 1440), Vector2.new(1024, 768) }) do
 		local L = HudLayout.solve(screen(size.X, size.Y))
 		local o, w = L.others, L.walk
 		local placed = not L.compact and o.x == I and o.y == w.y + w.h + G6 and o.w == W.X and o.h == CFG.WalkHeight
@@ -3205,7 +3457,8 @@ do
 		table.insert(offCases, { tag = string.format("%dx%d window", size[1], size[2]),
 			input = screen(size[1], size[2], { touch = false }) })
 	end
-	local offOk, offNotes, spots = true, {}, { underShop = 0, walkCompact = 0, eventsCompact = 0 }
+	local offOk, offNotes, spots = true, {}, { underShop = 0, walkCompact = 0, eventsCompact = 0, underWalk = 0,
+		besideWalk = 0 }
 	local SW = CFG.Phone.Switch
 	for _, case in ipairs(offCases) do
 		local L = HudLayout.solve(case.input)
@@ -3262,13 +3515,24 @@ do
 				else
 					table.insert(bad, "not under Shop, over WALK MODE")
 				end
-			else
+			elseif L.gardenRight then
+				-- A small window that keeps Garden and the Bag top right: as before.
 				if o.x + o.w == sw - M8 and o.y == e.y + e.h + G8 then
 					spots.eventsCompact += 1
 				elseif o.x + o.w == w.x + w.w and o.y == w.y + w.h + G8 then
 					spots.walkCompact += 1
 				else
 					table.insert(bad, "neither under EVENTS nor under WALK MODE")
+				end
+			else
+				-- Since 2026-10-09: at the right edge under WALK MODE (which stands
+				-- under EVENTS), else beside WALK MODE in its row.
+				if o.x + o.w == sw - M8 and o.y == w.y + w.h + G8 then
+					spots.underWalk += 1
+				elseif o.x + o.w + G8 == w.x and o.y == w.y then
+					spots.besideWalk += 1
+				else
+					table.insert(bad, "neither under WALK MODE nor beside it")
 				end
 			end
 			if #bad > 0 then
@@ -3280,10 +3544,11 @@ do
 	check(offOk, "off a desktop: a see-through row under Shop on a phone (OthersCompact in a window), a group of "
 		.. "its own, 8 px clear of every group, the name band and both thumbs, out of a phone's middle third, never "
 		.. "moved by the REMOVE row", table.concat(offNotes, "; "))
-	say(string.format("        phones: %d under Shop; windows: %d under EVENTS, %d under WALK MODE",
-		spots.underShop, spots.eventsCompact, spots.walkCompact))
-	check(spots.underShop > 0 and spots.eventsCompact > 0,
-		"the phone's spot and the window's are in use on the listed screens")
+	say(string.format("        phones: %d under Shop; windows: %d under WALK MODE, %d beside it; small windows "
+		.. "with the pair top right: %d under EVENTS, %d under WALK MODE", spots.underShop, spots.underWalk,
+		spots.besideWalk, spots.eventsCompact, spots.walkCompact))
+	check(spots.underShop > 0 and spots.underWalk > 0 and spots.eventsCompact > 0,
+		"the phone's spot and the windows' are in use on the listed screens")
 
 	local tvOk, tvNotes = true, {}
 	for _, case in ipairs(tvCases) do
@@ -3528,7 +3793,7 @@ do
 	end
 
 	local ok, notes = true, {}
-	local spots = { bag = 0, others = 0, events = 0, index = 0, panel = 0 }
+	local spots = { corner = 0, others = 0, events = 0, walk = 0, index = 0, panel = 0 }
 	local shown, small, hiddenOn = 0, 0, {}
 	for _, case in ipairs(all) do
 		local L = HudLayout.solve(case.input)
@@ -3636,8 +3901,11 @@ do
 			-- Its place, by name.
 			local where: string? = nil
 			if not L.compact then
-				if full and u.x + u.w == L.bag.x + L.bag.w and u.y == L.bag.y + L.bag.h + G8 then
-					where = "bag"
+				-- The top-right corner, where Garden stood (2026-10-09; under the Bag
+				-- before that).
+				local box = L.frame or rect(0, 0, L.safe.X, L.safe.Y)
+				if full and u.x + u.w == box.x + box.w - RAIL.Inset and u.y == box.y + RAIL.Inset then
+					where = "corner"
 				end
 			elseif L.sidebar then
 				if square and u.x == L.events.x and u.y == L.events.y + L.events.h + CFG.Phone.Panel.Gap
@@ -3648,8 +3916,11 @@ do
 			else
 				if u.x + u.w == L.others.x + L.others.w and u.y == L.others.y + L.others.h + G8 then
 					where = "others"
-				elseif u.x + u.w == L.events.x + L.events.w and u.y == L.events.y + L.events.h + G8 then
+				elseif L.gardenRight and u.x + u.w == L.events.x + L.events.w and u.y == L.events.y + L.events.h + G8 then
 					where = "events"
+				elseif not L.gardenRight and u.x + u.w == L.walk.x + L.walk.w and u.y == L.walk.y + L.walk.h + G8 then
+					-- Under WALK MODE, the right edge's second row since 2026-10-09.
+					where = "walk"
 				elseif u.x == L.index.x and u.y == L.index.y + L.index.h + G8 then
 					where = "index"
 				end
@@ -3660,10 +3931,13 @@ do
 				table.insert(bad, "not in one of its places")
 			end
 			-- The rows keep their ends: everything placed round them is where it was.
+			-- (The right ends since 2026-10-09: EVENTS in compact, Garden where a small
+			-- window keeps the pair top right, WHAT'S NEW's corner on a desktop.)
 			local ends = if L.sidebar
 				then L.railRight == L.walk.x + L.walk.w and L.rightLeft == L.index.x
-				elseif L.compact then L.railRight == L.settings.x + L.settings.w and L.rightLeft == L.garden.x
-				else L.railRight == L.index.x + RAIL.WideSize.X and L.rightLeft == L.garden.x
+				elseif L.compact then L.railRight == L.settings.x + L.settings.w
+					and L.rightLeft == (if L.gardenRight then L.garden.x else L.events.x)
+				else L.railRight == L.index.x + RAIL.WideSize.X and L.rightLeft == L.updates.x
 					and L.railBottom == L.walk.y + L.walk.h
 			if not ends then
 				table.insert(bad, "the rows' ends moved")
@@ -3674,19 +3948,20 @@ do
 			table.insert(notes, case.tag .. " " .. r2s(u) .. ": " .. table.concat(bad, ", "))
 		end
 	end
-	check(ok, "WHAT'S NEW: 50 x 50 or 44 x 44 in one of its places -- under the Bag; under OTHER PLANTS, under "
-		.. "EVENTS or under Index (a group of its own); on a phone between EVENTS and Settings in the panel under the "
-		.. "Bag (that panel's group) -- inside the margin, 8 px clear of every other group and badge, both thumbs, "
+	check(ok, "WHAT'S NEW: 50 x 50 or 44 x 44 in one of its places -- the desktop's top-right corner; under OTHER "
+		.. "PLANTS, under WALK MODE (EVENTS where a small window keeps Garden and the Bag top right) or under Index "
+		.. "(a group of its own); on a phone between EVENTS and Settings in the panel under Index (that panel's "
+		.. "group) -- inside the margin, 8 px clear of every other group and badge, both thumbs, "
 		.. "TELEPORT, OBBY, "
 		.. "BIOMES, ADMIN, the banner, SKIP, the toast and the icon row, out of a phone's middle third, never moved "
 		.. "by the REMOVE row or the icons; the rows' ends as they were; hidden on HIDDEN's screens and nowhere else",
 		table.concat(notes, "; "))
-	say(string.format("        stands on %d of %d screens: %d under the Bag, %d under OTHER PLANTS, %d under EVENTS, "
-		.. "%d under Index, %d in a phone's panel under the Bag (%d at 44 x 44); hidden on: %s",
-		shown, #all, spots.bag, spots.others, spots.events, spots.index, spots.panel, small,
+	say(string.format("        stands on %d of %d screens: %d in the corner, %d under OTHER PLANTS, %d under WALK MODE, "
+		.. "%d under EVENTS, %d under Index, %d in a phone's panel under Index (%d at 44 x 44); hidden on: %s",
+		shown, #all, spots.corner, spots.others, spots.walk, spots.events, spots.index, spots.panel, small,
 		if #hiddenOn > 0 then table.concat(hiddenOn, ", ") else "none"))
-	check(spots.bag > 0 and spots.others > 0 and spots.events > 0 and spots.index > 0 and spots.panel > 0,
-		"every one of its places is in use on the listed screens")
+	check(spots.corner > 0 and spots.others > 0 and spots.index > 0 and spots.panel > 0,
+		"every one of its places that the listed screens reach is in use")
 
 	local src = sourceOf("UpdateLogUI") or ""
 	local hooks = count(src, "RenderStepped") + count(src, "Heartbeat") + count(src, "BindToRenderStep")

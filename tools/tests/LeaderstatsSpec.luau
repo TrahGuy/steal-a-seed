@@ -137,9 +137,11 @@ local ok, err = pcall(function()
 	check(folder ~= nil, "a Folder named leaderstats exists")
 	check(speed ~= nil and cash ~= nil, "it holds a Speed and a Cash StringValue")
 	if folder then
+		-- A third since 2026-10-08: Rebirths, after the two that came first.
 		local kids = folder:GetChildren()
-		check(#kids == 2 and kids[1].Name == "Speed" and kids[2].Name == "Cash",
-			"exactly two values, Speed first")
+		check(#kids == 3 and kids[1].Name == "Speed" and kids[2].Name == "Cash" and kids[3].Name == "Rebirths"
+			and kids[3].Value == "0",
+			"exactly three values: Speed, Cash, then Rebirths (0 for a save never reborn)")
 	end
 	check(valueOf(speed) == "1.25T", "Speed reads 1.25T (got " .. valueOf(speed) .. ")")
 	-- GameConfig.money since 2026-09-24: rounded DOWN, so 3,427,039,827 is

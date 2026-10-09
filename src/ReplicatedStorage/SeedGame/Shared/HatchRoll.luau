@@ -164,9 +164,10 @@ end
 --==============================================================================
 -- WHOSE SILHOUETTES
 --
--- The plants of the hatched plant's own biome, in the species sheet's order. A
--- pod is a shell coloured by its biome, so these are the shapes that shell
--- could have held. Ids only.
+-- The plants of the hatched plant's own biome, in the species sheet's order:
+-- the roll's shapes. (A pod was once a shell coloured by its biome; since
+-- 2026-10-09 every ordinary plant has its own pod, and the roll stays the
+-- hatch's moment.) Ids only.
 --==============================================================================
 function HatchRoll.candidates(actualId: any): { string }
 	local actual = if type(actualId) == "string" then SeedData.Get(actualId) else nil

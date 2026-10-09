@@ -425,9 +425,45 @@ local ok, err = pcall(function()
 	check(string.find(adminSrcCode, "IsOwner(admin)", 1, true) == nil and string.find(adminSrcCode, "Owner only", 1, true) == nil,
 		"and the weather has no owner gate left on the server: the allowlist is its door, as for every other action")
 	local titleSrc = sourceOf(Server:FindFirstChild("OwnerTitleService")) or ""
-	check(string.find(titleSrc, "AdminService.IsOwner(player)", 1, true) ~= nil
+	check(string.find(titleSrc, "if not AdminService.HasTitle(player) then", 1, true) ~= nil
 			and string.find(titleSrc, "IsAdmin(", 1, true) == nil,
-		"and so is the rainbow ADMIN title: OwnerTitleService asks IsOwner, never IsAdmin")
+		"and so is the rainbow ADMIN title: OwnerTitleService asks HasTitle, never IsAdmin")
+	-- The title (2026-10-09, the owner: "add admin title to michael"; "yes, Teambarnze825 is Michael"): the owner's and
+	-- Teambarnze825's, by UserId; a lookalike name gets none; TappedYou and anybody else none; and Teambarnze825 is
+	-- still not the owner.
+	local titleOwner = { UserId = 4119740186, Name = "nicnicniccoal" }
+	local titleMichael = { UserId = 11607308004, Name = "Teambarnze825" }
+	local titleTapped = { UserId = 1139904972, Name = "TappedYou" }
+	local titleLookalike = { UserId = 90000000044, Name = "Teambarnze825" }
+	check(admin.HasTitle(titleOwner) and admin.HasTitle(titleMichael) and not admin.HasTitle(titleTapped)
+			and not admin.HasTitle(fourth) and not admin.HasTitle(titleLookalike)
+			and admin.IsOwner(titleOwner) and not admin.IsOwner(titleMichael),
+		"the ADMIN title is the owner's and Teambarnze825's by UserId (a lookalike name gets none), not TappedYou's or "
+			.. "anybody else's; Teambarnze825 is still not the owner")
+	-- And OwnerTitleService builds it so: on stand-in bodies (a Model and its Head), never a real character.
+	local TitleService = require(Server.OwnerTitleService)
+	local function standInBody()
+		local body = Instance.new("Model")
+		local head = Instance.new("Part")
+		head.Name = "Head"
+		head.Anchored = true
+		head.Parent = body
+		return body, head
+	end
+	local michaelBody, michaelHead = standInBody()
+	local tappedBody, tappedHead = standInBody()
+	local lookalikeBody, lookalikeHead = standInBody()
+	local builtMichael = TitleService.Apply(titleMichael, michaelBody)
+	local builtTapped = TitleService.Apply(titleTapped, tappedBody)
+	local builtLookalike = TitleService.Apply(titleLookalike, lookalikeBody)
+	local TITLE_NAME = GameConfig.OwnerTitle.Name
+	check(builtMichael ~= nil and michaelHead:FindFirstChild(TITLE_NAME) == builtMichael and builtTapped == nil
+			and tappedHead:FindFirstChild(TITLE_NAME) == nil and builtLookalike == nil
+			and lookalikeHead:FindFirstChild(TITLE_NAME) == nil,
+		"OwnerTitleService builds the ADMIN title on Teambarnze825's head, and none on TappedYou's or a lookalike's")
+	michaelBody:Destroy()
+	tappedBody:Destroy()
+	lookalikeBody:Destroy()
 	local trafficSrc = sourceOf(Server:FindFirstChild("TrafficLogService")) or ""
 	check(string.find(trafficSrc, "admin.IsAdmin", 1, true) ~= nil,
 		"staff everywhere admins already are: the traffic log leaves out whoever IsAdmin names, now three")
@@ -948,8 +984,8 @@ local ok, err = pcall(function()
 	admin.Config.Spawning = true
 	check(not off.ok and string.find(off.message, "switched off", 1, true) and same(s0, snapshot()),
 		"with the console's own switch off, nothing is spawned", off.message)
-	check(admin.Config.Spawning == true and kept.spawning == true and GameConfig.Secret.Enabled ~= true,
-		"the switch is on by default, on the server; natural Secret spawning stays off")
+	check(admin.Config.Spawning == true and kept.spawning == true and GameConfig.Secret.Enabled == true,
+		"the switch is on by default, on the server; natural Secret spawning is its own switch, on since 2026-10-09")
 
 	local targetsRefused = true
 	for _, id in ipairs({ "5551", 0, -5551, 5551.5, nil, {} }) do
@@ -1080,21 +1116,28 @@ local ok, err = pcall(function()
 		.. "own for the second family), the skipped roll; rainpod4 only below Colossal, rainpod5 only at it",
 		table.concat(rainWrong, ", "))
 
-	-- THE BAG'S ROOM: for the whole quantity, or nothing.
+	-- THE BAG'S ROOM: for the whole quantity, or nothing -- in the room of the
+	-- form asked for (2026-10-09: pods have their own, Save.MaxPods, and plants
+	-- keep Save.MaxHeld).
 	local fill = {}
 	for _ = 1, SAVE.MaxHeld do
-		table.insert(fill, { Id = "nubkin", Tier = 1, Hatched = false })
+		table.insert(fill, { Id = "nubkin", Tier = 1, Hatched = true })
 	end
 	data.SetHeld(adminB, fill)
 	local beforeFull = snapshot()
 	local full = admin.Handle(adminB, "Spawn", ADMIN_B, ask("snarlbloom", "plant", SeedData.SecretTier))
 	check(not full.ok and string.find(full.message, "Not enough room", 1, true) ~= nil
-			and string.find(full.message, string.format("(%d/%d)", SAVE.MaxHeld, SAVE.MaxHeld), 1, true) ~= nil
+			and string.find(full.message, string.format("(%d/%d plants)", SAVE.MaxHeld, SAVE.MaxHeld), 1, true) ~= nil
 			and same(beforeFull, snapshot()),
 		"a full bag refuses with the storage line, and nothing is given or lost", full.message)
-	local nearlyFull = table.clone(fill)
-	table.remove(nearlyFull)
-	table.remove(nearlyFull)
+	local nearlyFull = {}
+	for _ = 1, SAVE.MaxPods - 2 do
+		table.insert(nearlyFull, { Id = "nubkin", Tier = 1, Hatched = false })
+	end
+	-- And the 24 plants beside them take none of the pods' room.
+	for _, row in ipairs(fill) do
+		table.insert(nearlyFull, table.clone(row))
+	end
 	data.SetHeld(adminB, nearlyFull)
 	local beforeShort = snapshot()
 	local short = admin.Handle(adminB, "Spawn", ADMIN_B, ask("nubkin", "pod", 3, 3))

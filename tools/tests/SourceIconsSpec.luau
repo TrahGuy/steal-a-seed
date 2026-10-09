@@ -211,14 +211,19 @@ local ok, err = pcall(function()
 			and SOURCES.disco == "rbxassetid://129016824458756",
 		"each boost icon wears its own source (income, training, sacrifice, tickets, disco); the tickets the Bag's "
 			.. "Spin Ticket picture, the disco the owner's upload (2026-10-04)")
-	-- The Bag cell's satchel one layer over the rail art, set AFTER the art's own
-	-- layer (built first, it sat at 2 under the cell's plate -- seen in Play).
+	-- The Bag cell's picture (2026-10-09: the owner's studded tile is the whole
+	-- cell) one layer under the rail's satchel and over the plate, its layer set
+	-- AFTER the satchel's own (built first, the old one sat at 2 under the
+	-- cell's plate -- seen in Play); the satchel and the plate go only once the
+	-- tile has loaded.
 	local lo = source("LoadoutUI")
 	local artLayer = string.find(lo, "\ticon.ZIndex = 8\n", 1, true)
-	local satchelLayer = string.find(lo, "satchel.ZIndex = icon.ZIndex + 1", 1, true)
-	check(artLayer ~= nil and satchelLayer ~= nil and satchelLayer > artLayer
-			and string.find(lo, "icon.ImageTransparency = 1", 1, true) ~= nil,
-		"the BAG cell's satchel sits over the rail art, which fades only once the satchel has loaded")
+	local tileLayer = string.find(lo, "tile.ZIndex = icon.ZIndex - 1", 1, true)
+	check(artLayer ~= nil and tileLayer ~= nil and tileLayer > artLayer
+			and string.find(lo, "icon.ImageTransparency = 1", 1, true) ~= nil
+			and string.find(lo, "face.BackgroundTransparency = 1", 1, true) ~= nil,
+		"the BAG cell's tile sits over the plate, under the rail's satchel, which fades with the plate only once the "
+			.. "tile has loaded")
 end)
 
 StatusText.sourceImage = realLookup

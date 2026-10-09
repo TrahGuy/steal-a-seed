@@ -997,7 +997,9 @@ local function body()
 		-- Pressed with room for one (a full record opens no dialog), and the record
 		-- filled while the dialog was open: a receipt for the pod that was pressed.
 		pressNext(p, plot)
-		CarryService.GivePod(p, "spiretip", 1)
+		-- The 24th PLANT (a pod would not fill it: since 2026-10-09 pods have a
+		-- room of their own).
+		CarryService.GiveHatched(p, SeedData.Get("spiretip"), 1, -1, nil, true)
 		task.wait()
 		local answered, payload, ranThrough = receipt(p)
 		local onRecord = false

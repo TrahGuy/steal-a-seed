@@ -151,12 +151,13 @@ local temp = newPlayer("temporary")
 Metrics.profileReady(temp, { CreatedAt = 6000 }, true, false)
 check(count(function(e) return e.player == temp end) == 0, "a temporary (unsaveable) profile never counts")
 
--- Out of order: planting a pod (from somewhere else) before any bank must not
--- credit "stolen" or "banked".
-local done = { train = true, speed = true, place = true }
-Metrics.milestone(p1, "place", progress(done))
-check(onboardingSteps(p1) == "1", "planting before any bank logs nothing -- a funnel would credit steps 2 and 3")
-check(count(function(e) return e.name == "TutorialStepDone" and e.fields and e.fields.CustomField01 == "place" end) == 1,
+-- Out of order: hatching a pod (from somewhere else) before any bank must not
+-- credit "stolen" or "banked". Since 2026-10-09 the hatch is step 4 and the
+-- first plant placed step 5 (pods hatch in the Bag).
+local done = { train = true, speed = true, hatch = true }
+Metrics.milestone(p1, "hatch", progress(done))
+check(onboardingSteps(p1) == "1", "hatching before any bank logs nothing -- a funnel would credit steps 2 and 3")
+check(count(function(e) return e.name == "TutorialStepDone" and e.fields and e.fields.CustomField01 == "hatch" end) == 1,
 	"(it is still counted as the guide step it is, on its own)")
 done.steal = true
 Metrics.milestone(p1, "steal", progress(done))
@@ -164,22 +165,25 @@ check(onboardingSteps(p1) == "1,2", "the steal is step 2 -- and the walk stops a
 done.bank = true
 Metrics.milestone(p1, "bank", progress(done))
 check(onboardingSteps(p1) == "1,2,3,4",
-	"the bank is step 3, and the earlier plant is reported only now, as step 4, in order", onboardingSteps(p1))
+	"the bank is step 3, and the earlier hatch is reported only now, as step 4, in order", onboardingSteps(p1))
 Metrics.milestone(p1, "steal", progress(done))
 Metrics.milestone(p1, "bank", progress(done))
 check(onboardingSteps(p1) == "1,2,3,4", "a repeated callback adds nothing")
 Metrics.income(p1)
-check(onboardingSteps(p1) == "1,2,3,4", "income before the first hatch is not the funnel's last step")
-done.hatch = true
-Metrics.milestone(p1, "hatch", progress(done))
+check(onboardingSteps(p1) == "1,2,3,4", "income before the first plant is placed is not the funnel's last step")
+done.place = true
+Metrics.milestone(p1, "place", progress(done))
 Metrics.income(p1)
 Metrics.income(p1)
-check(onboardingSteps(p1) == "1,2,3,4,5,6", "hatch then the first income: steps 5 and 6, once each",
+check(onboardingSteps(p1) == "1,2,3,4,5,6", "the first plant placed, then the first income: steps 5 and 6, once each",
 	onboardingSteps(p1))
+check(Metrics.Onboarding[4].name == "First Plant Hatched" and Metrics.Onboarding[4].milestone == "hatch"
+		and Metrics.Onboarding[5].name == "First Plant Placed" and Metrics.Onboarding[5].milestone == "place",
+	"step 4 is First Plant Hatched and step 5 First Plant Placed (swapped 2026-10-09)")
 check(count(function(e) return e.name == "TutorialCompleted" and e.player == p1 end) == 1,
-	"the guide's completion is its own event, once, when the last step is done")
+	"the guide's completion is its own event, once, when the first loop's last step is done")
 check(count(function(e) return e.name == "TutorialStepDone" and e.player == p1 end) == 4,
-	"each guide step is counted once (place, steal, bank, hatch)")
+	"each guide step is counted once (hatch, steal, bank, place)")
 -- The guide's step 7 (2026-10-08), recorded after the hatch: its own
 -- TutorialStepDone, no second TutorialCompleted, nothing in the funnel moved.
 done.travel = true
@@ -188,14 +192,14 @@ check(count(function(e) return e.name == "TutorialStepDone" and e.player == p1 a
 		and e.fields.CustomField01 == "travel" end) == 1
 		and count(function(e) return e.name == "TutorialCompleted" and e.player == p1 end) == 1
 		and onboardingSteps(p1) == "1,2,3,4,5,6",
-	"the travel step is counted as its own guide step: TutorialCompleted stays at the hatch, the funnel's six steps "
-		.. "keep their numbers", onboardingSteps(p1))
+	"the travel step is counted as its own guide step: TutorialCompleted stays at the first loop's end, the funnel's "
+		.. "six steps keep their numbers", onboardingSteps(p1))
 
 -- A new player who left mid-guide comes back (a new session, the same save).
 fresh()
 local back = newPlayer("rejoined")
 Metrics.profileReady(back, { CreatedAt = 6000 }, false, true)
-Metrics.milestone(back, "place", progress({ train = true, speed = true, steal = true, bank = true, place = true }))
+Metrics.milestone(back, "hatch", progress({ train = true, speed = true, steal = true, bank = true, hatch = true }))
 check(onboardingSteps(back) == "2,3,4",
 	"after a rejoin the chain picks up where the save is (Roblox keeps only each step's first instance)",
 	onboardingSteps(back))

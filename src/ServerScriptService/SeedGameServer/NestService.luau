@@ -91,9 +91,15 @@ type Nest = {
 	-- ring meant nothing, and the scarcity the whole road is built around
 	-- existed on the map rather than in the game. Emptied stays emptied; the
 	-- world cycle refills every slot at dawn and never in between.
+	--
+	-- EXCEPT IN A POD RUSH (2026-10-09, GameConfig.PodRush): a slot taken while
+	-- one runs grows back RegrowSeconds later (`regrowAt`, by os.clock), for
+	-- the rush only. Supply is the rush's whole point: one day's 16 pods would
+	-- be gone in its first minute.
 	--==========================================================================
 	slots: { CFrame },
 	pods: { [number]: Model? },
+	regrowAt: { [number]: number }?,
 	state: string,
 	target: Player?,
 	stateUntil: number,
@@ -106,6 +112,14 @@ type Nest = {
 	-- When the CURRENT chase started. A guardian with a ramp profile reads it
 	-- every tick; one without never looks at it.
 	chaseSince: number,
+	-- A chase handed straight on from a catch, in the same raid (2026-10-09, the
+	-- owner): it runs at the ramp's top from its first tick, no opening restart.
+	-- Cleared whenever a chase starts any other way.
+	rampDone: boolean?,
+	-- While a throw's victim is in the air and nobody else was there to turn on
+	-- at the launch: the throw's own release, so a theft before it lands is
+	-- chased at once (provoke) rather than after the flight.
+	handOff: (() -> boolean)?,
 	--==========================================================================
 	-- WHAT IT TOOK OFF SOMEBODY, IF ANYTHING
 	--
@@ -307,6 +321,29 @@ local carryBridge: CarryBridge? = nil
 
 function NestService.SetCarryBridge(bridge: CarryBridge?)
 	carryBridge = bridge
+end
+
+--==============================================================================
+-- A POD RUSH IS ON (2026-10-09; PodRushService says so, GameConfig.PodRush)
+--
+-- While it is, a taken slot grows back RegrowSeconds later (TakePod, step) and
+-- a theft builds no rage past its own stack (provoke). Switched off, every
+-- slot still waiting is forgotten: the rush's supply ends with the rush.
+--==============================================================================
+local RUSH = GameConfig.PodRush
+local rushOn = false
+
+function NestService.SetRush(on: boolean)
+	rushOn = on == true
+	if not rushOn then
+		for _, nest in ipairs(nests) do
+			nest.regrowAt = nil
+		end
+	end
+end
+
+function NestService.RushOn(): boolean
+	return rushOn
 end
 
 local PARENT_HEIGHT = 15
@@ -816,7 +853,9 @@ local function ruleSpeedFor(nest: Nest, now: number): number
 		top = secret.TopSpeed or top
 		ramp = secret.RampSeconds or ramp
 	end
-	local u = math.clamp(since / math.max(ramp, 0.01), 0, 1)
+	-- A hand-off after a catch runs at the ramp's top (rampDone, the owner's
+	-- 2026-10-09 fix): the raid is the same raid.
+	local u = if nest.rampDone then 1 else math.clamp(since / math.max(ramp, 0.01), 0, 1)
 	--==========================================================================
 	-- A SCALED GUARDIAN RUNS THE WHOLE OF THAT, SCALED (2026-10-02)
 	--
@@ -1049,7 +1088,16 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: s
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
 	-- second attempt has to be harder than the first.
-	nest.rage += 1
+	--
+	-- BUT NOT IN A POD RUSH (2026-10-09, the owner's call): guardians chase as
+	-- usual -- every theft is chased as the first one is, at one stack -- and
+	-- build no rage, or four stacks (+20 speed) would wall off a five-minute
+	-- sprint.
+	if rushOn then
+		nest.rage = 1
+	else
+		nest.rage += 1
+	end
 	--==========================================================================
 	-- ONE CHASE AT A TIME, AND NOBODY FORGOTTEN (2026-10-01)
 	--
@@ -1068,6 +1116,12 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: s
 	local current = nest.target
 	if not GuardianPursuit.takesOver(current, thief, current ~= nil and chaseable(current) ~= nil) then
 		nest.thieves[thief] = os.clock()
+		-- A theft while the last victim is in the air, the guardian free of
+		-- them since the launch (2026-10-09): chased now, not after the landing.
+		local free = nest.handOff
+		if free then
+			free()
+		end
 		if nest.state == "chasing" then
 			setWalk(nest, chaseSpeedFor(nest, os.clock()))
 		end
@@ -1134,6 +1188,7 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: s
 			--==============================================================
 			nest.state = "chasing"
 			nest.chaseSince = os.clock()
+			nest.rampDone = nil
 			nest.stateUntil = 0
 			nest.parent:SetAttribute("Asleep", false)
 		end
@@ -1143,6 +1198,7 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: s
 		-- up from. The haul rides along and `goHome` picks the walk back up.
 		nest.state = "chasing"
 		nest.chaseSince = os.clock()
+		nest.rampDone = nil
 	end
 	-- Taking over: from nobody, from the same thief, or from a target that can no
 	-- longer be chased. A new target starts a new sweep.
@@ -1168,6 +1224,20 @@ end
 -- the same pod in the same frame is a race this has to lose gracefully rather
 -- than hand out two prizes.
 --==============================================================================
+-- A slot's pod leaves the ring: empty for the rest of the day -- unless a Pod
+-- Rush is on, when it grows back RegrowSeconds from now (step). Never a weather
+-- event's nest: its one batch is the event's.
+local function takeSlot(nest: Nest, slot: number, pod: Model, thief: Player)
+	nest.pods[slot] = nil
+	pod:Destroy()
+	if rushOn and nest.event == nil then
+		local due = nest.regrowAt or {}
+		nest.regrowAt = due
+		due[slot] = os.clock() + RUSH.RegrowSeconds
+	end
+	provoke(nest, thief, true)
+end
+
 function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 	local nestId = pod:GetAttribute("NestId")
 	local slot = pod:GetAttribute("SlotIndex")
@@ -1203,10 +1273,8 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 				-- Somebody else already took it this frame.
 				return nil
 			end
-			-- Empty for the rest of the day. Nothing schedules it back.
-			nest.pods[slot] = nil
-			pod:Destroy()
-			provoke(nest, thief, true)
+			-- Empty for the rest of the day, outside a Pod Rush (takeSlot).
+			takeSlot(nest, slot, pod, thief)
 			return SeedData.Get(speciesId)
 		end
 	end
@@ -1842,6 +1910,15 @@ function NestService.SpecThrow(player: any, token: string?, limp: Loosened?)
 	throwLimp[player] = if token then limp else nil
 end
 
+-- Studio specs (2026-10-09, the guardian hand-off): the throw a player is in
+-- the air for right now -- its token -- or nil once it has landed.
+function NestService.SpecThrowState(player: any): string?
+	if not RunService:IsStudio() then
+		return nil
+	end
+	return throwToken[player]
+end
+
 --==============================================================================
 -- THE GRAB
 --
@@ -1871,7 +1948,11 @@ local function resolveThrowRemote(): RemoteEvent?
 	return nil
 end
 
-local function throwPlayer(nest: Nest, player: Player)
+-- `onLaunched` (2026-10-09, the owner's guardian fix) runs, on its own thread,
+-- the moment the victim is launched -- before the flight it then waits out --
+-- so the guardian may turn on the next thief while this one is in the air. Not
+-- called when the throw never lands (a limp victim, a wind-up that misses).
+local function throwPlayer(nest: Nest, player: Player, onLaunched: (() -> ())?)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -2248,6 +2329,11 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 		root.AssemblyLinearVelocity = impulse
 	end)
+	-- LAUNCHED. The guardian's part of the catch is over; the flight below is
+	-- the victim's (2026-10-09: a guardian turns on its next thief now).
+	if onLaunched then
+		task.spawn(onLaunched)
+	end
 
 	--==========================================================================
 	-- WAIT FOR THE VICTIM TO SAY IT STOPPED
@@ -2737,6 +2823,8 @@ local function sleep(nest: Nest)
 	-- coming back for that pod free, which is the exact case this exists for.
 	nest.calmSince = os.clock()
 	nest.chaseSince = 0
+	nest.rampDone = nil
+	nest.handOff = nil
 	nest.humanoid.WalkSpeed = 0
 	nest.parent:SetAttribute("Asleep", true)
 end
@@ -2793,13 +2881,31 @@ local function canChaseFrom(nest: Nest): boolean
 	return not MapService.IsInSafeZone(at) and (at - nest.origin).Magnitude <= P.LeashStuds
 end
 
-local function takeNextThief(nest: Nest): boolean
+-- `handOff` (2026-10-09, the owner's guardian fix): straight on from a catch,
+-- in the same raid -- the chase runs at the ramp's top (rampDone).
+local function takeNextThief(nest: Nest, handOff: boolean?): boolean
 	if next(nest.thieves) == nil or nest.busy or not canChaseFrom(nest) then
 		return false
+	end
+	-- Never a body still in the air: one being thrown (its claim is held to the
+	-- end of the throw) or limp. Not dropped either (nextThief drops whoever it
+	-- is told is ineligible): set aside, remembered, chased once on their feet.
+	local aloft: { [Player]: number } = {}
+	for player, since in pairs(nest.thieves) do
+		local body = player.Character
+		if throwToken[player] ~= nil or (body ~= nil and isRagdolled(body)) then
+			aloft[player] = since
+		end
+	end
+	for player in pairs(aloft) do
+		nest.thieves[player] = nil
 	end
 	local thief = GuardianPursuit.nextThief(nest.thieves, nest.root.Position, function(player: Player): Vector3?
 		return eligibleThief(nest, player)
 	end)
+	for player, since in pairs(aloft) do
+		nest.thieves[player] = since
+	end
 	if not thief then
 		return false
 	end
@@ -2807,6 +2913,7 @@ local function takeNextThief(nest: Nest): boolean
 	nest.sample = nil
 	nest.state = "chasing"
 	nest.chaseSince = os.clock()
+	nest.rampDone = if handOff then true else nil
 	nest.stateUntil = 0
 	pinToServer(nest)
 	setWalk(nest, chaseSpeedFor(nest, os.clock()))
@@ -2816,11 +2923,12 @@ end
 
 -- Every end of a chase: the target goes, its sweep with it, and the walk home
 -- starts -- unless somebody remembered is next.
-local function endChase(nest: Nest)
+-- `handOff`: the end of a catch's throw -- the next chase is the same raid.
+local function endChase(nest: Nest, handOff: boolean?)
 	nest.target = nil
 	nest.sample = nil
 	goHome(nest)
-	takeNextThief(nest)
+	takeNextThief(nest, handOff)
 end
 
 -- How far the guardian's colliding body reaches from its root, flat: measured
@@ -3092,6 +3200,7 @@ local function recoverGuardian(nest: Nest, reason: string, now: number): boolean
 			nest.sample = nil
 			nest.busy = false
 			nest.busySince = nil
+			nest.handOff = nil
 			nest.state = "returning"
 			nest.stateUntil = 0
 			pcall(publishPursuit)
@@ -3220,6 +3329,21 @@ local function step(nest: Nest, now: number)
 		nest.calmSince = 0
 	end
 
+	--== A POD RUSH GROWS A TAKEN SLOT BACK (takeSlot; 2026-10-09) ==--
+	-- Above the busy and asleep returns: a nest mid-throw or asleep regrows too.
+	-- Only while the rush is on and it is day; normal pods, normal odds.
+	local due = nest.regrowAt
+	if due then
+		for slot, at in pairs(due) do
+			if now >= at then
+				due[slot] = nil
+				if rushOn and GameConfig.isDay() then
+					growPod(nest, slot)
+				end
+			end
+		end
+	end
+
 	-- Remembered thieves who reached safety, died, left or stopped carrying this
 	-- nest's pod are dropped as soon as it happens, not when their turn comes.
 	if next(nest.thieves) ~= nil then
@@ -3239,6 +3363,7 @@ local function step(nest: Nest, now: number)
 		if now >= nest.stateUntil then
 			nest.state = "chasing"
 			nest.chaseSince = os.clock()
+			nest.rampDone = nil
 			setWalk(nest, chaseSpeedFor(nest, os.clock()))
 			nest.parent:SetAttribute("Asleep", false)
 		end
@@ -3381,6 +3506,43 @@ local function step(nest: Nest, now: number)
 				-- threw on a nil index, and the nest went catatonic with no error
 				-- anywhere near the thing that stopped working.
 				local took = false
+				--==============================================================
+				-- FREE AT THE LAUNCH (2026-10-09, the owner: "we gotta fix
+				-- guardians first")
+				--
+				-- The throw yields through the victim's flight -- the five-odd
+				-- seconds -- and `busy` held the guardian standing for all of
+				-- it while a second thief it remembered ran on: "seems stopping
+				-- for a while then chase". Now the moment the victim leaves the
+				-- ground, a remembered thief it can still chase is chased at
+				-- once, at the ramp's top (takeNextThief's hand-off), and the
+				-- flight finishes on its own. Nobody to turn on: it holds as it
+				-- always did -- unless somebody robs it before the victim lands,
+				-- which provoke hands straight to the same release
+				-- (nest.handOff). Never the victim, who is in the air.
+				--==============================================================
+				local released = false
+				local function handOff(): boolean
+					if released or not nest.busy or not (nest.target == victim or nest.target == nil) then
+						return false
+					end
+					nest.busy = false
+					if takeNextThief(nest, true) then
+						released = true
+						if nest.handOff == handOff then
+							nest.handOff = nil
+						end
+						nest.busySince = nil
+						return true
+					end
+					nest.busy = true
+					return false
+				end
+				local function launched()
+					if not handOff() and not released and nest.busy then
+						nest.handOff = handOff
+					end
+				end
 				if victim then
 					--==========================================================
 					-- CONFISCATE FIRST, THEN THROW. THE ORDER IS THE FEATURE.
@@ -3477,7 +3639,7 @@ local function step(nest: Nest, now: number)
 						nest.state = "hauling"
 					end
 
-					local ok, err = pcall(throwPlayer, nest, victim)
+					local ok, err = pcall(throwPlayer, nest, victim, launched)
 					if not ok then
 						warn("[Seed/NestService] throw failed: " .. tostring(err))
 						-- Never leave somebody ragdolled because the throw broke,
@@ -3524,10 +3686,20 @@ local function step(nest: Nest, now: number)
 				-- here, before the walk home. The sweep sample goes either
 				-- way -- the throw moved everybody.
 				--==========================================================
-				nest.sample = nil
-				nest.busy = false
-				if nest.target == victim or nest.target == nil then
-					endChase(nest)
+				--
+				-- Unless the launch already handed the guardian on (above):
+				-- then this is the victim's landing and nothing more -- a late
+				-- end of a throw never ends the chase that followed it.
+				if nest.handOff == handOff then
+					nest.handOff = nil
+				end
+				if not released then
+					released = true
+					nest.sample = nil
+					nest.busy = false
+					if nest.target == victim or nest.target == nil then
+						endChase(nest, true)
+					end
 				end
 			end)
 			return
@@ -3658,6 +3830,22 @@ function NestService.SpecStep(nest: any, now: number)
 	step(nest, now)
 end
 
+-- Studio specs (2026-10-09, POD RUSH): the slot take TakePod makes, on a
+-- record the spec raised -- the pod destroyed, the regrowth a rush schedules,
+-- the theft. False when the slot holds nothing.
+function NestService.SpecTakeSlot(nest: any, slot: number, thief: any): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	specRecord(nest)
+	local pod = nest.pods[slot]
+	if not pod then
+		return false
+	end
+	takeSlot(nest, slot, pod, thief)
+	return true
+end
+
 -- Studio specs (2026-10-08, FIRST MINUTE): what a thief's guide record says
 -- about `steal` -- the stand-ins have no profile -- and the speed a nest would
 -- chase at right now. nil puts the real record back.
@@ -3743,6 +3931,8 @@ function NestService.ClearForNight(): number
 			end
 			nest.pods[slot] = nil
 		end
+		-- Nor does a Pod Rush's regrowth outlive the dusk.
+		nest.regrowAt = nil
 		-- The secret goes with the batch: its pod, its platform, its marks. Dawn
 		-- is a fresh roll for the spot as for every slot.
 		if nest.secret then
@@ -3783,6 +3973,7 @@ function NestService.ResetParents(): number
 			depositHaul(nest, "the parents were reset")
 		end
 		nest.busy = false
+		nest.handOff = nil
 		nest.sample = nil
 		nest.target = nil
 		table.clear(nest.thieves)

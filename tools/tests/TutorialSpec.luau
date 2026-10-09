@@ -25,8 +25,13 @@ local DONE = STEPS + 1
 --==============================================================================
 check(STEPS == 7, "seven steps")
 check(Data.Steps[1].Id == "train" and Data.Steps[2].Id == "speed", "training comes first")
-check(Data.Steps[6].Id == "hatch" and Data.Steps[STEPS].Id == "travel",
-	"the hatch is step 6, and the guide ends with the travel lesson (2026-10-08)")
+check(Data.Steps[3].Id == "steal" and Data.Steps[4].Id == "bank" and Data.Steps[5].Id == "hatch"
+		and Data.Steps[6].Id == "place" and Data.Steps[STEPS].Id == "travel",
+	"steal, bank, then the hatch (step 5) and the place (step 6) -- pods hatch in the Bag (2026-10-09) -- and the "
+		.. "guide ends with the travel lesson (2026-10-08)")
+check(string.find(Data.Steps[5].Detail, "Bag", 1, true) ~= nil and string.find(Data.Steps[5].Detail, "HATCH", 1, true) ~= nil
+		and Data.Steps[6].Title == "Place your plant!",
+	"the hatch step says to hold HATCH in the Bag; the place step places a plant")
 check(Data.Steps[STEPS].Title == "Get around fast!", "titled Get around fast!")
 check(Data.SpeedTarget == 400 and Data.SpeedTargetText == "400",
 	"readiness target is 400 (FIRST MINUTE, 2026-10-08; it was 1,000)")
@@ -116,13 +121,13 @@ check(Data.Current(rich.Tutorial) == 3, "an established player is not made to tr
 -- POSSESSIONS STILL PROVE STEPS
 --==============================================================================
 local carrying = v1({}, { Held = { { Id = "nubkin", Tier = 1, Hatched = false } } })
-check(Data.Current(carrying.Tutorial) == 5, "a banked pod starts at placement")
+check(Data.Current(carrying.Tutorial) == 5, "a banked pod starts at the hatch (step 5 since 2026-10-09)")
 check(#carrying.Held == 1, "and the pod is still there")
 local hatchling = v1({}, { Held = { { Id = "nubkin", Tier = 1, Hatched = true } } })
 check(Data.Current(hatchling.Tutorial) == DONE, "a hatchling means the guide is done")
 local planted = v1({}, { Plants = { { SpeciesId = "nubkin", Tier = 1, Stage = 1, X = 0, Z = 0,
 	PlantedAt = os.time() } } })
-check(Data.Current(planted.Tutorial) == 6, "a planted pod starts at the hatch")
+check(Data.Current(planted.Tutorial) == 5, "a planted pod proves the bank, and starts at the hatch")
 local grown = v1({}, { Plants = { { SpeciesId = "nubkin", Tier = 1, Stage = 3, X = 0, Z = 0,
 	PlantedAt = os.time() } } })
 check(Data.Current(grown.Tutorial) == DONE, "a grown garden is past the guide")
@@ -137,19 +142,20 @@ check(Data.Current(seen.Tutorial) == DONE, "an almanac entry only comes from a h
 -- past the hatch, and it moves neither the first loop's end nor the chest.
 --==============================================================================
 local early = Schema.Default()
-for _, id in { "train", "speed", "steal", "bank", "place" } do
+for _, id in { "train", "speed", "steal", "bank", "hatch" } do
 	Data.Record(early.Tutorial, id)
 end
 check(not Data.Record(early.Tutorial, "travel") and early.Tutorial.Done.travel == nil,
-	"a teleport home before the hatch records nothing")
-check(Data.Record(early.Tutorial, "hatch"), "the hatch records")
+	"a teleport home before the first plant is placed records nothing (the hatch alone is not enough)")
+check(not Data.FirstLoopDone(early.Tutorial), "at the hatch the first loop is not done yet: its plant is still to place")
+check(Data.Record(early.Tutorial, "place"), "placing the first plant records")
 check(Data.FirstLoopDone(early.Tutorial) and not Data.IsComplete(early.Tutorial) and Data.Current(early.Tutorial) == 7,
-	"at the hatch the first loop is done and the guide is not: it stands on step 7")
+	"with the first plant placed the first loop is done and the guide is not: it stands on step 7")
 check(Data.Record(early.Tutorial, "travel") and Data.IsComplete(early.Tutorial)
-	and Data.Current(early.Tutorial) == DONE, "a teleport home after the hatch records travel and finishes the guide")
+	and Data.Current(early.Tutorial) == DONE, "a teleport home after that records travel and finishes the guide")
 check(not Data.Record(early.Tutorial, "travel"), "travel is recorded once")
-check(Data.InFirstLoop("train") and Data.InFirstLoop("hatch") and not Data.InFirstLoop("travel")
-	and not Data.InFirstLoop("plant"), "the first loop is train through hatch")
+check(Data.InFirstLoop("train") and Data.InFirstLoop("hatch") and Data.InFirstLoop("place")
+	and not Data.InFirstLoop("travel") and not Data.InFirstLoop("plant"), "the first loop is train through place")
 
 local function v2(done: { [string]: boolean }, extra: any?): any
 	local profile = Schema.Default() :: any
@@ -166,8 +172,8 @@ check(doneV2.Tutorial.Done.travel == true and Data.IsComplete(doneV2.Tutorial),
 	"a complete v2 save stays complete: travel is credited at load")
 check(doneV2.Tutorial.Version == 3 and doneV2.Tutorial.PodGrants == 1, "restamped version 3, its pod grants kept")
 local midV2 = v2({ train = true, speed = true, steal = true, bank = true, place = true })
-check(not midV2.Tutorial.Done.travel and Data.Current(midV2.Tutorial) == 6,
-	"a v2 player mid-guide is not credited travel: they meet it after their hatch")
+check(not midV2.Tutorial.Done.travel and Data.Current(midV2.Tutorial) == 5,
+	"a v2 player mid-guide (a pod planted, not hatched) is not credited travel: they stand at the hatch")
 local credited = 0
 for _, record in { finished, hatchedOnly, boughtBat, hatchling, grown, seen } do
 	if record.Tutorial.Done.travel == true and Data.IsComplete(record.Tutorial) then
@@ -253,15 +259,15 @@ local chestPlayer = {
 	SetAttribute = function() end,
 } :: any
 if Config.BonusChest.Enabled then
-	for _, id in { "train", "speed", "steal", "bank", "place" } do
+	for _, id in { "train", "speed", "steal", "bank", "hatch" } do
 		Data.Record(chestProfile.Tutorial, id)
 	end
 	local _, lockedCode = Chest.Claim(chestPlayer)
-	check(lockedCode == "LOCKED", "before the hatch the chest is locked")
-	Data.Record(chestProfile.Tutorial, "hatch")
+	check(lockedCode == "LOCKED", "before the first plant is placed the chest is locked")
+	Data.Record(chestProfile.Tutorial, "place")
 	local opened, code = Chest.Claim(chestPlayer)
 	check(opened == true and code == "OK" and chestProfile.Tutorial.Done.travel == nil,
-		"at the hatch -- the travel step still to come -- it opens, exactly as before")
+		"with the first plant placed -- the travel step still to come -- it opens, at the first loop's end as before")
 end
 local chestSource = chestModule.Source
 check(select(2, string.gsub(chestSource, "TutorialData%.FirstLoopDone%(profile%.Tutorial%)", "")) == 2

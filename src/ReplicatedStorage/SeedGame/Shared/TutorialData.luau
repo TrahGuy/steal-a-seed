@@ -24,12 +24,16 @@
 -- ONE LESSON AFTER THE HATCH: THE TRAVEL BUTTONS (owner, 2026-10-08; Version 3)
 --
 -- Step 7, `travel`, teaches OBBY and TELEPORT TO PLOT. It is recorded only on a
--- successful PlotService.TeleportHome while the hatch is already done (Needs,
--- below) -- never by a client, never before the hatch. It pays nothing, so the
--- FIRST LOOP still ends at the hatch: the Bonus Chest opens there and the
+-- successful PlotService.TeleportHome while the first loop is already done
+-- (Needs, below) -- never by a client, never before it. It pays nothing, so the
+-- FIRST LOOP still ends before it: the Bonus Chest opens there and the
 -- TutorialCompleted analytics event is counted there (FirstLoopDone), exactly
 -- as under Version 2. IsComplete -- every step, travel included -- is only
 -- what decides that the guide is finished and stands down.
+--
+-- SINCE 2026-10-09 THE HATCH COMES BEFORE THE PLACE (pods hatch in the Bag, and
+-- the plant goes straight into a free bed): train, speed, steal, bank, hatch,
+-- place, travel. The first loop is still those first six steps.
 --==============================================================================
 local Tutorial = {}
 
@@ -124,17 +128,26 @@ Tutorial.Steps = {
 	{
 		Id = "bank",
 		Title = "Bring it to your plot!",
-		Detail = "Run back across the red line. Crossing it banks the pod into your hotbar.",
+		Detail = "Run back across the red line. Crossing it banks the pod into your Bag, and its timer starts.",
 	},
-	{
-		Id = "place",
-		Title = "Place your pod here!",
-		Detail = "Equip the pod from your hotbar, then tap or click an empty spot on your own soil.",
-	},
+	--==========================================================================
+	-- HATCH, THEN PLACE (2026-10-09, the owner's Phase 1: pods hatch in the Bag)
+	--
+	-- A pod grows in the Bag from the moment it is banked and is hatched there,
+	-- and the plant goes straight into a free bed -- which is `place` done in the
+	-- same moment. With every bed taken it goes to the Bag, and `place` is
+	-- putting it in the ground by hand. The step ids are unchanged; only their
+	-- order and words are.
+	--==========================================================================
 	{
 		Id = "hatch",
 		Title = "Hatch your first plant!",
-		Detail = "Wait for the pod's timer, then hold its Hatch prompt.",
+		Detail = "Open your Bag when your pod's timer ends, then hold HATCH.",
+	},
+	{
+		Id = "place",
+		Title = "Place your plant!",
+		Detail = "Equip the plant from your hotbar, then tap or click an empty spot on your own soil.",
 	},
 	{
 		Id = "travel",
@@ -156,19 +169,22 @@ end
 --
 -- `travel` is recorded on any successful teleport home, and a beginner may press
 -- TELEPORT TO PLOT long before their first hatch. Recorded then, it would tick
--- off a lesson they were never given -- so Record refuses it until the hatch is
--- done, and the teleport that follows the hatch is the one that counts.
+-- off a lesson they were never given -- so Record refuses it until the first
+-- loop's last step is done (the hatch until 2026-10-09; placing the first plant
+-- since the hatch moved before it), and the teleport after that is the one
+-- that counts.
 --==============================================================================
-Tutorial.Needs = { travel = "hatch" } :: { [string]: string }
+Tutorial.Needs = { travel = "place" } :: { [string]: string }
 
 --==============================================================================
--- THE FIRST LOOP: EVERY STEP UP TO AND INCLUDING THE HATCH
+-- THE FIRST LOOP: EVERY STEP UP TO AND INCLUDING THE FIRST PLANT PLACED
 --
--- The six steps Version 2 called the whole guide. The Bonus Chest opens when
--- they are done and Metrics counts TutorialCompleted then, so step 7 delays
--- neither and the analytics series keeps its meaning.
+-- The six steps Version 2 called the whole guide -- the same six since
+-- 2026-10-09, with the hatch before the place. The Bonus Chest opens when they
+-- are done and Metrics counts TutorialCompleted then, so step 7 delays neither
+-- and the analytics series keeps its meaning.
 --==============================================================================
-local FIRST_LOOP = indexOf.hatch
+local FIRST_LOOP = indexOf.place
 
 --==============================================================================
 -- WHAT VERSION 1 CALLED ITS STEPS
@@ -258,7 +274,7 @@ function Tutorial.HasOutstandingPod(have: Possessions): boolean
 	local starterAt = tonumber(have.starterAt) or 0
 	for _, row in have.plants or {} do
 		-- Stage 3 is grown. Anything below it is still waiting to hatch, which is
-		-- the same reading Sanitise uses below to credit the `place` step.
+		-- the same reading Sanitise uses below (it credits `bank` for one).
 		if type(row) == "table" and (tonumber(row.Stage) or 3) < 3
 			and not (starterAt > 0 and tonumber(row.PlantedAt) == starterAt) then
 			return true
@@ -324,7 +340,7 @@ function Tutorial.FirstLoopDone(progress: Progress): boolean
 	return true
 end
 
--- Whether `milestone` is one of the first loop's steps (train..hatch).
+-- Whether `milestone` is one of the first loop's steps (train..place).
 function Tutorial.InFirstLoop(milestone: string): boolean
 	local i = indexOf[milestone]
 	return i ~= nil and i <= FIRST_LOOP
@@ -412,27 +428,36 @@ function Tutorial.Sanitise(raw: any, profile: any): Progress
 
 	-- How far the profile's own contents prove they got, as a step index -- on a
 	-- profile that never had the starter pod (above).
+	--
+	-- SINCE THE HATCH MOVED BEFORE THE PLACE (2026-10-09) the proofs read: a pod
+	-- (planted, or in the Bag) proves `bank`, and anything hatched -- a grown
+	-- plant, a hatched Tool, an Almanac entry -- proves the whole first loop,
+	-- exactly as it did when the hatch was its last step. Nobody is sent
+	-- backwards by the swap.
 	local through = 0
 	if (tonumber(profile.StarterAt) or 0) <= 0 then
 		for _, row in profile.Plants or {} do
 			if type(row) == "table" then
-				through = math.max(through, if row.Stage == 3 then indexOf.hatch else indexOf.place)
+				through = math.max(through, if row.Stage == 3 then FIRST_LOOP else indexOf.bank)
 			end
 		end
 		for _, row in profile.Held or {} do
 			if type(row) == "table" then
-				through = math.max(through, if row.Hatched == true then indexOf.hatch else indexOf.bank)
+				through = math.max(through, if row.Hatched == true then FIRST_LOOP else indexOf.bank)
 			end
 		end
 		if next(profile.Almanac or {}) then
-			through = math.max(through, indexOf.hatch)
+			through = math.max(through, FIRST_LOOP)
 		end
 	end
 	-- Past the old hatch by any milestone: the first loop is done. Whether that
-	-- also finishes the guide is rule 3's question, below.
+	-- also finishes the guide is rule 3's question, below. A Version 3 record's
+	-- own `hatch` is not such a milestone (2026-10-09): since the hatch moved
+	-- before the place it no longer means the loop is over, and a v3 record that
+	-- placed its plant says so itself.
 	for _, key in LEGACY_PAST_HATCH do
-		if legacy[key] then
-			through = math.max(through, indexOf.hatch)
+		if legacy[key] and (beforeTravel or key ~= "hatch") then
+			through = math.max(through, FIRST_LOOP)
 		end
 	end
 	for i = 1, through do

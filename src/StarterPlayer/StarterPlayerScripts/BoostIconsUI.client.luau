@@ -93,7 +93,13 @@ padHint.Active = false
 padHint.Parent = row
 
 --==============================================================================
--- ONE ICON: A ROUND SLATE PLATE, THE PICTURE, THE RING, A BADGE
+-- ONE ICON: THE PICTURE, THE RING, A BADGE
+--
+-- TRANSPARENT (2026-10-09, the owner: "everything must be transparent, applies
+-- to buffs, and effects"): the round slate plate behind each icon and the
+-- popover's sheet are gone. The picture, its ring and the faint track the ring
+-- empties along stay; every word carries the game's dark outline over any
+-- scene, as the floating signs do.
 --==============================================================================
 type Icon = {
 	id: string,
@@ -168,9 +174,6 @@ local function buildIcon(e: BoostIcons.Entry): Icon
 	pop.Name = "Pop"
 	pop.Parent = frame
 
-	local plate = MenuKit.frame(frame, "Plate", 1, LOOK.Card, 0.2, 999)
-	plate.Size = UDim2.new(1, -2, 1, -2)
-	plate.Position = UDim2.fromOffset(1, 1)
 	-- The faint full track the ring empties along.
 	local track = MenuKit.frame(frame, "Track", 2, nil, nil, 999)
 	track.Size = UDim2.new(1, -6, 1, -6)
@@ -192,11 +195,10 @@ local function buildIcon(e: BoostIcons.Entry): Icon
 	badge.AnchorPoint = Vector2.new(0.5, 0)
 	badge.Position = UDim2.new(0.5, 0, 1, -9)
 	badge.Size = UDim2.fromOffset(30, 13)
-	badge.BackgroundColor3 = LOOK.Well
-	badge.BackgroundTransparency = 0.1
+	badge.BackgroundTransparency = 1
 	badge.Font = Enum.Font.FredokaOne
 	badge.Visible = false
-	UIKit.corner(badge, 6)
+	UIKit.stroke(badge, Color3.new(0, 0, 0), 1.5)
 
 	local hit = Instance.new("TextButton")
 	hit.Name = "Hit"
@@ -246,11 +248,12 @@ end
 --==============================================================================
 -- THE POPOVER
 --==============================================================================
-local popover = MenuKit.frame(gui, "Popover", 20, LOOK.Sheet, 0.04, 10)
+-- No sheet behind it (the owner's transparency): only its outlined lines.
+local popover = MenuKit.frame(gui, "Popover", 20, nil, nil, nil)
+popover.BackgroundTransparency = 1
 popover.AnchorPoint = Vector2.new(0, 1)
 popover.AutomaticSize = Enum.AutomaticSize.Y
 popover.Visible = false
-MenuKit.keyline(popover, LOOK.SheetEdge, 1.5)
 local popPad = Instance.new("UIPadding")
 popPad.PaddingTop = UDim.new(0, 8)
 popPad.PaddingBottom = UDim.new(0, 9)
@@ -272,6 +275,7 @@ local function popLine(name: string, order: number, textSize: number, colour: Co
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.AutomaticSize = Enum.AutomaticSize.Y
 	l.Size = UDim2.new(1, 0, 0, textSize + 2)
+	UIKit.stroke(l, Color3.new(0, 0, 0), if textSize >= 18 then 2.5 else 2)
 	return l
 end
 
@@ -280,15 +284,21 @@ local popEffect = popLine("Effect", 2, 14, LOOK.Cream, Enum.Font.FredokaOne)
 local popTime = popLine("Time", 3, 13, LOOK.Gold, Enum.Font.FredokaOne)
 local popHint = popLine("Hint", 4, 13, LOOK.Muted, Enum.Font.FredokaOne)
 
--- The small notch pointing down at the icon.
-local caret = MenuKit.frame(gui, "Caret", 19, LOOK.Sheet, 0.04, nil)
+-- The small notch that pointed down at the icon from the sheet: with no sheet
+-- it draws nothing, and is kept only as the place the popover's foot is.
+local caret = MenuKit.frame(gui, "Caret", 19, nil, nil, nil)
+caret.BackgroundTransparency = 1
 caret.AnchorPoint = Vector2.new(0.5, 0.5)
 caret.Rotation = 45
 caret.Size = UDim2.fromOffset(12, 12)
 caret.Visible = false
-MenuKit.keyline(caret, LOOK.SheetEdge, 1.5)
 
 local lastLayout: HudLayout.Layout? = nil
+-- The topbar's measure with it (HudLayout.measure), for the status rows the
+-- popover keeps off; and the popover's height before it has drawn once, about
+-- a title, two lines of effect, the time and the hint.
+local lastInsetTop = 0
+local POPOVER_GUESS = 100
 
 local function entryOf(id: string): BoostIcons.Entry?
 	for _, e in ipairs(current) do
@@ -313,6 +323,39 @@ local function paintPopover()
 	popHint.Visible = e.hint ~= nil
 end
 
+-- The Pod Rush tracker or its strip while it stands (PodRushUI), in this gui's
+-- safe space and the HUD's units: words that are not HudLayout's groups.
+local function rushWords(): { HudLayout.Rect }
+	local out: { HudLayout.Rect } = {}
+	local rush = playerGui:FindFirstChild("SeedPodRush")
+	if not (rush and rush:IsA("ScreenGui") and rush.Enabled) then
+		return out
+	end
+	local scale = math.max(1e-3, HudLayout.scaleOf(gui))
+	for _, name in ipairs({ "Tracker", "Strip" }) do
+		local f = rush:FindFirstChild(name)
+		if f and f:IsA("GuiObject") and f.Visible then
+			local p = (f.AbsolutePosition - rush.AbsolutePosition) / scale
+			local s = f.AbsoluteSize / scale
+			table.insert(out, HudLayout.rect(p.X, p.Y, s.X, s.Y))
+		end
+	end
+	return out
+end
+
+-- Tells the Pod Rush tracker to step aside while the popover stands on it;
+-- `coversFor` is the popover that sent it aside.
+local coversFor: string? = nil
+local function setCovers(on: boolean)
+	if not on then
+		coversFor = nil
+	end
+	local want = if on then true else nil
+	if player:GetAttribute(CFG.CoversAttribute) ~= want then
+		player:SetAttribute(CFG.CoversAttribute, want)
+	end
+end
+
 local function placePopover()
 	local id = openId
 	local icon = if id then icons[id] else nil
@@ -321,6 +364,7 @@ local function placePopover()
 	if not (icon and L and r) then
 		popover.Visible = false
 		caret.Visible = false
+		setCovers(false)
 		return
 	end
 	local phone = L.sidebar
@@ -330,15 +374,43 @@ local function placePopover()
 	popEffect.TextSize = math.round(14 * textScale)
 	popTime.TextSize = math.round(13 * textScale)
 	popHint.TextSize = math.round(13 * textScale)
-	local margin = HudLayout.Config.Margin
 	local cx = r.x + icon.frame.Position.X.Offset
-	local x = math.clamp(cx - width / 2, margin, math.max(margin, L.safe.X - margin - width))
-	local bottom = r.y - CFG.Popover.Gap
 	popover.Size = UDim2.fromOffset(width, 0)
-	popover.Position = HudLayout.place(HudLayout.rect(x, bottom, width, 0), Vector2.new(0, 1), L.safe)
-	caret.Position = HudLayout.place(HudLayout.rect(cx, bottom - 1, 0, 0), Vector2.new(0.5, 0.5), L.safe)
+	-- CLEAR OF THE GUIDE CARD AND THE HUD'S WORDS (2026-10-09, the owner): over
+	-- its icon where that is clear, else the nearest place that is
+	-- (HudLayout.popoverRect). Its height is what it drew (AutomaticSize), in
+	-- the HUD's units and before the rise's scale; the first time it has none
+	-- yet, so it is placed again on the next frame.
+	local drawn = popover.AbsoluteSize.Y / math.max(1e-3, HudLayout.scaleOf(gui) * popScale.Scale)
+	local height = if drawn > 1 then drawn else POPOVER_GUESS
+	-- The Pod Rush tracker's words too, while it stands. Where nothing is clear
+	-- of them as well (a short phone with the guide's card up), the popover
+	-- stands where it would without them and the tracker steps aside until it
+	-- closes (PodRushUI, CFG.CoversAttribute).
+	-- Once aside the tracker stays aside until this popover closes: hidden, it
+	-- is no longer in the way, and would come back on the next placing.
+	local guide = UIKit.guideShowing(playerGui)
+	local rush = rushWords()
+	local at, clear = HudLayout.popoverRect(L, cx, Vector2.new(width, height), CFG.Popover.Gap, lastInsetTop,
+		guide, rush)
+	local covers = coversFor == id or (not clear and #rush > 0)
+	if covers then
+		at = HudLayout.popoverRect(L, cx, Vector2.new(width, height), CFG.Popover.Gap, lastInsetTop, guide)
+	end
+	coversFor = if covers then id else nil
+	setCovers(covers)
+	popover.Position = HudLayout.place(HudLayout.rect(at.x, at.y + at.h, width, 0), Vector2.new(0, 1), L.safe)
+	caret.Position = HudLayout.place(HudLayout.rect(at.x + width / 2, at.y + at.h - 1, 0, 0), Vector2.new(0.5, 0.5),
+		L.safe)
 	popover.Visible = true
 	caret.Visible = true
+	if drawn <= 1 then
+		task.defer(function()
+			if openId ~= nil and popover.Visible and popover.AbsoluteSize.Y > 1 then
+				placePopover()
+			end
+		end)
+	end
 end
 
 local function unbindNav()
@@ -378,6 +450,7 @@ open = function(id: string?)
 	if not id then
 		popover.Visible = false
 		caret.Visible = false
+		setCovers(false)
 		if was then
 			unbindNav()
 		end
@@ -408,8 +481,10 @@ local function place()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
-	local L = HudLayout.solve(HudLayout.measure(gui))
+	local input = HudLayout.measure(gui)
+	local L = HudLayout.solve(input)
 	lastLayout = L
+	lastInsetTop = input.insetTop or 0
 	local r = L.icons
 	if not r or #current == 0 then
 		row.Visible = false

@@ -87,6 +87,10 @@ local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
+-- THE POD GUIDE (2026-10-09, KB/POD-GUIDE-PLAN.md): each plant's chance in its
+-- nest, the sizes' odds and worth, and the plant's own pod (ItemArt's picture).
+local PodGuide = require(Shared:WaitForChild("PodGuide"))
+local ItemArt = require(Shared:WaitForChild("ItemArt"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -96,6 +100,7 @@ local RAIL = GameConfig.Rail
 local CARD = GameConfig.Card
 local ATTR = GameConfig.Attributes
 local LOOK = MenuKit.Look
+local GUIDE = GameConfig.PodGuide
 local PANEL_NAME = "Index"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
@@ -150,6 +155,8 @@ gui.Parent = playerGui
 local button = UIKit.railButton(playerGui, {
 	name = "IndexButton",
 	art = RAIL.IndexArt,
+	-- INDEX on a plate until a picture has loaded here (UIKit.railFallback).
+	fallback = RAIL.Words.Index,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
 
@@ -183,7 +190,10 @@ placeButton()
 --==============================================================================
 -- THE PANEL: the Bag's shell, a short header, the plants' own icon by the title
 --==============================================================================
-local menu = MenuKit.modal(gui, PANEL_NAME, "Plant Almanac", GameConfig.BagLook.IconImages.plants, nil)
+-- On the studded kit's green collection band (2026-10-08, the owner: "do the
+-- index and bag next"; MenuKit.studdedTheme, GameConfig.StuddedLook.Index).
+local menu = MenuKit.modal(gui, PANEL_NAME, "Plant Almanac", GameConfig.BagLook.IconImages.plants, nil, nil, nil,
+	MenuKit.studdedTheme(GameConfig.StuddedLook.Index))
 -- This gui holds only the panel, so it takes the player's menu size whole.
 UIKit.menuGui(gui, Vector2.new(300, 220))
 local modal = menu.modal
@@ -238,6 +248,9 @@ local filter = MenuKit.segmented(body, Z, AlmanacView.Filters :: { string }, Alm
 -- well stood.
 --==============================================================================
 local plate = MenuKit.baseplate(body, Z - 1)
+-- The studded kit's white body is the page now (2026-10-08): the plate is
+-- still placed with the page, but not drawn, as in the Shop.
+plate.Visible = false
 local grid = Instance.new("ScrollingFrame")
 grid.Name = "Almanac"
 grid.BackgroundTransparency = 1
@@ -258,6 +271,56 @@ local pageList = Instance.new("UIListLayout")
 pageList.SortOrder = Enum.SortOrder.LayoutOrder
 pageList.Padding = UDim.new(0, IDX.SectionGap)
 pageList.Parent = grid
+
+--==============================================================================
+-- POD SIZES (the Pod Guide, 2026-10-09): over the first biome, the seven sizes
+-- in their colours -- what each earns against Tiny, and its chance from the
+-- first biome's nests to the last's (Mega and up grow likelier down the road;
+-- each stand by an arch has its own biome's exact odds). Hidden while a search
+-- runs. Every number is PodGuide's.
+--==============================================================================
+local podSizes = MenuKit.frame(grid, "PodSizes", Z + 1, LOOK.Well, LOOK.WellTransparency, 9)
+podSizes.LayoutOrder = 0
+podSizes.Size = UDim2.new(1, 0, 0, 74)
+MenuKit.keyline(podSizes, LOOK.WellEdge, 1, 0.3)
+do
+	local head = MenuKit.text(podSizes, "Title", 15, LOOK.Text, Z + 2)
+	head.Position = UDim2.fromOffset(10, 3)
+	head.Size = UDim2.new(1, -20, 0, 18)
+	head.TextXAlignment = Enum.TextXAlignment.Left
+	local first, last = road[1], road[#road]
+	head.Text = string.format("%s  <font color=\"#%s\" size=\"12\">income vs Tiny \u{00B7} chance in %s \u{2192} %s</font>",
+		GUIDE.Words.SizesTitle, LOOK.Muted:ToHex(), first.DisplayName, last.DisplayName)
+	head.RichText = true
+	local fromRows, toRows = PodGuide.sizes(first.Id), PodGuide.sizes(last.Id)
+	local count = #fromRows
+	for i, s in ipairs(fromRows) do
+		local cell = MenuKit.frame(podSizes, "Size" .. i, Z + 2)
+		cell.Position = UDim2.new((i - 1) / count, 4, 0, 22)
+		cell.Size = UDim2.new(1 / count, -8, 0, 48)
+		local name = MenuKit.text(cell, "Name", 13, s.colour, Z + 3)
+		name.Size = UDim2.new(1, 0, 0, 15)
+		name.TextScaled = true
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = 13
+		fit.MinTextSize = 9
+		fit.Parent = name
+		name.Text = string.upper(s.name)
+		local worth = MenuKit.text(cell, "Worth", 15, LOOK.Money, Z + 3)
+		worth.Position = UDim2.fromOffset(0, 15)
+		worth.Size = UDim2.new(1, 0, 0, 17)
+		worth.Text = PodGuide.times(s.worth)
+		local odds = MenuKit.body(cell, "Chance", 11, LOOK.Muted, Z + 3)
+		odds.Position = UDim2.fromOffset(0, 32)
+		odds.Size = UDim2.new(1, 0, 0, 14)
+		odds.TextScaled = true
+		local oddsFit = Instance.new("UITextSizeConstraint")
+		oddsFit.MaxTextSize = 11
+		oddsFit.MinTextSize = 8
+		oddsFit.Parent = odds
+		odds.Text = PodGuide.percent(s.chance) .. "\u{2192}" .. PodGuide.percent(toRows[i].chance)
+	end
+end
 
 type Section = {
 	frame: Frame,
@@ -452,6 +515,14 @@ local function cardFor(species: any): Card
 	accent.AnchorPoint = Vector2.new(0.5, 1)
 	accent.Position = UDim2.new(0.5, 0, 1, -2)
 	accent.Size = UDim2.new(0.5, 0, 0, 2)
+	-- How often a nest stocks this plant's own pod (the Pod Guide, 2026-10-09),
+	-- low in the window, found or not -- what the stand by its arch says.
+	local chance = MenuKit.text(well, "Chance", 12, WHITE, Z + 5)
+	chance.AnchorPoint = Vector2.new(0, 1)
+	chance.Position = UDim2.new(0, 5, 1, -6)
+	chance.Size = UDim2.new(1, -10, 0, 14)
+	chance.TextXAlignment = Enum.TextXAlignment.Left
+	chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.percent(PodGuide.chanceOf(species.Id)))
 	local view = Instance.new("ViewportFrame")
 	view.Name = "Plant"
 	view.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -613,8 +684,40 @@ stageView.LightColor = CARD.LightColour
 stageView.LightDirection = CARD.LightDirection
 stageView.ZIndex = Z + 10
 stageView.Parent = stage
+-- The plant's own pod, small in the stage's corner (the Pod Guide,
+-- 2026-10-09): what to look for in a nest. A pod's look is no secret; the
+-- plant over it stays a silhouette until grown.
+local stagePod = MenuKit.frame(stage, "Pod", Z + 11, LOOK.Window, 0.2, 8)
+stagePod.AnchorPoint = Vector2.new(0, 1)
+stagePod.Position = UDim2.new(0, 6, 1, -6)
+stagePod.Size = UDim2.fromScale(0.3, 0.3)
+do
+	local square = Instance.new("UIAspectRatioConstraint")
+	square.Parent = stagePod
+end
+local stagePodPreview = UIKit.itemPreview(stagePod, { name = "Preview", scrim = 1, fit = 0.9 })
+stagePodPreview.hero.Ambient = LOOK.PreviewAmbient
+for _, d in ipairs(stagePodPreview.holder:GetDescendants()) do
+	if d:IsA("GuiObject") then
+		d.ZIndex = math.max(d.ZIndex, Z + 12)
+	end
+end
+stagePodPreview.holder.ZIndex = Z + 12
 
-local info = MenuKit.frame(detail, "Info", Z + 9)
+-- The words beside the stage scroll when they outgrow it (a phone's short
+-- panel): the Pod Guide's lines made the column taller (2026-10-09).
+local info = Instance.new("ScrollingFrame")
+info.Name = "Info"
+info.BackgroundTransparency = 1
+info.BorderSizePixel = 0
+info.ScrollingDirection = Enum.ScrollingDirection.Y
+info.ScrollBarThickness = 4
+info.ScrollBarImageColor3 = LOOK.PlateEdge
+info.CanvasSize = UDim2.new()
+info.AutomaticCanvasSize = Enum.AutomaticSize.Y
+info.Selectable = false
+info.ZIndex = Z + 9
+info.Parent = detail
 local infoList = Instance.new("UIListLayout")
 infoList.SortOrder = Enum.SortOrder.LayoutOrder
 infoList.Padding = UDim.new(0, 4)
@@ -673,20 +776,45 @@ showState.Size = UDim2.new(1, 0, 0, 18)
 showState.AutomaticSize = Enum.AutomaticSize.Y
 showState.TextWrapped = true
 showState.TextXAlignment = Enum.TextXAlignment.Left
+-- Where it comes from (the Pod Guide, 2026-10-09): its own pod, and how often
+-- its biome's nests stock that pod.
+local showHatch = MenuKit.body(info, "HatchesFrom", 13, LOOK.Text, Z + 10)
+showHatch.LayoutOrder = 5
+showHatch.Size = UDim2.new(1, -6, 0, 16)
+showHatch.AutomaticSize = Enum.AutomaticSize.Y
+showHatch.TextWrapped = true
+showHatch.TextXAlignment = Enum.TextXAlignment.Left
+-- WHAT IT EARNS AT EVERY SIZE (the Pod Guide, 2026-10-09; it was the Tiny
+-- yield alone): each size in its colour, its rate a second.
 local yieldRow = MenuKit.frame(info, "Yield", Z + 10, LOOK.Well, LOOK.WellTransparency, 8)
-yieldRow.LayoutOrder = 5
-yieldRow.Size = UDim2.new(1, 0, 0, 32)
+yieldRow.LayoutOrder = 6
+yieldRow.Size = UDim2.new(1, -6, 0, 0)
+yieldRow.AutomaticSize = Enum.AutomaticSize.Y
 MenuKit.keyline(yieldRow, LOOK.WellEdge, 1, 0.3)
+do
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 6)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = yieldRow
+	local rows = Instance.new("UIListLayout")
+	rows.SortOrder = Enum.SortOrder.LayoutOrder
+	rows.Padding = UDim.new(0, 2)
+	rows.Parent = yieldRow
+end
 local yieldKey = MenuKit.text(yieldRow, "Key", 13, LOOK.Money, Z + 11)
-yieldKey.Position = UDim2.fromOffset(10, 0)
-yieldKey.Size = UDim2.new(0.6, -10, 1, 0)
+yieldKey.LayoutOrder = 1
+yieldKey.Size = UDim2.new(1, 0, 0, 18)
 yieldKey.TextXAlignment = Enum.TextXAlignment.Left
-yieldKey.Text = "Garden Yield (Tiny):"
-local yieldValue = MenuKit.text(yieldRow, "Value", 15, LOOK.Text, Z + 11)
-yieldValue.AnchorPoint = Vector2.new(1, 0)
-yieldValue.Position = UDim2.new(1, -10, 0, 0)
-yieldValue.Size = UDim2.new(0.4, 0, 1, 0)
-yieldValue.TextXAlignment = Enum.TextXAlignment.Right
+yieldKey.Text = GUIDE.Words.IncomeTitle
+local yieldValue = MenuKit.body(yieldRow, "Value", 13, LOOK.Text, Z + 11)
+yieldValue.LayoutOrder = 2
+yieldValue.Size = UDim2.new(1, 0, 0, 16)
+yieldValue.AutomaticSize = Enum.AutomaticSize.Y
+yieldValue.TextWrapped = true
+yieldValue.RichText = true
+yieldValue.TextXAlignment = Enum.TextXAlignment.Left
 
 --==============================================================================
 -- THE STAGE'S PEDESTAL
@@ -763,16 +891,32 @@ local function paintDetail()
 		else "Not grown yet: hatch one on your own plot to discover it."
 	showState.TextColor3 = if known then LOOK.Money else LOOK.Muted
 	--==========================================================================
-	-- THE YIELD AT THE BASE TIER, AND UNMULTIPLIED
+	-- THE YIELD AT EVERY SIZE, AND UNMULTIPLIED (the Pod Guide, 2026-10-09)
 	--
-	-- What one of this species pays standing grown at the tier every pod starts
-	-- from: SeedData.IncomePerSecond, the calculation the faucet itself runs. A
-	-- bigger roll pays more, which is the Garden row's number to show, and the
-	-- x2 pass is a fact about the player, not about the plant.
+	-- What one of this species pays standing grown at each size:
+	-- SeedData.IncomePerSecond (PodGuide.incomes), the calculation the faucet
+	-- itself runs. The x2 pass is a fact about the player, not about the plant.
+	-- Still ??? until grown, as the Tiny yield alone was.
 	--==========================================================================
-	yieldValue.Text = if known
-		then "+$" .. GameConfig.compact(SeedData.IncomePerSecond(species, SeedData.BaseTier)) .. "/s"
-		else "???"
+	if known then
+		local parts = {}
+		for i, rate in ipairs(PodGuide.incomes(id)) do
+			local tier = SeedData.Tiers[i]
+			-- The size's colour a quarter darker and bold: the pale ones (Tiny's
+			-- grey, Colossal's gold) read faint on the light sheet (seen in Play).
+			table.insert(parts, string.format("<b><font color=\"#%s\">%s</font></b> $%s/s",
+				tier.color:Lerp(Color3.new(0, 0, 0), 0.25):ToHex(), tier.name, GameConfig.compact(rate)))
+		end
+		yieldValue.Text = table.concat(parts, "  \u{00B7}  ")
+	else
+		yieldValue.Text = "???"
+	end
+	showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.percent(PodGuide.chanceOf(id)),
+		biome and biome.DisplayName or "")
+	local podKey = "pod|p:" .. id .. "|" .. tostring(GUIDE.PodTier)
+	local podArt: ItemArt.Art = { kind = "pod", speciesId = id, tier = GUIDE.PodTier }
+	local podBuilder, podKind = ItemArt.builder(podKey, podArt)
+	stagePodPreview.setModel(podKey, podBuilder, podKind)
 	stageArt.Image = if known then (CARD.Art[id] or "") else ""
 	stageArt.Visible = known
 	if panelOpen then
@@ -860,6 +1004,7 @@ local function paintGrid()
 			s.frame.Visible = not searching or (found[biome.Id] or 0) > 0
 		end
 	end
+	podSizes.Visible = not searching
 	local first = list[1]
 	padFirst.Value = if first then cards[first.species.Id].button else nil
 	if searching and #list == 0 then
@@ -943,6 +1088,8 @@ relayout = function()
 		compact = hud.compact,
 		railRight = hud.railRight / f,
 		rightLeft = hud.rightLeft / f,
+		-- A phone draws this gui smaller (UIKit.menuScaleFor): the panel keeps its room.
+		fill = math.min(1, k),
 		keyboardTop = keyboardTop(),
 	}, RAIL.OutlineThickness, counts)
 	layoutNow = p
@@ -1086,7 +1233,7 @@ local function closeDetail()
 	end
 	detailId = nil
 	detail.Visible = false
-	plate.Visible = true
+	-- The plate stays hidden: the studded body is the page (2026-10-08).
 	grid.Visible = true
 	RarityFX.setActive(showRarityFX, false)
 	MenuKit.unbind(backName)
@@ -1322,6 +1469,20 @@ gui.Destroying:Connect(function()
 	UIKit.coverRail(playerGui, PANEL_NAME, false)
 	MenuKit.unbind("SeedIndexPad")
 	MenuKit.unbind(backName)
+end)
+
+-- OPENED AT ONE PLANT FROM ELSEWHERE (the Pod Guide, 2026-10-09: a Bag pod's
+-- WHAT'S INSIDE?): the panel, then that plant's own page. ShopUI's OpenAt.
+local openAt = Instance.new("BindableEvent")
+openAt.Name = "OpenAt"
+openAt.Parent = gui
+openAt.Event:Connect(function(speciesId: any)
+	local species = if type(speciesId) == "string" then SeedData.ById[speciesId] else nil
+	if not (species and PodGuide.chanceOf(speciesId) > 0) then
+		return
+	end
+	setOpen(true)
+	openDetail(species)
 end)
 
 --==============================================================================

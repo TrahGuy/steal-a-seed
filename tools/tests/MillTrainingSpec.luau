@@ -96,9 +96,12 @@ local ok, err = pcall(function()
 		and GameConfig.trainingRushBlend == nil and ATTR.TrainingRush == nil and ATTR.TrainingCharge == nil
 		and not string.find(configSrc, "trainingRushBlend", 1, true),
 		"GameConfig has no Training block, no rush helpers and no Rush attribute names")
-	check(string.find(treadmill, 'local paid = rate * BonusChestService.Multiplier(player, "training") * discoFactor * dt',
-		1, true) ~= nil,
-		"the one line that mints belt Speed: the rate x the chest's training reward x the Disco Mill x the tick")
+	-- Sprout Dash's own +25% (2026-10-08, the owner's choice) is ADDED to the
+	-- chest's training reward, never multiplied with it.
+	check(string.find(treadmill, 'local training = BonusChestService.Multiplier(player, "training")', 1, true) ~= nil
+		and string.find(treadmill, "+ SproutDash.bonusAt(sprout and (sprout :: any).SproutBoostEndsAt, os.time())", 1, true) ~= nil
+		and string.find(treadmill, "local paid = rate * training * discoFactor * dt", 1, true) ~= nil,
+		"the one line that mints belt Speed: the rate x (the chest's training reward + Sprout Dash's) x the Disco Mill x the tick")
 	check(not string.find(fx, "rushTag", 1, true)
 		and string.find(fx, 'label.Text = "+" .. GameConfig.compact(math.max(1, math.floor(amount + 0.5)))', 1, true) ~= nil,
 		"the +Speed pop prints the amount alone -- no x4 tag")
@@ -374,6 +377,76 @@ local ok, err = pcall(function()
 		string.format("a fully 'rested' rider on the Disco Mill earns %s/s every tick for 40 s: x10 of their own %s, "
 			.. "never x40", tostring(Treadmill.RateOf(rider) * DISCO.Multiplier), tostring(Treadmill.RateOf(rider))),
 		table.concat(discoWrong, ", "))
+
+	--==========================================================================
+	say("5b. A teleport takes a rider off (the owner's report, 2026-10-08)")
+	-- A rider who pressed BIOMES landed at the road with WalkSpeed 0 until they
+	-- jumped: PlotService.TeleportTo moves the root and never unmounted.
+	--==========================================================================
+	local MOUNTED = GameConfig.Attributes.MillMounted
+	local riderRoot = rider.Character.HumanoidRootPart
+	task.wait() -- the mount's own placement, delivered: it must not count
+	check(rider:GetAttribute(MOUNTED) == true, "the Disco rider is still mounted once the mount's own move is delivered")
+	riderRoot.CFrame = CFrame.new(riderRoot.Position + Vector3.new(0, 0, 400)) -- as TeleportTo's PivotTo does
+	task.wait()
+	check(rider:GetAttribute(MOUNTED) == nil, "moved 400 studs by a script (a teleport): unmounted at once, before any tick")
+	-- The tick catches what no script's CFrame write announced: here the BELT
+	-- goes away from a rider who never moved.
+	tick(1) -- away from every belt: the dismount guard clears
+	local walker = fakePlayer("Walker", 958, 1, 0)
+	local walkBelt = belts[fresh]
+	standOn(walker, walkBelt)
+	local mountedOk = Treadmill.Mount(walker, walkBelt)
+	task.wait()
+	check(mountedOk and walker:GetAttribute(MOUNTED) == true, "mounted on a belt, and still mounted a frame later")
+	local home = walkBelt.CFrame
+	walkBelt.CFrame = home + Vector3.new(0, 0, 500)
+	tick(1)
+	check(walker:GetAttribute(MOUNTED) == nil, "carried away from the belt with no script move: the next tick unmounts")
+	walkBelt.CFrame = home
+	stepOff(walker)
+	tick(1) -- off the belt: the dismount guard clears
+	standOn(walker, walkBelt)
+	local walkerMounted = Treadmill.Mount(walker, walkBelt)
+	walker.Character.HumanoidRootPart.CFrame = walkBelt.CFrame * CFrame.new(2, walkBelt.Size.Y / 2 + 3, 4)
+	task.wait()
+	tick(1)
+	check(walkerMounted and walker:GetAttribute(MOUNTED) == true,
+		"a small scripted move over the belt keeps the mount: only AWAY ends it")
+	Treadmill.Unmount(walker)
+	stepOff(walker)
+	local svc = sourceOf(Server, "TreadmillService")
+	check(select(2, string.gsub(svc, "watchMount%(", "")) == 3,
+		"Mount and Rebuild both use the one watcher (jump, death, and a script moving the root away)")
+
+	--==========================================================================
+	say("5c. A dismount survives the landing (Play, 2026-10-08)")
+	-- A jump straight up rises 7.3 studs, past STAND_HEIGHT: a tick at the top
+	-- of it cleared the block, and the landing's Touched remounted the jumper.
+	--==========================================================================
+	local jumper = fakePlayer("Jumper", 959, 1, 0)
+	local jumpBelt = ownMill(jumper.plotId, 3400 + 9 * 40)
+	standOn(jumper, jumpBelt)
+	local jumperOn = Treadmill.Mount(jumper, jumpBelt)
+	Treadmill.Unmount(jumper) -- what the Jumping humanoid's watcher calls
+	jumper.Character.HumanoidRootPart.CFrame = jumpBelt.CFrame * CFrame.new(0, jumpBelt.Size.Y / 2 + 1 + 7.3, 0)
+	task.wait()
+	tick(1) -- at the top of the jump
+	standOn(jumper, jumpBelt) -- landed
+	local remounted = Treadmill.Mount(jumper, jumpBelt) -- the landing's Touched
+	check(jumperOn and not remounted and jumper:GetAttribute(MOUNTED) == nil,
+		"jumped straight up with a tick at the top of the jump: the landing does not remount")
+	stepOff(jumper)
+	tick(1) -- off the footprint: the block clears
+	standOn(jumper, jumpBelt)
+	local backOn = Treadmill.Mount(jumper, jumpBelt)
+	check(backOn and jumper:GetAttribute(MOUNTED) == true, "stepped off and back on: it mounts again")
+	Treadmill.Unmount(jumper)
+	stepOff(jumper)
+	check(string.find(svc, "and ((belt ~= nil and overBelt(root :: BasePart, belt :: BasePart))", 1, true) ~= nil
+		and string.find(svc, "or (discoBelt ~= nil and overBelt(root :: BasePart, discoBelt :: BasePart)))", 1, true) ~= nil,
+		"the block waits for the footprint (overBelt), at any height, on both kinds of belt")
+
 	Treadmill.Unmount(rider)
 	event(nil, nil, nil)
 
