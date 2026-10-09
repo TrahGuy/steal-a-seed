@@ -1,0 +1,295 @@
+{
+  "frames": [
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 67,
+        "height": 157,
+        "x": 61,
+        "width": 120
+      },
+      "nativeAlphaBounds": {
+        "y": 44,
+        "height": 371,
+        "x": 129,
+        "width": 285
+      },
+      "name": "run-1",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 0,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 63,
+        "height": 161,
+        "x": 66,
+        "width": 109
+      },
+      "nativeAlphaBounds": {
+        "y": 33,
+        "height": 382,
+        "x": 561,
+        "width": 259
+      },
+      "name": "run-2",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 443,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 74,
+        "height": 150,
+        "x": 58,
+        "width": 117
+      },
+      "nativeAlphaBounds": {
+        "y": 59,
+        "height": 356,
+        "x": 977,
+        "width": 278
+      },
+      "name": "run-3",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 887,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 62,
+        "height": 162,
+        "x": 63,
+        "width": 111
+      },
+      "nativeAlphaBounds": {
+        "y": 32,
+        "height": 383,
+        "x": 1414,
+        "width": 262
+      },
+      "name": "run-4",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 1330,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 53,
+        "height": 131,
+        "x": 37,
+        "width": 145
+      },
+      "nativeAlphaBounds": {
+        "y": 461,
+        "height": 310,
+        "x": 87,
+        "width": 342
+      },
+      "name": "hop",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 184,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 0,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 96,
+        "height": 128,
+        "x": 55,
+        "width": 149
+      },
+      "nativeAlphaBounds": {
+        "y": 512,
+        "height": 304,
+        "x": 499,
+        "width": 353
+      },
+      "name": "hit",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 443,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 74,
+        "height": 150,
+        "x": 66,
+        "width": 109
+      },
+      "nativeAlphaBounds": {
+        "y": 461,
+        "height": 355,
+        "x": 974,
+        "width": 258
+      },
+      "name": "ready",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 887,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.4225352112676056,
+      "exportContentBounds": {
+        "y": 75,
+        "height": 149,
+        "x": 46,
+        "width": 141
+      },
+      "nativeAlphaBounds": {
+        "y": 464,
+        "height": 352,
+        "x": 1375,
+        "width": 333
+      },
+      "name": "cheer",
+      "torsoAnchorMethod": "alpha span midpoint at half visible height",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 1330,
+        "width": 444
+      }
+    }
+  ],
+  "height": 512,
+  "notes": [
+    "Final source is the normalized upload atlas, not the preserved native generation.",
+    "Coordinates are top-left; right/bottom exclusive. Use final 256x256 cell rectangles.",
+    "Native bounds and normalization transforms are recorded separately.",
+    "Standing/ground contact baseline is y224 in each export cell; hop y184. No painting or nonuniform stretching.",
+    "Visually review animation identity/poses and collision fit before production wiring.",
+    "Common uniform scale based on ready frame; upper leaf movement causes visible-height differences. All standing frames contact y224; hop y184."
+  ],
+  "nativeWidth": 1774,
+  "alpha": {
+    "minAlpha": 0,
+    "exteriorEdgeMaxAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "maxAlpha": 255
+  },
+  "source": "sprout-dash-runner-v1.png",
+  "columns": 4,
+  "width": 1024,
+  "nativeCornerAlpha": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "nativeHeight": 887,
+  "nativeSource": "sprout-dash-runner-v1-original.png",
+  "rows": 2,
+  "rectangles": [
+    {
+      "file": "runner-run-1-v1.png",
+      "x": 0,
+      "y": 0,
+      "name": "run-1",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-run-2-v1.png",
+      "x": 256,
+      "y": 0,
+      "name": "run-2",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-run-3-v1.png",
+      "x": 512,
+      "y": 0,
+      "name": "run-3",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-run-4-v1.png",
+      "x": 768,
+      "y": 0,
+      "name": "run-4",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-hop-v1.png",
+      "x": 0,
+      "y": 256,
+      "name": "hop",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-hit-v1.png",
+      "x": 256,
+      "y": 256,
+      "name": "hit",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-ready-v1.png",
+      "x": 512,
+      "y": 256,
+      "name": "ready",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "runner-cheer-v1.png",
+      "x": 768,
+      "y": 256,
+      "name": "cheer",
+      "width": 256,
+      "height": 256
+    }
+  ]
+}

@@ -37,6 +37,45 @@ library already has usable UI clicks. The beds in Part 2 are where Suno is
 actually the right tool, and that is where the generations are worth spending.
 
 
+-------------------------------------------------------------------------------
+HOW LONG EACH SOUND SHOULD BE (trim to this after generating)
+-------------------------------------------------------------------------------
+Suno always hands back a long clip. Cut it down to these lengths in Audacity,
+and fade out the last 30-50 ms so it does not click when it stops. "ms" is
+milliseconds: 1000 ms = 1 second.
+
+   #   SOUND                               LENGTH            NOTES
+  --   ---------------------------------   ---------------   ----------------
+   1   Card hover pop                      60-110 ms         one tiny pop
+   2   Card click / confirm                90-140 ms         one click
+   3   Denied / not enough cash            250 ms
+   4   Panel open (and close, reversed)    300 ms
+   5   Banked -- a pod made it home        0.7-1 s
+   6   Rarity reveal: Common               300 ms
+       Rarity reveal: Rare                 500 ms
+       Rarity reveal: Epic                 1.2 s
+       Rarity reveal: Legendary            2.5 s
+   7   Mill upgrade bought                 900 ms
+   8   Mounting the belt                   400 ms
+   9   Cash tick                           50 ms             tiny tick
+  10   Garden bed (music)                  2-3 min           loops
+  11   Night garden (music)                2-3 min           loops
+  12   Chase bed, second tier (music)      60-90 s           loops
+  13   Shop / Index underscore (music)     45-60 s           loops
+  14   Title / loading (music)             30-45 s
+  15   Grab -- the parent reaches you      200-300 ms
+  16   Throw -- the launch                 500-700 ms
+  17   Take pod -- the hold completes      250-400 ms
+  18   Chase bed (music)                   45-90 s           loops
+  19   Chase footstep                      2-4 s             a loop of steps
+  20   Rebirth fanfare                     2.5-3 s           big hit about 1.5 s in
+  21   Pod Rush bed (music)                60-90 s           LOOPS, no intro/ending
+  22   Pod Rush start sting                about 2 s
+       Pod Rush finish sting               about 2 s
+
+Music that "loops" must end on a bar line that flows back into its start.
+
+
 ===============================================================================
 PART 1 -- THE ONE-SHOTS
 ===============================================================================
@@ -317,6 +356,87 @@ animation. Ask for the limp.
   If what you get is a SINGLE step rather than a run of them, that is fine and
   arguably better -- set Looped = false on the ChaseStep cue in GameConfig and
   it will be retriggered per stride instead.
+
+
+===============================================================================
+PART 4 -- REBIRTH (2026-10-09)
+===============================================================================
+
+-------------------------------------------------------------------------------
+20. REBIRTH FANFARE                                  <- cue "Rebirth"
+-------------------------------------------------------------------------------
+The biggest moment a player can buy: all their cash gone, reborn stronger. It
+plays under the rebirth celebration, which is about 3.5 s long:
+
+  0.0 - 1.6 s   the character spins twice, light orbs spiral up   = THE BUILD
+  1.6 s         the spin stops, a gold ring bursts out            = THE HIT
+  1.6 - 3.0 s   leaves and sparkles drift up, the popup sits      = THE TAIL
+
+So the sound is a RISE, ONE BIG BRIGHT HIT, then a sparkling fade. Nearby
+players hear it too, from where the player stands.
+
+It must NOT sound like the Legendary reveal (glockenspiel + harp + choir): a
+rebirth is bigger and different. Here the brass carries the hit, and the
+rising whoosh carries the build. No drum kit, no beat, no melody that wants
+to keep going.
+
+  STYLE:
+  magical rising shimmer whoosh building into one bright orchestral brass and bell chord hit, sparkling chime tail, triumphant, no drums, no vocals
+
+  ALTERNATE, if the first one comes out as a song or too epic-movie:
+  short reverse cymbal swell into a single sunny brass fanfare chord with harp glissando and twinkling chimes fading out, cheerful, no drums
+
+  ALTERNATE, softer and more "garden" if the brass is too loud:
+  rising wind chimes and airy shimmer swell into a warm bell and marimba chord, bright sparkle fade, magical, uplifting, no drums, no vocals
+
+  Target: 2.5 to 3.0 s in total.
+  TRIM SO THE BIG HIT LANDS ABOUT 1.5 s AFTER THE START (the build before it
+  can be 1.2 to 1.6 s). Cut everything after the sparkle fades, then fade out
+  the last 50 ms. If the build you get is shorter, keep it: the game can start
+  the sound later so the hit still meets the burst.
+  Level in game: about 0.6. It is louder than a reveal and quieter than the
+  alarm. Claude measures the WAV and sets the real volume before wiring it.
+
+  Upload as AUDIO and send the id. Until then the game borrows the Legendary
+  reveal (RevealLegendary).
+
+
+===============================================================================
+PART 5 -- POD RUSH (2026-10-09)
+===============================================================================
+
+-------------------------------------------------------------------------------
+21. POD RUSH BED (LOOP)                              <- the rush's own music
+-------------------------------------------------------------------------------
+Plays for the 5 minutes of a Pod Rush, in place of the normal garden music,
+the same way the rain event swaps its own bed in. Everyone on the server hears
+it, so it IS the announcement that something is happening. Players are
+sprinting, stealing and being chased the whole time, so it should feel urgent
+and fun, never scary. The chase music still comes in over it when a guardian
+is after you, so it must not compete with that.
+
+  STYLE:
+  upbeat playful chase music loop, fast bouncy marimba and pizzicato strings, punchy drums, whistle hook, cheerful urgency, garden game, instrumental, no vocals
+
+  ALTERNATE, if it comes out too frantic or too orchestral:
+  energetic cartoon garden race music, plucky ukulele and xylophone, bright snare groove, playful brass stabs, fun and fast, instrumental, no vocals
+
+  Target: 60 to 90 s that LOOPS cleanly. Cut at a bar line where the end
+  flows back into the start; no intro build and no ending. About 140 to 160
+  BPM. Level in game: about the normal bed's 0.32; Claude measures it first.
+
+  Upload as AUDIO and send the id.
+
+-------------------------------------------------------------------------------
+22. POD RUSH START AND FINISH STINGS (OPTIONAL)
+-------------------------------------------------------------------------------
+  START (when POD RUSH! is announced):
+  short exciting race start fanfare, quick drum roll into bright brass hit, cheerful, 2 seconds, no vocals
+
+  FINISH (when the rush ends and the end card shows):
+  short referee whistle then a bright brass ta-da chord, fun, 2 seconds, no vocals
+
+  Target: about 2 s each, trimmed tight, a 50 ms fade at the end.
 
 
 ===============================================================================

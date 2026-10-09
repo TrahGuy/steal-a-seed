@@ -1,0 +1,294 @@
+{
+  "frames": [
+    {
+      "uniformScale": 0.2508361204013378,
+      "exportContentBounds": {
+        "y": 149,
+        "height": 75,
+        "x": 81,
+        "width": 94
+      },
+      "nativeAlphaBounds": {
+        "y": 117,
+        "height": 299,
+        "x": 36,
+        "width": 375
+      },
+      "name": "boulder",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 0,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.24926686217008798,
+      "exportContentBounds": {
+        "y": 139,
+        "height": 85,
+        "x": 78,
+        "width": 100
+      },
+      "nativeAlphaBounds": {
+        "y": 79,
+        "height": 341,
+        "x": 459,
+        "width": 402
+      },
+      "name": "thorn-weed",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 443,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.2575107296137339,
+      "exportContentBounds": {
+        "y": 164,
+        "height": 60,
+        "x": 73,
+        "width": 110
+      },
+      "nativeAlphaBounds": {
+        "y": 184,
+        "height": 233,
+        "x": 898,
+        "width": 427
+      },
+      "name": "fallen-log",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 887,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.24734982332155478,
+      "exportContentBounds": {
+        "y": 154,
+        "height": 70,
+        "x": 80,
+        "width": 96
+      },
+      "nativeAlphaBounds": {
+        "y": 131,
+        "height": 283,
+        "x": 1353,
+        "width": 390
+      },
+      "name": "broken-pot",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 0,
+        "height": 443,
+        "x": 1330,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.28776978417266186,
+      "exportContentBounds": {
+        "y": 88,
+        "height": 80,
+        "x": 82,
+        "width": 93
+      },
+      "nativeAlphaBounds": {
+        "y": 524,
+        "height": 278,
+        "x": 64,
+        "width": 323
+      },
+      "name": "heart-full",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 168,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 0,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.2857142857142857,
+      "exportContentBounds": {
+        "y": 88,
+        "height": 80,
+        "x": 82,
+        "width": 92
+      },
+      "nativeAlphaBounds": {
+        "y": 520,
+        "height": 280,
+        "x": 503,
+        "width": 323
+      },
+      "name": "heart-empty",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 168,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 443,
+        "width": 444
+      }
+    },
+    {
+      "uniformScale": 0.1590909090909091,
+      "exportContentBounds": {
+        "y": 189,
+        "height": 35,
+        "x": 97,
+        "width": 62
+      },
+      "nativeAlphaBounds": {
+        "y": 588,
+        "height": 220,
+        "x": 920,
+        "width": 391
+      },
+      "name": "dust",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 224,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 887,
+        "width": 443
+      }
+    },
+    {
+      "uniformScale": 0.22099447513812154,
+      "exportContentBounds": {
+        "y": 88,
+        "height": 80,
+        "x": 89,
+        "width": 78
+      },
+      "nativeAlphaBounds": {
+        "y": 458,
+        "height": 362,
+        "x": 1377,
+        "width": 353
+      },
+      "name": "impact",
+      "torsoAnchorMethod": "visible bounds midpoint",
+      "baselineY": 168,
+      "nativeCell": {
+        "y": 443,
+        "height": 444,
+        "x": 1330,
+        "width": 444
+      }
+    }
+  ],
+  "height": 512,
+  "notes": [
+    "Final source is the normalized upload atlas, not the preserved native generation.",
+    "Coordinates are top-left; right/bottom exclusive. Use final 256x256 cell rectangles.",
+    "Native bounds and normalization transforms are recorded separately.",
+    "Visually review animation identity/poses and collision fit before production wiring.",
+    "Ground props/dust contact y224. Hearts and impact are centered on (128,128), not foot-baseline sprites. Natural aspect ratios preserved; log exported 110x60 pixels, narrower than the rough target."
+  ],
+  "nativeWidth": 1774,
+  "alpha": {
+    "minAlpha": 0,
+    "exteriorEdgeMaxAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "maxAlpha": 255
+  },
+  "source": "sprout-dash-props-v1.png",
+  "columns": 4,
+  "width": 1024,
+  "nativeCornerAlpha": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "nativeHeight": 887,
+  "nativeSource": "sprout-dash-props-v1-original.png",
+  "rows": 2,
+  "rectangles": [
+    {
+      "file": "prop-boulder-v1.png",
+      "x": 0,
+      "y": 0,
+      "name": "boulder",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-thorn-weed-v1.png",
+      "x": 256,
+      "y": 0,
+      "name": "thorn-weed",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-fallen-log-v1.png",
+      "x": 512,
+      "y": 0,
+      "name": "fallen-log",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-broken-pot-v1.png",
+      "x": 768,
+      "y": 0,
+      "name": "broken-pot",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-heart-full-v1.png",
+      "x": 0,
+      "y": 256,
+      "name": "heart-full",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-heart-empty-v1.png",
+      "x": 256,
+      "y": 256,
+      "name": "heart-empty",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-dust-v1.png",
+      "x": 512,
+      "y": 256,
+      "name": "dust",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "prop-impact-v1.png",
+      "x": 768,
+      "y": 256,
+      "name": "impact",
+      "width": 256,
+      "height": 256
+    }
+  ]
+}

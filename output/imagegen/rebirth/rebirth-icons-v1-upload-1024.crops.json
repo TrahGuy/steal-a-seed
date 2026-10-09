@@ -1,0 +1,156 @@
+{
+  "columns": 4,
+  "rows": 1,
+  "nativeSource": "rebirth-icons-v1-original.png",
+  "nativeWidth": 2172,
+  "nativeHeight": 724,
+  "alpha": {
+    "nativeCornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "masterExteriorMaxAlpha": 0,
+    "uploadExteriorMaxAlpha": 0
+  },
+  "nativeMeasuredCrops": [
+    {
+      "uniformScale": 0.72,
+      "cellExteriorMaxAlpha": 0,
+      "nativeRegion": {
+        "height": 724,
+        "width": 543,
+        "y": 0,
+        "x": 0
+      },
+      "name": "rebirth-emblem",
+      "nativeCrop": {
+        "height": 500,
+        "width": 491,
+        "y": 103,
+        "x": 52
+      },
+      "exportContentBounds": {
+        "height": 360,
+        "width": 354,
+        "y": 76,
+        "x": 79
+      },
+      "smallExteriorMaxAlpha": 0
+    },
+    {
+      "uniformScale": 0.6923076923076923,
+      "cellExteriorMaxAlpha": 0,
+      "nativeRegion": {
+        "height": 724,
+        "width": 543,
+        "y": 0,
+        "x": 543
+      },
+      "name": "mill",
+      "nativeCrop": {
+        "height": 518,
+        "width": 520,
+        "y": 101,
+        "x": 564
+      },
+      "exportContentBounds": {
+        "height": 359,
+        "width": 360,
+        "y": 76,
+        "x": 76
+      },
+      "smallExteriorMaxAlpha": 0
+    },
+    {
+      "uniformScale": 0.7157057654075547,
+      "cellExteriorMaxAlpha": 0,
+      "nativeRegion": {
+        "height": 724,
+        "width": 543,
+        "y": 0,
+        "x": 1086
+      },
+      "name": "cash-reset",
+      "nativeCrop": {
+        "height": 479,
+        "width": 503,
+        "y": 119,
+        "x": 1114
+      },
+      "exportContentBounds": {
+        "height": 343,
+        "width": 360,
+        "y": 84,
+        "x": 76
+      },
+      "smallExteriorMaxAlpha": 0
+    },
+    {
+      "uniformScale": 0.6963249516441006,
+      "cellExteriorMaxAlpha": 0,
+      "nativeRegion": {
+        "height": 724,
+        "width": 543,
+        "y": 0,
+        "x": 1629
+      },
+      "name": "title-badge",
+      "nativeCrop": {
+        "height": 471,
+        "width": 517,
+        "y": 120,
+        "x": 1640
+      },
+      "exportContentBounds": {
+        "height": 328,
+        "width": 360,
+        "y": 92,
+        "x": 76
+      },
+      "smallExteriorMaxAlpha": 0
+    }
+  ],
+  "notes": [
+    "Coordinates use a top-left origin with right/bottom exclusive.",
+    "Native generation is 2172x724, not the requested 2048x512. It was preserved untouched.",
+    "Icons were cropped without clipping, uniformly fitted inside the central 360x360 of separate 512x512 cells, then repacked.",
+    "At least 76 pixels transparent margin on master cells; at least 38 on upload cells.",
+    "Use rectangles belonging to the exact file you upload; master and upload offsets differ.",
+    "No text/numbers or actual 3D mill model baked into these supporting icons. No upload or game wiring performed."
+  ],
+  "source": "rebirth-icons-v1-upload-1024.png",
+  "width": 1024,
+  "height": 256,
+  "rectangles": [
+    {
+      "height": 256,
+      "width": 256,
+      "name": "rebirth-emblem",
+      "y": 0,
+      "x": 0
+    },
+    {
+      "height": 256,
+      "width": 256,
+      "name": "mill",
+      "y": 0,
+      "x": 256
+    },
+    {
+      "height": 256,
+      "width": 256,
+      "name": "cash-reset",
+      "y": 0,
+      "x": 512
+    },
+    {
+      "height": 256,
+      "width": 256,
+      "name": "title-badge",
+      "y": 0,
+      "x": 768
+    }
+  ]
+}

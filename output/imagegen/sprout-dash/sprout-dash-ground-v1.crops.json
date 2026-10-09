@@ -1,0 +1,51 @@
+{
+  "horizontalSeam": {
+    "totalRows": 256,
+    "exactlyMatching": false,
+    "maxChannelDifference": 212,
+    "meanAbsoluteRGBDifference": 6.189,
+    "matchingRows": 2
+  },
+  "height": 256,
+  "exportGroundContactY": 48.088,
+  "nativeWidth": 2172,
+  "alpha": {
+    "minAlpha": 255,
+    "exteriorEdgeMaxAlpha": 255,
+    "cornerAlpha": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "maxAlpha": 255
+  },
+  "source": "sprout-dash-ground-v1.png",
+  "columns": 1,
+  "width": 1024,
+  "nativeHeight": 724,
+  "nativeCrop": {
+    "y": 135,
+    "height": 543,
+    "x": 0,
+    "width": 2172
+  },
+  "notes": [
+    "Opaque generated art, uniform resampling only; source preserved.",
+    "Ground uses a vertical 4:1 crop with running contact near y48 in the 1024x256 export.",
+    "Horizontal seams are measured, not assumed perfect. exactlyMatching=false means strict seamless-edge requirement is not met.",
+    "Use as a review draft until motion/tiling fit is approved; no Roblox upload or game wiring."
+  ],
+  "nativeSource": "sprout-dash-ground-v1-original.png",
+  "rows": 1,
+  "rectangles": [
+    {
+      "name": "ground",
+      "height": 256,
+      "x": 0,
+      "width": 1024,
+      "y": 0
+    }
+  ],
+  "nativeGroundContactY": 237
+}

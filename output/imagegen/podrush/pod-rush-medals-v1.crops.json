@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "atlas": "pod-rush-medals-v1.png",
+  "width": 1536,
+  "height": 512,
+  "coordinateSpace": "final atlas pixels, top-left origin; x/y/width/height rectangles",
+  "rectangles": [
+    {
+      "height": 512,
+      "width": 512,
+      "x": 0,
+      "file": "pod-rush-bronze-v1-512.png",
+      "name": "pod-rush-bronze",
+      "y": 0
+    },
+    {
+      "height": 512,
+      "width": 512,
+      "x": 512,
+      "file": "pod-rush-silver-v1-512.png",
+      "name": "pod-rush-silver",
+      "y": 0
+    },
+    {
+      "height": 512,
+      "width": 512,
+      "x": 1024,
+      "file": "pod-rush-gold-v1-512.png",
+      "name": "pod-rush-gold",
+      "y": 0
+    }
+  ],
+  "source": {
+    "file": "pod-rush-medals-v1-original.png",
+    "width": 2172,
+    "height": 724,
+    "boundsMeasuredAtAlpha": 8
+  },
+  "fit": {
+    "cellWidth": 512,
+    "cellHeight": 512,
+    "longestContentSide": 430,
+    "minimumRequiredMargin": 32,
+    "aspectPreserved": true
+  },
+  "sourceCrops": [
+    {
+      "name": "pod-rush-bronze",
+      "nativeRegion": {
+        "y": 0,
+        "x": 0,
+        "height": 724,
+        "width": 724
+      },
+      "nativeCrop": {
+        "y": 31,
+        "x": 115,
+        "height": 663,
+        "width": 537
+      },
+      "uniformScale": 0.6485671191553545,
+      "exportContentBounds": {
+        "y": 41,
+        "x": 82,
+        "height": 430,
+        "width": 348
+      }
+    },
+    {
+      "name": "pod-rush-silver",
+      "nativeRegion": {
+        "y": 0,
+        "x": 724,
+        "height": 724,
+        "width": 724
+      },
+      "nativeCrop": {
+        "y": 30,
+        "x": 798,
+        "height": 664,
+        "width": 536
+      },
+      "uniformScale": 0.6475903614457831,
+      "exportContentBounds": {
+        "y": 41,
+        "x": 82,
+        "height": 430,
+        "width": 347
+      }
+    },
+    {
+      "name": "pod-rush-gold",
+      "nativeRegion": {
+        "y": 0,
+        "x": 1448,
+        "height": 724,
+        "width": 724
+      },
+      "nativeCrop": {
+        "y": 30,
+        "x": 1518,
+        "height": 663,
+        "width": 538
+      },
+      "uniformScale": 0.6485671191553545,
+      "exportContentBounds": {
+        "y": 41,
+        "x": 82,
+        "height": 430,
+        "width": 349
+      }
+    }
+  ]
+}

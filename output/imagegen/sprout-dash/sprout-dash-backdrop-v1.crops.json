@@ -1,0 +1,50 @@
+{
+  "horizontalSeam": {
+    "totalRows": 512,
+    "exactlyMatching": false,
+    "maxChannelDifference": 63,
+    "meanAbsoluteRGBDifference": 1.991,
+    "matchingRows": 0
+  },
+  "height": 512,
+  "exportGroundContactY": null,
+  "nativeWidth": 1774,
+  "alpha": {
+    "minAlpha": 255,
+    "exteriorEdgeMaxAlpha": 255,
+    "cornerAlpha": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "maxAlpha": 255
+  },
+  "source": "sprout-dash-backdrop-v1.png",
+  "columns": 1,
+  "width": 1024,
+  "nativeHeight": 887,
+  "nativeCrop": {
+    "y": 0,
+    "height": 887,
+    "x": 0,
+    "width": 1774
+  },
+  "notes": [
+    "Opaque generated art, uniform resampling only; source preserved.",
+    "Horizontal seams are measured, not assumed perfect. exactlyMatching=false means strict seamless-edge requirement is not met.",
+    "Use as a review draft until motion/tiling fit is approved; no Roblox upload or game wiring."
+  ],
+  "nativeSource": "sprout-dash-backdrop-v1-original.png",
+  "rows": 1,
+  "rectangles": [
+    {
+      "name": "backdrop",
+      "height": 512,
+      "x": 0,
+      "width": 1024,
+      "y": 0
+    }
+  ],
+  "nativeGroundContactY": null
+}
