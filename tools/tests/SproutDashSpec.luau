@@ -396,8 +396,9 @@ check(has(ui, 'send("finish", { id = run.id, hops = run.hops, ticks = state.tick
 check(has(ui, 'RunService:IsStudio() and player:GetAttribute("SproutDashAutoplay") == true'),
 	"its self-hopping test aid runs only in Studio")
 
--- THE GAME'S OWN MUSIC (2026-10-09, the owner: "sprout rush"): a bed of its own
--- while THIS player has the screen open, on Music.client's one Sound.
+-- THE GAME'S OWN MUSIC: a slot for a bed of its own while THIS player has the
+-- screen open, on Music.client's one Sound. Empty: the owner's 111742643280141
+-- is Pod Rush's ("just pod rush", 2026-10-09), so Sprout Dash keeps the bed.
 local music = ""
 for _, s in ipairs(StarterPlayer:GetDescendants()) do
 	if s.Name == "Music" and s:IsA("LocalScript") then
@@ -407,10 +408,10 @@ end
 local sproutAt = music:find("if #sproutTracks > 0 and sproutOk ~= false and sproutOpen() then", 1, true)
 local discoAt = music:find("if #discoTracks > 0 and discoOk ~= false and discoPlaying() then", 1, true)
 local _, soundsMade = music:gsub("Instance%.new%(\"Sound\"%)", "")
-check(CFG.Music.Id == "rbxassetid://111742643280141" and CFG.Music.Volume == 0.32
-		and CFG.Music.Volume == GameConfig.Music.Volume and type(CFG.Music.FadeSeconds) == "number"
-		and CFG.Music.FadeSeconds > 0,
-	"the owner's Sprout Dash bed, at the beds' own level (0.32)")
+check(CFG.Music.Id == "" and GameConfig.Music.PodRushTrack == "rbxassetid://111742643280141"
+		and CFG.Music.Volume == 0.32 and CFG.Music.Volume == GameConfig.Music.Volume
+		and type(CFG.Music.FadeSeconds) == "number" and CFG.Music.FadeSeconds > 0,
+	"the slot is empty (the owner's track is Pod Rush's), at the beds' own level (0.32) when it is filled")
 check(sproutAt ~= nil and discoAt ~= nil and sproutAt < discoAt and soundsMade == 2
 		and has(music, "return localPlayer ~= nil and localPlayer:GetAttribute(SPROUT.Attributes.Open) == true")
 		and has(music, "localPlayer:GetAttributeChangedSignal(SPROUT.Attributes.Open):Connect(function()")

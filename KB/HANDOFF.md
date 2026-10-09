@@ -1,5 +1,13 @@
 # Steal a Seed — Session Handoff
 
+## POD RUSH'S MUSIC AND STINGS; SPROUT DASH BACK TO THE BED — DONE 2026-10-09 (CLAUDE)  (COMMITTED ON wip, ITS OWN COMMIT; NOT PUBLISHED; PodRushSpec 96/0, SproutDashSpec 49/0, MusicBedSpec 28/0; THE THREE IDS LOADED IN STUDIO EDIT; NOT YET HEARD IN PLAY: THAT IS THE COMBINED PHONE PLAY OF QUEUE ITEMS 7-10)
+
+Queue item 8. The owner: "111742643280141 bgm for pod rush / 101349325894268 Start / 117588221543351 finish", then "just pod rush". The batch below had wired 111742643280141 as Sprout Dash's music: the relay read the owner's "sprout rush" as Sprout Dash.
+- `GameConfig.Music.PodRushTrack` = 111742643280141: plays only while a Pod Rush runs, in the disco's place, at the beds' level (Music.Volume 0.32). Studio Edit: loaded, 182.814 s. The peer measured a mean of -16.6 dB, as BGM1.
+- `GameConfig.SproutDash.Music.Id` = "": the slot and Music.client's code stay; Sprout Dash keeps the bed that was playing.
+- `Sfx.Cues.PodRushStart` = 101349325894268 and `PodRushFinish` = 117588221543351: 0.6 each, the whole asset, no window. Studio Edit: loaded, 2.000 s each. The peer measured START sounding 0.00-1.43 s and FINISH 0.00-1.20 s, no lead-in, peak 1.0, clean tails.
+- Files: GameConfig, Music.client (a comment); specs PodRushSpec (the track, the stings), SproutDashSpec (the empty slot).
+
 ## Batch committed and pushed: aad1639 + 22b9fff on origin/wip, NOT published — 2026-10-09 (CLAUDE)
 
 - **Not published.** That stays the owner's own Publish. No publish after v1038 (2026-10-08) is on record: the Studio logs kept on this PC (the oldest from 2026-10-09 00:16 UTC) hold none, and the other session reports none. So rebirth, Sprout Dash, Pod Rush, the Pod Guide and the 25 pods are not live.
@@ -266,7 +274,7 @@ STILL QUEUED (2026-10-09, the owner's, relayed by the other session), in this or
    - DESKTOP: "do not put sidebar on desktop, just on phone". INVITE, EVENTS, WHAT'S NEW and Settings stay where this batch puts them. Only Index, Garden and Inventory move: stacked in that order at the RIGHT edge, vertically centred in the safe height, at the desktop rail size unless it crowds. Shop, WALK MODE and OTHER PLANTS stay top-left; the clock stays top centre.
    - Keep: every badge visible; a sensible PadFocus order; coverRail, and clear of right-docked panels (MY PLANTS). The dependents follow: modal header padding, HudLayout.bag, the buff row, the Pod Rush strip, notices, the guide's pointer.
    - "If the column of three doesn't fit a listed phone under the sidebar row, tell me the numbers before changing the design."
-8. **POD RUSH'S AUDIO; Sprout Dash back to the bed.** The owner: "111742643280141 bgm for pod rush / 101349325894268 Start / 117588221543351 finish", then "just pod rush".
+8. **POD RUSH'S AUDIO; Sprout Dash back to the bed.** -- DONE (entry at the top), its own commit, done before item 7. The owner: "111742643280141 bgm for pod rush / 101349325894268 Start / 117588221543351 finish", then "just pod rush".
    - 111742643280141 moves to Pod Rush's track at 0.32 (182.8 s, mean -16.6 dB, like BGM1).
    - `SproutDash.Music.Id` goes back to "": the slot stays, and Sprout Dash plays the normal bed.
    - The stings at 0.6 each, both checked by the peer (AssetTypeId 3, CrazyCozy Games): Start 2.000 s, sound 0.00-1.43 s; Finish 2.000 s, sound 0.00-1.20 s; no lead-in, peak 1.0, clean tails.

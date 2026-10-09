@@ -904,13 +904,19 @@ local ok, err = pcall(function()
 	local rushAt = musicSrc:find("if #rushTracks > 0 and rushOk ~= false and rushPlaying() then", 1, true)
 	local rainAt = musicSrc:find("if #rainTracks > 0 and rainOk ~= false and rainFalling() then", 1, true)
 	local _, sounds = musicSrc:gsub("Instance%.new%(\"Sound\"%)", "")
-	check(GameConfig.Music.PodRushTrack == "" and discoAt and rushAt and rainAt and discoAt < rushAt and rushAt < rainAt
+	check(GameConfig.Music.PodRushTrack == "rbxassetid://111742643280141" and discoAt and rushAt and rainAt
+			and discoAt < rushAt and rushAt < rainAt
 			and has(musicSrc, "local rushTracks: { string } = usable({ (MUSIC :: any).PodRushTrack })")
 			and has(musicSrc, "return mode ~= nil and mode.PodRush == true") and sounds == 2,
-		"the music: the rush's own bed in the disco's place, \"\" until the owner's track comes; one probe for every bed")
+		"the music: the owner's rush bed (\"111742643280141 bgm for pod rush\") in the disco's place, at the beds' "
+			.. "level; one probe for every bed")
 	local cues = GameConfig.Sfx.Cues
-	check(cues.PodRushStart and cues.PodRushStart.id == "" and cues.PodRushFinish and cues.PodRushFinish.id == "",
-		"the start and finish stings are silent slots for now")
+	check(cues.PodRushStart and cues.PodRushStart.id == "rbxassetid://101349325894268" and cues.PodRushStart.volume == 0.6
+			and cues.PodRushFinish and cues.PodRushFinish.id == "rbxassetid://117588221543351"
+			and cues.PodRushFinish.volume == 0.6 and cues.PodRushStart.group == "UI" and cues.PodRushFinish.group == "UI"
+			and cues.PodRushStart.start == nil and cues.PodRushStart.clip == nil
+			and cues.PodRushFinish.start == nil and cues.PodRushFinish.clip == nil,
+		"the start and finish stings: the owner's, whole, at 0.6, flat on the player's screen")
 
 	local carrySrc = sourceOf(Server, "CarryService")
 	local bankBody = bodyOf(carrySrc, "local function bank(player: Player): boolean")

@@ -194,8 +194,8 @@ local function rushPlaying(): boolean
 end
 
 --==============================================================================
--- AND A SIXTH, WHILE THIS PLAYER PLAYS SPROUT DASH (2026-10-09, the owner:
--- "sprout rush")
+-- AND A SIXTH, WHILE THIS PLAYER PLAYS SPROUT DASH (2026-10-09; an empty slot
+-- since the owner's track went to Pod Rush: "just pod rush")
 --
 -- GameConfig.SproutDash.Music while THIS player has the minigame's screen open
 -- (the LocalPlayer's SproutDash Open attribute, which SproutDashUI writes and

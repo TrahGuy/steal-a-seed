@@ -8569,15 +8569,16 @@ GameConfig.SproutDash = {
 	},
 	-- The screen's band (DEFAULT: the kit's Upgrades orange).
 	Look = { Band = Color3.fromRGB(255, 154, 34), Edge = Color3.fromRGB(153, 81, 20) },
-	-- THE GAME'S OWN MUSIC (2026-10-09, the owner: "sprout rush"; an Audio
-	-- asset, Studio Edit: PreloadAsync Success, 182.81 s). While THIS player has
-	-- the screen open (Attributes.Open, client-local) Music.client crossfades
-	-- the bed to it over FadeSeconds, looping, and back to whatever the world
-	-- asks for on close. On the one music Sound and bus, so the player's music
-	-- level and mute and the chase bed's duck apply as to any bed. Volume is on
-	-- the same scale as Music.Volume (0.32: the beds' own level). "" keeps the
-	-- bed that was playing.
-	Music = { Id = "rbxassetid://111742643280141", Volume = 0.32, FadeSeconds = 1.5 },
+	-- THE GAME'S OWN MUSIC: an empty slot. While THIS player has the screen
+	-- open (Attributes.Open, client-local) Music.client crossfades the bed to
+	-- Id over FadeSeconds, looping, and back to whatever the world asks for on
+	-- close. On the one music Sound and bus, so the player's music level and
+	-- mute and the chase bed's duck apply as to any bed. Volume is on the same
+	-- scale as Music.Volume (0.32: the beds' own level). "" keeps the bed that
+	-- was playing -- as now: the owner's 111742643280141, wired here first on
+	-- 2026-10-09 (a misread of "sprout rush"), is Pod Rush's bed (the owner:
+	-- "just pod rush"; Music.PodRushTrack).
+	Music = { Id = "", Volume = 0.32, FadeSeconds = 1.5 },
 	Words = {
 		Button = "PLAY MINIGAME",
 		Title = "Sprout Dash",
@@ -9200,11 +9201,12 @@ GameConfig.Music = {
 	-- does -- the two are both mini events and never run at once -- on the same
 	-- one Sound and Music bus, so the chase bed ducks it as it ducks any bed;
 	-- looping, faded in and out over PodRushFadeSeconds, and started at the
-	-- rush's own position. "" keeps the normal bed: the owner's Suno take goes
-	-- here once uploaded and measured (sfx/suno prompts.txt, entry 21). An id
-	-- that does not load is reported and skipped.
+	-- rush's own position, at the beds' own level (Volume). The owner's
+	-- (2026-10-09: "111742643280141 bgm for pod rush"; an Audio asset, CrazyCozy
+	-- Games; Studio Edit: loaded, 182.814 s; mean -16.6 dB, as BGM1). "" keeps
+	-- the normal bed. An id that does not load is reported and skipped.
 	--==========================================================================
-	PodRushTrack = "",
+	PodRushTrack = "rbxassetid://111742643280141",
 	PodRushFadeSeconds = 3.0,
 }
 
@@ -9643,11 +9645,13 @@ GameConfig.Sfx = {
 		--==================================================================
 		-- THE POD RUSH'S STINGS (2026-10-09; PodRushUI): a short START with
 		-- its announcement and a FINISH with the end card, flat on the
-		-- player's own screen. Silent ("") until the owner's Suno takes are
-		-- uploaded and measured (sfx/suno prompts.txt, entry 22).
+		-- player's own screen. The owner's (Audio, CrazyCozy Games; Studio
+		-- Edit: loaded, 2.000 s each): START sounds 0.00-1.43 s, FINISH
+		-- 0.00-1.20 s, no lead-in, peak 1.0, clean tails -- the whole asset,
+		-- no window. 0.6 as designed.
 		--==================================================================
-		PodRushStart = { id = "", volume = 0.6, group = "UI" },
-		PodRushFinish = { id = "", volume = 0.6, group = "UI" },
+		PodRushStart = { id = "rbxassetid://101349325894268", volume = 0.6, group = "UI" },
+		PodRushFinish = { id = "rbxassetid://117588221543351", volume = 0.6, group = "UI" },
 
 		--======================================================================
 		-- THE MILL
