@@ -127,16 +127,26 @@ local function placeButton()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	button.Position = HudLayout.place(layout.garden, button.AnchorPoint, layout.safe)
+	-- Its size is the layout's: the rail's 50 x 50, or a phone column's 34-40
+	-- (2026-10-09), the pot no larger than the button.
+	UIKit.railShape(button, Vector2.new(layout.garden.w, layout.garden.h),
+		math.min(RAIL.IconBare, layout.garden.w))
 	-- The owner's studded Garden picture IS the button once it has loaded
 	-- (2026-10-09, GameConfig.Rail.StuddedGardenArt); the pot and GARDEN stay
 	-- under it until then, and for good if it never does.
 	UIKit.railPicture(button, RAIL.StuddedGardenArt, 1)
-	-- On its top-RIGHT corner since the button stands at the left edge
-	-- (2026-10-09): tucked in level with its top where Garden and the Bag stand
-	-- side by side (a phone); on its top-LEFT corner where a small window keeps
-	-- them top right (HudLayout.badges).
-	local row = layout.pairRow == true
-	UIKit.railBadge(badge, layout.compact or row, if layout.gardenRight then "left" else "right", row)
+	-- On a phone the owner's small pill on its top-RIGHT corner, over the gap
+	-- above it (2026-10-09). In a desktop's or a TV's right-edge column tucked
+	-- into its top-LEFT corner, toward the middle. In compact on its top-RIGHT
+	-- corner at the left edge, or its top-LEFT where a small window keeps
+	-- Garden top right (HudLayout.badges).
+	if layout.sidebar then
+		UIKit.railBadge(badge, true, "right", false, true)
+	elseif layout.column then
+		UIKit.railBadge(badge, true, "left")
+	else
+		UIKit.railBadge(badge, layout.compact, if layout.gardenRight then "left" else "right")
+	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 placeButton()

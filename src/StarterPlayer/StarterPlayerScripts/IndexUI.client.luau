@@ -182,7 +182,16 @@ local function placeButton()
 	UIKit.railPicture(button, RAIL.StuddedIndexArt, 1)
 	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.index, Vector2.zero, layout.safe)
-	UIKit.railBadge(badge, layout.compact, if layout.sidebar then "left" else "right")
+	-- On a phone the owner's small pill on its top-RIGHT corner, level with its
+	-- top (2026-10-09); at the top of a desktop's or a TV's right-edge column
+	-- tucked into its top-LEFT corner; in compact's top row tucked into its
+	-- top-right one (HudLayout.badges).
+	local column = layout.column == true
+	if layout.sidebar then
+		UIKit.railBadge(badge, true, "right", true, true)
+	else
+		UIKit.railBadge(badge, layout.compact or column, if column then "left" else "right")
+	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 placeButton()

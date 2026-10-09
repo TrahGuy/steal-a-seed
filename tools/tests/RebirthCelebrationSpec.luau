@@ -463,11 +463,24 @@ local ok, err = pcall(function()
 		{ 956, 440, 62 }, { 844, 390, 47 } }
 	local P = C.Popup
 	local bad, scales = {}, {}
+	local overToastOn = {}
 	local smallest = math.huge
 	local function try(tag, input, phone)
 		local L = HudLayout.solve(input)
-		local avoid = HudLayout.occupied(L)
-		local r, s = RebirthCelebration.popup(L.safe, avoid, phone)
+		-- The notices' line is soft (RebirthFX, 2026-10-09): kept off wherever the
+		-- card still draws at Readable, given way to only where that draws it larger.
+		local avoid = HudLayout.occupiedButToast(L)
+		local r, s = RebirthCelebration.popup(L.safe, avoid, phone, { L.toast })
+		local _, kept = RebirthCelebration.popup(L.safe, HudLayout.occupied(L), phone)
+		local t = L.toast
+		local overToast = t.w > 0 and r.x < t.x + t.w + P.Gap and t.x < r.x + r.w + P.Gap
+			and r.y < t.y + t.h + P.Gap and t.y < r.y + r.h + P.Gap
+		if overToast then
+			table.insert(overToastOn, tag)
+			if not (kept < P.Readable - 1e-9 and s > kept + 1e-9) then
+				table.insert(bad, string.format("%s: over the notices' line though keeping off it draws %.2f", tag, kept))
+			end
+		end
 		local inside = r.x >= P.Gap and r.y >= P.Gap and r.x + r.w <= L.safe.X - P.Gap and r.y + r.h <= L.safe.Y - P.Gap
 		local clear = true
 		for _, a in ipairs(avoid) do
@@ -503,6 +516,12 @@ local ok, err = pcall(function()
 	check(#bad == 0, "on every listed desktop (whole size) and phone (at most 85%): inside the safe area, clear of "
 		.. "every HUD rect, in the upper half", table.concat(bad, "; "))
 	say("    the card's scale: " .. table.concat(scales, ", "))
+	say("    over the notices' line, to stay readable: " .. (if #overToastOn > 0 then table.concat(overToastOn, ", ")
+		else "none"))
+	local fxSrc = (Shared:FindFirstChild("RebirthFX") :: ModuleScript).Source
+	check(P.Readable == 0.66 and string.find(fxSrc, "RebirthCelebration.popup(L.safe, HudLayout.occupiedButToast(L), "
+			.. "phone, { L.toast })", 1, true) ~= nil,
+		"the card keeps off the notices' line unless that would draw it under Popup.Readable (0.66), where it gives way")
 	-- The longest words, at the size the card draws them on the smallest phone.
 	local room = RebirthFX.cardRoom()
 	local small = {}

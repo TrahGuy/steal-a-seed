@@ -1974,6 +1974,9 @@ local function layoutHud()
 		restyleHotbar()
 	end
 	bagButton.Position = HudLayout.place(layout.bag, bagButton.AnchorPoint, layout.safe)
+	-- Its size is the layout's: the rail's 50 x 50, or a phone column's 34-40
+	-- (2026-10-09), the satchel no larger than the button.
+	UIKit.railShape(bagButton, Vector2.new(layout.bag.w, layout.bag.h), math.min(RAIL.IconBare, layout.bag.w))
 	-- The owner's studded Bag picture IS the button once it has loaded
 	-- (2026-10-09, GameConfig.Rail.StuddedBagArt); the satchel and BAG stay
 	-- under it until then, and for good if it never does.

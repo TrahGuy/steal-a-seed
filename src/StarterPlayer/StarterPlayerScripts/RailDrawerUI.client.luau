@@ -1,9 +1,10 @@
 --!strict
 -- Steal a Seed :: RailDrawerUI
 --
--- On a touch screen: the slim panel under the Bag -- INVITE, EVENTS, WHAT'S NEW
--- and Settings down it (the owner, 2026-10-05 and 2026-10-06) -- its scrolling
--- viewport and the handle that shuts it. Nothing else.
+-- On a touch screen: the slim panel -- INVITE, EVENTS, WHAT'S NEW and Settings
+-- (the owner, 2026-10-05 and 2026-10-06) -- as one row under the clock's chip
+-- since 2026-10-09 ("it should show sideways"), its viewport and the "<"
+-- handle at its left end that folds it away to the right edge. Nothing else.
 --
 --==============================================================================
 -- ONE OWNER PER CONTROL, AS EVERYWHERE ON THIS HUD
@@ -20,15 +21,17 @@
 -- this draws nothing.
 --
 --==============================================================================
--- IT SCROLLS, AND IT SHUTS (the owner, 2026-10-06)
+-- IT SHUTS SIDEWAYS (the owner, 2026-10-06; a row since 2026-10-09)
 --
--- Four squares do not fit a short phone's height at a comfortable size, so the
--- squares stop shrinking at MinTile and the viewport scrolls: a thin bar, and a
--- fade over the cut edge while there is more below. A tap still presses a square;
--- a drag scrolls, and the engine never presses the square a drag started on.
+-- From 2026-10-06 the panel ran down the right edge and scrolled where four
+-- squares did not fit a short phone's height. As a row every listed phone holds
+-- it whole, so it never scrolls now; the scrolling frame, its fades and the
+-- pinned "!" below stay for a screen that ever needs them.
 --
--- The handle on the panel's top edge shuts it up under the Bag and opens it again
--- -- a drawn chevron, no glyph (Gotham draws most arrows as boxes). Open by
+-- The handle at the row's left end -- a drawn chevron, no glyph (Gotham draws
+-- most arrows as boxes): ">" while open, "<" while tucked, the way the row will
+-- move (the owner) -- folds the row away to the right edge, where the handle
+-- alone then stands, and brings it back out. Open by
 -- default; the choice lasts the session (a client-local attribute HudLayout
 -- reads), never the save. The slide is decoration: the answer is the shut or
 -- open layout at once, and the tween only draws the way there. Shut, a square
@@ -180,13 +183,15 @@ handle.Parent = dock
 UIKit.corner(handle, 8)
 UIKit.stroke(handle, RAIL.DockEdge, 1.5, 0.15)
 
--- The chevron: two short bars meeting at a point, drawn. Up (^) while open,
--- down (v) while shut: which way the panel will go.
+-- The chevron: two short bars meeting at a point, drawn -- the way the row will
+-- move (the owner, 2026-10-09): a ">" while it is open (a tap tucks it into the
+-- right edge), a "<" while it is tucked (a tap brings it back out). It was an
+-- up (^) or down (v) one on the panel's top edge before.
 local chevron = Instance.new("Frame")
 chevron.Name = "Chevron"
 chevron.AnchorPoint = Vector2.new(0.5, 0.5)
 chevron.Position = UDim2.fromScale(0.5, 0.5)
-chevron.Size = UDim2.fromOffset(18, 10)
+chevron.Size = UDim2.fromOffset(10, 18)
 chevron.BackgroundTransparency = 1
 chevron.Active = false
 chevron.ZIndex = 5
@@ -196,7 +201,7 @@ for i, side in ipairs({ -1, 1 }) do
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar" .. i
 	bar.AnchorPoint = Vector2.new(0.5, 0.5)
-	bar.Position = UDim2.new(0.5, side * 4, 0.5, 0)
+	bar.Position = UDim2.new(0.5, 0, 0.5, side * 4)
 	bar.Size = UDim2.fromOffset(11, 3)
 	bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	bar.BorderSizePixel = 0
@@ -206,10 +211,10 @@ for i, side in ipairs({ -1, 1 }) do
 	bars[i] = bar
 end
 local function drawChevron(shut: boolean)
-	-- Shut: a "v" (pull down to open); open: a "^".
-	local tilt = if shut then 38 else -38
-	bars[1].Rotation = tilt
-	bars[2].Rotation = -tilt
+	-- Tucked: a "<" (the upper bar rising to the right); open: a ">".
+	local tilt = if shut then 52 else -52
+	bars[1].Rotation = -tilt
+	bars[2].Rotation = tilt
 end
 
 -- The handle's badge: INVITE's "!" (its own look, GameConfig.Rail.InviteBadge),
@@ -306,12 +311,15 @@ local function place()
 	end
 	local shut = layout.dockShut == true
 	drawChevron(shut)
-	handle.Position = HudLayout.place(hr, Vector2.zero, layout.safe)
+	local handleAt = HudLayout.place(hr, Vector2.zero, layout.safe)
 	handle.Size = UDim2.fromOffset(hr.w, hr.h)
 	handle.Visible = true
-	-- The viewport and the tray behind it, at the open size; shut, the clip slides
-	-- to nothing (or is simply nothing, with no tween).
-	clip.Position = HudLayout.place(view, Vector2.zero, layout.safe)
+	-- The viewport and the tray behind it, hung from the row's RIGHT end at the
+	-- open size; shut, the clip slides to nothing into the right edge (or is
+	-- simply nothing, with no tween), and the handle goes with its left end.
+	clip.AnchorPoint = Vector2.new(1, 0)
+	panel.AnchorPoint = clip.AnchorPoint
+	clip.Position = HudLayout.place(view, Vector2.new(1, 0), layout.safe)
 	panel.Position = clip.Position
 	-- The pinned "!": its press and its glyph in the clip's own coordinates.
 	local box, from, press = HudLayout.invitePin(layout)
@@ -321,7 +329,7 @@ local function place()
 	pinBang.Position = UDim2.fromOffset(box.x - press.x + box.w / 2, box.y - press.y + box.h / 2)
 	pinBang.Size = UDim2.fromOffset(box.w, math.floor(box.h * BADGE.Scale))
 	local openSize = UDim2.fromOffset(view.w, view.h)
-	local target = if shut then UDim2.fromOffset(view.w, 0) else openSize
+	local target = if shut then UDim2.fromOffset(0, view.h) else openSize
 	local changed = lastShut ~= nil and lastShut ~= shut
 	-- Opening fresh -- on joining, or after being shut -- it opens at the top.
 	if not shut and lastShut ~= false then
@@ -339,6 +347,7 @@ local function place()
 		local info = TweenInfo.new(PP.Slide, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		local tween = TweenService:Create(clip, info, { Size = target })
 		TweenService:Create(panel, info, { Size = target }):Play()
+		TweenService:Create(handle, info, { Position = handleAt }):Play()
 		slide = tween
 		tween.Completed:Once(function(state: Enum.PlaybackState)
 			if state == Enum.PlaybackState.Completed and slide == tween then
@@ -351,6 +360,7 @@ local function place()
 	else
 		clip.Size = target
 		panel.Size = target
+		handle.Position = handleAt
 		clip.Visible = not shut
 		panel.Visible = not shut
 	end

@@ -564,8 +564,10 @@ src/StarterPlayer/StarterPlayerScripts/
     CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only): the
                                 OWNER's rate (GameConfig.gardenIncomeMultiplier), starting above
                                 a showing overhead label (2026-10-04)
-    IndexUI.client.luau         LEFT rail (on a phone the top-right row; the owner's studded picture on
-                                every screen, 2026-10-05/06): the compact almanac (2026-10-04) as ONE
+    IndexUI.client.luau         Index's button (top of the right edge's column with Garden and the Bag
+                                since 2026-10-09 on a phone, a desktop and a TV; the rail's top row in
+                                compact; the owner's studded picture on every screen, 2026-10-05/06):
+                                the compact almanac (2026-10-04) as ONE
                                 scrolling page since 2026-10-06 -- every biome in road order over the
                                 studded baseplate (MenuKit.baseplate), each under its own heading (the
                                 progress row: count, bar, harvest, its own CLAIM), square cards,
@@ -578,7 +580,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 in the header) over the studded baseplate, cards with RobuxPrice prices,
                                 SOON / OFF SALE / OWNED / OPENING, details with Back. Prompts only;
                                 StoreService's receipt grants
-    GardenUI.client.luau        Garden's button (centre left since 2026-10-09; the owner's picture) and
+    GardenUI.client.luau        Garden's button (under Index at the right edge since 2026-10-09's evening,
+                                centre left in compact; the owner's picture) and
                                 MY PLANTS (2026-10-04) -- PLANTED / STORED cards, plot count,
                                 garden income; PLANT, RETURN TO BAG, EQUIP BEST, UNEQUIP ALL asked of
                                 PlantService (GameConfig.Plant.MyPlants); pods keep their clocks
@@ -624,13 +627,13 @@ src/StarterPlayer/StarterPlayerScripts/
                                 the trap's own slot (TrapRemove; the Bag menu has the same
                                 action) -- 2026-10-04; while the owner's trigger cooldown runs
                                 EVERY trap slot is dimmed and counts it down (2026-10-05)
-    RailDrawerUI.client.luau    TOUCH ONLY: the panel under Index (under the Bag until 2026-10-09;
-                                HudLayout `dock`, 2026-10-05;
-                                the left edge's shutting dock before) that INVITE, EVENTS, WHAT'S NEW
-                                and Settings stand down -- a scrolling viewport (`dockView`, squares
-                                never under MinTile) and the handle that shuts it (2026-10-06; session
-                                only, SeedDockShut), the handle wearing a square's badge while shut --
-                                and the frame they stand in, hidden while a centre panel is open
+    RailDrawerUI.client.luau    TOUCH ONLY: the panel that INVITE, EVENTS, WHAT'S NEW and Settings
+                                stand in -- ONE ROW under the clock's chip since 2026-10-09 (HudLayout
+                                `dock`; down the right edge before, the left edge's dock before that):
+                                its viewport (`dockView`, squares never under MinTile) and the "<"
+                                handle at its left end that folds it to the right edge (2026-10-06;
+                                session only, SeedDockShut), the handle wearing a square's badge while
+                                shut -- and the frame they stand in, hidden while a centre panel is open
     TrapUI.client.luau          the red countdown over a trapped player (amber SLOWED)
     TrapMarks.client.luau       THIS player's own placed traps, drawn locally from the records
                                 CombatService puts in their PlayerGui -- nobody else is sent

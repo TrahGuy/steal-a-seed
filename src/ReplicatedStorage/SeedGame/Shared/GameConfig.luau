@@ -6286,6 +6286,11 @@ GameConfig.Rebirth = {
 			-- The most it may stand off the middle, as a share of the width (a
 			-- small phone's free gap between its corner buttons is off it).
 			Shift = 0.15,
+			-- The least it is drawn at before the notices' line gives way to it
+			-- (RebirthCelebration.popup's `soft`, 2026-10-09): its longest lines fit
+			-- at about 19 px (the Bonus line), so 0.66 keeps every word 12 px or
+			-- more drawn. Under the phone's panel row 640 x 360 had it at 0.63.
+			Readable = 0.66,
 			Emblem = 112,
 			Rays = 250,
 		},

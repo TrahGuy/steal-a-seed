@@ -1327,19 +1327,21 @@ function UIKit.railDockScroll(playerGui: Instance): ScrollingFrame
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
 	scroll.Size = UDim2.fromScale(1, 1)
-	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+	-- A row since 2026-10-09 (HudLayout, THE TOP-RIGHT CORNER): it runs, and
+	-- would scroll, sideways; down the edge before.
+	scroll.ScrollingDirection = Enum.ScrollingDirection.X
 	scroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
 	scroll.CanvasSize = UDim2.new()
-	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.X
 	scroll.ScrollBarThickness = 3
 	scroll.ScrollBarImageTransparency = 0.3
-	scroll.VerticalScrollBarInset = Enum.ScrollBarInset.None
+	scroll.HorizontalScrollBarInset = Enum.ScrollBarInset.None
 	scroll.Selectable = false
 	scroll.Parent = clip
-	-- The squares are placed with the top padding in their rects; the bottom's
-	-- is the canvas's own, so AutomaticCanvasSize ends a pad under the last square.
+	-- The squares are placed with the left padding in their rects; the right's
+	-- is the canvas's own, so AutomaticCanvasSize ends a pad after the last square.
 	local pad = Instance.new("UIPadding")
-	pad.PaddingBottom = UDim.new(0, HudLayout.Config.Phone.Panel.Pad)
+	pad.PaddingRight = UDim.new(0, HudLayout.Config.Phone.Panel.Pad)
 	pad.Parent = scroll
 	return scroll
 end
@@ -2648,12 +2650,84 @@ end
 -- instead: on the glass, clear of its neighbour, on the corner a player reads.
 -- `side` is the corner it belongs to: Index's is its right, Garden's its right
 -- too since Garden stands at the left edge (2026-10-09; its left before).
--- `flush` keeps it level with the button's top -- Garden's on a phone, whose
--- pair fills the gap it stands in to the pixel (HudLayout.badges).
+-- `flush` keeps it level with the button's top (HudLayout.badges).
+--
+-- `pill`: A PHONE'S SMALL PILL (the owner, 2026-10-09: "shrink the badges" so
+-- the pictures show). HudLayout.Config.Phone.Badge: Size px tall with its
+-- Stroke, as wide as its count needs at Text px -- never under its height, so
+-- two digits widen it rather than shrink under the drawn-size floor -- on the
+-- button's top-RIGHT corner, Over px past it, growing leftward. Anything else
+-- puts the round 26-px badge back as UIKit.badge made it.
 --==============================================================================
-function UIKit.railBadge(badge: GuiObject, compact: boolean, side: string, flush: boolean?)
+local PILL_PAD, PILL_MIN = "PillPad", "PillMin"
+
+function UIKit.railBadge(badge: GuiObject, compact: boolean, side: string, flush: boolean?, pill: boolean?)
 	local right = side == "right"
 	local edge = if right then 1 else 0
+	local count = badge:FindFirstChild("Count")
+	local line = badge:FindFirstChildOfClass("UIStroke")
+	local round = badge:FindFirstChildOfClass("UICorner")
+	local pad = badge:FindFirstChild(PILL_PAD)
+	local least = badge:FindFirstChild(PILL_MIN)
+	if pill then
+		local PB = HudLayout.Config.Phone.Badge
+		local inner = PB.Size - PB.Stroke * 2
+		if not (pad and pad:IsA("UIPadding")) then
+			local made = Instance.new("UIPadding")
+			made.Name = PILL_PAD
+			made.Parent = badge
+			pad = made
+		end
+		if not (least and least:IsA("UISizeConstraint")) then
+			local made = Instance.new("UISizeConstraint")
+			made.Name = PILL_MIN
+			made.Parent = badge
+			least = made
+		end
+		local padding = pad :: UIPadding
+		padding.PaddingLeft = UDim.new(0, PB.Pad)
+		padding.PaddingRight = UDim.new(0, PB.Pad)
+		local floor = least :: UISizeConstraint
+		floor.MinSize = Vector2.new(inner, inner)
+		floor.MaxSize = Vector2.new(math.huge, inner)
+		badge.AutomaticSize = Enum.AutomaticSize.X
+		badge.Size = UDim2.fromOffset(inner, inner)
+		badge.AnchorPoint = Vector2.new(1, 0)
+		badge.Position = UDim2.new(1, PB.Over - PB.Stroke, 0, if flush then PB.Stroke else PB.Stroke - PB.Over)
+		if line then
+			line.Thickness = PB.Stroke
+		end
+		if round then
+			round.CornerRadius = UDim.new(0, inner / 2)
+		end
+		if count and count:IsA("TextLabel") then
+			count.TextSize = PB.Text
+			count.AutomaticSize = Enum.AutomaticSize.X
+			count.Size = UDim2.new(0, 0, 1, 0)
+			count.Position = UDim2.fromOffset(0, 1)
+		end
+		return
+	end
+	if pad then
+		pad:Destroy()
+	end
+	if least then
+		least:Destroy()
+	end
+	badge.AutomaticSize = Enum.AutomaticSize.None
+	badge.Size = UDim2.fromOffset(26, 26)
+	if line then
+		line.Thickness = 2.5
+	end
+	if round then
+		round.CornerRadius = UDim.new(0, 13)
+	end
+	if count and count:IsA("TextLabel") then
+		count.TextSize = 15
+		count.AutomaticSize = Enum.AutomaticSize.None
+		count.Size = UDim2.fromScale(1, 1)
+		count.Position = UDim2.fromOffset(0, 1)
+	end
 	if compact then
 		local hang = HudLayout.Config.BadgeHang
 		badge.AnchorPoint = Vector2.new(edge, 0)

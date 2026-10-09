@@ -386,7 +386,14 @@ local function where(): (MenuLayout.Rect, number, MenuLayout.PopupShape)
 		return MenuLayout.rect(0, 0, 0, 0), 0, "tall"
 	end
 	local L = HudLayout.solve(HudLayout.measure(gui))
-	return MenuLayout.rewardPopup(L.safe, HudLayout.occupied(L), L.sidebar)
+	local r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupied(L), L.sidebar)
+	if r.w <= 0 then
+		-- No place clear of the notices' line too (a 640 x 360 phone under the
+		-- panel's row, 2026-10-09): the line gives way, the notices' only while
+		-- one passes (HudLayout.occupiedButToast).
+		r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupiedButToast(L), L.sidebar)
+	end
+	return r, scale, shape
 end
 
 local fitScale = 1

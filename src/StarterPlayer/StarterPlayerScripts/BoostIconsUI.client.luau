@@ -386,16 +386,23 @@ local function placePopover()
 	-- The Pod Rush tracker's words too, while it stands. Where nothing is clear
 	-- of them as well (a short phone with the guide's card up), the popover
 	-- stands where it would without them and the tracker steps aside until it
-	-- closes (PodRushUI, CFG.CoversAttribute).
-	-- Once aside the tracker stays aside until this popover closes: hidden, it
-	-- is no longer in the way, and would come back on the next placing.
+	-- closes (PodRushUI, CFG.CoversAttribute). Where nothing is clear of the
+	-- guide's card either (2026-10-09: a 705 x 338 phone, under the panel's
+	-- row), it stands where it would without the card, and the card's words
+	-- step aside too (TutorialUI).
+	-- Once aside they stay aside until this popover closes: hidden, they are no
+	-- longer in the way, and would come back on the next placing.
 	local guide = UIKit.guideShowing(playerGui)
 	local rush = rushWords()
-	local at, clear = HudLayout.popoverRect(L, cx, Vector2.new(width, height), CFG.Popover.Gap, lastInsetTop,
-		guide, rush)
-	local covers = coversFor == id or (not clear and #rush > 0)
+	local size = Vector2.new(width, height)
+	local at, clear = HudLayout.popoverRect(L, cx, size, CFG.Popover.Gap, lastInsetTop, guide, rush)
+	local covers = coversFor == id or (not clear and (#rush > 0 or guide))
 	if covers then
-		at = HudLayout.popoverRect(L, cx, Vector2.new(width, height), CFG.Popover.Gap, lastInsetTop, guide)
+		local clearOfCard
+		at, clearOfCard = HudLayout.popoverRect(L, cx, size, CFG.Popover.Gap, lastInsetTop, guide)
+		if guide and not clearOfCard then
+			at = HudLayout.popoverRect(L, cx, size, CFG.Popover.Gap, lastInsetTop, false)
+		end
 	end
 	coversFor = if covers then id else nil
 	setCovers(covers)

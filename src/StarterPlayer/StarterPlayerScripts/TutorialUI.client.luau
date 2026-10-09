@@ -333,11 +333,16 @@ end
 table.insert(connections, instruction:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
 table.insert(connections, subline:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
 
--- The words stand down while a notice is up beside them (a phone only).
+-- The words stand down while a notice is up beside them (a phone only), and
+-- while a buff popover with no clear place but over them is open (2026-10-09:
+-- a 705 x 338 phone, under the panel's row) -- BoostIconsUI's client-local
+-- BoostIcons.CoversAttribute, which the Pod Rush tracker steps aside for too.
+local COVERS = Config.BoostIcons.CoversAttribute
 local function coverWords()
-	words.Visible = not (guide and Notice.reach() ~= nil)
+	words.Visible = not ((guide and Notice.reach() ~= nil) or player:GetAttribute(COVERS) == true)
 end
 table.insert(connections, Notice.onReach(coverWords))
+table.insert(connections, player:GetAttributeChangedSignal(COVERS):Connect(coverWords))
 
 local function placeBanner()
 	if gui.AbsoluteSize.X <= 0 then

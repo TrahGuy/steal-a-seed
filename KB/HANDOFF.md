@@ -1,6 +1,82 @@
 # Steal a Seed — Session Handoff
 
-## POD RUSH'S MUSIC AND STINGS; SPROUT DASH BACK TO THE BED — DONE 2026-10-09 (CLAUDE)  (COMMITTED ON wip, ITS OWN COMMIT; NOT PUBLISHED; PodRushSpec 96/0, SproutDashSpec 49/0, MusicBedSpec 28/0; THE THREE IDS LOADED IN STUDIO EDIT; NOT YET HEARD IN PLAY: THAT IS THE COMBINED PHONE PLAY OF QUEUE ITEMS 7-10)
+## Tonight's tree goes to the owner's Publish — 2026-10-10 (CLAUDE)
+
+- The owner publishes tonight's tree themselves: the batch (aad1639, 22b9fff, 56530ea), Pod Rush's audio (8f7f7a0) and the HUD layout below. No agent publishes.
+- The published version number goes here once the other session says it is out (the Studio log's "Add publish notes to v...").
+
+## THE HUD LAYOUT: THE PHONE'S PANEL AS A ROW WITH INDEX, GARDEN AND THE BAG UNDER IT; THE DESKTOP'S THREE AT THE RIGHT EDGE — DONE 2026-10-09 (CLAUDE)  (COMMITTED ON wip, ITS OWN COMMIT; NOT PUBLISHED BY AN AGENT -- THE OWNER PUBLISHES TONIGHT'S TREE; HudLayoutSpec 1458/0, InviteHudSpec 416/0, InvitePanelSpec 395/0, RebirthCelebrationSpec 76/0 AND 22 NEIGHBOURING SPECS GREEN; FULL SUITE 132 OF 132 RUN ONCE, ITS TWO FAILURES (THE LAYOUT'S KNOCK-ONS) FIXED AND THOSE SPECS RERUN; NO MUTANTS (THE OWNER'S LEAN RULES); TWO GUARDED PLAYS, CLEARED (probe 336 / 0 differ / 0 ZZ / marker absent): THE PHONE (705 x 338) ON `SeedTest_layout_20261009`, THE DESKTOP (1148 x 716, AND A FORCED PHONE LOOK) ON `SeedTest_layout2_20261009`)
+
+Queue item 7. The owner's asks, relayed by the other session:
+- the phone: "now in mobile, i want to transfer the sidebar below the night/day ui, and it should show sideways, not upward downward, below it is Index, inventory, and garden, smaller buttons";
+- then the owner's sketch: "(Night Day) / <sidebar / Index / Garden / Inventory";
+- the desktop: "do not put sidebar on desktop, just on phone". Only Index, Garden and the Bag move there: stacked at the right edge, vertically centred.
+- The fit numbers went to the owner first (705 x 338 was 12 px short at 40). The owner: "option 1 is fine". The squares shrink to fit, never under 34, so they are 36 on 705 x 338.
+- "flip the arrow": ">" while open, "<" while tucked.
+
+**The phone** (HudLayout `sidebars`, THE TOP-RIGHT CORNER; RailDrawerUI)
+- **The row.** INVITE, EVENTS, WHAT'S NEW and Settings, in that order, form one row in the safe area's top-right corner, under the clock's chip.
+  - The squares are Panel.Tile (40). They shrink to 36 on the 640-px phones. The rule: the row's left end keeps `Panel.RowClear` (128 px) right of the screen's middle, so the boost row under the clock's row still holds two boosts side by side (the widest pair is 378 px on a phone, 302 at BoostShrink).
+  - The handle stands at the row's left end. It is a drawn chevron pointing the way the row will move: ">" while open, "<" while tucked.
+  - Tucked, the row slides into the right edge and the handle alone stands there.
+  - The row never scrolls. The scrolling frame, its fades and the pinned "!" stay, but sideways, for a screen that ever needs them.
+  - On a phone whose top row can't hold the buttons, ADMIN hangs under the clock into the corner (430 x 500 with Roblox's buttons to 250). There the row starts 8 px under ADMIN.
+- **The column.** Index, Garden and the Bag stand one over another, 8 px under the row, centred under Settings, 6 px apart (`Phone.Column`).
+  - Size 40, shrinking to stand 8 px over the jump button, never under 34. That gives 36 on 705 x 338 and 40 on every other listed phone.
+  - Badges are tucked into the top-LEFT corners. Index's sits level with its top.
+  - The centre left is free again.
+- **Their badges are small pills** (the owner, after the first phone Play: "shrink the badges", so the picture shows; `Phone.Badge`, UIKit.railBadge's `pill`):
+  - 22 px tall with the 2-px line, the count at 12 px. A pill widens for two digits rather than shrinking the words.
+  - Each sits on its square's top-RIGHT corner, 5 px past it. Index's sits level with its top, 8 px under the row; Garden's overhangs into the gap above it.
+  - Desktops and TVs keep the round 31-px badges, tucked top-left.
+- `rightLeft` is the column's x: what a panel's header steps round (the row stands down while a centre panel is open).
+
+**The desktop and the TV** (HudLayout `desktop`)
+- Index, Garden and the Bag stand one over another in WHAT'S NEW's right-edge column: the rail's 50-px squares, 6 px apart.
+  - They sit on the safe area's middle (1280 x 720: y 250-412).
+  - They step down 8 px under WHAT'S NEW and Index's tucked badge where they would meet, and up off the strip's band where it reaches the column.
+- Nothing else moved: Shop, the switches, INVITE, EVENTS, WHAT'S NEW, Settings and the clock. Index's old top-left corner is empty.
+- The 1024 x 600 class (1024 x 600, 1000 x 609, 1169 x 609) keeps the desktop again. It went compact that afternoon only because Garden and the Bag had no room at the left edge.
+
+**Compact (a small desktop window) is unchanged.** Index stays in the top row and Garden and the Bag at the left edge's middle; 640 x 400 and smaller keep the old top-right row. Their right edge already holds EVENTS, WALK MODE, OTHER PLANTS and WHAT'S NEW. Not asked for; say if they should follow.
+
+**What follows the move**
+- Garden's and the Bag's buttons take the layout's size (UIKit.railShape) and badge corner. Index's badge takes the column's corner too.
+- The popover on 705 x 338 with the guide's card up: under the panel's row nothing is clear of the card any more. The popover stands where it would without the card, and the CARD'S WORDS STEP ASIDE until it closes. It is the same client-local `BoostIcons.CoversAttribute` the Pod Rush tracker steps aside for (BoostIconsUI, TutorialUI).
+  - Only 705 x 338 and a 700 x 400 window do this. The 700 x 400 window's popover stood over its icon on the card before.
+- The guide's words, the banner fallback and the icon row keep 8 px off the row and the column.
+- **The two big passing cards** (`HudLayout.occupiedButToast`). Found by the full suite:
+  - The invite reward card had no centred place on 640 x 360: the row and the notices' line left none. Where no place clears the notices' line too, the line gives way (InviteRewardUI). Only 640 x 360 does this.
+  - The REBORN! card drew at 0.63 on 640 x 360, its Bonus line 11.9 px. The notices' line is now soft for it (`RebirthCelebration.popup`'s `soft`): kept off wherever the card still draws at `Popup.Readable` (0.66), given way to only where that draws it larger.
+  - The rule is the buff popover's own: the line is the notices' only while one passes.
+- PadFocus only gives focus back to a button wherever it stands: nothing to change.
+
+**Specs** (the owner's lean rules: the specs that touch the changed files, no mutants for layout):
+- HudLayoutSpec 1458/0, InviteHudSpec 416/0 and 22 neighbouring specs green.
+  - The row and the column on every listed phone, with sizes summarised.
+  - The desktop column on every desktop.
+  - The 1024 x 600 class back on the desktop.
+  - The popover rule.
+  - ADMIN's step.
+  - The chevron for both states.
+  - The phone's pills and the desktop's round badges.
+- Full suite 132 of 132, run once (656 s): InvitePanelSpec and RebirthCelebrationSpec failed on the layout's knock-ons (the two big cards, above); fixed, 395/0 and 76/0.
+
+**Seen in Play**: two guarded Plays, both cleared.
+- **The phone**, the owner's emulator at 705 x 338, on `SeedTest_layout_20261009`; captures in `output/hud-layout-2026-10-09/phone/` 01-06.
+  - The row: handle (497,8 22x46), then INVITE, EVENTS, WHAT'S NEW and Settings, 40 px at y 11. The chevron read ">" (bars 52/-52).
+  - Tapped: the row slid into the right edge, the handle moved to (675,8), "<" (-52/52), INVITE's "!" on the handle. Tapped again: back.
+  - The column: Index (656,62), Garden (656,104), Bag (656,146), all 36 px. The Bag ends at 182 and the jump button starts at 190: 8 px clear.
+  - A Pod Rush played 111742643280141 and showed its icon in the boost row. The icon's popover stood at (274,62 214x100), clear of the row, the column and the icon. The guide's words and the tracker stepped aside while it was open and came back on close.
+- **The desktop**, the owner's window at 1148 x 716 with the emulator off, on `SeedTest_layout2_20261009`; captures in `output/hud-layout-2026-10-09/desktop/` 07-08.
+  - Index (1086,248), Garden (1086,304), Bag (1086,360): the middle of the safe height, in WHAT'S NEW's column at (1086,12). Round badges are tucked top-left.
+  - Shop, Settings, EVENTS, the switches and INVITE stand where they were. Index's old corner is empty.
+  - Then a forced phone look (a harness patching HudLayout.measure; deleted after): the row, the 40-px column, and Index's pill (1114,64 26x18 inside its 2-px line) reading "24" at 12 px on its top-right corner, the picture showing.
+- **Seen, not changed** (first on the next queue): on 705 x 338, at the spawn view, the tutorial's world hand (SeedGuideMarker, DisplayOrder 12, under every HUD layer) points at the mill from under the open row. It shows with the row tucked and once the camera turns; the yellow ground arrow shows the way meanwhile.
+
+**Files**: HudLayout, UIKit (the dock's scroll runs sideways; the phone's badge pill), GameConfig (Rebirth Celebration Popup.Readable), RebirthCelebration, RebirthFX, RailDrawerUI, IndexUI, GardenUI, LoadoutUI, BoostIconsUI, TutorialUI, InviteRewardUI; specs HudLayoutSpec, InviteHudSpec, InvitePanelSpec, RebirthCelebrationSpec; AGENTS.md.
+
+## POD RUSH'S MUSIC AND STINGS; SPROUT DASH BACK TO THE BED — DONE 2026-10-09 (CLAUDE)  (COMMITTED ON wip, ITS OWN COMMIT; NOT PUBLISHED; PodRushSpec 96/0, SproutDashSpec 49/0, MusicBedSpec 28/0; THE THREE IDS LOADED IN STUDIO EDIT; THE RUSH'S BED HEARD IN THE LAYOUT'S PHONE PLAY (111742643280141 ON THE MUSIC SOUND DURING A RUSH); THE STINGS NOT READ IN PLAY)
 
 Queue item 8. The owner: "111742643280141 bgm for pod rush / 101349325894268 Start / 117588221543351 finish", then "just pod rush". The batch below had wired 111742643280141 as Sprout Dash's music: the relay read the owner's "sprout rush" as Sprout Dash.
 - `GameConfig.Music.PodRushTrack` = 111742643280141: plays only while a Pod Rush runs, in the disco's place, at the beds' level (Music.Volume 0.32). Studio Edit: loaded, 182.814 s. The peer measured a mean of -16.6 dB, as BGM1.
@@ -269,7 +345,7 @@ Pack hatch-rebirth-extras-v1-pack.zip3,826,435bytes/24entries verifiedCRCandbyte
 
 STILL QUEUED (2026-10-09, the owner's, relayed by the other session), in this order. Each is its own commit on wip, pushed once green (the owner's commit approval for today's work). Never published by an agent.
 
-7. **THE HUD LAYOUT, phone and desktop together, one commit.**
+7. **THE HUD LAYOUT, phone and desktop together, one commit.** -- DONE (entry at the top; with the owner's flipped arrow and the phone's small badge pills).
    - PHONES (the owner's sketch: "(Night Day) / <sidebar / Index / Garden / Inventory"): under the day/night clock pill, the slim panel (INVITE, EVENTS, WHAT'S NEW, Settings) as a HORIZONTAL row, with a "<" toggle at its LEFT end that folds it away sideways to the right edge (it replaces the ^ arrow). Under that, with a small gap, Index, Garden and Inventory (the Bag) stacked VERTICALLY in that order, about 40 px each and never under the touch floor, with the owner's art and word fallbacks. The centre-left is free again on phones.
    - DESKTOP: "do not put sidebar on desktop, just on phone". INVITE, EVENTS, WHAT'S NEW and Settings stay where this batch puts them. Only Index, Garden and Inventory move: stacked in that order at the RIGHT edge, vertically centred in the safe height, at the desktop rail size unless it crowds. Shop, WALK MODE and OTHER PLANTS stay top-left; the clock stays top centre.
    - Keep: every badge visible; a sensible PadFocus order; coverRail, and clear of right-docked panels (MY PLANTS). The dependents follow: modal header padding, HudLayout.bag, the buff row, the Pod Rush strip, notices, the guide's pointer.
@@ -279,7 +355,7 @@ STILL QUEUED (2026-10-09, the owner's, relayed by the other session), in this or
    - `SproutDash.Music.Id` goes back to "": the slot stays, and Sprout Dash plays the normal bed.
    - The stings at 0.6 each, both checked by the peer (AssetTypeId 3, CrazyCozy Games): Start 2.000 s, sound 0.00-1.43 s; Finish 2.000 s, sound 0.00-1.20 s; no lead-in, peak 1.0, clean tails.
    - Its own small commit, or folded into item 7's.
-9. **THE MINIGAME BUTTON, PHONES ONLY** ("the minigame button looks also huge on mobile as i see it, we should descale and put it on a comfortable area"). About 65% (~150 x 36), text at least 12 px drawn. In the right thumb's zone just above the jump button, clear of the right dock, the buff row, the hotbar and notices; else the nearest clear spot through HudLayout, and say where. Desktop unchanged.
+9. **THE MINIGAME BUTTON, PHONES ONLY** ("the minigame button looks also huge on mobile as i see it, we should descale and put it on a comfortable area"). About 65% (~150 x 36), text at least 12 px drawn. CHANGED by the owner after the layout (2026-10-09): LEFT of the column (Index, Garden and the Bag), 8 px clear of it -- not straight above the jump button, which the column now fills on 705 x 338 with nothing to spare. Check it against the column on 705 x 338, 640 x 360 and 844 x 390 notched; clear of the buff row, the hotbar and notices. Desktop unchanged.
 10. **RARITY EDGES.** Static rarity-colour edges for Common to Legendary on Bag tiles and HotbarCard; Mythic, Divine and Secret keep RarityFX. Almanac cards by FORM rarity; locked "???" cards and pods plain. The keyline and RESTORING precedence kept; legible at the phones' 85%.
 11. **THE 100 REBIRTH TITLES** ("approve the rebirth titles, let terminal do it"). The design: `output/design/rebirth-titles-fx-v1/README.md` and `rebirth-titles-fx-v1.json`, from the owner's Cursor session. It is design data, not a drop-in config: read both in full.
    - The ladder: 100 names. Slots 1-4 single-rank; ordinary titles I-III; landmark slots #10, #25, #50, #75 and #100 I-V. GROVE KEEPER I at 20, ELDER ROOT I at 67, WORLD TREE I at 144, EVERBLOOM I at 221, GAIA I at 298, GAIA V at 302. After 302 the title stays GAIA V while REBIRTH N keeps counting; it replaces today's unbounded numerals.
@@ -298,6 +374,15 @@ STILL QUEUED (2026-10-09, the owner's, relayed by the other session), in this or
 - ONE combined phone Play for items 7-10 (Pod Rush's audio heard in it), ONE for item 11. Short, capturing only what the owner needs. One quick desktop pass at the end, with the emulator off, for the desktop changes.
 - No rerun of a green spec; reruns only for a failure or a known flake.
 - Kept: a commit per item, the pushes, the probe and cleanup after each Play, every safety rule (test stores, no publish).
+
+**TOMORROW (2026-10-10), the owner's order after tonight's publish** -- items 8 and 7 are done; the owner stopped the queue there for the night:
+1. **The tutorial's world hand clear of the HUD** (found in the layout's phone Play). On 705 x 338 at the spawn view, the hand (TutorialUI `drawWorld`, SeedGuideMarker, DisplayOrder 12, under every HUD layer by design) points at the mill from under the open row.
+   - Where its fingertip's point falls under a HUD rect (HudLayout.occupied, moved into the viewport's space), stand the hand just below that rect, turned to point UP at it, with its words beside it.
+   - Cache the rects per resize, not per frame. Add a spec, and look at it in Play.
+2. **The minigame button** (item 9, LEFT of the column).
+3. **Rarity edges** (item 10).
+4. **The 100 rebirth titles** and the two prototype effects (item 11).
+The testing rules below stand.
 
 Parked by the owner: the rain biome fix stays as it is for now (the other session holds the options).
 

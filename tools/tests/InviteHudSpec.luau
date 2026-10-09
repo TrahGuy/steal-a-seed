@@ -164,12 +164,13 @@ local ok, err = pcall(function()
 		check(L.sidebar or not overlaps(b, indexBadge), tag .. ": clear of Index's badge",
 			r2s(b) .. " vs " .. r2s(indexBadge))
 		if L.sidebar then
-			-- A phone: the panel's first square, the badge tucked in its padding.
+			-- A phone: the panel's first square, the badge tucked in its padding --
+			-- along the row since 2026-10-09 (down the panel before).
 			local view = L.dockView
-			check(view ~= nil and r.x >= view.x and r.x + r.w <= view.x + view.w and r.x == L.events.x
-					and r.y < L.events.y and L.events.y < L.updates.y and L.updates.y < L.settings.y
-					and r.x == L.settings.x,
-				tag .. ": INVITE first down the panel, then EVENTS, WHAT'S NEW, Settings",
+			check(view ~= nil and r.x == view.x + PP.Pad and r.x + r.w <= view.x + view.w and r.y == L.events.y
+					and r.x < L.events.x and L.events.x < L.updates.x and L.updates.x < L.settings.x
+					and r.y == L.settings.y and r.y == L.updates.y,
+				tag .. ": INVITE first along the panel's row, then EVENTS, WHAT'S NEW, Settings",
 				r2s(r) .. " " .. r2s(L.events) .. " " .. r2s(L.settings))
 			-- The glyph is Scale times its box's height with its ink line round it:
 			-- with the canvas at its top, none of it above the viewport (Play at
@@ -197,14 +198,17 @@ local ok, err = pcall(function()
 		else
 			local W, S = RAIL.WideSize, RAIL.SquareSize
 			-- The rail's top row at its right end (a TV's title-safe frame moves the
-			-- whole rail; the same place in it).
-			local want = rect(L.index.x + W.X - S.X, L.index.y, S.X, S.Y)
+			-- whole rail; the same place in it) -- measured off the rail's corner,
+			-- which Index left for the right edge's column on 2026-10-09.
+			local ox, oy = if L.frame then L.frame.x else 0, if L.frame then L.frame.y else 0
+			local want = rect(ox + RAIL.Inset + W.X - S.X, oy + RAIL.Inset, S.X, S.Y)
 			check(r.x == want.x and r.y == want.y and r.w == want.w and b.x + b.w / 2 == r.x + r.w
 					and b.y + b.h / 2 == r.y,
 				tag .. ": the rail's top row at its right end, the \"!\" half off its top-right corner",
 				r2s(r) .. " want " .. r2s(want))
 			if not case.tv then
-				check(L.index.x == RAIL.Inset and L.index.y == RAIL.Inset, tag .. ": the rail itself has not moved")
+				check(L.shop.x == RAIL.Inset and L.shop.y == RAIL.Inset + W.Y + RAIL.Gap,
+					tag .. ": the rail itself has not moved")
 			end
 		end
 		if not L.sidebar then
@@ -248,27 +252,31 @@ local ok, err = pcall(function()
 		local tile = L.invite.w
 		check(tile >= PP.MinTile and tile <= PP.Tile and L.events.w == tile and L.settings.w == tile,
 			tag .. string.format(": squares of %d px, never under MinTile %d", tile, PP.MinTile))
-		check(h.y + h.h + PP.HandleGap == view.y and h.x == view.x and h.w == view.w,
-			tag .. ": the handle on the panel's top edge, the viewport under it", r2s(h) .. " " .. r2s(view))
-		check(L.dockCanvas >= view.h and L.settings.y + L.settings.h + PP.Pad - view.y <= L.dockCanvas + 0.5,
-			tag .. ": the canvas holds all four squares", string.format("canvas %g view %g", L.dockCanvas, view.h))
-		if L.dockCanvas > view.h + 0.5 then
+		-- A ROW since 2026-10-09 (the owner's sketch): the "<" handle at its left
+		-- end, the viewport right of it; it never scrolls on a listed phone.
+		check(h.x + h.w + PP.HandleGap == view.x and h.y == view.y and h.h == view.h and h.w == PP.HandleH,
+			tag .. ": the handle at the row's left end, the viewport right of it", r2s(h) .. " " .. r2s(view))
+		check(L.dockCanvas >= view.w and L.settings.x + L.settings.w + PP.Pad - view.x <= L.dockCanvas + 0.5,
+			tag .. ": the canvas holds all four squares", string.format("canvas %g view %g", L.dockCanvas, view.w))
+		if L.dockCanvas > view.w + 0.5 then
 			table.insert(scrolls, tag)
 		else
 			table.insert(still, tag)
 		end
-		-- Under Index since Garden and the Bag went to the left edge (2026-10-09):
-		-- the handle centred under it, in the corner's column where the Bag stood.
-		check(L.index.y + L.index.h <= h.y and math.abs((h.x + h.w / 2) - (L.index.x + L.index.w / 2)) < 1e-6,
-			tag .. ": the panel under Index", r2s(L.index) .. " " .. r2s(h))
-		-- Shut: only the handle.
+		-- Index, Garden and the Bag one over another under the row, centred under
+		-- Settings (2026-10-09; the panel ran down under Index before).
+		check(L.index.y >= view.y + view.h + 8 - 1e-6
+				and math.abs((L.index.x + L.index.w / 2) - (L.settings.x + L.settings.w / 2)) < 1e-6,
+			tag .. ": Index under the panel's row, under Settings", r2s(L.index) .. " " .. r2s(view))
+		-- Shut: only the handle, at the right edge.
 		local shutInput = table.clone(case.input)
 		shutInput.dockShut = true
 		local S = HudLayout.solve(shutInput)
 		check(S.dockShut == true and S.dock ~= nil and S.handle ~= nil and S.dock.x == S.handle.x
 				and S.dock.y == S.handle.y and S.dock.w == S.handle.w and S.dock.h == S.handle.h
+				and S.handle.x + S.handle.w == S.safe.X - CFG.Margin and S.handle.y == view.y
 				and #HudLayout.problems(S) == 0,
-			tag .. ": shut, the panel is only its handle, tucked under the Bag", r2s(S.dock))
+			tag .. ": shut, the panel is only its handle, folded away to the right edge", r2s(S.dock))
 		local hb = HudLayout.handleBadge(S)
 		check(inside(hb, S.safe, 0.01) and overlaps(hb, S.handle), tag .. ": the handle's badge on its corner, on the glass",
 			r2s(hb))
@@ -337,6 +345,22 @@ local ok, err = pcall(function()
 			.. "for a panel, and touches no square")
 	check(PP.Slide > 0 and PP.Slide <= 0.3 and PP.ShutAttribute ~= nil,
 		"a ~0.2 s slide; the shut state one client-local attribute")
+	-- THE CHEVRON (the owner, 2026-10-09): the way the row will move -- ">" while
+	-- open (the upper bar falling to the right, the lower rising: the point on
+	-- the right), "<" while tucked (the point on the left); drawn every placing.
+	do
+		local function point(tilt: number): string
+			-- Upper bar at y -4 with Rotation -tilt, lower at +4 with Rotation tilt:
+			-- a bar rotated clockwise (positive) drops its right end.
+			local upperDrops, lowerDrops = -tilt > 0, tilt > 0
+			return if upperDrops and not lowerDrops then ">" elseif lowerDrops and not upperDrops then "<" else "?"
+		end
+		check(has(drawer, "local tilt = if shut then 52 else -52") and has(drawer, "bars[1].Rotation = -tilt")
+				and has(drawer, "bars[2].Rotation = tilt") and has(drawer, "\tdrawChevron(shut)\n")
+				and has(drawer, "bar.Position = UDim2.new(0.5, 0, 0.5, side * 4)")
+				and point(-52) == ">" and point(52) == "<",
+			"the handle's chevron points the way the row will move: \">\" while open, \"<\" while tucked")
+	end
 	-- INVITE's "!" never scrolls away (the owner, 2026-10-06).
 	check(has(drawer, 'topFade.Name = "DockFadeTop"')
 			and has(drawer, "topFade.Visible = clip.Visible and scroll.CanvasPosition.Y > 1")
@@ -364,9 +388,10 @@ local ok, err = pcall(function()
 	end
 	from = kit:find("function UIKit.railDockScroll", 1, true)
 	body = if from then kit:sub(from, (kit:find("\nend\n", from, true) or #kit)) else ""
-	check(has(body, "scroll.ScrollingDirection = Enum.ScrollingDirection.Y")
-			and has(body, "scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y") and has(body, "scroll.ScrollBarThickness = 3"),
-		"the panel's canvas scrolls up and down only, sized by its squares, a thin bar")
+	check(has(body, "scroll.ScrollingDirection = Enum.ScrollingDirection.X")
+			and has(body, "scroll.AutomaticCanvasSize = Enum.AutomaticSize.X") and has(body, "scroll.ScrollBarThickness = 3")
+			and has(body, "pad.PaddingRight = UDim.new(0, HudLayout.Config.Phone.Panel.Pad)"),
+		"the panel's canvas runs sideways only (a row since 2026-10-09), sized by its squares, a thin bar")
 	from = kit:find("function UIKit.placeRail", 1, true)
 	body = if from then kit:sub(from, (kit:find("\nend\n", from, true) or #kit)) else ""
 	check(has(body, "button.Position = UDim2.fromOffset(r.x - view.x, r.y - view.y)")

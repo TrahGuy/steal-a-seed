@@ -412,9 +412,17 @@ local ok, err = pcall(function()
 		table.insert(lines, InviteRewards.popup(tier).line)
 	end
 	local smallest, smallestTag = math.huge, ""
+	local overToastOn = {}
 	for _, case in ipairs(cases) do
 		local L = HudLayout.solve(case.input)
 		local r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupied(L), L.sidebar)
+		-- With no place clear of the notices' line too, the line gives way
+		-- (InviteRewardUI; 2026-10-09, a 640 x 360 phone under the panel's row).
+		local overToast = r.w <= 0
+		if overToast then
+			r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupiedButToast(L), L.sidebar)
+			table.insert(overToastOn, case.tag)
+		end
 		local B = MenuLayout.popupBlocks(shape)
 		local tag = case.tag
 		check(r.w > 0 and scale >= P.MinScale, tag .. ": the card has a place", r2s(r))
@@ -422,7 +430,7 @@ local ok, err = pcall(function()
 			continue
 		end
 		local clash = {}
-		for _, a in ipairs(HudLayout.occupied(L)) do
+		for _, a in ipairs(if overToast then HudLayout.occupiedButToast(L) else HudLayout.occupied(L)) do
 			if overlaps(r, a) then
 				table.insert(clash, r2s(a))
 			end
@@ -462,12 +470,26 @@ local ok, err = pcall(function()
 	end
 	say(string.format("  smallest card: x%.2f on %s; tall on %d screens, wide on %d", smallest, smallestTag,
 		shapes.tall or 0, shapes.wide or 0))
+	say("  over the notices' line (no place clear of it): " .. (if #overToastOn > 0 then table.concat(overToastOn, ", ")
+		else "none"))
+	do
+		local only = true
+		for _, tag in ipairs(overToastOn) do
+			only = only and string.find(tag, "640x360", 1, true) ~= nil
+		end
+		check(only, "the card stands over the notices' line only where nothing else clears: the 640 x 360 phone",
+			table.concat(overToastOn, ", "))
+	end
 	check((shapes.tall or 0) > 0 and cases[1].desk, "every desktop and TV the tall card; the wide one where it reads larger")
 
 	--==========================================================================
 	say("-- 9. the card's wiring --")
 	local pop = sourceOf(StarterPlayer, "InviteRewardUI")
 	local run = code(pop)
+	check(has(pop, "local r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupied(L), L.sidebar)")
+			and has(pop, "\tif r.w <= 0 then\n")
+			and has(pop, "r, scale, shape = MenuLayout.rewardPopup(L.safe, HudLayout.occupiedButToast(L), L.sidebar)"),
+		"the card keeps off the notices' line, and stands over it only where nothing else clears")
 	check(not has(run, "Dimmer") and not has(run, "dimmer") and not has(run, "Modal = true")
 			and has(run, "card.Active = false") and not has(run, "ModalEnabled"),
 		"no dimmer, nothing modal: the card takes no press but its two buttons")

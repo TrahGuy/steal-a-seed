@@ -830,7 +830,9 @@ function RebirthFX.play(o: Options): Handle?
 		end
 		local L = HudLayout.solve(HudLayout.measure(screen))
 		local phone = if o.phone ~= nil then o.phone else UIKit.phoneMenuScale() < 1
-		local r, s = RebirthCelebration.popup(L.safe, HudLayout.occupied(L), phone)
+		-- The notices' line is soft: kept off unless that draws the card too small
+		-- to read (2026-10-09, under the phone's panel row).
+		local r, s = RebirthCelebration.popup(L.safe, HudLayout.occupiedButToast(L), phone, { L.toast })
 		fitScale = s
 		button.Position = UDim2.fromOffset(r.x + r.w * 0.5, r.y + r.h * 0.5)
 	end

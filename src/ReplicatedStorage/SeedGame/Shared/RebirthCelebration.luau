@@ -242,8 +242,14 @@ end
 -- under 12 px). Answers its rect and its scale against Popup.Size. With no
 -- clear spot at any size it stands just under the top at MinScale: it passes
 -- in seconds and takes no tap but its own.
+--
+-- `soft` (2026-10-09): rects it keeps off as well wherever it still draws at
+-- Popup.Readable or larger -- the notices' line, the notices' only while one
+-- passes (HudLayout.occupiedButToast). Under the phone's panel row keeping off
+-- it drew 640 x 360's card at 0.63, its Bonus line under 12 px; there it gives
+-- way, and only where that draws the card larger.
 --==============================================================================
-function RebirthCelebration.popup(safe: Vector2, avoid: { Rect }, phone: boolean): (Rect, number)
+local function search(safe: Vector2, avoid: { Rect }, phone: boolean): (Rect, number)
 	local P = C.Popup
 	local base = P.Size
 	local gap = P.Gap
@@ -287,6 +293,24 @@ function RebirthCelebration.popup(safe: Vector2, avoid: { Rect }, phone: boolean
 	local s = math.min(largest, P.MinScale)
 	local w, h = math.floor(base.X * s), math.floor(base.Y * s)
 	return { x = math.floor(sw / 2 - w / 2), y = gap, w = w, h = h }, w / base.X
+end
+
+function RebirthCelebration.popup(safe: Vector2, avoid: { Rect }, phone: boolean, soft: { Rect }?): (Rect, number)
+	local all = avoid
+	if soft and #soft > 0 then
+		all = table.clone(avoid)
+		for _, r in ipairs(soft) do
+			table.insert(all, r)
+		end
+	end
+	local r, s = search(safe, all, phone)
+	if soft and #soft > 0 and s < C.Popup.Readable - 1e-9 then
+		local r2, s2 = search(safe, avoid, phone)
+		if s2 > s + 1e-9 then
+			return r2, s2
+		end
+	end
+	return r, s
 end
 
 return RebirthCelebration
