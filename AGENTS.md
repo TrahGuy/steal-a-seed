@@ -328,6 +328,27 @@ src/
                                 ONE switch, GameConfig.Plant.Hatch.Roll.Enabled -- OFF on
                                 published servers until the owner says so; StudioPreview
                                 shows it in Studio (KB/HANDOFF.md, the world-roll entry)
+    Shared/PodRush.luau         POD RUSH (2026-10-09): the five-minute stealing event's rules --
+                                levels 3/7/12 and their rewards, what counts (a nest theft banked
+                                inside the window, 20 s of grace), the owed pods, the tracker's
+                                words and its place clear of the HUD (full, strip or mini), the
+                                end card's place over the hotbar, the nest rings (PodRushSpec)
+    Shared/SproutDash.luau      the mill's minigame, its rules alone: the course a seed makes, one
+                                fixed step, a run replayed from its hop ticks, what a distance
+                                pays and the caps -- the server counts, the client draws
+    Shared/Rebirth.luau         the rebirth rulebook (2026-10-08), pure: the next one's cost, needs
+                                and gains, the title and fence a count earns, what stops one now
+    Shared/RebirthCelebration.luau  the rebirth celebration as arithmetic (2026-10-09): its 3.5 s
+                                timeline, the turn, the orbs, who sees it, its words, its card's place
+    Shared/RebirthFX.luau       draws that celebration on THIS screen (client only; decides nothing)
+    Shared/FenceStyle.luau      how a plot owner's rebirths dress their fence (RebirthService and
+                                RebirthUI's NEXT UNLOCKS)
+    Shared/PodGuide.luau        THE POD GUIDE (2026-10-09): what a pod hatches, in numbers, from the
+                                rolls' own data (KB/POD-GUIDE-PLAN.md); PodGuideStand builds one
+                                biome's stand, PodGuideView letters its board (client-built)
+    Shared/PodModel.luau        builds one of the owner's 25 pods (PodForms/, one per plant) at a
+                                tier's size -- the one pod builder (CreatureModel.BuildPod)
+    Shared/PodMotion.luau       the 25 pods' idles as maths; PodMotion.client plays them
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
@@ -484,6 +505,16 @@ src/
                                 pad, checks group membership on the server BEFORE any join
                                 prompt ("join" sends a non-member to it, "verify" after), then
                                 WheelService.GrantCommunity (once per profile)
+    PodRushService.luau         POD RUSH on the server (2026-10-09): the rush's window and grace,
+                                counting banked nest thefts (CarryService.OnBanked), paying the
+                                levels (spins, the training boost, a Titan pod or an owed one),
+                                the dusk hold, the saved row (ProfileSchema.PodRush)
+    SproutDashService.luau      the mill's minigame, counted: a seed per run, the hops replayed,
+                                only on the player's own mill, the boost paid (2026-10-08)
+    RebirthService.luau         rebirths (2026-10-08): the quote, the reset, the fence and the
+                                title over the name, the celebration sent to everyone near
+    BatHintService.luau         the one-time "bats are sold at Marigold's" hint for a player with
+                                no bat, the first time a guardian chases them (2026-10-08)
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     Music.client.luau           the background bed; ids in GameConfig.Music
@@ -547,7 +578,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 in the header) over the studded baseplate, cards with RobuxPrice prices,
                                 SOON / OFF SALE / OWNED / OPENING, details with Back. Prompts only;
                                 StoreService's receipt grants
-    GardenUI.client.luau        RIGHT rail: MY PLANTS (2026-10-04) -- PLANTED / STORED cards, plot count,
+    GardenUI.client.luau        Garden's button (centre left since 2026-10-09; the owner's picture) and
+                                MY PLANTS (2026-10-04) -- PLANTED / STORED cards, plot count,
                                 garden income; PLANT, RETURN TO BAG, EQUIP BEST, UNEQUIP ALL asked of
                                 PlantService (GameConfig.Plant.MyPlants); pods keep their clocks
     EventsUI.client.luau        EVENTS (2026-10-04): the owner's POSTED Roblox experience events, read on
@@ -592,7 +624,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 the trap's own slot (TrapRemove; the Bag menu has the same
                                 action) -- 2026-10-04; while the owner's trigger cooldown runs
                                 EVERY trap slot is dimmed and counts it down (2026-10-05)
-    RailDrawerUI.client.luau    TOUCH ONLY: the panel under the Bag (HudLayout `dock`, 2026-10-05;
+    RailDrawerUI.client.luau    TOUCH ONLY: the panel under Index (under the Bag until 2026-10-09;
+                                HudLayout `dock`, 2026-10-05;
                                 the left edge's shutting dock before) that INVITE, EVENTS, WHAT'S NEW
                                 and Settings stand down -- a scrolling viewport (`dockView`, squares
                                 never under MinTile) and the handle that shuts it (2026-10-06; session
@@ -651,6 +684,16 @@ src/StarterPlayer/StarterPlayerScripts/
                                 Heartbeat (BloomTrail's numbers); only while the body covers
                                 ground; Reduced = one still ribbon, Off = nothing; not drawn on
                                 the obby course, like SpeedFX's run streak
+    PodRushUI.client.luau       POD RUSH on this screen (2026-10-09): the tracker (or its strip),
+                                the "+1" and medal pops, the end card, the nests' gold rings,
+                                the stings -- transparent, as the owner asked
+    SproutDashUI.client.luau    PLAY MINIGAME on the own mill, and Sprout Dash's screen (the
+                                jump held, the run drawn, the server's count shown); its open
+                                screen switches the music bed (Music.client)
+    RebirthUI.client.luau       the shrine's REBIRTH panel and its words; plays RebirthFX
+    PodGuideUI.client.luau      the Pod Guide's stands, built on this client (2026-10-09)
+    PodMotion.client.luau       plays the pods' idles over every pod this screen should see move
+    MarigoldSign.client.luau    "BAT SHOP!" over Marigold's stall (2026-10-08)
 ```
 
 **Phase A and the HUD are complete**, and Dustbowl is live production content. Tanglemire comes only

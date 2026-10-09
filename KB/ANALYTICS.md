@@ -80,14 +80,20 @@ anonymous processing, and no additional personal information is collected.
 | 1 | Session Ready | `PlayerDataService`: a **brand-new** save loaded (`SaveService.Load` said "new") that can be saved, for a player in the cohort |
 | 2 | First Pod Stolen | The guide's `steal` milestone recorded for the first time ever (`CarryService.TryTake` success) |
 | 3 | First Pod Banked | `bank` recorded for the first time (`CarryService` bank at the red line) |
-| 4 | First Pod Planted | `place` recorded for the first time (`PlantService.PlaceAt` success) |
-| 5 | First Plant Hatched | `hatch` recorded for the first time (`PlantService` hatch) |
+| 4 | First Plant Hatched | `hatch` recorded for the first time (`PlantService`: a hatch from the Bag, or an old save's planted pod) |
+| 5 | First Plant Placed | `place` recorded for the first time (a hatched plant auto-planted in a free bed, `PlantService.PlaceAt`, or MY PLANTS' PLANT) |
 | 6 | First Plant Income | The first garden income payout (`EconomyService`, the one positive `AddCash`) in the session where step 5 went out |
 
-**Why this order.** It is the guide's real order: steal → bank → place → hatch. The guide's first two
+**Steps 4 and 5 swapped on 2026-10-09** (Phase 1, "More stealing, less waiting": pods hatch in the Bag,
+and the plant is placed after the hatch). Step 4 was "First Pod Planted" (`place`) and step 5 "First
+Plant Hatched" (`hatch`). **Before and after the update cannot be compared at steps 4 and 5**: read the
+funnel from the first server version with the swap. Steps 1-3 and 6 keep their meaning.
+
+**Why this order.** It is the guide's real order: steal → bank → hatch → place. The guide's first two
 steps, train and reach 1,000 Speed, are not in the funnel. A player can steal without training, so
 those two are not sequential. They are counted separately as `TutorialStepDone`. "Tutorial completed"
-is separate too: it happens at the hatch and can be skipped entirely.
+is separate too: it happens when the first loop ends (the first plant placed since 2026-10-09; at the hatch
+before) and can be skipped entirely.
 
 **The funnel can't imply something that didn't happen.** Roblox credits every earlier step when a later
 one is logged. So `Metrics` walks the chain and sends a step only while every milestone up to it is
@@ -110,12 +116,13 @@ the bank.
 | Event | When | Fields | Deduplication |
 | --- | --- | --- | --- |
 | `TutorialStepDone` | A guide step recorded for the first time | 01 = `train` / `speed` / `steal` / `bank` / `place` / `hatch` / `travel` | Once per step per session; the save already guarantees "first time ever" |
-| `TutorialCompleted` | The guide's first loop finished: the step that completes train through hatch | none | Once |
+| `TutorialCompleted` | The guide's first loop finished: the step that completes train through place (through hatch before 2026-10-09) | none | Once |
 
 **Step 7, `travel` (2026-10-08).** The guide gained a last step after the hatch: the first successful
-TELEPORT TO PLOT (`PlotService.TeleportHome`) once the hatch is done. It is reported only as
-`TutorialStepDone` 01 = `travel`. `TutorialCompleted` stays where it always was, at the hatch (the first
-loop, which is also when the Bonus Chest opens), so the series keeps its meaning across the update.
+TELEPORT TO PLOT (`PlotService.TeleportHome`) once the first loop is done (the hatch until 2026-10-09; the
+first plant placed since). It is reported only as `TutorialStepDone` 01 = `travel`. `TutorialCompleted`
+stays where it always was, at the end of the first loop (which is also when the Bonus Chest opens), so the
+series keeps its meaning across the update.
 The onboarding funnel keeps its six steps and their numbers; `travel` is not in it.
 | `TutorialSkipped` | The player hid the guide (Skip) | none | Once per session; Resume is not counted |
 

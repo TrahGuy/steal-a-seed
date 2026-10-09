@@ -1,5 +1,1358 @@
 # Steal a Seed — Session Handoff
 
+## Batch committed and pushed: aad1639 + 22b9fff on origin/wip, NOT published — 2026-10-09 (CLAUDE)
+
+- **Not published.** That stays the owner's own Publish. No publish after v1038 (2026-10-08) is on record: the Studio logs kept on this PC (the oldest from 2026-10-09 00:16 UTC) hold none, and the other session reports none. So rebirth, Sprout Dash, Pod Rush, the Pod Guide and the 25 pods are not live.
+- **aad1639: code and specs.** Every entry from "Mill + BIOMES/OBBY: a teleport now ends the mill ride" (2026-10-08, after 0edc766) up to "GARDEN AND THE BAG CENTRE LEFT" just below.
+  - Those entries still say UNCOMMITTED. They are now committed, and still not published.
+  - Before the commit the probe found Studio and disk equal: 336 scripts, 0 differ, 0 ZZ, test-store marker absent.
+  - The full suite: 132 of 132 run, all green but HatchInBagSpec's timing check, once ("and the others follow, AllGapSeconds apart"); 42/0 alone.
+- **22b9fff: assets.** The owner's sounds for Pod Rush, rebirth and the minigame (and their prompts); the four 2026-10-09 rail buttons; the double offline claim icon; six image-gen packs (extras, podrush, pods, rebirth, sprout-dash, wheel-jackpot).
+- **The docs commit:** this handoff, AGENTS.md's file map, KB/ANALYTICS.md (funnel steps 4 and 5 swapped with Phase 1), and the four plans (POD-GUIDE, POD-MODELS, POD-RUSH, STEAL-MORE).
+- **Not committed, as before:** the `output/` test captures and model backups; `output/design/` (the rebirth-titles design from the owner's Cursor session, queue item 11); the owner's `game thumbnails/` changes (new images and videos, `update 1` deleted).
+- **Corrected since:** 111742643280141 is Pod Rush's music, not Sprout Dash's (queue item 8).
+
+## GARDEN AND THE BAG CENTRE LEFT, THEIR NEW PICTURES, THE PHONE'S BUFF ROW AND POPOVER, THE END CARD, THREE MORE CARDS TRANSPARENT, SPROUT DASH'S MUSIC — DONE 2026-10-09 (CLAUDE)  (COMMITTED aad1639 + 22b9fff; NOT PUBLISHED; HudLayoutSpec 1470/0 AND 10 UPDATED SPECS GREEN; 40 OF 40 MUTANTS CAUGHT; FULL SUITE 132 OF 132, ALL GREEN BUT HatchInBagSpec's TIMING CHECK ONCE (42/0 ALONE); TWO GUARDED PLAYS ON THE OWNER'S PHONE EMULATOR (705 x 338): `SeedTest_batch_20261009` AND `SeedTest_batch2_20261009`, CLEARED (probe 336 / 0 differ / 0 ZZ / marker absent); DESKTOP NOT SEEN (THE EMULATOR STAYED ON): ITS PLACEMENT IS SPEC-ONLY; THE MUSIC CORRECTED SINCE: QUEUE ITEM 8)
+
+The owner's asks of 2026-10-09, relayed by the other session, every recommendation approved ("approve, let terminal do it"): "sprout rush, new garden button, and inventory button" / "yes, hotbar bag cell too"; "also lower the garden and inventory, put them on center left"; and, after the phone pass of Pod Rush, the popover, the end card and the buff row on phones, and three more effect cards made transparent.
+
+**Garden and the Bag, centre left** (HudLayout; GardenUI, LoadoutUI place them as before)
+- Desktop and TV: Garden over the Bag at the left edge, on the safe area's middle; stepped down to 8 px under OTHER PLANTS and Garden's badge where the middle would meet the rail (1280 x 720: 302), and up off the cash block. Measured with a trap's REMOVE row up, so the pair never moves when a trap comes out.
+  - A 720p TV (its title-safe canvas) has no room for one over the other: side by side there (`pairRow`).
+  - The 1024 x 600 class (1024 x 600, 1000 x 609, 1169 x 609) now takes the COMPACT layout: under the rail the desktop's lifted cash block stands only 30-40 px below OTHER PLANTS. Compact keeps ten slots and the pair at the left edge. 1024 x 768 and up keep the desktop.
+  - WHAT'S NEW took the top-right corner, Garden's old UDim2 (1, -12, 0, 12); panels keep their width there (rightLeft is the same x).
+- Small windows (compact): Garden over the Bag at the left edge's middle; EVENTS in the top-right corner, WALK MODE under it at the right edge, OTHER PLANTS under that (or beside WALK MODE), WHAT'S NEW under them or under Index.
+  - 640 x 400 and smaller (700 x 400, 640 x 400, 600 x 348, 560 x 320): no room at the left edge (the cash block stands within two buttons of the top row), so they keep the top-right row exactly as it was (`gardenRight`, `pairFits`).
+- Phone: Garden and the Bag SIDE BY SIDE (Garden first) at the left edge, between WALK MODE and the thumbstick, on that gap's middle -- the owner's call; one over the other fits none of the listed phones (51 px of room on 705 x 338). Index alone in the top-right corner, centred in the Bag's old 50-px cell, so the slim panel under it (INVITE, EVENTS, WHAT'S NEW, Settings) and everything measured off the row's foot stand where they were. (The owner has since asked for a new phone layout and a desktop column: queue item 7.)
+- Garden's badge: on its top-RIGHT corner (half off on a desktop, tucked in compact, tucked level with the top where the pair stands side by side -- 51 px holds a button but nothing above it); top-LEFT where a small window keeps the old row.
+- The notice band's bounds only count a badge whose button stands in the top rows. The phone's pair floor keeps 8 px over the belt's band (an x2 card slides the belt: 430 x 500).
+- Panels: every UIKit.modal (the Bag, Settings, Sell, Sacrifice, Offline, Marigold) covers the rail while open on a compact screen or a phone (UIKit.coverRail), as MenuLayout's panels already did there; a desktop's stand between the rails. PadFocus only puts focus back on a button, wherever it stands: nothing to change.
+
+**The new pictures** (owner-designated; Edit check: PreloadAsync Success, 1024 x 1024, opaque body 948 x 928 / 948 x 925, corner alpha 0; old icons' bodies 68-77% of their canvas)
+- `Rail.StuddedGardenArt` 80369422946168 ("Plant-creatures": teal studded tile, purple paw) and `Rail.StuddedBagArt` 100113253044275 ("inventory": the same tile, a satchel) on the two rail buttons only, through UIKit.railPicture: the picture IS the button once loaded, the pot / satchel and GARDEN / BAG under it until then. The old GardenIcon / BagIcon stay everywhere else (the panels' title icons, RETURN / TELEPORT TO PLOT, the Bag's Plants box, the rebirth card's chip).
+- The hotbar's Bag cell: `Hotbar.BagIconImage` = the Bag's picture, square over the whole cell; once it has loaded the cell's plate, its edge and the satchel go (the owner: "so only the owner's tile shows"); never hidden on a timeout.
+
+**Sprout Dash's music** (`GameConfig.SproutDash.Music` = 111742643280141, Volume 0.32, FadeSeconds 1.5; 182.81 s) -- AS COMMITTED IN aad1639. **Corrected by the owner the same evening**: the track is Pod Rush's ("111742643280141 bgm for pod rush"; "just pod rush"); the relay had read "sprout rush" as Sprout Dash. Queue item 8 moves it and sets `SproutDash.Music.Id` back to "" (the slot and its code stay).
+- While THIS player has the screen open (the LocalPlayer's SproutDashOpen), Music.client crossfades the bed to it, first in the order, looping, from its start each time; back to whatever the world asks for on close. The one music Sound and bus: the music level, mute and the chase bed's duck apply. Its Volume is on the beds' scale (levelFor: own / Music.Volume = 1). Probed and skipped like the rain's.
+
+**Phone fixes for Pod Rush and the buff row** (the owner approved all three)
+- The buff row on a phone: over the strip's RIGHT end (it was centred over the strip: on the character, reading like a crosshair without its disc), at the same height and on the same rules.
+- The popover: HudLayout.popoverRect -- over its icon where that keeps 8 px off every group and badge, the status rows, the Pod Rush tracker's words (BoostIconsUI passes the live tracker or strip) and, while it shows, the guide card (UIKit.guideShowing, shared with the Pod Rush tracker); else the nearest clear place (SpeedMilestones.clearOf). Where nothing is clear of the tracker too (705 x 338 with the guide card up), the popover stands where it would without it and the TRACKER STEPS ASIDE until the popover closes (`GameConfig.BoostIcons.CoversAttribute`, client-local; latched per popover so it never flickers). Over its icon after all only where nothing is clear (a 700 x 400 window under the guide's banner). Still transparent.
+- The end card: PodRush.endCard(L, guide), centred in the room between the safe top and the hotbar's top, scaled to fit (0.87 on 705 x 338, whole elsewhere): TAP TO CLOSE clears the hotbar by 16 px on all 14 screens. While the guide's card shows it stands 8 px clear of it -- beside it on a phone (333..629 on 705 x 338), drawn at 0.85 on the 640-px phones so its 12-px words still draw at 10.
+- The tutorial's pointing hand (TutorialSpotlight.handFor / wordsFor, a new `avoid` list): keeps off Garden and the Bag where a side lets it -- on a phone the hand for SPEED stood on the Bag. It now points at SPEED from the right, its words under it; on 705 x 338 those words brush the cash line (reported, not changed).
+
+**Transparent, as the owner approved**: the REBORN! card (no plate, no rim: rays, emblem, outlined words), the reward splash card (no plate, corner or rim; heading and amounts outlined 2 px), the Treadmill Fun bar (no dark track, no gold edge: the gold fill outlined in black). Kept (owner): the clock pill and the server-restart card.
+
+**Specs**: HudLayoutSpec 1470/0 (new: the pair on every desktop, phone and window; never moved by the REMOVE row on any screen or TV; the phone's buff row; the popover's clearance and its guide plumbing; the cover rule), RailFallbackSpec 46/0, SourceIconsSpec 18/0, SproutDashSpec 49/0, PodRushSpec 96/0, RebirthCelebrationSpec 75/0, RewardSplashSpec 20/0, TreadmillFunSpec 111/0, InviteHudSpec 414/0, CompactMenusSpec 46/0, TutorialSpotlightSpec 45/0; full suite 132 of 132 run, all green but HatchInBagSpec's timing check once ("and the others follow, AllGapSeconds apart"; 42/0 alone; an earlier run's HatchRollSpec 153/13 is its known wall-clock flake); 40 of 40 mutants caught. The spec runner hands a spec over in 168,000-character parts now (HudLayoutSpec passed the 200,000 a StringValue holds).
+
+**Seen in Play**: two guarded Plays on the owner's phone emulator (705 x 338, touch, as the owner had it), both cleared (Game Stopped, the test store's keys removed, probe 0 differ / 0 ZZ / marker absent). Captures (not committed): `output/hud-batch-2026-10-09/phone/` 01-12 and `output/pod-rush-2026-10-09/phone/` 00-09.
+- `SeedTest_batch_20261009`: Garden and the Bag at the centre left with the new pictures and Index alone in the corner, the buff row at the strip's right end, the popover, the end card over the hotbar, the splash, REBORN! and the Treadmill Fun bar transparent, Sprout Dash open. It found three overlaps: the buff popover over the Pod Rush tracker; the end card over the guide card's words; the tutorial's hand and its words over the new pair. All three fixed (above).
+- `SeedTest_batch2_20261009`: the three fixes seen working. The popover opened during a rush: the tracker stepped aside and came back on close. The end card stood right of the guide's words (333..629), over the hotbar. The hand for SPEED kept off Garden and the Bag (its words brush the cash line, reported).
+- Seen, not changed: the Treadmill Fun bar overlaps the PLAY MINIGAME button and the guide's words (as before this batch; queue item 9 moves the button); REBORN! and the splash meet the guide card only on a fresh test profile, while the guide still runs.
+- Not seen: a desktop (the emulator stayed on and was not switched).
+
+**Files**: GameConfig (Rail.StuddedGardenArt/StuddedBagArt, Hotbar.BagIconImage, SproutDash.Music, BoostIcons.CoversAttribute), HudLayout (popoverRect), UIKit (railBadge flush, guideShowing, the modal's cover rule), PodRush (endCard), TutorialSpotlight (avoid), GardenUI, LoadoutUI, Music.client, BoostIconsUI, PodRushUI, TutorialUI, RebirthFX, RewardSplash, TreadmillFunUI; specs HudLayoutSpec, RailFallbackSpec, SourceIconsSpec, SproutDashSpec, PodRushSpec, RebirthCelebrationSpec, RewardSplashSpec, TreadmillFunSpec, InviteHudSpec, CompactMenusSpec, TutorialSpotlightSpec.
+
+## 100 UNIQUE REBIRTH TITLES + SHARED FX — 2026-10-09 (CODEX; DESIGN DRAFT, NOT IMPLEMENTED)
+
+Owner explicitly selected100 unique names with short ranks, GAIA later. output/design/rebirth-titles-fx-v1/README.md + rebirth-titles-fx-v1.json contain100 names /11shared FX profiles and exact proposed ranges. First four single-rank; usual I–III; title slots10 GROVE KEEPER,25 ELDER ROOT,50 WORLD TREE,75 EVERBLOOM,100 GAIA use I–V. Their ACTUAL rebirth ranges are20–24,67–71,144–148,221–225,298–302. GAIA after302 staying atV while REBIRTH N continues is proposed, not an approved runtime change.
+
+Canvas review: C:/Users/Maykel/.cursor/projects/d-KAPE-Steal-an-Artifact/canvases/rebirth-titles-fx-v1.canvas.tsx. All100 ordered names match JSON; unique count100, profiles11, caps1/3/5, range continuity and GAIA298/302 verified from saved files. Preview open queued; no TypeScript/runtime/render test. FX are descriptions only; no new PNGs generated. Owner has not answered the prior plan-versus-new-PNG question.
+
+BEFORE IMPLEMENTING: protect previously earned titles (old ladder gives GAIA at100; a straight remap would demote100–297); decide cosmetic legacy policy without altering saved rebirth counts or multipliers. Keep GameConfig.Rebirth.Celebration.Aura.From at ACTUAL50, not WORLD TREE's new144. Confirm final cap after302, phone font fit (current171x26/15px; longest proposed label21characters), pacing and mobile/multiplayer FX budget. Use existing white leaf/sparkle/aura/rays; main burst is baked-colour, not a neutral-white recolourable sheet. New aura caps are proposed/unbenchmarked. No source, economy, save, IDs, Studio/Play, publish, external messages, stage/commit/push. Root Git scope/remote decisions unresolved; other working edits untouched.
+
+## POD RUSH: A FIVE-MINUTE STEALING EVENT — BUILT 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; PodRushSpec 96/0 (NEW; 35 OF 35 MUTANTS CAUGHT); FULL SUITE 132 OF 132 (HatchRollSpec's known wall-clock flake 166/0 alone); RainAudioSpec's old failure fixed in passing (39/0); FOUR GUARDED PLAYS ON `SeedTest_podrush_20261009` AND `SeedTest_podrush2_20261009`, CLEARED (probe 0 differ / 0 ZZ / marker absent); DESKTOP, THEN THE PHONE ON THE OWNER'S EMULATOR (705x338, `SeedTest_podrush3_20261009`, CLEARED))
+
+The owner approved KB/POD-RUSH-PLAN.md ("approve, let terminal work") with every recommendation taken: levels 3 / 7 / 12, the rewards in the table, no rage build-up, a 15 s regrow, dusk waits, admin-console start only. Added later (relayed by the other session): music slots, and "pod rush gui must be transparent, everything must be transparent, applies to buffs, and effects".
+
+**What a rush is** (`GameConfig.PodRush`; `MiniEvent.Modes.podrush`)
+- A fifth global mini event, POD RUSH, started from the admin console like the other four (its chip puts its 300 s in the duration box) and run on every server at once through the shared record.
+- The announcement: "POD RUSH! Steal and bank as many pods as you can in 5 minutes!", with the owner's rush icon.
+- While it runs:
+  - every nest grows a taken pod back 15 s later: normal pods, normal odds, still no words (NestService `takeSlot` / `regrowAt`; never at night, never on a weather event's nest, never after the rush);
+  - a golden ring of light lies under each nest (client-built Neon bars on the pods' ring; it breathes, and stays still with REDUCED FX);
+  - guardians chase as usual but build no rage: every theft is chased at one stack.
+- Dusk waits: PodRushService writes `Workspace.PodRushUntil` (the rush's end plus its grace), and WorldCycleService stretches a day that would end before it, plus 10 s (`HoldForRush`). The day loop sleeps on a moved deadline.
+
+**What counts** (Shared/PodRush.counts)
+- A pod TAKEN FROM A NEST during the rush and banked by the same player. CarryService stamps a nest theft's server time on the pod in the arms (`Held.stolenAt`), never on a pod picked back up.
+- A pod still in the arms when the rush ends has 20 s of grace (BANK IT!).
+- Banks reach PodRushService through the new `CarryService.OnBanked`, called after the bank is done, each listener on its own thread under a pcall.
+- The count, the levels paid and the highest biome banked from are saved on the profile under the event's id (`ProfileSchema.PodRush`, kept by a progress reset), so a rejoin on any server keeps them.
+
+**The levels** (each paid once per player per rush, the moment it is reached)
+- BRONZE 3: 1 Spin Ticket.
+- SILVER 7: 3 tickets + the chest's 2-minute +25% training boost (its one slot: it replaces a running chest boost).
+- GOLD 12: 5 tickets + a Titan pod of the highest biome banked from this rush. With the Bag full it is OWED (`PodRush.PodOwed`, a short list, oldest first) and given as soon as there is room, with a line saying so.
+- Spins land through `WheelService.GrantMilestoneSpins`; any that do not fit are owed through MilestoneSpinsOwed.
+- GOLD sends everyone else in the server one quiet line: "Pat hit GOLD in the Pod Rush!".
+
+**On screen** (PodRushUI)
+- The tracker: the rush icon, POD RUSH and the time left, "5 banked", "2 more for SILVER", and a bar with the owner's three medals.
+  - It is placed clear of the whole HUD on every screen, and clear of the beginner's guide card while that shows (seen in Play under the card and fixed). It is drawn at 0.78 on a phone.
+  - Where it has no room (the short landscape phones once boost icons show: 640x360, 705x338, 772x360) it is a one-line strip: the time, the pods, the next goal. With the guide card up as well, a mini strip: the time and the pods.
+- "+1" on a count and the medal's pop on a level (no pops with REDUCED FX); a notice says what the level paid.
+- The end card: POD RUSH OVER, "9 pods · SILVER!", and what it paid (the lines shrink to fit: Play showed the third one clipped). It goes at once to anyone with empty hands; anyone carrying gets it after their grace bank or at the grace's end.
+- The boost-icon row: the rush icon with this player's count on its badge.
+- PodRushEnded goes once per player per rush, with the count and the level's word (Metrics).
+- Music: `GameConfig.Music.PodRushTrack` takes the bed's place while a rush runs (the disco's place in the order), crossfades back after, and the chase bed ducks it as any bed. Cues `PodRushStart` (with the announcement) and `PodRushFinish` (with the end card). All three are "" for now (sfx/suno prompts.txt, entries 21 and 22). Music.client's three bed probes now share one helper: RainAudioSpec's one-Sound pin passes again.
+
+**TRANSPARENT, AS THE OWNER ASKED** (2026-10-09)
+- The Pod Rush GUI: no plate or edge behind the tracker, its strip or the end card. The bar keeps only its fill, outlined in black; the medals mark the levels. The words carry thicker dark outlines.
+- The buff row (BoostIconsUI): no round slate plate behind the icons, no well behind the count (outlined now), no popover sheet or caret. Each popover line is outlined. The picture, its ring and the faint track the ring empties along stay.
+- Seen in Play over a bright day scene and a forced night (`output/pod-rush-2026-10-09/transparent/`): all readable.
+- Other effect UIs that still draw a plate were LISTED to the other session for the owner, not changed: the REBORN! celebration card (RebirthFX), the Treadmill Fun bar's track (TreadmillFunUI), the reward splash card (RewardSplash), the clock pill (WorldClock), the server-restart announcement card (AnnouncementUI). A dismissible notice's close button keeps its red plate (a button, not a backdrop). Sprout Dash's PLAY MINIGAME button and its game screen are a button and a game, left as they are.
+- **Seen on the phone (2026-10-09, the owner's emulator, 705x338 touch; `output/pod-rush-2026-10-09/phone/`)**, for the owner to decide:
+  - the buff popover opens upward from the buff row (mid-screen on a phone) INTO the beginner's guide card, and with no sheet the two texts show through each other ("3 bronze, 7" under TRAIN YOUR SPEED!; `05_` and `07_`). Recommended: place it clear of the guide card and other HUD words, still transparent; or a faint sheet for the popover only;
+  - the end card's TAP TO CLOSE stands over hotbar slots 3-4 (`08_`, `09_`). Recommended: lift the card so its last line clears the hotbar;
+  - the plate-less buff icon stands over the character mid-screen (the row's existing phone place) and reads a bit like a crosshair.
+
+**The owner's art, wired** (ids checked by the other session: AssetTypeId 1, CrazyCozy Games 744756221, Edit PreloadAsync Success + IsLoaded, 512 x 512, corner alpha 0). One shared crop, ImageRectOffset (41,41) and ImageRectSize (430,430), applied everywhere they draw; the notices and boost icons get it through the new `GameConfig.SourceIconCrops`.
+- Icon `rbxassetid://108173602941410`: the announcement, the tracker, the strip, the boost row, the end card.
+- Bronze `rbxassetid://106320803448209`, Silver `rbxassetid://108448116105933`, Gold `rbxassetid://100048210150003`: the tracker's bar, the level pop, the end card.
+
+**Seen in Play** (desktop 875x716 and 979x716; captures in `output/pod-rush-2026-10-09/play/` and `.../transparent/`)
+- Start and the first minute:
+  - the rush started through `MiniEventService.StartGlobal`, the console's own call;
+  - the announcement showed 2 s in, with the cropped icon in the notice and the boost row;
+  - the rings: 4 of 5 nests streamed in, 144 bars;
+  - a Greenhollow nest regrew from 2 pods to 5 inside 15 s.
+- Counting and the levels:
+  - BRONZE at 3: 1 spin, and the pop drew above the tracker (probe: the bronze medal and "BRONZE!");
+  - SILVER at 7: 3 spins, the training boost for 120 s, and the notice "SILVER! +3 Spin Tickets · +25% training for 2 min";
+  - a drop and re-pick banked without counting;
+  - GOLD at 12: 5 spins (9 in all) and a Titan petalpip (T6) in the Bag.
+- The end and the rejoin:
+  - a second Play inside the same rush restored 12 / GOLD / paid 3 from the save;
+  - END gave "12 pods · GOLD!", "+9 Spin Tickets / +25% training for 2 min / a Titan Greenhollow pod";
+  - BANK IT! showed in red after an END;
+  - a pod carried over the timer's end was banked inside the grace and counted;
+  - dusk was held: the day, cut to 5 s during the grace, was stretched to 28 s.
+- Harness note: the guardian caught the carrier in quick raids (real throws), so banks went one at a time with a step home between. The grace bank needed the carrier to keep moving through the timer's end.
+
+**Seen on the phone** (2026-10-09, the owner's emulator 705x338 touch, two short rushes): with the beginner's guide up and the buff icon showing, the tracker was the ONE-LINE STRIP ("4:57  0 banked · 3 more for BRONZE", then "5 banked · 2 more for SILVER") right of the buff row; the BRONZE pop; the buff icon's count; the popover (a tap measured landing on the icon's centre with the harness's 47-px emulator offset); the end card "5 pods · BRONZE!" / "+1 Spin Ticket". Bright and night scenes; the phone end card over day only (Studio's 15 s night ended first). Three taps the harness did not send arrived (probably the owner) and closed the popover once.
+
+**Not seen**: the mini strip (spec-only), two real players (the GOLD line is spec-only), a real cross-server rejoin (Studio's one server stands in), the owed Titan pod (spec-only).
+
+**Owner calls (defaults in use)**: the strip on short phones; SILVER's boost replaces a running chest boost (one slot); the Titan pod is owed while the Bag is full; the rush bed sits in the disco's place in the music order; the faint ring track stays on the buff icons.
+
+**Files**: new `Shared/PodRush.luau`, `SeedGameServer/PodRushService.luau`, `StarterPlayerScripts/PodRushUI.client.luau`, `tools/tests/PodRushSpec.luau`; changed `GameConfig` (MiniEvent.Modes.podrush, PodRush, SourceIcons.podrush, SourceIconCrops, BoostIcons, Music, Sfx cues), `StatusText` (crops), `BoostIcons`, `BoostIconsUI` (transparent), `NestService`, `CarryService`, `ProfileSchema`, `PlayerDataService`, `Metrics`, `WorldCycleService`, `AdminService`, `AdminConsoleUI`, `Music.client`.
+
+## MATCHING GREEN RECTANGULAR INDEX BUTTON — 2026-10-09 (CODEX; ART ONLY, NO UPLOAD/IDS OR WIRING)
+
+Owner requested rectangular INDEX. New art/ui-buttons/index-rectangle-2026-10-09/index-green-studded-v1-1024x384.png plus128x48 preview and2048x768 native original. Built-in edit of PLOT source; green studded family, upright white black-outlined INDEX (I N D E X checked), no icons/emoji. Full-source0.5 resampling, no crop/stretch/repaint; corners alpha0, final outeredge max1/255 near-transparent noise, preview edge0. Both sizes inspected/readable. Native copy hash verified and PLOT target unchanged; exact prompt/notes/helper beside art.
+
+No current Index asset/UI/hitbox or code replacement, uploads/IDs, Studio/Play/IsLoaded, external messages, publish or git mutations. Owner/implementer retains upload/actualHUD review; prior assets/peer changes preserved.
+
+## GREEN RECTANGULAR PLOT BUTTON — 2026-10-09 (CODEX; NEW ART ONLY, NO UPLOAD/IDS OR WIRING)
+
+Owner requested green studded rectangular PLOT art. New art/ui-buttons/plot-2026-10-09/plot-green-studded-v1-1024x384.png plus128x48 preview; bright green square-stud tile/dark rim, upright white dark-outlined PLOT, no emoji/extra icon. Built-in generation1call, bag tile only a style reference; prior bag/paw untouched. Native1983x793 original preserved/hashverified; whole-source uniform fit960x384 at32,0 in1024x384, no crop/stretch/repaint. Output corners/exterior alpha0, opaque face. Spelling P L O T and preview legibility visually checked; exact prompt/notes/helper alongside.
+
+No current PLOT navigation/hitbox/ID replacement, upload, code, Studio/Play/IsLoaded, external messages, publish or git mutations. Owner/implementer handles upload and actualHUD fit. Peer changes preserved.
+
+## MATCHING MONSTER PAW BUTTON — 2026-10-09 (CODEX; ART ONLY, NO UPLOAD/IDS OR WIRING)
+
+Owner requested the same studded background as the bag, with a monster paw print. New art/ui-buttons/monster-paw-2026-10-09/monster-paw-studded-v1-512.png plus32px version/native1254px original; simple purple paw pad/four toes/ivory claws on matching mint-teal studded tile, no text. Built-in edit from bag original (target unchanged/hash verified). Tile visually matches, not pixel-identical certified. Whole-source uniform export; final512/32 corners/exterior alpha0, opaque tile, both sizes inspected and readable. Exact prompt/notes/helper beside assets.
+
+No uploads/IDs, existing Bag/Garden/creature art or rail fallback replacement, code, Studio/Play/IsLoaded, external messages, publish or git mutations. Owner reviews/uploads; actualHUD integration remains separate. Peer work and bag reference untouched.
+
+## SIMPLE INVENTORY BAG BUTTON — 2026-10-09 (CODEX; NEW ART ONLY, NO UPLOAD/IDS OR WIRING)
+
+Owner asked for a simple bag logo with studded background. art/ui-buttons/inventory-bag-2026-10-09/inventory-bag-studded-v1-512.png is a512px mint-teal raised-square-stud button with a brown satchel, top handle, flap and one gold buckle; no text or extra icons. 32px preview and1254px native original preserved, exact prompt/notes/export helper beside them. Built-in generation1call, existing Settings tile only a style reference, no CLI/API fallback. Whole-source uniform resampling, no crop/pad/repaint; corners/exterior edges alpha0 in512/32, opaque studded tile. Both sizes visually inspected; native SHA copy verified.
+
+No current Bag/inventory ID replacement or rail fallback implementation changes, uploads/IDs, game code, Studio/Play/IsLoaded, external messages, publish or git mutations. Owner/implementing session retains upload/load/actualHUD review. Peer work and previous button art untouched.
+
+## RAIL BUTTONS NEVER VANISH: A WORD UNTIL THE PICTURE LOADS — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; RailFallbackSpec 38/0 (NEW; 17 OF 17 MUTANTS CAUGHT) + HudLayoutSpec 1452/0 + InviteHudSpec 415/0 + StuddedLookSpec 33/0 + ControllerSpec 63/0; A FORCED FAILURE SEEN IN EDIT; NOT YET SEEN IN PLAY OR ON A PHONE)
+
+The owner (relayed by the other session): "some buttons are invisible like the garden and inventory". The other session found Studio's image fetch failing for Garden 106268245303506, the Bag 135554729755251 and the Bag cell's 129734693384327 (a Studio restart cleared it), and the code fault below. The fetch failure is real whenever a player's fetch flakes, so the fix stands.
+
+**The causes**
+- Garden and the Bag are BARE rail buttons: a transparent ImageButton holding only its picture. No picture, no button.
+- `UIKit.railPicture` hid everything of ours under its picture (the art box, the icon, the gear, the words, the tile, the plate) the moment an id was SET, loaded or not.
+
+**The fix** (`UIKit.railFallback`, `GameConfig.Rail.Words`)
+- Every bare or art rail button but Settings stands its plain word on a slate plate (the dock tile's colours, the rail's black outline) UNDER its pictures: GARDEN, BAG, INDEX, SHOP, INVITE (and EVENTS once it has a picture). Shown until one of its pictures has loaded HERE; kept for good if none ever does; not Active; under the badge.
+- `railPicture` hides ours only once its picture has loaded (`UIKit.whenPictureLoads`, the answer written down per id: a relayout never asks twice, and a stale answer for an id no longer shown changes nothing). The picture itself is never hidden: a hidden picture never loads (measured 2026-10-03).
+- The Shop's rainbow rim waits for its picture too. With no picture it was a rainbow square over the word (seen in Edit).
+- The hotbar's Bag cell says BAG where its icon stands until the rail's art or the satchel has loaded.
+- Settings keeps its gear drawn from frames. EVENTS and WHAT'S NEW are slabs with their words on already.
+
+**Seen in Edit**: a board of stand-ins built by the real UIKit (`output/rail-fallback-2026-10-09/edit/02_board_rim_fixed.png`). The game's ids load and show their pictures; the same buttons given `rbxassetid://0` show GARDEN, BAG, INDEX, SHOP and INVITE. `01_board.png` is the rim fault before its fix.
+
+**Seen in Play** (2026-10-09, Pod Rush's Play C; `output/rail-fallback-2026-10-09/play/`): the live Garden icon given an id that never loads read IsLoaded TRUE at once and false 0.6 s later, so asking at once hid GARDEN over nothing (`03_garden_missing_id.png`). FIXED: the first question waits `UIKit.PictureSettleSeconds` (0.3 s) after an id is set, and an id taken back inside it is never asked about (RailFallbackSpec's settle checks, 2 more mutants). The fixed code is not yet re-seen in Play: check it in the next guarded Play.
+
+**Seen again in Play on the phone** (2026-10-09, the owner's emulator 705x338; `output/pod-rush-2026-10-09/phone/01_`, `02_`): with the settle fix in, the live Garden icon given `rbxassetid://0` read IsLoaded true at once and false 0.6 s later, and the GARDEN word SHOWED; the real id put back hid it again.
+
+**Files**: `UIKit` (`railFallback`, `watchPicture`, `refreshFallback`, `railPicture`, `RailOptions.fallback`); `GameConfig.Rail` (`Words`, `FallbackOutline`, `FallbackTextMax`, `FallbackTextMin`); GardenUI, LoadoutUI (the rail button and the cell), IndexUI, ShopUI, InviteUI, EventsUI; new `tools/tests/RailFallbackSpec.luau`; HudLayoutSpec's railPicture label.
+
+## WHEEL JACKPOT BURST v1 — 2026-10-09 (CODEX; ART ONLY, NOT UPLOADED OR WIRED)
+
+Owner requested a trial FX after brainstorming. output/imagegen/wheel-jackpot/wheel-jackpot-burst-v1.png is a1024-square RGBA4x4/16-frame one-shot: gold flash/ring/pollen plus green confetti leaves, no sprout/text. Frame cells256px, row-major, centred192px content with verified32px clear margin; all corner/edge alpha0. Final frame peak28/255, mean0.027191,269 nontransparent pixels. One built-in generation using rebirth burst as style reference only; native1254-square original preserved/hash-verified, same cell scale/anchor and fading tail exported mechanically with PowerShell. Python renders read-only QA/preview/package, no API fallback.
+
+Animated256px GIF (16x80ms) repeats for review; use one-shot playback in game, not a permanent loop. Selected-frame64/32 contact preview, exact prompt and notes included in wheel-jackpot-burst-v1-pack.zip (1067505bytes,5entries, CRC/member identity verified). Native original/helpers remain outside pack. Generated motion/visual centres are not pixel-perfect or engine-certified. Owner supplies an upload ID if accepted; implementing session must verify actual effect size/frame order, confirmed reward timing and Reduced FX suppression. No upload/ID, code/reward rules/economy/product changes, external messages, Studio/Play/IsLoaded, publish or git mutations. Peer work preserved.
+
+## POD RUSH ICONS — 2026-10-09 (CODEX; IMAGE EXPORTS ONLY, NO UPLOAD/IDS OR EVENT IMPLEMENTATION)
+
+Owner supplied output/imagegen/podrush/pod-rush-icons-v1.prompt.md. FourfinaluploadPNGs: pod-rush-v1-512.png, pod-rush-bronze-v1-512.png, pod-rush-silver-v1-512.png, pod-rush-gold-v1-512.png, all512square/genuineRGBA/clearouter32px/edgeandcorneralpha0. Mainiconmatchesexistinghatchpodstyle,3leftspeedlines,lower-rightred/goldstopwatchwithwhitefaceoneuphand; actual24/32 viewed,podandwatchdistinguishable. Medalscoherentcopper/green,silver/blue,gold/red, raised sproutingpodrelief. Masterpod-rush-medals-v1.png1536x512; measurednative/finalrectanglesinpod-rush-medals-v1.crops.json. Iconlongestbound430px (~84%), aspectpreserved; medalsminor2pxshape/shinevariation, notpixelidenticalcolourcopies.
+
+Built-inimagegen2calls withhatchrefs, noexistingartedits/CLIAPI fallback. Nativeoriginals1254square/2172x724 preserved/hashverified. Eight24/32variants,64/32/24QApreview,2assetnotes,exactprompts,unchangedbrief,README. Packpod-rush-icons-v1-pack.zip2394588bytes/20entriesverifiedCRC/byte-memberidentity. Useindividual512uploads; do notuploadpreview/rescaledatlasandguessoffsets. OwnerprovidesIDs; implementing sessionchecksIsLoaded/actualHUDslotappearance. No eventcode/duration/rewards/boosts/economy/products, uploads/IDs, externalmessages, Studio/Play/publish, staging/commits/pushes. RootKB/HANDOFF has fullmeasurements; peerworkingchangespreserved.
+
+## REBIRTH CELEBRATION: the spin, the light, REBORN!, the owner's chime, others see it, an aura from 50 — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; RebirthCelebrationSpec 74/0 (NEW, 12/12 MUTANTS CAUGHT) + RebirthSpec 67/0 + 7 NEIGHBOUR SPECS GREEN; NO FULL SUITE; NINE GUARDED PLAYS ON `SeedTest_celebrate_20261009`, CLEARED (probe 300 / 0 differ / 0 ZZ / marker absent); DESKTOP ONLY (THE EMULATOR WAS OFF); PHONE NOT SEEN)
+
+The owner: "can we also make a pop up when rebirthed? like a animation rotating the character, or a light that rotates around when you rebirth then a text and sfx". The other session's plan was approved as written ("approve, let terminal work"), every default taken.
+
+**What a rebirth now looks like** (`Shared/RebirthCelebration` is the timeline, pure; `Shared/RebirthFX` draws it; numbers in `GameConfig.Rebirth.Celebration`)
+- 0.0 s: the panel shuts; a soft white-gold flash; a column of light rises from the feet; the fanfare.
+- 0.0-1.6 s: the body spins two turns, eased, and ends FACING THE CAMERA; eight golden orbs orbit the other way, rising from the feet to over the head. The camera is held still (Scriptable, written before AND after its step) and the jump and turning are held; all handed back exactly at 1.6 s.
+- 0.6 s: the REBORN! card pops in at the upper middle (0.6 -> 1.08 -> 1), gold rays turning behind the owner's emblem: "REBORN!", "REBIRTH 6 · BOTANIST II" in the title's colour (GAIA: white under the turning rainbow), "x4 training · x2.5 income". It replaces the old REBORN notice; it never dims or blocks; a tap closes it sooner.
+- 1.6 s: the owner's burst plays once, behind the body and flat on the ground; leaves and sparkles in the title's colour (rainbow at GAIA).
+- 3.5 s: the card has faded; every piece is destroyed.
+- REDUCED FX: no spin, orbs, rays, flash, column or particles; the card simply appears; the chime still plays.
+
+**Everybody else** (`RebirthService.Celebrate`, after the save and the "done" answer; nothing yields in Confirm's write)
+- Within 120 studs: "celebrate" on GameEvent; their screen draws the column, orbs and burst round THAT body and plays the chime from it (cue `RebirthNearby`, World, range 120).
+- Everybody else in the server, near or far: one quiet line in the notice stack, "Pat reached REBIRTH 6 · BOTANIST II!", with the rebirth emblem (`SourceIcons.rebirth`). The reborn player gets neither.
+
+**The aura from WORLD TREE (rebirth 50)**: the owner's wisp sheet played as a 16-frame picture on two BILLBOARDS, to the left and the right of the body in camera space and a little behind it, tinted by the title (rainbow at GAIA), off for REDUCED FX and in first person.
+- WHY BILLBOARDS: measured over several Plays, the same sheet as a flipbook ParticleEmitter with a continuous Rate drew only now and then (on the body, in a part following it, in loose parts), with no setting that held; two billboards stepping its frames drew every time, front and back. The celebration's one-shot particles (burst, leaves, sparkles, Emit) drew every time.
+- Each aura is an invisible anchored part in `Workspace.SeedRebirthAuras` (client), put on the body's root every frame by one RenderStepped, gone with the body.
+
+**Assets**
+- The four effect sheets (other session checked them: Image, CrazyCozy Games, IsLoaded, alpha): burst 104561904060787 (4x4, once), leaf 139088327003961 (2x2, played back and forth: its last frame jumps), sparkle 113832021583342 (2x2, frame 3 is the orb), aura 136617357503029 (4x4, loops).
+- The fanfare: the owner's "Triumphant Chime" 115254226875194 (13.09 s), window from 0.85 s for 3.4 s with a 1.2 s fade, so its hit (2.41 s) lands on the burst. Volume 0.94 = designed 0.6 / peak 0.635 (-3.9 dBFS, both channels at 48 kHz; the other session's first 0.501 was a mono downmix, it agrees).
+- THE OWNER'S EXTRAS, WIRED 2026-10-09 (ids checked by the peer: economy AssetTypeId 1 by CrazyCozy Games 744756221, Edit PreloadAsync Success + IsLoaded): `Celebration.Rays = "rbxassetid://134900206184752"` (sunburst-rays-v1, 1024 white, peak alpha 204, tinted RayColour) and `Celebration.Logo = "rbxassetid://107076109311776"` (reborn-logo-v1, 1024x384 "REBORN!"). `""` puts the drawn bars / LuckiestGuy words back. RebirthCelebrationSpec pins both ids (74/0 after). SEEN IN PLAY 2026-10-09 (this window's guarded Play): at first the rays were hidden behind the card's plate. They now draw over the plate and under the emblem (ZIndex 3), faded to 40% (`Celebration.RayFade = 0.4`): a soft gold burst (`rays_v2b_zoom.png` in `output/rebirth-celebration-2026-10-09/play/`). Whether the slow spin "breathes" (Codex warned its 16 rays are uneven) cannot be judged from stills: watch it moving. In the harness the card closes early (an MCP Client exec resets the camera); the game itself is not affected. RebirthCelebrationSpec 74/0 after the change. The four hatch icons from the same batch are in the Phase 1 entry.
+
+**Specs**
+- New `tools/tests/RebirthCelebrationSpec.luau` 74/0: config and the moments' order; the whole timeline; REDUCED FX; the turn always ends facing the camera; the orbs' ring; the words and the server line; the REAL RebirthService (within 120 studs only, the line to everyone else, nothing to the reborn player, save -> done -> others); the card on 6 desktops and 8 phones (clear of every HUD rect, at most 85% on a phone, every line >= 12 px to rebirth 4200; 640x360 draws it at 0.67, 16 px off the middle between the corner buttons); whole celebrations stepped by hand (built, held, handed back exactly, every piece gone; REDUCED FX; another's; GAIA; played twice; a body lost midway); the billboard aura; the wiring.
+- 12 mutants caught (REDUCED FX ignored, no face, over the HUD, orbs the same way, everyone shown, self told, nobody told, camera kept, pieces leaked, aura kept, wisps in step, aura over the body).
+- RebirthSpec 67/0, ParentVoiceSpec 189/0, SfxWiringSpec 202/0, SoundLevelSpec 28/0, SourceIconsSpec 18/0, NoticeSpec 100/0, PhoneMenuSpec 29/0, LeaderstatsSpec 29/0.
+
+**Seen in Play** (desktop 1167x716; captures in `output/rebirth-celebration-2026-10-09/play/`)
+- A real rebirth through Quote + Confirm at the shrine: cash and mill reset, SPROUT, the log lines "was reborn" and "celebration: shown to 0 nearby, the line to 0".
+- Frozen frames at rebirth 6: `c1_0.3s` (flash, column), `c2_1.0s` (the card, rays, orbs), `c3_2.0s` (turned to the camera, burst, sparkles), `c4_3.0s` (ground burst, leaves); then every piece gone.
+- `o1_other_view` (another's: column and orbs, no card), `n1_server_line` (the line with the emblem), `x1_reduced_card` (REDUCED FX), `g1_gaia_card_aura` (GAIA's rainbow line).
+- The aura from the game's own code at join: `k1_aura_gaia_front`, `k2_aura_gaia_back`, `k3_aura_worldtree_back`, `k4_aura_worldtree_front`.
+- Console clean. HARNESS NOTE: an MCP Client exec puts `CurrentCamera.CameraType` back to Custom, so the hold reads Custom from outside; inside the game it read Scriptable through the spin.
+
+**Not seen**: a phone (the card's fit is spec-only), a pad, two real players, the owner's rays and logo (not uploaded).
+
+**Owner calls (defaults in use)**: the 3.5 s timing and two turns; 120 studs for others; the server-wide line; the aura from rebirth 50 as two billboards; the chime's 3.4 s window (the whole 13 s, bed ducked, for the reborn player only, is the other option the owner was told about).
+
+**Files**: new `Shared/RebirthCelebration.luau`, `Shared/RebirthFX.luau`, `tools/tests/RebirthCelebrationSpec.luau`; changed `GameConfig` (`Rebirth.Celebration`, cues `Rebirth` / `RebirthNearby`, `SourceIcons.rebirth`), `RebirthService` (`Celebrate`, `Hooks.send` / `players`), `RebirthUI` ("done" plays the celebration, "celebrate", the auras).
+
+## Hatch + rebirth extra images — 2026-10-09 (CODEX; ART EXPORTS ONLY, NO UPLOAD/IDS OR GAME IMPLEMENTATION)
+
+Owner supplied output/imagegen/extras/hatch-rebirth-extras-v1.prompt.md. Final separate upload files: hatch-v1-512.png, instant-hatch-v1-512.png, hatch-timer-v1-512.png, hatch-ready-v1-512.png (all512square); sunburst-rays-v1.png1024square (pure-white, alpha<=204/255); reborn-logo-v1.png1024x384 (R E B O R N ! spelling visually checked). All genuineRGBA, corners/exterioredgesalpha0; iconsouter32pxclear, aspect-preserved430pxlongestbound. Masterhatch-icons-v1.png2048x512 plus measured source/finalrects in hatch-icons-v1.crops.json; preferindividual512uploads to avoid atlasrescaling. Native originals preserved/hash-verified. Built-in imagegen, mechanicalPowerShellexport; exactsixprompts andassetnotes/README alongsideoutputs. 64/32/24preview and36framespincopy included.
+
+Pack hatch-rebirth-extras-v1-pack.zip3,826,435bytes/24entries verifiedCRCandbyteidentity. Generated art caveats: Hatchfourburstticks vsbriefthree; Timercap2leaves vsone. Sunburst16sharp rays withsmallgeneratedasymmetry;45degrotatedalphaMAD9.8661/255, no perfectrotational-equality certification. Reviewspinbehindactualpopup before shipping. No owneruploadIDs, IsLoaded, Studio/Play, purchases/products/prices, GameConfig/gamecode, publish, staging/commit/push or externalmessages. Phase1/celebration implementation stays with the implementing session; brief mentions are context, not actions performed here. Existing peer edits are preserved. RootKB/HANDOFF records fullverification; helpers/originals excludedfrompack.
+
+## QUEUED FOR THE TERMINAL CLAUDE, IN THIS ORDER (2026-10-09; each approved by the owner)
+
+1. Phase 1, "More stealing, less waiting" -- DONE (entry below).
+2. THE OWNER'S 25 PODS INTO THE GAME ("approve but let claude terminal build"): [POD-MODELS-PLAN.md](POD-MODELS-PLAN.md) -- DONE (entry below), with the owner's mid-build change: no breathing, no bases, no seam ring.
+3. The REBIRTH TITLE over the head, smaller (the owner: "make the title smaller, it looks huge specially on phones"): smaller everywhere and smaller still on phones; the ADMIN stack kept tidy; the longest numerals fit; captures on desktop (and the phone emulator if the owner has it on); RebirthSpec's billboard pins updated. -- DONE (entry below). The owner's follow-ups on the 25 pods were done with it (in the 25 pods' entry).
+4. The POD GUIDE: [POD-GUIDE-PLAN.md](POD-GUIDE-PLAN.md) -- DONE (entry below). With it, the owner's later calls: secret pods back ON and the guardian hand-off fix -- both DONE (entries below).
+   - Done alongside, before Pod Rush (the owner's): ADMIN smaller on phones and Teambarnze825's ADMIN title -- entry below; ADMIN's phone size matched to a player's name (the owner's phone screenshot).
+5. POD RUSH -- DONE (entry "POD RUSH: A FIVE-MINUTE STEALING EVENT"): [POD-RUSH-PLAN.md](POD-RUSH-PLAN.md). The owner's art, ids checked by the peer (AssetTypeId 1, CrazyCozy Games 744756221, Edit PreloadAsync Success + IsLoaded, each 512x512, corner alpha 0; one shared crop ImageRectOffset (41,41), ImageRectSize (430,430)):
+   - Icon `rbxassetid://108173602941410` (pod-rush-v1-512: a pod dashing, a red-and-gold stopwatch) -- the announcement, the tracker, the boost-icon row and the end card;
+   - medals, one shape in three metals (the tracker's bar marks, the level-up pop, the end card): Bronze `rbxassetid://106320803448209`, Silver `rbxassetid://108448116105933`, Gold `rbxassetid://100048210150003`.
+   Record the ids again in the Pod Rush entry when they are wired.
+6. This batch's eight phone and HUD items and the Garden/Bag move -- DONE, committed in aad1639 + 22b9fff (entry "GARDEN AND THE BAG CENTRE LEFT" at the top).
+
+STILL QUEUED (2026-10-09, the owner's, relayed by the other session), in this order. Each is its own commit on wip, pushed once green (the owner's commit approval for today's work). Never published by an agent.
+
+7. **THE HUD LAYOUT, phone and desktop together, one commit.**
+   - PHONES (the owner's sketch: "(Night Day) / <sidebar / Index / Garden / Inventory"): under the day/night clock pill, the slim panel (INVITE, EVENTS, WHAT'S NEW, Settings) as a HORIZONTAL row, with a "<" toggle at its LEFT end that folds it away sideways to the right edge (it replaces the ^ arrow). Under that, with a small gap, Index, Garden and Inventory (the Bag) stacked VERTICALLY in that order, about 40 px each and never under the touch floor, with the owner's art and word fallbacks. The centre-left is free again on phones.
+   - DESKTOP: "do not put sidebar on desktop, just on phone". INVITE, EVENTS, WHAT'S NEW and Settings stay where this batch puts them. Only Index, Garden and Inventory move: stacked in that order at the RIGHT edge, vertically centred in the safe height, at the desktop rail size unless it crowds. Shop, WALK MODE and OTHER PLANTS stay top-left; the clock stays top centre.
+   - Keep: every badge visible; a sensible PadFocus order; coverRail, and clear of right-docked panels (MY PLANTS). The dependents follow: modal header padding, HudLayout.bag, the buff row, the Pod Rush strip, notices, the guide's pointer.
+   - "If the column of three doesn't fit a listed phone under the sidebar row, tell me the numbers before changing the design."
+8. **POD RUSH'S AUDIO; Sprout Dash back to the bed.** The owner: "111742643280141 bgm for pod rush / 101349325894268 Start / 117588221543351 finish", then "just pod rush".
+   - 111742643280141 moves to Pod Rush's track at 0.32 (182.8 s, mean -16.6 dB, like BGM1).
+   - `SproutDash.Music.Id` goes back to "": the slot stays, and Sprout Dash plays the normal bed.
+   - The stings at 0.6 each, both checked by the peer (AssetTypeId 3, CrazyCozy Games): Start 2.000 s, sound 0.00-1.43 s; Finish 2.000 s, sound 0.00-1.20 s; no lead-in, peak 1.0, clean tails.
+   - Its own small commit, or folded into item 7's.
+9. **THE MINIGAME BUTTON, PHONES ONLY** ("the minigame button looks also huge on mobile as i see it, we should descale and put it on a comfortable area"). About 65% (~150 x 36), text at least 12 px drawn. In the right thumb's zone just above the jump button, clear of the right dock, the buff row, the hotbar and notices; else the nearest clear spot through HudLayout, and say where. Desktop unchanged.
+10. **RARITY EDGES.** Static rarity-colour edges for Common to Legendary on Bag tiles and HotbarCard; Mythic, Divine and Secret keep RarityFX. Almanac cards by FORM rarity; locked "???" cards and pods plain. The keyline and RESTORING precedence kept; legible at the phones' 85%.
+11. **THE 100 REBIRTH TITLES** ("approve the rebirth titles, let terminal do it"). The design: `output/design/rebirth-titles-fx-v1/README.md` and `rebirth-titles-fx-v1.json`, from the owner's Cursor session. It is design data, not a drop-in config: read both in full.
+   - The ladder: 100 names. Slots 1-4 single-rank; ordinary titles I-III; landmark slots #10, #25, #50, #75 and #100 I-V. GROVE KEEPER I at 20, ELDER ROOT I at 67, WORLD TREE I at 144, EVERBLOOM I at 221, GAIA I at 298, GAIA V at 302. After 302 the title stays GAIA V while REBIRTH N keeps counting; it replaces today's unbounded numerals.
+   - Effects: each family's palette on the rebirth-50 aura (the gate stays at ACTUAL rebirth 50). Signature unlock effects for TWO families only, a prototype for the owner: Seedlight (slots 1-9) and World Tree Halo (50-59). The other nine use the common celebration plus their palette until the owner says yes.
+   - A new NAME plays its family's accent; a rank-only change gets a small pulse and a few motes, never the full show or a longer control lock.
+   - Existing art only: the white leaf 139088327003961 (ping-pong, not a hard wrap), sparkle 113832021583342, aura 136617357503029, rays 134900206184752; the baked burst stays shared and untinted.
+   - Budget: at most 2 wisps + 2 accent sprites per body, the 4 nearest aura bodies per viewer; the 120- and 160-stud ranges and first-person suppression stay. Reduced FX: no new particles, orbits, rays or colour cycling; a static, readable title.
+   - No legacy migration: rebirth was never published (v1038 predates it), so no live player holds a title.
+   - Fit: every string measured at the phone's 171 x 26 (15 px) and the desktop's 228 x 34 (20 px), shrunk where needed (never under the drawn-size floor), the worst cases reported.
+   - The "?" TITLES view: 100 rows, grouped or labelled by family, each with its range ("BOTANIST I-III · REBIRTH 5-7"), scrolled to the player's next title. Colours from the JSON (the founder colours kept).
+   - Specs: every boundary (each title's first and last rank), count 0, 298 / 302 / 303 / 1000, ADMIN stacking, Reduced FX, the aura gate at 50, the fits; RebirthSpec's ladder and numeral pins rewritten. Captures: phone and desktop, the two prototype unlocks, the aura tint.
+
+**Testing for items 7-11** (the owner: "we should cut longer tests if not necessary"):
+- Per item, only the specs that touch its files, plus HudLayoutSpec for any HUD move. The full suite ONCE, at the end of the queue, before the final push.
+- Mutants only where game logic changes (the title ladder's rank math); none for config, UI and layout.
+- ONE combined phone Play for items 7-10 (Pod Rush's audio heard in it), ONE for item 11. Short, capturing only what the owner needs. One quick desktop pass at the end, with the emulator off, for the desktop changes.
+- No rerun of a green spec; reruns only for a failure or a known flake.
+- Kept: a commit per item, the pushes, the probe and cleanup after each Play, every safety rule (test stores, no publish).
+
+Parked by the owner: the rain biome fix stays as it is for now (the other session holds the options).
+
+## THE GUARDIAN TURNS ON THE NEXT THIEF AT THE LAUNCH — BUILT 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; GuardianHandOffSpec 14/0 (NEW; 9 OF 9 MUTANTS CAUGHT) + GuardianPursuitSpec 62/0 + 4 GUARDIAN SPECS GREEN; FULL SUITE OF 130: ALL GREEN BUT RainAudioSpec (FAILING BEFORE THIS WORK) AND SourceIconsSpec (THIS STUDIO'S IMAGE LOADING, NOT CODE); THE TWO-THIEF HAND-OFF SPEC-ONLY (TWO REAL PLAYERS NOT AVAILABLE); ITS END-OF-THROW RE-CHASE SEEN IN PLAY C)
+
+The owner (relayed by the other session): "we gotta fix guardians first"; "yes, let terminal fix the guardian". The report: player 1 steals and is chased, player 2 steals, the guardian catches player 1, and "seems stopping for a while then chase" player 2. The owner wants it to turn on the other thief at once and not stop.
+
+**The cause** (found by the other session, confirmed):
+- `NestService`'s catch set `busy` and then ran `throwPlayer`, which yields through the victim's whole flight: about five seconds until the landing or THROW_TIMEOUT (6).
+- `takeNextThief` refuses while `busy`, so the guardian stood still while the second thief ran.
+
+**The fix** (`NestService`):
+- `throwPlayer(nest, player, onLaunched)` calls `onLaunched` on its own thread the moment the victim is LAUNCHED, before the flight it waits out.
+- At the launch, if a remembered thief can be chased, the guardian drops `busy` and takes them at once (`takeNextThief(nest, true)`). The flight, set-downs and restore finish on their own.
+- Nobody to turn on: it holds `busy` through the flight exactly as before.
+  - If somebody robs it before the victim lands, `provoke` calls the same release (`nest.handOff`) and they are chased at once.
+- **Full speed.** A hand-off runs at the ramp's top (`nest.rampDone`). That covers the launch hand-off and the end-of-throw `endChase`: the same raid.
+  - Every other chase start clears `rampDone` and ramps as before: waking, under-speed, from returning or hauling, sleep.
+- **Never the victim mid-flight.** A thrown or ragdolled player is set aside while `nextThief` runs. They are not dropped: still remembered, and chased once they land if still eligible.
+- **A late end of a throw never ends the chase that followed it**: a `released` flag, as well as the old `target == victim` guard.
+- Unchanged:
+  - the pod in the fist (haul and confiscation);
+  - `Metrics.guardianCaught` at the hit;
+  - one chase at a time, nearest first;
+  - the safe-zone, leash and dusk exits.
+- `handOff` is cleared on sleep, recovery and reset.
+- New Studio-only spec seam: `NestService.SpecThrowState(player)`.
+
+**Specs**
+- New `tools/tests/GuardianHandOffSpec.luau` 14/0, on the real tick and throw with stand-in thieves:
+  - catch A while B is remembered: within a frame or two of A's launch it is chasing B, free, at the ramp's top, while A is still in the air;
+  - A is not re-targeted mid-flight and stays remembered; A's throw completes (back on their feet); A is chased once landed;
+  - no B: unchanged (busy through the flight, then home);
+  - a theft while the victim is in the air: chased at once, and the late landing does not end it;
+  - Astralmaw: the hand-off runs at the top speed (101), while a fresh chase opens at 83;
+  - a chase from asleep ramps again.
+- 9 mutants, all caught:
+  - no launch call;
+  - the ramp restarts;
+  - the ramp is ignored;
+  - the in-flight victim is chosen;
+  - the in-flight victim is dropped;
+  - it releases with nobody else to chase;
+  - a late theft waits;
+  - a fresh chase keeps the hand-off ramp;
+  - a late end ends the new chase.
+- GuardianPursuitSpec 62/0: its end-of-throw source pin was updated to `endChase(nest, true)`.
+- Also green: GuardianRecoverySpec 45/0, GuardianRagdollSpec 120/0, GuardianConfiscateSpec 103/0, FirstMinuteSpec 117/0, SecretWalkSpec 37/0.
+
+**In Play**: two real players were not available, so the two-thief hand-off is SPEC-ONLY. One related path was seen in Play C (the secret test below): the Greenhollow guardian caught the secret's carrier ("left the secret behind with nicnicniccoal and keeps after them"), and after the landing "turns on nicnicniccoal, who robbed it while it was busy". That is the marked thief re-chased through the end-of-throw hand-off.
+
+**Files**: `NestService` (the throw's launch callback, the hand-off, `rampDone`, the aloft set-aside, `SpecThrowState`); `tools/tests/GuardianHandOffSpec.luau` (new); `GuardianPursuitSpec` (one pin).
+
+## SECRET PODS SPAWN NATURALLY AGAIN — Secret.Enabled turned ON 2026-10-09 (the owner)  (UNCOMMITTED; NOT PUBLISHED; THE SECRET, GUARDIAN, ADMIN AND RAIN SPECS GREEN; SEEN IN PLAY ON `SeedTest_podguide2_20261009`, CLEARED: SPAWN AND TOAST, TAKE, THE GUARDIAN'S CATCH AND RE-CHASE, BANK, BAG HATCH, AUTO-PLACE)
+
+The owner (relayed by the other session): "turn secret pods back on". Natural spawning had been off since the Secret feature shipped. That entry (2026-10-02) reads "NATURAL SPAWNING STILL OFF"; admin grants were on.
+
+- `GameConfig.Secret.Enabled = true`: each nest stocking rolls its biome's `SpawnChance`, 5% in Greenhollow (Snarlbloom) and Starbloom (Petalfawn).
+- **Read before changing anything: auto-place does NOT clash with the Secret placement rules.**
+  - A Bag hatch places the plant in a free bed of the player's own garden (`spotsFor` → `GardenPlan.spots`: on the beds, 1.6 studs inside the rim, overlap allowed). That is "Placement for everything" exactly.
+  - It plants grown, facing `facingFor(id)`, as `PlaceAt` plants a hatched Secret by hand.
+  - The fixed facing (`Secret.PodFacing`) only ever applied to a planted Secret POD, and pods never take a bed since Phase 1. An old save's planted secret pod still stands at the fixed facing.
+  - The Secret pod's grow time is SecretTier 1's rung, stamped at the bank like any pod's.
+- Pins updated to ON: PlacementCircleSpec, RainEventSpec, RainPodsSpec, SecretToastSpec, SecretWalkSpec, AdminSpec. AdminService's comment says the switch is on.
+- Green: SecretFormsSpec 106, SecretToastSpec 61, SecretWalkSpec 37, SecretIncomeSpec 24, PlacementCircleSpec 23, RainEventSpec 88, RainPodsSpec 67, AdminSpec 127, AdminConsoleSpec 38, GuardianConfiscateSpec 103, GuardianRecoverySpec 45, PodDropSpec 24, NoticeSpec 100. The Pod Guide's secret row now shows (PodGuideSpec).
+
+**Seen in Play** (guarded, `SeedTest_podguide2_20261009`, cleared; desktop 1148 x 716; captures in `output/secrets-on-2026-10-09/play/`):
+- **Spawn**: DebugService `SpawnSecret` greenhollow, the same spawn the natural roll makes. Platform up. Every player got the toast "A SECRET EGG SPAWNED ON GREENHOLLOW!" (01). NestService `SecretState`: onSpot true.
+- **Take**: TryTake on `Pod_snarlbloom`, carried (overhead), the thief marked (marked 1).
+- **The guardian's chase**: chasing at once, 71 → 13 studs in 2.7 s. It caught the carrier, who stood still on purpose. "left the secret behind with nicnicniccoal and keeps after them"; after the landing, "turns on nicnicniccoal, who robbed it while it was busy". The thief was thrown out to the field, and the mark cleared there.
+- **Bank**: re-taken and banked at once (`CarryService.Bank` true). The encounter resolved (`SecretState` none). The Bag row "snarlbloom T1 … due +29s", its grow time.
+- **Bag hatch and auto-place**: at home, readied (`DebugReady`), `HatchFromBag` → "true PLANTED". The Snarlbloom stands GROWN on the bed (its base on the soil), at its own `facingFor` bearing (03). No clash with "Placement for everything".
+- Console: no errors.
+
+## THE POD GUIDE: what a pod hatches, taught outside the pod — BUILT 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; PodGuideSpec 28/0 (NEW; 13 OF 13 MUTANTS CAUGHT) + PlantInfoSpec, RarityFXSpec, HudLayoutSpec AND THE IndexUI/LoadoutUI SPECS GREEN; TWO GUARDED PLAYS ON `SeedTest_podguide2_20261009`, CLEARED (probe 333 / 0 differ / 0 ZZ / marker absent); A CAROUSEL BUG FOUND IN PLAY AND FIXED; DESKTOP ONLY (THE EMULATOR WAS OFF); PHONE NOT SEEN)
+
+The plan: [POD-GUIDE-PLAN.md](POD-GUIDE-PLAN.md), approved: "???" silhouettes, exact percentages, the size row with its income ratio, a stand inside each biome's arch. It was written for one pod per biome. With the owner's 25 pods (one per plant) it was adapted, as told to the other session:
+- each stand shows the biome's FIVE pods, each paired with its plant;
+- the Bag's "Hatches one of 5" line is dropped (no longer true);
+- the Bag's way to the Almanac is a menu action (a tap already opens a pod's menu).
+
+**One source for every number** (`Shared/PodGuide`, pure). Worked out from SeedData and BiomeData, the rolls' own tables:
+- each plant's chance in its nest (rarity weight / biome pool): Greenhollow 43 / 43 / 11.2 / 2.37 / 0.387%; Dustbowl 44.4 / 44.4 / 9.4 / 1.54 / 0.239%; the other three 45.6 / 45.6 / 7.46 / 1.16 / 0.182%;
+- each size's chance per biome. `SeedData.TierWeight` is the roll's own rule, now shared: RarityBonus on Mega and up. Colossal runs from 0.52% (Greenhollow) to 1.76% (Starbloom);
+- each size's income against Tiny: x1 x7 x35 x132 x412 x1,300 x2,375, from the sizes' value;
+- the secret row while `Secret.Enabled` is on;
+- a plant's income at every size (`SeedData.IncomePerSecond`).
+
+**The stands** (`Shared/PodGuideStand`, `Shared/PodGuideView`, `PodGuideUI.client`; `GameConfig.PodGuide`)
+- One stand just inside each biome's arch, beside the road, built by each client for itself (nothing replicates):
+  - at x = +40 (Starbloom −40, clear of its fan trees), 9.5 studs inside the arch, clear of the racing line and the walls;
+  - a turntable with the biome's five pods at Big, built by `CreatureModel.BuildPod` and idled by PodMotion (`PodShowcase`), never loot;
+  - the carousel turns once every 40 s on the server's clock (still for reduced motion);
+  - pods are built within 150 studs and freed past 180.
+- The board (15 × 8.4 studs, TOP CREATURES' look):
+  - "<BIOME> PODS" and "EACH POD HATCHES ITS OWN PLANT. HOW OFTEN A NEST HAS IT:";
+  - five cards, each pod → plant (a silhouette and "???" until grown, as in the Almanac), with its rarity and chance;
+  - the seven sizes' chance and income;
+  - the secret line.
+  - Its ten pictures are built within 60 studs and freed past 75.
+- All five seen in Edit previews, clear of every biome's props (`output/pod-guide-2026-10-09/edit/`).
+
+**The Almanac** (`IndexUI`)
+- POD SIZES over the first biome: each size's income against Tiny and its chance from Greenhollow → Starbloom. Hidden while searching.
+- Each card: "43% of pods", low in its window, found or not.
+- The detail page:
+  - the plant's own pod in the stage's corner;
+  - "Hatches from its own pod: 43% of Greenhollow nest pods";
+  - "Income by size" for every size, replacing the Tiny-only yield (??? until grown).
+  - Its words scroll on a short panel.
+- An `OpenAt` BindableEvent opens the panel at one plant (for the Bag).
+
+**The Bag**
+- An ordinary pod's tile reads "Greenhollow pod" (`PlantInfo`; Secret and Rain pods keep their own names).
+- Its menu has WHAT'S INSIDE?, which opens the Almanac at its plant through IndexUI's `OpenAt`. Ordinary pods only (`HatchRoll.candidates`).
+
+**Specs**
+- New `tools/tests/PodGuideSpec.luau` 28/0:
+  - the chances add up and are the plan's;
+  - the sizes add up, with the bonus on Mega+ only;
+  - both match 100,000 seeded real rolls per biome;
+  - the secret row; the words;
+  - the stands: placement, inert, the carousel (the game's own pods, PodShowcase, never loot), the turn, no words on any pod, the 2026-09-17 rule pinned word for word;
+  - the board: title, cards, sizes, ??? until grown, the secret line, pictures built near and FREED far, every line at least a third of a stud;
+  - the wiring.
+- 13 mutants, all caught.
+- Updated for the Bag title: PlantInfoSpec 45/0, RarityFXSpec 52/0, HudLayoutSpec (the five biome titles fit a tile).
+- IndexUI/LoadoutUI specs green: CompactMenusSpec 46/0, PhoneMenuSpec 29/0, StuddedLookSpec 33/0, UsabilityAudioSpec 95/0, InviteHudSpec 415/0, HatchRollSpec 166/0, HotbarSpec 35/0, HatchInBagSpec 42/0.
+
+**Seen in Play** (`SeedTest_podguide2_20261009`, cleared; the first try, `SeedTest_podguide_20261009`, was stopped by a Roblox outage before a save could load; desktop 1148 x 716 and 1251 x 716, the emulator off; captures in `output/pod-guide-2026-10-09/play/`):
+- **Stands**: all five built with their faces. Near Greenhollow: its carousel's five pods and ten pictures. PodMotion idles them (4 of 5 moved a part; the lid pod between peeks). Walking off, the pictures were freed. The secret line shows ("SECRET POD: 5% CHANCE A NEST RAISES ONE"). (10, 11)
+- **A BUG FOUND AND FIXED IN PLAY: the carousel never turned.**
+  - Its angle is server time / 40 s × 2π, about 2.8 × 10^8 radians, and CFrame.Angles keeps a float's seven digits: steps of about 30 radians, a pod that never moved.
+  - `PodGuideStand.podFrames` now brings the angle into one turn in double precision; PodGuideUI too.
+  - After a restart: 27.0° in 3 s, exactly one turn per 40 s (30, 31).
+  - PodGuideSpec now turns a carousel on a 2026 clock angle and checks the pods move. The float mutant is caught; the UI-side twin is equivalent.
+- **Bag**: the tiles read "Greenhollow pod", "Starbloom pod" (20). The pod's menu has WHAT'S INSIDE? (21). Pressed: the Bag closed and the Almanac opened at Petalpip's page (22) with:
+  - its pod in the stage's corner;
+  - "Hatches from its own pod: 43% of Greenhollow nest pods";
+  - "Income by size: Tiny $5/s · Big $29/s · … · Colossal $9.5K/s".
+  - Seen there: the pale sizes (Tiny, Colossal) read faint on the light sheet, so they are now a quarter darker and bold.
+- **Almanac page**: POD SIZES over Greenhollow (x1 … x2,375; 53.2% → 20% … 0.52% → 1.76%) and every card's "43% of pods" … "0.239% of pods" (23).
+- Console: no errors.
+
+**Comment fixes** (the plan's two, and two more found):
+- CreatureModel's "the only pod with an aura" (Titan has one too);
+- BiomeData's RarityBonus "Epic-and-above" (it is sizes Mega and up);
+- CreatureModel's "Species stays hidden until hatch";
+- HatchRoll's "a shell coloured by its biome".
+
+**Files**:
+- New: `Shared/PodGuide`, `Shared/PodGuideStand`, `Shared/PodGuideView`, `StarterPlayerScripts/PodGuideUI.client`, `tools/tests/PodGuideSpec`.
+- Changed: `GameConfig` (`PodGuide`), `SeedData` (`TierWeight`), `PlantInfo`, `IndexUI`, `LoadoutUI`, `CreatureModel`/`BiomeData`/`HatchRoll` (comments); specs PlantInfoSpec, RarityFXSpec, HudLayoutSpec.
+
+## THE ADMIN TITLE: Teambarnze825 (Michael) wears it too; smaller on phones — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; AdminSpec 127/0 + RebirthSpec 74/0; 8 OF 8 MUTANTS CAUGHT; ONE GUARDED PLAY ON `SeedTest_admintitle_20261009`, CLEARED (probe 329 / 0 differ / 0 ZZ / marker absent); DESKTOP 1148 x 716 ONLY; A PHONE'S LOOK DRAWN BY HAND; THE PHONE SIZE MATCHED TO A PLAYER'S NAME ON THE OWNER'S PHONE SCREENSHOT)
+
+The owner (relayed by the other session): "yes shrink admin on phones too ... shrink it that it matches the name size of a player"; "add admin title to michael"; "yes, Teambarnze825 is Michael".
+
+**Michael's title** (`AdminService.HasTitle`; `OwnerTitleService`)
+- `AdminService.HasTitle(player)` is true for the owner (`IsOwner`), and for an account in its `TITLED` table, by UserId, while that account is on the allowlist. Teambarnze825 (11607308004) is listed. The check runs on the server only, never by name.
+- The title only: `IsOwner` is unchanged, so he is not the owner. TappedYou and anybody else get none. No power changes.
+- OwnerTitleService asks `HasTitle`. His title stacks over a rebirth title and takes the phone size, like the owner's.
+- AdminSpec 127/0, on stand-in tables:
+  - `HasTitle`: the owner yes, Teambarnze825 yes, TappedYou no, a fourth id no, a lookalike name on a simulated id no;
+  - Teambarnze825 is not the owner;
+  - `Apply` builds the title on Teambarnze825's stand-in head, and none for TappedYou or the lookalike.
+- His real account was never used.
+
+**ADMIN on phones** (`GameConfig.OwnerTitle.PhoneTextSize`; `GameConfig.titlePhone`, `ownerTitleScale`, `ownerTitleLook`, `ownerTitleLift(stacked, titleScale, adminScale)`; `OwnerTitleUI`)
+- On a phone, each viewer's `OwnerTitleUI` redraws ADMIN with its letters at `PhoneTextSize`; its box, glow and outline shrink with them, never under 1. It is now 70 x 17 at 15, from 140 x 34 at 30. "A phone" is the rebirth title's rule: touch, shorter side under 500.
+- It stays 2 px over a phone's rebirth title, and the rainbow still turns. Desktop is exactly as built.
+- **15 matches a player's name** (measured 2026-10-09). The owner sent a real phone screenshot of the engine's default name tag, from another game, 2000 x 900.
+  - The name's capitals are 28 px tall there. The top bar's logo button, 44 points, is 108 px, so the scale is about 2.45 and the capitals are 11.4 points.
+  - ADMIN at 15 draws 12 points tall with its outline: capture 12, rows 296-307, at 1:1. That is within about 1 point.
+  - Measured by the other session; the screenshot is the owner's and is not in the repo.
+  - That name cannot be measured in Studio: it is no instance a script can read, and the MCP capture leaves it out, like the Roblox top bar. Tried 2026-10-09 with a local copy of my character beside me, names on: its ADMIN was captured, its name was not.
+- RebirthSpec 74/0. ADMIN on a phone: 15 px letters, the word fits its 70 x 17 box, its foot 2 px over the phone title's top. Desktop exactly as built. `OwnerTitleUI`'s pins.
+- Mutants: 8 of 8 caught:
+  - the title only for the owner;
+  - the title for every admin;
+  - Teambarnze825 made owner;
+  - `Apply` asking `IsOwner` (caught only after the `Apply` check was added);
+  - ADMIN never smaller;
+  - the lift computed with a desktop ADMIN;
+  - the letters kept at 30;
+  - `OwnerTitleUI` not fitting the letters.
+
+**Seen in Play** (`output/admin-title-2026-10-09/play/`)
+- Desktop ADMIN, unchanged: over BOTANIST II (11) and alone (14).
+- A phone's look, drawn by hand (12, 13, 15): ADMIN 70 x 17 over the 171 x 26 title, its letters the size of the title's words. `OwnerTitleUI` put the desktop size back on its own.
+- Console: "the owner (4119740186) is here; their ADMIN title follows them."
+- No phone or emulator seen. Michael's title not seen in Play: his account was not used.
+
+**Files**:
+- `AdminService`: `TITLED`, `HasTitle`; comments.
+- `OwnerTitleService`: `HasTitle`, the strokes from config, the header.
+- `GameConfig`: `OwnerTitle.GlowThickness`, `EdgeThickness`, `PhoneTextSize`; `titlePhone`, `ownerTitleScale`, `ownerTitleLook`; `ownerTitleLift`'s `adminScale`; `rebirthTitleScale` through `titlePhone`.
+- `OwnerTitleUI`: ADMIN's phone redraw.
+- AdminSpec, RebirthSpec.
+
+## THE REBIRTH TITLE, SMALLER: everywhere, and three quarters again on phones — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; RebirthSpec 73/0 (6 NEW CHECKS; 9 OF 9 MUTANTS CAUGHT) + AdminSpec 125/0 + 4 NEIGHBOUR SPECS GREEN; FULL SUITE OF 128 ON THE FINAL TREE: ALL GREEN BUT RainAudioSpec (FAILING BEFORE THIS WORK); TWO GUARDED PLAYS (`SeedTest_titlefix_20261009`, `SeedTest_glowfix_20261009`), CLEARED (probe 329 / 0 differ / 0 ZZ / marker absent); DESKTOP 881 x 716 AND 777 x 716 ONLY (THE EMULATOR WAS OFF AND WAS NOT SWITCHED); A PHONE'S LOOK DRAWN BY HAND ON THE DESKTOP; NO PHONE SEEN)
+
+The owner: "make the title smaller, it looks huge specially on phones" (relayed by the other session; queued after the 25 pods, before the Pod Guide).
+
+**What changed** (`GameConfig.Rebirth.Title`; `RebirthService.ApplyTitle`; `OwnerTitleUI`)
+- The title over the head: 320 x 46, the words at 28 and REBIRTH N at 14, is now **228 x 34, the words at 20 and REBIRTH N at 12** (about 29% smaller). The words get six tenths of the box and REBIRTH N four (it was 0.64 / 0.36). 228 holds the widest title to rebirth 4200, GAIA MMMDCCCLXXXVIII (212 px at 20), with its 3-px outline on each side.
+- **On a phone it is three quarters again**: 171 x 26, the words at 15, REBIRTH N at 10 (never under `SubMinTextSize` 10). "A phone" is the prompts' rule: a touch screen whose shorter side is under 500. Each viewer's `OwnerTitleUI` redraws every rebirth title for its own screen (`GameConfig.rebirthTitleScale`, `GameConfig.rebirthTitleLook`). It checks again with the rainbow's steps, so a turned or resized screen follows. Desktops and tablets are never touched: the server builds the desktop size.
+- **ADMIN stays stacked**: `GameConfig.ownerTitleLift(stacked, titleScale)` puts ADMIN's foot 2 px over the title's top at either size, and `OwnerTitleUI` brings ADMIN down with a phone's smaller title. ADMIN's own size (140 x 34, text 30) is unchanged.
+- Still sized in pixels, as before: a title sized in studs would shrink to nothing at range and break the ADMIN stack. `MaxDistance` 100, `Rise` 2.4 and `Lift` 0.9 are unchanged.
+- On a 705 x 338 phone the box was 45% of the screen's width and 14% of its height; it is now 24% and 8%.
+
+**Specs**
+- RebirthSpec 73/0, with 6 new checks: the built size and its split; ADMIN on a phone; smaller than before; the phone rule; every title fits on a phone with REBIRTH N at 10 or more; `OwnerTitleUI`'s wiring.
+- 9 mutants, 9 caught: the scale ignored, REBIRTH N's floor gone, ADMIN's lift ignoring the scale, the old size back, the wrong short side, the floor too low, the old split, `OwnerTitleUI` not redrawing, `OwnerTitleUI` not restacking.
+- AdminSpec 125/0, RebirthCelebrationSpec 74/0, InviteAudioSpec 66/0, RainFamilySpec 38/0, LeaderstatsSpec 29/0.
+
+**Seen in Play** (captures in `output/rebirth-title-smaller-2026-10-09/play/`)
+- Desktop:
+  - BOTANIST II at 14 and 28 studs, new (01, 02), next to the old size redrawn by hand for comparison (03, 04);
+  - the widest title, GAIA MMMDCCCLXXXVIII, in its rainbow, fits: 212 of 228 px (07);
+  - ADMIN alone, with no title (09);
+  - GROVE KEEPER III in the second Play (10).
+- A phone's look, drawn by hand on the desktop with `OwnerTitleUI` paused (05, 06, 08): 171 x 26, text 15 / 10; the widest title is 164 of 171 px. When restarted, `OwnerTitleUI` put the desktop size back on its own, which proves its wiring at scale 1.
+- Measured: the box 228 x 34; the words 20 (BOTANIST II is 97 px wide); REBIRTH N 12. ADMIN's offset is 1.959 over the desktop title and 1.629 over the phone's.
+- NOT seen: a real phone or Studio's emulator (it was off and was not switched). The phone path is checked by the spec only: `GameConfig` is frozen, so a Play cannot fake a phone.
+
+**For the owner**: on a phone, ADMIN (unchanged, text 30) now stands bigger than the title under it (05, 08). Should ADMIN shrink on phones too? Not done, because it was not asked.
+
+**Files**:
+- `GameConfig`: the `Rebirth.Title` sizes, `PhoneScale`, `PhoneShortSide`, `SubMinTextSize`; `rebirthTitleScale`, `rebirthTitleLook`; `ownerTitleLift(stacked, titleScale)`.
+- `RebirthService`: the 0.6 / 0.4 split.
+- `OwnerTitleUI`: the per-screen redraw and ADMIN's restack.
+- `RebirthSpec`.
+
+## THE OWNER'S 25 PODS IN THE GAME: one pod per plant, one scale per tier, no bases, no breathing — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; PodModelsSpec 38/0 (NEW; 11 OF 12 MUTANTS CAUGHT, THE 12TH EQUIVALENT) + DustbowlPodSpec 40/0 (REWRITTEN) + 3 UPDATED SPECS GREEN; FULL SUITE OF 128 ON THE FINAL TREE: ALL GREEN BUT RainAudioSpec (FAILING BEFORE THIS WORK) AND SourceIconsSpec 17/1 (FOUR OF THE OWNER'S UPLOADED PICTURES STOPPED LOADING IN STUDIO TODAY; NOT CODE, SEE SPECS); THREE GUARDED PLAYS ON `SeedTest_podmodels_20261009`, CLEARED (probe 329 / 0 differ / 0 ZZ / marker absent); DESKTOP 777 x 716 ONLY (THE EMULATOR WAS OFF AND WAS NOT SWITCHED); PHONE NOT SEEN; NO ROBUX SPENT; THE OWNER'S FOLLOW-UPS DONE THE SAME DAY: A SOFTER COLOSSAL GLOW ON PALE PODS, NO SHADOWS, THE SOURCE FOLDERS MOVED TO SERVERSTORAGE -- SEE ITS END)
+
+The plan: [POD-MODELS-PLAN.md](POD-MODELS-PLAN.md), approved ("approve but let claude terminal build"). Mid-build the owner changed it: "disable breathing animation on pods, and remove the base if there is a base below the pods for us to save time". The plan now records that change. The owner's five Workspace folders (`greenhollow pods` ... `starbloom pods`) were only read: never moved, edited or deleted.
+
+**What the game builds now**
+- `CreatureModel.BuildPod` hands these 25 species to `Shared/PodModel.Build`. Secret and Rain pods are unchanged.
+- Each pod is replayed from data: `Shared/PodForms/<id>.luau`, lifted part for part by a read-only generator. `SecretModel.Replay` now also replays SpecialMesh (type, scale, offset) and the stud Textures (per face; their tiles grow with the pod). Joints point at parts by index; WeldConstraints are recorded as Welds. The owner's per-pod Scripts are NOT imported.
+- Backups: 25 verified .rbxm files in `output/model-backups/2026-10-09-pod-originals/`, with `manifest.json`. They still have their bases.
+- **One uniform scale per tier.** The 12 studded pods, and Bogbonnet (a lid pod with no designed size), fill the box: at most 1.25 D wide and 1.45 D tall. The other 12 lid pods keep their designed `ClosedWidth`. With the base gone they stand lower than their `ClosedHeight`. D = 1.66 / 2.59 / 3.66 / 4.87 / 6.09 / 7.94 / 9.04 studs (Tiny to Colossal).
+- **The contract:** `Pod_<id>`; SpeciesId, Rarity, Tier, Stage; `PodForm` and `PodScale`. An invisible upright Shell PrimaryPart: the pod's width x min(D, height) x depth, its centre min(D, height)/2 up. Every part anchored, with collide, query and touch off. `ModelStreamingMode` Atomic, tag `PodRig`, PickupSound at Colossal.
+- **Size shown:** the lid pods' own `SizeSeam` parts take the tier colour (Bogbonnet has none). The studded pods get NO seam ring (the owner's change); their size shows by scale. Titan: the vent and the aura. Colossal: a Neon core inside the pod (0.34 D, at the Shell), its light, the stronger aura, PickupSound.
+- **Carrying:** the owner's Motor6Ds and Welds are stripped in the arms (`CarryService` attachInFront) and in the held Tool (giveTool), as the Secret pods' are.
+- **Hatching:** the burst and the lift fade the stud Textures with their parts (`PlantService`; a part's Transparency does not reach its Textures).
+- **PlantAura** skips fully transparent parts (the Shell, the hinges).
+- **The Bag** draws each pod as its own species' pod (`InventoryModel`, key `pod|p:<id>|<tier>`). Two species are two tiles.
+
+**The bases removed (the owner's change)**: 35 parts, with every weld that joined them. Each pod's bottom and scale are measured after the removal; each data module lists its own under `Removed`. Drawn size in D, the same at every tier:
+
+| Pod | Biome | Style | Removed | Drawn W x H (D) |
+|---|---|---|---|---|
+| Bellchime | greenhollow | lid | `SeedBase`, `PlinthBevel` | 0.88 x 1.28 |
+| Nubkin | greenhollow | studded | `FlatBase` | 1.25 x 1.42 |
+| Petalpip | greenhollow | studded | `FlatBase` | 1.25 x 0.90 |
+| Spiretip | greenhollow | studded | `FlatBase` | 1.07 x 1.45 |
+| Toadcap | greenhollow | lid | `SeedBase`, `BasePlinth` | 1.00 x 1.11 |
+| Dunebud | dustbowl | studded | `FlatBase` | 1.25 x 1.13 |
+| Paddlehop | dustbowl | studded | `FlatBase` | 1.06 x 1.45 |
+| Raincup | dustbowl | studded | `FlatBase` | 1.11 x 1.45 |
+| Suncrown | dustbowl | studded | `FlatBase` | 1.24 x 1.45 |
+| Thornwhorl | dustbowl | studded | `FlatBase` | 1.25 x 1.04 |
+| Bogbonnet | tanglemire | lid | `SeedBase` | 1.25 x 1.38 |
+| Crookreed | tanglemire | studded | `FlatBase` | 0.75 x 1.45 |
+| Gloomlotus | tanglemire | lid | `SeedBase` | 0.74 x 1.36 |
+| Lanterncap | tanglemire | studded | `FlatBase`, `PlinthBase` | 1.13 x 1.45 |
+| Snapmoss | tanglemire | lid | `SeedBase` | 1.03 x 1.23 |
+| Cinderpaw | emberroot | studded | `FlatBase`, `BaseRim` | 1.25 x 0.36 |
+| Emberquill | emberroot | studded | `FlatBase`, `PlinthBase` | 0.53 x 1.45 |
+| Kilnhusk | emberroot | lid | `SeedBase` | 0.97 x 1.32 |
+| Pyrelotus | emberroot | lid | `SeedBase`, `PlinthBevel` | 0.93 x 1.22 |
+| Slagbloom | emberroot | lid | `SeedBase`, `PlinthBevel` | 0.99 x 1.20 |
+| Astralhorn | starbloom | lid | `SeedBase`, `PlinthBevel` | 0.96 x 1.21 |
+| Cosmospire | starbloom | lid | `SeedBase`, `BasePlinth` | 0.98 x 1.20 |
+| Novaorb | starbloom | lid | `SeedBase`, `BulbPlinth` | 0.98 x 1.20 |
+| Supernovus | starbloom | lid | `SeedBase` | 1.07 x 1.28 |
+| Voidpetal | starbloom | lid | `SeedBase` | 1.21 x 1.28 |
+
+- Kept on purpose (the owner's list): Nubkin's `Bottom_*` parts, Lanterncap's `RoofPlinth`, Bellchime's `StalkBase`.
+- Checked by eye and kept: Raincup's `GobletFoot` (the goblet's own foot), Paddlehop's `RimBottom` (the fourth side of the pad's frame), Dunebud's `FrontBaseRim` (the husk's lip).
+
+**Animation: `PodMotion`, on the client, with no breathing** (numbers in `GameConfig.PodModels.Motion`)
+- One LocalScript (`PodMotion.client.luau`) and `Shared/PodMotion`. It moves only world pods (nest, loose, planted, and `PodShowcase` stands for the Pod Guide) within 120 studs: every 2nd frame within 60 studs, every 4th beyond. Bag and hotbar pictures stay still. REDUCED FX: every pod rests.
+- Studded pods: their scripts' joint waves and lamp pulses, ported one to one. Their root's breathing bob is NOT ported.
+- Lid pods: the lid peeks open a crack (0.08 of its swing, about 5 degrees) every 5.5 s for 1.4 s, and the glow pulses (25%).
+- Ready to hatch (an old save's planted pod): a lid pod stands 0.45 open; a studded pod's idle runs twice as fast.
+- Only the parts a waving joint carries are written (one `Workspace:BulkMoveTo`). The root and the body never move.
+
+**Specs**
+- New `tools/tests/PodModelsSpec.luau` 38/0: the 25 and only those; part, texture and light counts after the removal (1,172 / 3,012 / 27); every part of the 25 originals in the place replayed exactly where and as the owner built it (the removed names skipped); the contract at all 7 tiers (name and attributes, inert, the Shell, no Script, no text, PickupSound, the tag); studs and mesh offsets grow with the pod; the box, the fill, the designed widths, the lowest point at the base; the seam colour and nothing else repainted; no base, no ring, nothing added; Tiny to Giant quiet, Titan, Colossal; every recipe finds its joints and lights, every lid pod its LidHinge; one step moves only what waving joints carry (no root, no body), never the whole pod; peek, ready, rest exact; source pins (the client's live test, the carry strips, the Texture fade, PlantAura).
+- `DustbowlPodSpec` rewritten, 40/0: the owner's five Dustbowl pods (no bases, no ring, the box, the contract).
+- Updated and green: ReachPointSpec 53/0, InventoryModelSpec 51/0 (own-pod pictures), HatchRollSpec 166/0 (a mid-roll pod drawn as its own pod). PlacementCircleSpec, PlantStreamingSpec and RainPodsSpec needed no change.
+- 12 mutants on PodModelsSpec, 11 caught: ring back, Shell centred, seam uncoloured, Shell visible, core on top, studs at world size, every part written, breathing back, ready not hurried, designed width ignored, not routed. Survived: `PmMutFixedJoinsTree` (parts the owner anchored joining the moving tree). It is equivalent now: no such part hangs under a waving joint, and nothing breathes.
+- Full suite on the final tree: 128 of 128 specs in 652 s. Two fail. RainAudioSpec 38/1 failed before this work. SourceIconsSpec 17/1 fails its load check, twice: four of the owner's uploads no longer load in Studio: `all_items-256` 97250543670622, `plants-256` 113964771900247 and `pods-256` 88009836282641 (the Bag's category tabs), and `sacrifice-256` 120984862343497. The milestone icon 101850589009212 fails too (not one of that spec's 16). ContentProvider answers Failure for each, at 15:00 and again at 15:15. The economy details still list each under CrazyCozy Games (created 2026-10-03; milestone 2026-10-08). They loaded in the 14:06 suite, and no code here touches them. **The owner should check those five on the Creator Dashboard** (moderation?). It was a Studio glitch: they all load after a restart (follow-up 6).
+
+**Seen in Play** (three guarded Plays on `SeedTest_podmodels_20261009`; desktop 777 x 716, touch off; Studio's emulator was off and was not switched; captures in `output/pod-models-2026-10-09/play/`)
+- Plays 1-2, before the owner's change (01-26): all 25 at Tiny, Mega and Colossal; each biome at Colossal; a Titan; a nest; carry (front and side) and drop at Tiny and Mega; the Bag's tiles; a planted Toadcap growing, ready (lid part open), the burst and the hatch; a Nubkin's burst in steps.
+- Confiscation and haul (Play 2): a Crookreed T1 taken from the Tanglemire nest; the provoked guardian took it from the arms (a `HauledPod`, box 1.62 x 2.41 x 1.62) and the haul was over about 3 s later. The log shows it; captures 25-26 do not show it cleanly.
+- Play 3, after the change (30-73): all 25 with no base and no ring at Tiny (40), Mega (41) and Colossal (42); each biome at Colossal (`5x_colossal_*`) and at Mega (`6x_mega_*`); a Mega Crookreed carried (70 front, 71 side) and dropped (72); the Bag's own-species pictures (73). The first try at 30-35 is covered by the WHILE YOU WERE AWAY panel; 40-47 replace it.
+- Motion: 23 of 30 pods in range moved a part, and 0 moved their root. The 7 still ones were lid pods between peeks. A Toadcap over 6 s: its PodCore moved 0.0000 studs; its lid peeked to 5.1 degrees.
+- Console: no errors. One warning in every Play comes from the owner's own `Workspace.tanglemire pods.CrookreedPod.PodAnimate`, line 5: an infinite yield on `SheafCore:WaitForChild("PollenHeart")`.
+
+**Performance** (desktop Studio, 777 x 716; NOT measured on a phone)
+- The Greenhollow nest, 5 pods in range: 59 fps; frame mean 16.8 ms, p95 22.0 ms, worst 49.6 ms.
+- PodMotion's own Lua: 0.48 ms a frame for those 5 pods (163 moving parts) if every pod stepped every frame; the cadence halves that. Before the change, which wrote whole pods: 1.4 ms for 5 pods.
+- The 25 at one tier: 1,172 parts + 25 Shells, 3,012 stud Textures, 27 lights (+25 core lights at Colossal). A full world's nests (16 pods): 686 parts, 2,196 Textures, 19 lights.
+
+**For the owner to decide** (nothing here was changed on my own; all five were settled the same day: see the follow-ups below)
+1. **Colossal pale pods glow white.** The Colossal aura washes out the pale pods: Greenhollow's and Dustbowl's read as white (42, `5x_colossal_greenhollow`, `5x_colossal_dustbowl`). A weaker Colossal aura for pale pods, or keep it?
+2. **Stud textures on phones:** 3,012 for all 25, about 2,200 at a full set of nests. Not measured on a phone. Switching to the game's stud surface is the owner's call.
+3. **Shadowed lights:** 10 of the owner's lights (StudioFillLights) cast shadows. Kept as built; shadows cost on phones.
+4. **Crookreed's own script never runs** past `WaitForChild("PollenHeart")`: there is no PollenHeart under SheafCore. In the game, PodMotion plays the motions the script describes.
+5. **Two extreme shapes:** Cinderpaw is very low (0.36 D: 0.6 studs tall at Tiny), and Emberquill is thin (0.53 D wide). Those are their own proportions, scaled uniformly.
+
+**Not seen**: a phone or a pad; two real players; the hatch burst's texture fade (too fast to capture: code and a spec pin only).
+
+**The follow-ups the owner approved the same day** ("approve your suggestions, let terminal do it"; relayed by the other session)
+1. **A softer Colossal glow on pale pods** (`GameConfig.PodModels.PaleGlow`; `PodModel.Brightness` and `PodModel.GlowFor`).
+   - The experiment in Play: `output/pod-models-2026-10-09/glow/` (gh_*, d_*, k_*, k2_*). It showed that the Colossal's two PointLights wash pale pods white, not the aura's halo, and that a neighbour's light adds to it.
+   - So both lights' strength and reach now follow the pod's own brightness: its visible parts' mean luminance, weighed by area. Full at 0.42 and under; 15% strength and half reach at 0.60 and over; straight between. The halo is unchanged.
+   - Measured brightness: Greenhollow 0.59-0.87; Dustbowl 0.54-0.72; Tanglemire's Lanterncap 0.80 and Gloomlotus 0.73 (its other three 0.38-0.42); Emberroot 0.17-0.40; Starbloom 0.20-0.31.
+   - Play B light values (core / aura strength):
+     - softer: every Greenhollow and Dustbowl pod, Lanterncap and Gloomlotus. Most are at 0.24 / 0.33 with half reach; Spiretip 0.33 / 0.46; Thornwhorl 0.69 / 0.94;
+     - full (1.60 / 2.20): Emberroot, Starbloom, and Tanglemire's dark three.
+   - Before and after, from the same camera: `play/5x_colossal_<biome>` against `glow/after_5x_colossal_<biome>`, and `play/42_nobase_all_colossal` against `glow/after_42b_all_colossal`.
+   - In the high all-25 view the pale front rows still look bright. `glow/after_42c` has every Colossal light and halo off and looks the same, so that brightness is their own colour in sunlight.
+2. **Stud textures: no change** (the owner).
+3. **No shadows**: no light on a built pod casts shadows (`PodModel`, right after the replay).
+   - CORRECTION to the count above: SIXTEEN of the owner's lights cast them, not ten. Ten are StudioFillLights; six are the pods' own: Cinderpaw's EmberCoreLight, Crookreed's MarshGlow, Emberquill's CandleLight, Lanterncap's LanternLight, Raincup's GoldGlow and Suncrown's SolarGlow.
+   - All sixteen are off in the game. The data keeps the owner's record.
+   - Play B: 0 of 95 pod lights cast shadows.
+4. **Cinderpaw and Emberquill: no change** (the owner).
+5. **The five source folders moved from the Workspace to ServerStorage** (the owner's approval; the owner saved the place after).
+   - First, the 25 backups were verified IDENTICAL against the live originals.
+   - Then a reparent only, with no edits and no deletes. Descendant counts are unchanged: greenhollow 1286, dustbowl 1619, tanglemire 1131, emberroot 1131, starbloom 537. The 25 scripts inside do not run in ServerStorage.
+   - Afterwards 24 of 25 still fingerprint the same as their backups. In Kilnhusk, three welded, unanchored door parts (DoorJamb1, DoorJamb2, DoorArch2) moved about 1e-5 studs when their welds re-solved outside the Workspace; that flipped the fingerprint's 4th decimal. The backup file is unchanged.
+   - In Play B the Crookreed infinite-yield warning is gone: no owner script runs any more.
+   - PodModelsSpec now reads the originals from ServerStorage and fails if a pod folder is back in the Workspace. The generator reads ServerStorage first. The PodForms comments (`init` and the 25 headers) say where the originals are.
+6. **The five pictures that would not load** were a Studio glitch: after the owner's restart they all load (checked by the other session).
+
+**Specs after the follow-ups**
+- PodModelsSpec 42/0, with 4 new checks: no pod folder in the Workspace; no built light casts shadows; a Colossal's lights follow its brightness, with the halo as it was; Greenhollow and Dustbowl softer, the palest five at the floor, Emberroot and Starbloom in full.
+- 6 more mutants, 6 caught: shadows kept, glow at full, reach kept, the aura's reach ignored, brightness without area, the halo shrunk. In all, 17 of 18 caught; the 18th is equivalent.
+- Full suite on the final tree, after the follow-ups and the smaller title: 128 of 128 specs in 550 s, all green but RainAudioSpec 38/1 (failing before this work). SourceIconsSpec is green again: the pictures load after the restart.
+
+**Files (follow-ups)**: `GameConfig` (`PodModels.PaleGlow`); `PodModel` (`Brightness`, `GlowFor`, `AddAura`'s `lightReach`, no shadows); the PodForms comments; PodModelsSpec. In the place: the five folders, now in ServerStorage.
+
+**Files**: new `Shared/PodForms/init.luau` and 25 data modules, `Shared/PodModel.luau`, `Shared/PodMotion.luau`, `StarterPlayerScripts/PodMotion.client.luau`, `tools/tests/PodModelsSpec.luau`. Changed: `SecretForms`, `SecretModel`, `CreatureModel`, `GameConfig` (`PodModels`), `CarryService`, `PlantService`, `PlantAura`, `InventoryModel`; specs `DustbowlPodSpec` (rewritten), `ReachPointSpec`, `InventoryModelSpec`, `HatchRollSpec`; `KB/POD-MODELS-PLAN.md`.
+
+## MORE STEALING, LESS WAITING (Phase 1): pods hatch in the Bag, pods get their own room of 60 — DONE 2026-10-09 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; HatchInBagSpec 42/0 (NEW; 12 OF 13 MUTANTS CAUGHT, THE 13TH IS EQUIVALENT) + 13 UPDATED SPECS GREEN; FULL SUITE OF 127: ALL GREEN BUT RainAudioSpec (FAILING BEFORE THIS WORK); GUARDED PLAYS ON `SeedTest_hatchbag_20261009`, CLEARED (probe 300 / 0 differ / 0 ZZ / marker absent); DESKTOP 1167 x 716 ONLY (THE EMULATOR WAS OFF AND WAS NOT SWITCHED); PHONE NOT SEEN; NO ROBUX SPENT)
+
+The plan: [STEAL-MORE-PLAN.md](STEAL-MORE-PLAN.md). The owner approved it with every recommendation taken ("approve, let terminal work"). It came from Michael's playtest of the first 30 minutes: hatch time, and how many pods can be stolen and hatched. Phase 2 (+Speed per bank, sacrifice upgrades, offline mill) is NOT approved, and none of it is built.
+
+**The rules, as built** (numbers and words in `GameConfig.HatchInBag`; rooms in `GameConfig.Save`)
+- **The wait starts at the bank.** `CarryService.Bank` gives the pod its deadline: `HatchAt` = os.time() + its grow time, on the Tool and on its saved `profile.Held` row. It is absolute, so it runs while the player is offline. Every other way a pod arrives (`GivePod`, a wheel prize, the admin console, a rebuilt Bag) keeps the deadline it has, or starts one now.
+- **Pods never take a bed.** Placing a pod is refused with "HATCH IT IN YOUR BAG" / "Pods hatch in your Bag now." (`ActionRefusal` `POD_IN_BAG`). Beds hold plants only.
+- **Ready.** A growing pod's tile and hotbar slot count down ("READY IN 2:05", beside the owner's hourglass). A ready pod reads READY (the owner's green check on its tile), and the Bag button wears a READY badge.
+- **HATCH.** A pod's menu has HOLD TO HATCH: the bed's own 1.1 s hold. HATCH ALL (n) in the Bag hatches every ready pod. The requests ride GameEvent (`BagHatch`, `BagHatchAll`, `BagInstantHatch`) and are answered with `BagHatchResult`; one request per player per 0.3 s. The same hatch moment plays: the rattle, the crack, the rarity reveal and its sound.
+- **Where the plant goes.** Straight into a free bed, else into the Bag. The moment plays at that bed when the player stands within 120 studs of it. Otherwise (away from home, or the garden full) it plays in front of the player, 9 studs out plus the shell's size; HATCH ALL fans its plants over 5 places, 50 degrees either side, 0.4 s apart. The notices: "PLANTED!" (planted while the moment played away from the bed), "IN YOUR BAG" (the garden full), and "N HATCHED!" with how many went where.
+- **Instant Hatch moves to a growing Bag pod**: the same product (3713212811, 99 R$) and the same saved `InstantCredits`. With a credit the menu reads FREE INSTANT HATCH and no purchase dialog opens. A ready pod is never offered one.
+- **Two rooms.** Pods have `Save.MaxPods = 60` (a pod in the arms counts here); plants keep `Save.MaxHeld = 24`. A steal is refused only at 60 pods, with "POD STORAGE FULL". The server side is `CarryService.HeldRoom(player, own, kind)` and `CarryService.PodRoom`. The Bag's footer reads "Plant storage: 12/24 · Pods: 3/60".
+- **Old saves.** Pods already planted keep growing and hatch where they stand (hold E, as before). Bag pods with no deadline get now + their grow time when the save loads (`ProfileSchema`).
+- **The hatch ladder is unchanged** (the `SeedData` grow times are untouched).
+- **Equip Best** counts plant rows only; growing pods no longer take its room.
+- **The guide** goes steal, bank, hatch (in the Bag), place. Its hatch step says "Your pod is growing in your Bag: ready in 26s", then "Open your Bag and hold HATCH." The funnel's steps 4 and 5 swap to match (`Metrics`, [ANALYTICS.md](ANALYTICS.md)).
+- **Admin** gives check the right room, and the console shows pods against 60. **Wheel** pod prizes check the pod room.
+- **Studio only**: `PlantService.DebugOldPod` plants an old-save pod for tests; `DebugReady` now readies Bag pods too.
+
+**The owner's four hatch icons, wired** (ids checked by the peer: AssetTypeId 1, CrazyCozy Games 744756221, Edit PreloadAsync Success + IsLoaded; each 512 x 512). One shared crop: ImageRectOffset (41, 41), ImageRectSize (430, 430). They live in `GameConfig.HatchInBag.Icons`; `""` puts the drawn stand-in back, never another upload.
+- Hatch `rbxassetid://70562570593192`: HATCH and HATCH ALL.
+- InstantHatch `rbxassetid://111764150121238`: the Instant Hatch action.
+- Timer `rbxassetid://111370496768773`: beside a growing pod's countdown.
+- Ready `rbxassetid://131185686807584`: a ready pod's tile.
+- The same batch's Rays and Logo are in the REBIRTH CELEBRATION entry above.
+
+**Specs**
+- New `tools/tests/HatchInBagSpec.luau` 42/0. It loads the real PlantService and CarryService from source; players are stand-ins with simulated ids from 90,000,000,000; nothing is bought and no save is opened.
+- 13 mutants: 12 caught (one room for both, pods placed in beds, no clock, never a bed, the plant standing at once, no stamp at load, no stagger, never at the bed, a rebuild forgetting the deadline, no READY after a receipt, Equip Best counting pods, a ready pod sold). The 13th, `GivePod` with no deadline, is equivalent: the record stamps a missing deadline at now + grow.
+- Updated for the new rules, all green: TutorialSpec 121/0, WheelSpec 162/0, GardenPlanSpec 18/0, TutorialSpotlightSpec 44/0, PlacementCircleSpec 23/0, HatchDeliverySpec 62/0, MetricsSpec 59/0, ActionRefusalSpec 74/0, AdminSpec 125/0, HatchStorageSpec 208/0, StorageDoorsSpec 128/0, InventoryModelSpec 49/0, HotbarSpec 35/0.
+- The full suite (127 specs, 742 s) caught two more, both fixed and re-run green: HatchRollSpec 166/0 (a LoadoutUI source pin) and NoticeSpec 100/0 (a notice line too long). RainAudioSpec fails as it did before this work; it is untouched.
+
+**Seen in Play** (guarded, `SeedTest_hatchbag_20261009`; desktop 1167 x 716, touch off: Studio's emulator was off and was not switched; captures in `output/hatch-in-bag-2026-10-09/play/`, 01-18)
+- Three pods banked through the game's own TryTake and Bank: three tiles counting down, each with its own wait (01). After a rejoin on the same store they came back READY, with HATCH ALL (3) (01_bag_pods_after_rejoin).
+- HATCH ALL with free beds: the reveals one after another, then the plants standing in the beds (02-04).
+- The pod menu's HOLD TO HATCH (05); the hatch moment in front of the player (06).
+- A full garden: the plant goes to the Bag, with "IN YOUR BAG" (07).
+- The hotbar's pod countdown (08).
+- Instant Hatch on a growing Bag pod with ONE saved credit: the menu read FREE INSTANT HATCH; the credit went 1 to 0, the pod hatched, and no purchase dialog opened (09-11). No real purchase was made.
+- An old save's planted pod: it grew in its bed, showed its prompt when ready, and hatched there with hold E (12-14).
+- Away from home: the moment played in front of the player, then rose (15, 15b); "PLANTED!" (16).
+- 60 pods: 60 given, the pod room 0. A steal at an Emberroot nest was then refused with "POD STORAGE FULL" / "60/60. Hatch or sell a pod to make room." (17); the Bag at 60 (18).
+- Console clean of errors after the one fix below.
+
+**Found in Play and fixed**: LoadoutUI already had `local BAG = HudLayout.Config.Bag`; the new Bag-hatch local of the same name shadowed it and broke the hotbar (`LoadoutUI:798: attempt to index nil with 'Ready'`). The new one is `HATCH_BAG`.
+
+**Not seen**: a phone or a pad (the Bag's fit on phones is spec-only), two real players, a real Instant Hatch purchase.
+
+**Still as before (not part of the plan)**: the tutorial's starter pod still plants in the garden and hatches in place.
+
+**Files**: new `tools/tests/HatchInBagSpec.luau`. Changed: `GameConfig` (`HatchInBag`, `Save.MaxPods`), `ActionRefusal`, `CarryService`, `PlantService`, `ProfileSchema`, `AdminService` (+ its console), `WheelService`, `Metrics`, `TutorialData`, `GardenPlan` (comments), `InventoryModel`, `InventoryTile`, `InventoryPanel`, `HotbarCard`, `LoadoutUI`, `PlantPlace`, `TutorialUI`; `KB/ANALYTICS.md`.
+
+## REBIRTH TITLES: roman numerals, and a TITLES-list legibility fix — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; RebirthSpec 67/0, PhoneMenuSpec 29/0, LeaderstatsSpec 29/0, AdminSpec 125/0; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_roman_20261008`, DESKTOP 1167 x 716 (THE EMULATOR WAS OFF), CLEARED; PHONE NOT SEEN)
+
+The owner, relayed by the other session: "Add roman numerals so that players wont think it's repepitive, we will let claude terminal work". The other session's suggested defaults were taken as given; the owner has not chosen yet.
+
+**The rule** (`Shared/Rebirth.titleFor`; the formats in `GameConfig.Rebirth.Title`)
+- A step that lasts more than one rebirth counts through it from I:
+  - BOTANIST I at 5 and II at 6; HERBALIST I-III for 7-9;
+  - GROVE KEEPER, BLOOM WARDEN, THORN KNIGHT and ELDER ROOT I-V;
+  - CANOPY LORD and ANCIENT OAK I-X; WORLD TREE and EVERBLOOM I-XXV.
+- **GAIA counts on from I at 100, with no end:** LXXXVIII at 187, M at 1099 and MMMCMXCIX at 4098. After that it shows the plain number (GAIA 4000), because roman has no 4000 without a bar over it.
+- **No numeral on one-rebirth steps:** SPROUT, SEEDLING, GARDENER and GREEN THUMB last one rebirth each. A lone "I" would promise a II that never comes.
+- No two rebirths in a row wear the same title (the spec walks 2 to 5000).
+- "REBIRTH N" stays under the title.
+
+**Where it shows**
+- **Over the head** (`RebirthService.ApplyTitle`). The billboard is now 320 x 46 instead of 180 wide.
+  - At 28 px the longest step with a numeral, BLOOM WARDEN III, is 224 px; GAIA MMMDCCCLXXXVIII is 298.
+  - The box is invisible; only the words show.
+- **The panel:**
+  - the strip: "REBIRTH 16 · BLOOM WARDEN II", then "NEXT: REBIRTH 17 · BLOOM WARDEN III";
+  - NEXT UNLOCKS: "Title: BLOOM WARDEN III".
+- **The "?" TITLES list** names each step's range:
+  - "BOTANIST I-II" over "REBIRTH 5-6";
+  - "GAIA I+" over "REBIRTH 100+";
+  - "SPROUT" over "REBIRTH 1".
+  - It uses a plain hyphen, because the fonts' dashes are unchecked (memory: the tofu list).
+- The REBORN! notice is unchanged; it names the count, not the title.
+
+**Fit**
+- The strip, the next line, the title line and the TITLES words each shrink to fit their box (`fitOne` + `Rebirth.fitSize`).
+- The room is measured with every UIScale above the label taken out, so a phone's 85% and the panel's pop never change it.
+- RebirthSpec measured every listed screen and menu size up to rebirth 1099:
+  - only the strip ever shrinks, at worst to 20 of its 26 px ("REBIRTH 987 · GAIA DCCCLXXXVIII");
+  - the other lines never shrink.
+
+**The legibility fix (found in this Play)**
+- **Before:** the TITLES list FILLED the highest-reached row pink and the NEXT row dark red.
+  - BLOOM WARDEN's pink words all but vanished on the pink row.
+  - THORN KNIGHT's red was weak on the dark red, and so was GAIA's rainbow.
+- **Now:** every row keeps the same dark plate.
+  - The highest reached is RINGED in gold, the next in the band's pink.
+  - Every title colour is at least 3:1 on the plate (spec).
+
+**Specs**
+- RebirthSpec 67/0. New section 13 covers:
+  - the numerals against an independent table, 1 to 3999;
+  - every step edge;
+  - the no-repeat walk;
+  - the TITLES ranges;
+  - the billboard measured to rebirth 4200;
+  - the panel fit on every listed screen;
+  - the plate contrast;
+  - source pins.
+- A mutant of `titleFor` without numerals fails 3 checks: the head title, the step edges and the no-repeat walk.
+- PhoneMenuSpec 29/0, LeaderstatsSpec 29/0, AdminSpec 125/0.
+
+**Guarded Play** (`SeedTest_roman_20261008`, cleared; captures in `output/rebirth-numerals-2026-10-08/play/`)
+- DESKTOP 1167 x 716: Studio's emulator was off this time (touch false).
+- **n1-n4, the head title:**
+  - BLOOM WARDEN II at 16;
+  - GAIA LXXXVIII (rainbow) at 187;
+  - BOTANIST I at 5;
+  - GREEN THUMB at 4;
+  - ADMIN stacked on top and "REBIRTH N" under, every time.
+- **The panel:** n5 at 16 and n7 at 187.
+- **TITLES:** n6 at 16 and n8 at 187, after the ring fix (Play restarted).
+- Console clean.
+- Probe after cleanup: 298 scripts, 0 differ, 0 ZZ, marker absent.
+
+**Not seen:** a phone (the fit is measured for the 12 phone screens at 85%, spec only), a pad, a TV.
+
+**DEFAULTS for the owner:**
+1. Numerals count inside a step from I; one-rebirth steps get none.
+2. GAIA counts on with no end, and plain numbers follow MMMCMXCIX.
+3. The TITLES list shows ranges ("BOTANIST I-II", "REBIRTH 5-6").
+4. The head billboard is 320 wide.
+5. A ring (gold = your title, pink = next) replaces the filled row.
+
+## EVERY MENU PANEL 85% ON PHONES — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; PhoneMenuSpec 29/0 (NEW, 4/4 MUTANTS CAUGHT) + 8 NEIGHBOUR SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_phonemenu_20261008` IN THE OWNER'S PHONE EMULATOR 705x338 TOUCH, CLEARED; NO REAL PHONE, NO DESKTOP PLAY)
+
+The owner, with a phone screenshot of the Rebirth panel: "i also want to make the ui smaller on phones". Answers: **Every menu panel** and **85%** ("text and controls about 15% smaller and the panel no longer edge to edge").
+
+**The rule.** A phone is touch AND the viewport's shorter side < 500 — the same rule as the 75% prompts. `GameConfig.MenuSize.PhoneScale = 0.85`, `PhoneShortSide = 500`, `GameConfig.menuPhoneScale(viewport, touch)`, `UIKit.phoneMenuScale()` (always 1 on a TV). It multiplies the player's MENU SIZE, so LARGE on a phone is still larger, still capped to fit.
+
+**How each panel takes it.** Each keeps exactly the logical room it had at 1:1, is drawn 85% the size, centred, short of every edge. The HUD and the prompts are not touched.
+- **Menu guis** (`UIKit.menuGui`): `UIKit.menuScaleFor` now returns `max(phone, min(choice × phone, fit))`, so their UIScale is 0.85 on a phone.
+  - MenuLayout menus pass `fill = math.min(1, k)` in their Screen: Events, Garden, Index, Invite, Rebirth (the peer added that line), Shop, SproutDash, UpdateLog.
+  - With `fill`, `MenuLayout.panel`'s covering panel takes only the middle `fill` share of the (now larger) canvas.
+- **Plain modals:** `UIKit.modal` has a `share()` (`min(1, gui scale × userScale)`, 1 on TV). Their fractions, `fitContent` and `contentRoom` are taken of it.
+  - `applyFollow` (Sell, Offline, Sacrifice) folds the phone scale into `userScale`.
+  - New `modal.fitScreen()`; Marigold calls it after its gui scale changes.
+  - The header's rail padding divides by the real drawn scale.
+- **The Wheel:** the shell takes `fill` of the screen, lays out in `whole × fill`, and reads the topbar band in shell units (`shellAt`).
+- **The Bag** (it lives in the HUD gui): `HudLayout.bag` takes `phone`. The footprint becomes 85% around the same centre, `scale ×= phone`, and the insides are unchanged. LoadoutUI passes `phone = UIKit.phoneMenuScale()`.
+
+**Verified, guarded Play in the owner's emulator (705x338, touch; log-verified numbers):**
+- Every menu gui read UIScale 0.850; the HUD gui read 1.
+- Shop, Index, MY PLANTS, Bag and Rebirth: 586x224 in the 705x280 safe area, margins L59 T27 R60 B30. At 1:1 they were edge to edge, 689x264.
+- Settings 374x204 (was 240 tall); WHAT'S NEW 476x224; EVENTS 578x224; Marigold 442x204; Wheel shell 599x287 of 705x338.
+- Rebirth's "?" opens TITLES at the new size.
+- Captures: `output/phone-menus-2026-10-08/play/01_shop` … `11_events`.
+- During the run, 5 taps not sent by me reached the Play window (logged by the test host). Someone was clicking in Studio; nothing visible changed.
+- NOT seen in Play: Sprout Dash, Invite, Sell, Offline, Sacrifice (spec only). No real phone, no desktop Play (the emulator stays on).
+
+**Specs:**
+- New `tools/tests/PhoneMenuSpec.luau` 29/0. Mutants (no fill, one-sided fill, Bag ignores phone, Bag keeps scale): 4/4 caught.
+- RebirthSpec 58/0 (the peer modelled the phone scale), HudLayoutSpec 1452/0, CompactMenusSpec 46/0, UsabilityAudioSpec 95/0.
+- SacrificeSpec 289/0, InvitePanelSpec 393/0, StuddedLookSpec 33/0, AdminSpec 125/0.
+- Probe after cleanup: 298 scripts, 0 differ, 0 ZZ, marker absent.
+
+**Files:**
+- `GameConfig`, `UIKit`, `MenuLayout`, `HudLayout`;
+- `EventsUI`, `GardenUI`, `IndexUI`, `InviteUI`, `ShopUI`, `SproutDashUI`, `UpdateLogUI` (one line each), `RebirthUI` (the peer);
+- `WheelUI`, `LoadoutUI`, `MarigoldShopUI`;
+- new `tools/tests/PhoneMenuSpec.luau`.
+
+**Owner calls:** whether 85% reads well on a real phone (Rebirth's body is the tightest); whether the Sell/Offline cards should also stay 85% (they do now).
+
+**Open at the end of 2026-10-08 (this session):**
+- **Roman numerals on rebirth titles:** relayed to the terminal Claude; the owner is waiting on it. Suggested defaults: the numeral counts rebirths inside a step; no numeral on the 1-rebirth steps SPROUT..GREEN THUMB; GAIA I+ with no end; the "?" list shows ranges.
+- **Rebirth FX** (owner: "we'll work this tomorrow"). Codex prompts are in `output/imagegen/rebirth/rebirth-fx-v1.prompt.md`: A burst (4x4), B leaf (2x2, white), C sparkle (2x2, white), D aura (4x4, white, rebirth 50+).
+  - UPLOADED 2026-10-09, checked (economy details: Image, CrazyCozy Games 744756221; Edit IsLoaded Success; stored at exact size, corners alpha 0):
+    - burst `rbxassetid://104561904060787` (1024, 4x4);
+    - leaf `rbxassetid://139088327003961` (512, 2x2, white);
+    - sparkle `rbxassetid://113832021583342` (512, 2x2, white);
+    - aura `rbxassetid://136617357503029` (1024, 4x4, white).
+  - NOT WIRED YET: waits on the owner approving the rebirth celebration plan (spin + orbiting light + REBORN! popup + fanfare), which uses them.
+  - Then: check them (economy details, IsLoaded, alpha).
+  - Then the terminal Claude builds them: the burst at rebirth, seen by everyone nearby; leaves and sparkles tinted by the title colour; the aura from 50; all off under REDUCED FX.
+
+## REBIRTH panel: more detail, the phone fix, a "?" with 15 TITLES — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; RebirthSpec 58/0 AND 8 NEIGHBOURING SPECS GREEN AFTER IT; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_rebirth_20261008`, CLEARED; PHONE SEEN IN THE EMULATOR BEFORE AND (THE OTHER SESSION) AFTER THE 85% SHRINK; DESKTOP ONLY AT HALF SCALE)
+
+The owner, relayed by the other session:
+- "add more detail on the rebirth info, we will add how the required mill look";
+- a screenshot from their real phone: the REBIRTH button ran off the bottom of the panel (urgent);
+- "yes add more titles, and i want players to see the titles inside a question mark button inside the rebirth ui".
+
+This replaces the panel, the title list and "Not seen: a phone" in the REBIRTH entry below. The rest of that entry stands.
+
+**The body** (`RebirthUI`; every word in `GameConfig.Rebirth.Words`)
+- **Title strip:** "REBIRTH n · TITLE" in the title's colour (GAIA's rainbow turns), and "NEXT: REBIRTH n+1 · TITLE" under it.
+- **BONUS:** training and income, each "xA → xB", with the SourceIcons training and income icons.
+- **REQUIREMENTS:**
+  - cash: ✓ or ✖, a bar filling towards the price, "$cash / $price";
+  - mill: ✓ or ✖, "Your mill: NAME (tier N) → needs Inferno Forge (tier 8)";
+  - **the required mill, live:** the real `MillModel.Build` at tier 8 (156 parts, animation tags stripped), turning in a ViewportFrame. Under reduced motion it holds a fixed three-quarter view.
+- **NEXT UNLOCKS:** the next fence on a short live sample (`FenceStyle.segment(n + 1)`) with its line, and the next title in its colour.
+- **YOU KEEP / YOU LOSE:**
+  - KEEP has 9 chips with the game's own icons;
+  - LOSE has "All cash" and "Mill → Compost Walk".
+- The reason line and the REBIRTH / ARE YOU SURE? button are unchanged.
+- Both 3D pictures are built on open and destroyed on close.
+- **The owner's icons — WIRED 2026-10-08 (the other session; UNCOMMITTED).** They arrived as three separate Images, not one sheet; there is no MILL icon.
+  - `GameConfig.Rebirth.Art` now holds one id per icon:
+    - Emblem `rbxassetid://133554119533442`;
+    - CashReset `rbxassetid://112687292855232`;
+    - TitleBadge `rbxassetid://133032357694764`;
+    - Mill `""`, so its "M" stand-in stays.
+  - Every drawn icon uses one shared crop, `CropOffset (72,72)` + `CropSize (368,368)`. It encloses all three drawings (alpha bounds 76..435 of 512), so Fit draws them full size and the same size.
+  - Checked: economy details (type 1 Image, CrazyCozy Games 744756221, names `*-v1-512`); Edit IsLoaded Success; 512x512 with real alpha.
+  - `RebirthUI.sheetIcon` / `drawSeed` use the per-icon id; "" still draws the stand-in. The RebirthSpec pin was updated with this session's OK: 58/0.
+  - Seen in a guarded phone Play (`SeedTest_rebirthicons_20261008`, cleared; probe 298 / 0 differ / 0 ZZ):
+    - the emblem in the band;
+    - the laurel by "Title: SPROUT";
+    - the coins on the "All cash" chip.
+    - Captures: `output/rebirth-icons-2026-10-08/play/`.
+
+**The phone fix** (`Shared/Rebirth.layout`, the one answer RebirthUI places by)
+- The foot (reason line and button) is pinned under the body, and only the body scrolls.
+- Two columns where the body is at least 640 wide, else one. Landscape phones get two, the owner's 801 x 392 included.
+- The panel is laid out on every open and every resize. Every open starts at the top of the body.
+- **The other session's 85% phone shrink** (`UIKit.menuScaleFor`): RebirthUI passes `fill = math.min(1, k)`. On a phone the panel keeps the room it had and is drawn at 85%, centred.
+
+**The "?" and TITLES**
+- A round blue studded "?" sits left of the X, like the wheel's REWARDS & ODDS "?".
+- It swaps the body for TITLES and back. BACK also returns, and closing always reopens on the body.
+- TITLES lists every step, each row with:
+  - the word in its colour, "REBIRTH N", and "xA training · xB income";
+  - a chip: REACHED (the highest one lit), NEXT, or LOCKED (greyed, still readable).
+- It opens with the NEXT row in view.
+
+**15 titles** (`GameConfig.Rebirth.Title.Ladder`; the title over the head uses the same ladder)
+- 1 SPROUT, 2 SEEDLING, 3 GARDENER, 4 GREEN THUMB, 5 BOTANIST, 7 HERBALIST, 10 GROVE KEEPER, 15 BLOOM WARDEN, 20 THORN KNIGHT, 25 ELDER ROOT, 30 CANOPY LORD, 40 ANCIENT OAK, 50 WORLD TREE, 75 EVERBLOOM, 100 GAIA.
+- GAIA is a rainbow, turned like ADMIN.
+- Every colour is at least 3:1 against the dark outline.
+
+**Files**
+- New: `Shared/FenceStyle.luau`. It holds the fence's paint and caps (moved out of RebirthService, which now calls it) and the detached sample the panel shows.
+- Changed:
+  - `GameConfig`, the `Rebirth` block: Ladder, Art, Preview, Keep/Lose, Layout, Words;
+  - `Shared/Rebirth.luau`: the ladder and the layout;
+  - `RebirthService`: the fence through FenceStyle; the ladder's top step is the rainbow;
+  - `RebirthUI`: the body, foot, "?" and TITLES;
+  - `RebirthSpec`.
+
+**Specs**
+- RebirthSpec 58/0, in 12 sections.
+- Section 10 lays the panel out on 17 screens x 3 menu sizes. It models `UIKit.menuScaleFor` with the phone's 85% and `fill`.
+- A no-fill mutant fails the new "keeps its 1:1 room" check.
+- After this rework, all green:
+  - LeaderstatsSpec 29/0, PlotSpec 73/0, PlotReleaseSpec 42/0, FloatingSignSpec 48/0;
+  - MapDecorSpec 93/0, MiniEventSpec 90/0, OfflineEarningsSpec 26/0, TutorialSpotlightSpec 44/0.
+- The other session ran these with RebirthUI's `fill` in: RebirthSpec 58/0, AdminSpec 125/0, UsabilityAudioSpec 95/0, PhoneMenuSpec 29/0.
+
+**Guarded Play** (`SeedTest_rebirth_20261008`, cleared; captures in `output/rebirth-2026-10-08/play/`)
+- **Phone:** Studio's emulator at 705 x 338, touch, BEFORE the 85% shrink (the panel's UIScale read 1.000).
+  - p1: short of the mill, "Your mill must reach Inferno Forge first.";
+  - p2: short of cash, "You need $4.00B.";
+  - p3: ready, the button green;
+  - p4: scrolled to the live Inferno Forge and YOU LOSE;
+  - the button shows in all four;
+  - p5: TITLES at rebirth 1; p5b: BACK; p6: TITLES at 6; p7: TITLES at 100, GAIA lit.
+- **Desktop: NOT seen.** d1/d2 show the panel and TITLES laid out for a 1410-wide canvas and drawn at half size (a TenFoot UIScale of 0.5). They show placement only, never type.
+- Console clean.
+- After cleanup:
+  - test store off, 1 key removed;
+  - ZZ host deleted;
+  - probe: 298 scripts, 0 differ, 0 ZZ, marker absent.
+- **After the shrink**, the other session's guarded Play saw it (every menu gui at UIScale 0.850):
+  - the panel is 586 x 224 in the 705 x 280 safe area, centred, margins L59 T27 R60 B30 (before: edge to edge, 689 x 264);
+  - a tap on the "?" opened TITLES;
+  - captures: `output/phone-menus-2026-10-08/play/09_rebirth.png` and `10_rebirth_titles.png`.
+
+**Not seen:** a real phone, a real desktop, a pad, a TV.
+
+**DEFAULTS for the owner:**
+1. The 15 names and colours.
+2. A MILL icon: none was sent. The "M" stand-in stays on the mill row and the "Mill → Compost Walk" chip; the panel's mill picture is the live model.
+3. The price cap and the rest, as in the entry below.
+
+## REBIRTH: all cash and the mill reset for +50% training and +25% income each, a shrine, a fence ladder, a title over the name — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; RebirthSpec 42/0 AND 32 NEIGHBOURING SPECS GREEN (one pin updated: LeaderstatsSpec, now three columns); NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_rebirth_20261008`, CLEARED; PHONE / TOUCH / PAD NOT SEEN)
+
+The owner asked, in the other session: "rebirth first, cash and mill tier reset, plan it" / "we should also do a fence upgrade every rebirth and a title above the name" / "use your defaults, let claude terminal build it".
+
+**What a rebirth does**
+- **Needs:** $1B, then x4 each time ($4B, $16B, $64B...). The price **stops at $500T from rebirth 11**: the save holds at most $1Qa, so x4 alone would make rebirth 11 ($1.05Qa) unpayable and titles 25 and 50 unreachable. The mill must also be at least Inferno Forge (tier 8, itself $1B).
+- **Spends ALL cash.** The mill goes back to Compost Walk and is rebuilt; its rider is unmounted first.
+- **Keeps** Speed, the plot's level, every plant (garden and Bag), pods, weapons, spin tickets, the Speed milestones, the Index, passes and running boosts. The spec checks that nothing else in the profile moves.
+- **Bonus per rebirth, adding up:**
+  - +50% training, through the `GameConfig.rebirthMultiplierFor` seam (every training rate: payout, sign, shop, SpeedFX);
+  - +25% garden income, inside EconomyService's `withPass`, so it rides exactly with the x2 pass: the live garden, the garden sign's boost and the OFFLINE claim. Never a sale, cash pack, refund or reward.
+  - `GameConfig.incomeMultiplier` and the offline card (OfflineUI `claimed()`) show it too.
+
+**What blocks one** (`Shared/Rebirth.check`, in this order):
+- not loaded; closed; the 10 s cooldown;
+- a Robux receipt being decided (new `StoreService.Deciding`, so a cash pack is never wiped mid-grant);
+- dead; carrying a pod; chased (PursuedBy); an offline claim waiting;
+- the mill short; the cash short.
+- On confirm, also a stale or used token (QUOTE) and standing more than 24 studs from the shrine (FAR).
+
+**Server: `RebirthService`** (Priority 97)
+- **The shrine** stands at **(45, 0, 36), just off the deck's north-east rim**, as a Persistent model.
+  - In Play I measured every hub prompt. No ground ON the deck lets a reach-10 prompt share nothing that is also off every walking corridor (to the plots, the obby, the road).
+  - It is added to `MiniEvent.Dancers.KeepClear`.
+- **The flow:** its prompt (hold 0.5) gets a server QUOTE with a one-use token, which opens the panel.
+  - The confirm checks everything again from scratch, then writes with no yield until `PlayerDataService.Save` runs at once.
+  - A busy flag spans the save, and the cooldown follows it. A double press, a replayed packet or a lagging client cannot rebirth twice.
+- **Save:** `Rebirths` and `RebirthAt` (old saves read 0 and 0). The admin progress reset keeps both. They are published as the player attribute `Rebirths`, and a third leaderstats column `Rebirths` shows them.
+
+**The panel** (`RebirthUI`)
+- In the studded kit's Rebirth band, (255,53,93)/(120,19,41).
+- It shows the current rebirth and bonuses, the next one's, and the price and mill in green or red. Then YOU KEEP / YOU LOSE in plain words.
+- REBIRTH turns into **ARE YOU SURE?** for 4 s; the second press sends the token.
+- "REBIRTH" with "+50% TRAINING · +25% INCOME" floats over the shrine, in magenta #FF50C8 (at least 100 RGB from every other sign in the square).
+- No HUD button.
+
+**The fence, by the plot OWNER's rebirths**
+- 0 wood;
+- 1 white picket with pointed caps;
+- 2 stone with moss caps;
+- 3 iron with gold tips;
+- 4 marble with planters and pink flowers;
+- 5 crystal with glowing caps;
+- 6+ gold with gem caps, which step ruby → sapphire → emerald → amethyst → topaz → diamond every 4 rebirths.
+
+Only the `Rail`/`Post` colour and material change, plus caps nothing can touch, stand on or hit. `RailGap` and every board's size, place and collision stay untouched (the spec snapshots them). It follows plot assignment, release and resize (PlotService listeners) and the count. All of it is built from parts; there are no uploads.
+
+**The title over the name**
+- Built on the Head like ADMIN: 1 SPROUT, 2 SEEDLING, 3 GARDENER, 5 BOTANIST, 10 GROVE KEEPER, 25 ELDER ROOT, 50 WORLD TREE. The last is a rainbow turned by OwnerTitleUI, still for reduced motion. "REBIRTH N" sits under it.
+- It hides under a trap's countdown like ADMIN.
+- With ADMIN, both show, ADMIN on top (`GameConfig.ownerTitleLift`; both services restack).
+
+**Files**
+- New: `Shared/Rebirth.luau`, `SeedGameServer/RebirthService.luau`, `StarterPlayerScripts/RebirthUI.client.luau`, `tools/tests/RebirthSpec.luau`.
+- Changed:
+  - `GameConfig`: the `Rebirth` block; `rebirthCount`, `rebirthMultiplierFor`, `rebirthIncomeFor`, `rebirthIncomeOf`; `ownerTitleLift`; `incomeMultiplier`; `Dancers.KeepClear`;
+  - `ProfileSchema`;
+  - `PlayerDataService` (UpdateRebirth/PublishRebirth, the column, the reset);
+  - `EconomyService` (withPass), `StoreService` (Deciding);
+  - `OwnerTitleService`, `OwnerTitleUI`, `OfflineUI`;
+  - `LeaderstatsSpec`.
+
+**Verified in Play** (captures in `output/rebirth-2026-10-08/play/`)
+- 01 the shrine, 02 the panel, 03 ARE YOU SURE?.
+- 04: a REAL rebirth on a test profile ($3.5B, tier 9), after which:
+  - cash 0, mill 1, Rebirths 1, saved;
+  - SPROUT / REBIRTH 1 under ADMIN;
+  - fence tier 1 (17 caps); the leaderstats column reads 1;
+  - the notice "REBORN! REBIRTH 1".
+- Then the test host set the count to show 05-09, the titles at 1, 3, 5, 10 and 50, and 10-16, the fence at tiers 1-6 plus rebirth 10's sapphire gems.
+- Console clean. The probe after cleanup: 297 scripts, 0 differ, 0 ZZ, marker absent.
+
+**Not seen:** a phone, touch, a pad, a refusal in Play (spec only), or an offline claim with rebirths (spec pins only).
+
+**DEFAULTS for the owner to confirm or change**
+1. The price, x4, stops at $500T from rebirth 11.
+2. The mill requirement, Inferno Forge (tier 8).
+3. +50% training and +25% income per rebirth, adding up; the income bonus also pays on offline earnings.
+4. The shrine just off the deck's north-east rim.
+5. The look:
+   - the magenta floating words and the title colours;
+   - fence tiers 1-6 as above. Tiers 1-3 were asked for; 4-6 were proposed and built the same way. They need the owner's approval.
+6. Cooldown 10 s, a quote good for 120 s, the panel closing beyond 24 studs.
+7. The gold fence's gems stepping every 4 rebirths.
+
+## Marigold's counter says SHOP; a one-time "NO BAT YET?" hint — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_bathint_20261008`, CLEARED)
+
+The owner: "change sell to shop and add the hint" (after the BAT SHOP! entry below).
+
+**SHOP:** `MapService.luau` (~1652) — the counter's big SurfaceGui word is "SHOP", not "SELL". It was a leftover from when the stall was the sell point; selling is at the SELL ONE / SELL ALL boards. `MarigoldSign`'s comment follows.
+
+**The hint:** new `BatHintService` (server, Priority 120).
+- **When:** the first time a player who owns NO bat (no `Weapons` id whose WeaponData Category is "bat") gets `PursuedBy` > 0, once the guide's first loop is done or the guide was skipped. It never talks over the guide's own first raid.
+- **What:** one server notice, `NO BAT YET?` / `Buy a bat at Marigold's stall to fight back!` (key `bathint`).
+- **Once per profile, ever:** new save field `BatHintShown` (`ProfileSchema` type, Default false, Sanitise `== true`, so an old save is untold). `PlayerDataService.MarkBatHintShown` sets it in the same step as the notice, and the progress reset keeps it.
+- Reads only `PursuedBy`, `Weapons` and `Tutorial`. Chases, weapons and the shop are unchanged.
+
+**Specs (Edit):**
+- BatHintSpec (new) 19/0: the rules matrix; the real service with stand-ins (told once, flag first, second chase / unready / bat owner silent); the save default, migration and reset; the SHOP word.
+- WeaponSpec 121/0, FloatingSignSpec 48/0, TutorialSpec 119/0, FirstMinuteSpec 117/0.
+- Every spec that reads ProfileSchema (35 more) is green.
+
+**Guarded Play:**
+- Guide skipped, no bat, `PursuedBy` set and cleared by a test host.
+- The notice showed once, with the exact words; the server log says "was told where bats are sold"; `BatHintShown` became true.
+- A second chase 12 s later: no notice.
+- Console clean. Store cleared. Probe: 295 scripts, 0 differ, 0 ZZ. Capture `output/bat-hint-2026-10-08/play/01_hint.png`.
+
+**Not verified:** a real guardian's chase (the attribute was set by the host); a phone; no full suite.
+
+## "BAT SHOP!" over Marigold's stall — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; FloatingSignSpec 48/0, WeaponSpec 121/0, TrapRemoveSpec 27/0; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_marigold_20261008`, CLEARED; PHONE NOT SEEN)
+
+The owner asked, in the other session: "rework marigold stall, new players dont know about where to buy bats, we will add a shop text above marigold like spinwheel. plan and let claude terminal work".
+
+**What it is.** **BAT SHOP!** with **BATS & TRAPS** under it. It is drawn by FloatingSign like the hub's other floating words: LuckiestGuy, the thick dark outline, sized in studs, gone past SignDistance (150).
+- The colour is red orange #FF6928, at least 100 RGB away from every other sign in the square (FREE CHEST gold, SACRIFICE lime, the teaser's lavender, the wheel's white). A marigold orange was tried first; it sat too close to the chest's gold.
+- The letters are 2.17 studs tall (TextService), a touch over the wheel's 2.01. The second line is 1.3.
+- Each client's own (`StarterPlayerScripts/MarigoldSign`). It is always shown, because anyone can buy.
+- Config: `GameConfig.Weapon.FloatingWords` (Text, SubText, Colour, Width 10, Height 2.4, SubHeight 1.3, Above 9.1, Front 4.5).
+
+**Where, and why not over the roof.**
+- The words hang UNDER the awning's front lip, at (0, 11.5, 10.5). That is over Marigold's head (7.45), over her Open Shop prompt (about 9.1) and 1.5 studs under the lip.
+- The wheel stands straight behind the stall. Over the roof, the words sat right on top of "SPIN THE WHEEL!" from the square's whole south half and the road (`00_ontop_square_view`). FloatingSignSpec's sight-line test counts 393 overlapping eye points for that spot and 0 for this one.
+- The words are placed off the stall's counter (`SellStand`), not off Marigold, who wanders 6.5 studs either side.
+- The anchor lives in a local `Workspace.SeedMarigoldSign` folder, because the hub is not Persistent under StreamingEnabled.
+
+**Verified.**
+- FloatingSignSpec's new section, 12 checks:
+  - the words and their colour distance, the letter sizes;
+  - the stall's source pins;
+  - under the lip, over her head and prompt;
+  - below SPIN THE WHEEL! for every eye from the road to the counter;
+  - clear of every other sign;
+  - the Edit preview's real stall (no part inside the words' box);
+  - the real FloatingSign, the client wiring, and no server build.
+- Play: the client built the words at (0, 11.5, 10.5), enabled, MaxDistance 150. Captures are in `output/marigold-sign-2026-10-08/play/`:
+  - 01 SW spawn, 02 the square, 03 the road, 04 close, 05 at the counter, 06 SE spawn (day);
+  - 07, 08, 09 at night (forced by WorldCycleService.StartNight);
+  - 00 is the rejected over-the-roof spot.
+- The probe after cleanup: 293 scripts, 0 differ, 0 ZZ, marker absent.
+
+**Not seen:** a phone. Her prompt panel does not show in MCP captures.
+
+**Owner calls**
+1. The colour, red orange #FF6928 (DEFAULT).
+2. The words under the awning lip rather than over the roof, for the reason above.
+3. PROPOSED, NOT BUILT: **her counter's front still says "SELL"**, a MapService leftover from when the stall was the sell point. Selling happens at the SELL ONE / SELL ALL boards now. Changing that one word to "SHOP" (or "BAT SHOP") would make the stall read as a shop at a glance, with no art needed. It is probably the biggest single fix for new players.
+4. PROPOSED, NOT BUILT: new-player discoverability.
+   - (a) A one-time notice the first time a player without a bat is chased or hit: "Buy a bat at Marigold's stall to fight back!". It is small: a client notice plus a saved flag.
+   - (b) The guide's pointing hand on Marigold once. That changes the guide, whose 7 steps stay untouched without the owner's OK.
+5. PROPOSED: an awning colour or a bat icon on the counter. Owner-designated art only.
+
+## SPROUT DASH: a minigame on the own mill, its +25% training boost, the owner's sprites; and a mill dismount fix — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; SUITE 122/122 RUN ON THE FINAL TREE BY THE OTHER SESSION (582 s; its report), FAILING ONLY RainAudioSpec (pre-existing), PROBE CLEAN; MY OWN RUN WAS STOPPED BY LOW MEMORY AFTER 63 GREEN; FIVE GUARDED PLAYS ON `SeedTest_sprout_20261008`, CLEARED; PHONE / TOUCH / PAD NOT SEEN)
+
+The owner asked, in the other session: "let claude terminal build it". Their design: "when player rides the mill, a play minigame button appears, then when opened, a screen of the game will open, so it will not affect the jump". They also said "until 3 hits, free replay".
+
+**What a player sees**
+- **The button.** While they ride their OWN mill (never the Disco Mill), an orange studded **PLAY MINIGAME** button shows above the hotbar, clear of the HUD.
+- **The screen.** It opens Sprout Dash: an orange studded panel placed like the Shop (between the rails, or over them on a small screen).
+- **The run.** A sprout runs a belt and hops over a rock, a thorn weed and a log, picking up seed coins. The speed ramps up. Hops are Space, A, a tap or a click.
+- **The end.** The third hit ends the run. The end screen shows the distance, coins and best today, all as the SERVER counted them, plus PLAY AGAIN and CLOSE. Replays are free; Space or A also plays again after 0.75 s.
+- **The reward.** A run that reaches 250 m earns a +25% treadmill training boost: 1 min at 250 m, 2 at 500 m, 3 at 1,000 m, 5 at 2,000 m and over. It is its own boost, added to the Bonus Chest's and the wheel's. It shows in the boost icons with the boosted shoe and its time left.
+
+**The jump**
+- While the screen is open, the rider cannot be lifted off the mill.
+- The client turns its humanoid's Jumping state off and hides the touch controls, then puts both back exactly as they were on close.
+- It does NOT go through the PlayerModule. In this engine, PlayerScripts has none (it sits under `StarterPlayer`). The first build waited for it there and the screen never opened (memory `playermodule-under-starterplayer`).
+- Pads: `PadFocus` leaves the game alone (`OWN_FOCUS.SeedSproutDash`), the stage is not selectable, and opening clears the selection. So A reaches the hop and B closes.
+
+**Cheat-proofing**
+- The server hands out a seed per run.
+- The client sends only the ticks it hopped on and where it stopped. The server replays the run in `Shared/SproutDash` (fixed 60 Hz step, xorshift32, `+ - * /` only) and counts that.
+- The server refuses:
+  - malformed or too-long runs, too many hops, mid-air hops, hops after the end;
+  - a finish faster than the run could have taken;
+  - a run not on the own mill;
+  - starts more often than every 2 s.
+- SproutDashSpec includes a forged-score refusal.
+
+**The owner's sprites** (uploaded 2026-10-08, CrazyCozy Games Images, set in `GameConfig.SproutDash.Art`)
+- The runner, `134371957887780`, is `sprout-dash-runner-v1`.
+  - Feet are 32 px over each cell's foot. That was MEASURED on the upload; the other session's "about 40" was not what the pixels say.
+  - The tucked hop frame's feet are 72 px up. Each frame is set down by its own feet.
+- The props, `87208780933422`, are **`sprout-dash-props-v1-ORIGINAL`**: the 1774×887 generation (stored 1024×512), not the 256-cell atlas.
+  - Each drawing is a tight `Rect` measured on the upload. An obstacle is drawn just big enough to cover its hitbox.
+  - The broken pot has no obstacle.
+  - If the owner meant the atlas, a re-upload plus new rects is config-only.
+- The ground, `107251527164014`, tiles and scrolls. Its wrap seam step is 6.19 against 2.95 inside the image: faint, not seen in motion.
+- The backdrop, `122111644752248`, is drawn once and still, never scrolled. That follows the other session's note that it doesn't tile.
+- All four loaded in Edit (`IsLoaded`, `AssetFetchStatus.Success`). Their stored pixels match the PNGs in `output/imagegen/sprout-dash/`.
+
+**Mill dismount fix (TreadmillService, found while testing)**
+- A jump straight off the mill could re-mount on landing. Play trace: `MillMounted` nil at take-off, true again 0.67 s later. This happened with no minigame open.
+- Cause: the per-tick check that clears the post-dismount block used `standingOn`, which stops at 6.5 studs up, but a jump rises 7.3. A 1 s tick at the top of the jump cleared the block, and the landing's Touched re-mounted.
+- Fix: the block now waits until the player leaves the belt's footprint at any height (`overBelt`).
+- MillTrainingSpec 5c (25/0) fails on the old check and passes on the new one. In Play after the fix: 8 of 8 traced jumps dismounted and stayed off, and so did one jump right after the game was opened and closed.
+
+**Files**
+- New: `Shared/SproutDash.luau`, `SeedGameServer/SproutDashService.luau` (Priority 61), `StarterPlayerScripts/SproutDashUI.client.luau`, `tools/tests/SproutDashSpec.luau`.
+- Changed:
+  - `GameConfig` (`SproutDash`, plus the boost icon's `sprout` entry);
+  - `ProfileSchema` (`SproutBoostEndsAt`, `SproutEarned`, `SproutBestDay`, `SproutBest`);
+  - `PlayerDataService` (`UpdateSprout`, `PublishSprout`);
+  - `TreadmillService` (`OnOwnMill`, the payout's boost, `overBelt`);
+  - `Shared/BoostIcons`, `PadFocus`;
+  - MillTrainingSpec, TreadmillFunSpec and SpeedSpec pins. SpeedSpec still pinned the old payout line, and the stopped suite never reached it.
+
+**Verified in Play** (captures in `output/sprout-dash-2026-10-08/play/`)
+- The button on the mill.
+- The screen with the art: `02_screen_start`, `03_hop_space`, `05_run_art`.
+- Three real Space presses while open: `MillMounted` stayed true and the root never rose.
+- A no-hop run counted by the server: 146 m.
+- Space to play again.
+- A Studio-only autoplay past 323 m, then three hits: 404 m and "+1 min training boost!" (`06_reward`).
+- The X closed the screen and restored the jump and touch controls. The server profile had `SproutBoostEndsAt`, and the boost icon showed (`07_boost_icon`).
+
+**Not seen:** a phone, touch input, a pad, the 10-min bank and 15-min hour caps (spec only), or a day rollover for best today.
+
+**Someone played a run in my Play.** The Studio log shows "ran 370 m (34 coins, 3 hits)" at 11:32:22Z, 71 s after my 103 m run. Autoplay was off, so it was a person, probably the owner. It is counted on the throwaway store only.
+
+**DEFAULTS for the owner to confirm or change**
+- Own mill only, not the Disco Mill.
+- The kit's Upgrades orange band.
+- The reward table above, with the 10 min banked and 15 min an hour caps.
+- My own choices:
+  - Physics: start 8 m/s, +0.15 m/s each second, top 18 m/s.
+  - 3 lives, a 1 s grace after a hit, runs capped at 300 s.
+  - Coins are score only.
+  - The X mid-run counts the distance so far.
+  - Best today uses UTC days.
+  - The view is 16 m across.
+
+## Index, Bag and the Reward Wheel restyled to the Studded UI kit's look — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; NO FULL SUITE; TWO GUARDED PLAYS ON `SeedTest_restyle2_20261008` / `SeedTest_restyle3_20261008`, CLEARED; PHONE NOT SEEN)
+
+The owner asked, in the other session: "do the index and bag next", then "let claude terminal do the wheel too". The Shop/Settings entry below has the kit, its licence (never put the kit file in the repo) and the band theme.
+
+**Colours (`GameConfig.StuddedLook`).** The kit has no Index, Bag or Wheel menu, so the nearest kit menus were used:
+- Index: the kit's Pets green, rgb(52,217,135) with edge (9,106,67).
+- Bag: the kit's Trade Inventory cyan, rgb(33,187,235) with edge (7,87,118).
+- Wheel: the kit's Spin screen.
+  - Purple (169,91,255) with edge (78,28,134), as on its SKIP and +10 SPINS buttons.
+  - Green (85,255,0), as on its SPIN.
+  - A dark purple row strip, (52,32,82).
+- Other kit bands, if the owner prefers one: Rewards pink (255,102,175)/(143,20,95), Upgrades orange (255,154,34)/(153,81,20), Codes teal (5,205,174)/(0,105,84).
+
+**Index (IndexUI).**
+- `MenuKit.modal(..., MenuKit.studdedTheme(StuddedLook.Index))`.
+- The green baseplate is placed but never drawn. `closeDetail` no longer re-shows it; the Shop had the same bug, and the other session fixed it there.
+
+**Bag (LoadoutUI).**
+- `UIKit.modal` with theme `MenuKit.studdedTheme(StuddedLook.Bag)` and titleColour `StuddedLook.Title`.
+- InventoryPanel's layout takes back a lift of 0, so the search bar sits just under the band.
+- The grid keeps its own light well.
+
+**Reward Wheel (WheelUI): the chrome only.** WheelDraw's slices, pods, shoes and pointer are the owner's art and are untouched.
+- The round "?" and Back are Settings' blue; the X buttons are the kit's close red. All are studded.
+- The word buttons (GET SPINS, USE PURCHASED, CANCEL, REWARDS & ODDS, CLOSE) and the ticket tiles wear the stud tile. Buying and spending are the kit's green.
+- The GET SPINS card and the use-a-bought-spin box are purple studded cards with the edge colour as their rim. The card's note is now white.
+- Reward info has a studded purple band, a white studded body and a dark purple border, foot and footer. Each prize row is a solid dark purple strip, so the rarity words read on white.
+
+**Specs.** StuddedLookSpec is 33/0; section 4 pins the Index, Bag and Wheel wiring and colours, and the rim list is down to Marigold, Sacrifice and Sell. Also green:
+- WheelSpec 162/0, WheelArtSpec 82/0, WheelScaleSpec 22/0, SpinPurchaseSpec 49/0;
+- CompactMenusSpec 46/0, HudLayoutSpec 1452/0;
+- InventorySpec 47/0, InventoryModelSpec 42/0, HotbarSpec 35/0, HotbarSlotsSpec 81/0;
+- InvitePanelSpec 393/0, AlmanacClaimSpec 75/0, ControllerSpec 63/0, UsabilityAudioSpec 95/0.
+
+**Plays** (desktop 1167/1063×716, emulator off, real rail and panel clicks):
+- The Bag held seven plants and a pod; the Index was a fresh profile's.
+- Captured: the wheel, Reward info and the GET SPINS card. The card was opened only; nothing was bought.
+- No console errors. Both stores cleared; probe: 289 scripts, 0 differ, 0 ZZ.
+- Captures: `output/studded-restyle-2026-10-08/index-bag/` (01_bag, 02_index, 03_wheel, 04_reward_info, 05_get_spins_card).
+
+**Not verified:**
+- A phone or TV.
+- The use-a-bought-spin box: it needs a bought spin, and no purchase is made in tests.
+- The Index's card detail.
+- The Bag scrolled or filtered.
+
+**Owner calls:**
+- The three menu colours.
+- Whether the wheel's word buttons should become the kit's flat pills. They keep the game's shading and outlined words.
+
+## Shop and Settings restyled to the Studded UI kit's look — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_restyle_20261008`, CLEARED; PHONE NOT SEEN)
+
+The owner's `D:\KAPE\StuddedUI-Free.zip` (RBLX Essentials, free kit).
+- **License:** use and modify in this game, commercial included. Never redistribute the kit itself. The `.rbxm` is NOT in the repo; keep it out.
+- **Contents:** one ScreenGui of 3,000 UI instances, 14 menus, no scripts.
+- **The owner's call:** "restyle the shop and settings first".
+- **Decoded:** the kit's own values were read off the binary model (scratchpad parser). Twelve menus were captured in Edit: `output/studded-ui-preview-2026-10-08/`.
+
+**What changed (only the look; every control, layout and font is the game's own):**
+- **`GameConfig.StuddedLook`:** the kit's values.
+  - The stud tile `rbxassetid://118347284107187` at 90 px: 0.5 over a band, 0.85 over the white body.
+  - The Shop's red band rgb(255,53,67) and edge rgb(133,13,27); Settings' blue rgb(24,143,255) and edge rgb(0,57,132), plus its dark blue rows.
+  - The close rgb(255,32,70) with edge rgb(120,10,28); a white title with a black line; a 5 px base.
+- **`UIKit.modal`, a new BAND theme** (`band`, `texture`, `base`, `closeEdge`, `closeMarkLine`):
+  - no lift and no rim;
+  - the coloured banner wears the stud tile, and the white body wears it faintly;
+  - a solid base in the edge colour stands 5 px out under the shell (a ZIndex-0 child; the shell is 5 px shorter);
+  - the close plate is studded, with its own edge;
+  - no lattice.
+- **`MenuKit`:** `studdedTheme(colours)` builds the band. `MenuKit.modal` takes an optional theme (the rim stays the default) and centres a band's title row in the band; its shell gives the base up instead of the lift.
+- **Shop:** `MenuKit.studdedTheme(StuddedLook.Shop)`. The green baseplate is kept and placed but not drawn, so the cards stand on the white studded body. The other session's OpenAt block is untouched.
+- **Settings:** the blue band; rows are the kit's dark blue strips with white words (`ROWS.RowDetail` / `RowMuted` for the state word).
+- **Every other menu keeps the studded rim:** Bag/Loadout, Marigold, Sacrifice, Sell, Index and the rest.
+
+**Specs:**
+- StuddedLookSpec (new) 26/0. It builds a real band modal and a rim modal in Edit: no lift, the textures, the base, the edges, the title.
+- CompactMenusSpec 46/0, HudLayoutSpec 1452/0, SpeedShoeSpec 19/0, StoreSpec 28/0, ControllerSpec 63/0, EventsPanelSpec 51/0, InvitePanelSpec 393/0, InviteHudSpec 415/0, UpdateLogSpec 22/0, SacrificeSpec 289/0, TreadmillFunSpec 110/0, and every other spec that reads the menu code.
+
+**Guarded Play** (desktop 1065/1169 x 716):
+- Shop and Settings were opened with real rail clicks; `output/studded-restyle-2026-10-08/play/`, `03_shop_white` being the final Shop.
+- No console errors. Store cleared. Probe: 289 scripts, 0 differ, 0 ZZ.
+
+**Not verified:**
+- A phone or a TV (the emulator can't be switched).
+- The Shop scrolled to its lower shelves; Settings at LARGE / LARGER menu size.
+
+**The owner's calls:**
+- Roll the look out to the other menus? Which next?
+- The titles stay LuckiestGuy, not the kit's Fredoka One (labels already are Fredoka One).
+
+## HUD Speed shoe bigger; its "+" opens the Shop at SPEED — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_speedshoe_20261008`, CLEARED; PHONE NOT SEEN)
+
+The owner's request (typed in the other session): "make the speedhud logo, bigger, and connect that +sign to the speed section in the shop". Then: "not the number, i mean the shoe logo".
+
+**The shoe is bigger; nothing else moves.**
+- CashUI draws the owner's shoe in a 54 box (was 38) that hangs 8 px under its 50×38 box. The art fills only 88% × 68% of its square.
+- It now draws 47.8×36.6 on a desktop (was 33.6×25.8): 1.42× on every face. Compact is 30.6×23.4 and phone 26.0×19.9.
+- It stays inside the block, 2 px short of the Speed number, its foot level with the Speed line's.
+- The number, the box and every HUD rect are unchanged.
+- The gold "+" badge moved 5 px right (26 → 31) to stay on the bigger shoe's bottom-right.
+
+**The "+" opens the Shop at SPEED.**
+- A clear `SpeedShop` button covers the shoe and its badge.
+  - Desktop: 62×52.
+  - Compact and phone: 44×44, the x2 card's touch floor. On a phone it reaches a few px over the number and the top of the cash line; neither takes a press.
+  - It reaches only into the 8 px that HudLayout keeps clear round the block.
+- It fires the new `SeedShop.OpenAt` BindableEvent with "Speed".
+- ShopUI's `OpenAt(categoryId)` opens the Shop and puts that shelf's heading at the top of the page, as LB/RB do.
+- It is not selectable: a controller keeps the rail's Shop button.
+
+**Specs:** SpeedShoeSpec (new) 19/0 checks every face. All green:
+- HudLayoutSpec 1452/0 (untouched);
+- TreadmillFunSpec 110/0 (one pin updated to `PICTURE`);
+- CashFormatSpec 26/0, CompactMenusSpec 46/0, SourceIconsSpec 18/0, ControllerSpec 63/0;
+- HotbarSpec 35/0, RobuxPriceSpec 17/0, StoreSpec 28/0, UsabilityAudioSpec 95/0.
+
+**Play** (desktop 1169×716, emulator off):
+- The 54×54 picture loaded. The badge's edge sits at 66 and the number at 68.
+- A real click on the "+" opened the Shop with SPEED's heading at the top of the page.
+- No console errors. The store was cleared; probe: 289 scripts, 0 differ, 0 ZZ, marker absent.
+- Captures, including a before/after crop: `output/speed-shoe-2026-10-08/play/`.
+
+**Owner calls:**
+- 1.42× is close to the most the shoe can grow without moving the number.
+- The badge still covers the shoe's lower-right, as in the reference.
+
+**Not verified:** a phone or tablet (spec only), and a controller.
+
+## Prompts: none on another player's plot; three-quarter size on a phone — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED; SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_plotprompts_20261008`, CLEARED; PHONE SIZE NOT SEEN)
+
+The owner's report: "proximity prompt on other plots, and also proximity prompt on mobile looks too large". The owner chose 75% for phones.
+
+**1. Another player's plot** (`PromptUI.client.luau`)
+- Before: a pod's Hatch, the mill's Upgrade and the plot board's prompt stood on every plot and were drawn for everybody. The server refuses all three to anybody but the owner. Only Instant Hatch carried `ReservedFor`.
+- Measured in Play: the neighbouring UNCLAIMED plot's board prompt was Enabled with reach 18.
+- Now a prompt under anything carrying a `PlotId` (the plot, its mill, its boards) that is not this player's `OwnPlotId` is never drawn. It is also put out of reach on this client (`MaxActivationDistance = 0`), so E or a tap never lands on it and it can't take the key from the player's own prompt.
+- Reaches are given back when `OwnPlotId` changes. A reach the server writes again is put out again the next time the prompt shows. The server's checks are unchanged.
+- `PromptHoldLock` treats a 0 as its own write. Its comment now records this second writer; the bookkeeping holds (see the comment there).
+
+**2. A phone draws prompts at 3/4**
+- New `GameConfig.Labels.Prompt.PhoneScale = 0.75` and `PhoneShortSide = 500`.
+- `ReachPoint.promptScale(viewport, touch, shortSide, phoneScale)`: 0.75 on a touch screen whose shorter side is under 500 px, else 1.
+- The touch panel's UIScale rests at that value: 170 x 52 becomes about 128 x 39. The pop and fade animations scale from it.
+- The tracker stacks, culls and clamps at `size * rest`. PlantUI reserves the same smaller room above a pod's timer, so the pair still agree to the pixel.
+- Tablets and desktops (the billboard) are unchanged.
+
+**Specs:**
+- ReachPointSpec 53/0, with 9 new checks: the scale on phones, tablets and no-touch; the stack gap at 3/4; and the PromptUI/PlantUI pins for both rules.
+- HatchLockSpec 35/0, InstantHatchSpec 57/0, ControllerSpec 63/0, FloatingSignSpec 36/0, RobuxPriceSpec 17/0, HudLayoutSpec 1452/0, TutorialSpec 119/0, TutorialSpotlightSpec 44/0, PlantStreamingSpec 12/0.
+
+**Guarded Play** (desktop 1169x716, emulator off):
+- Own board, 5.6 studs away: reach 18 and drawn.
+- The neighbour's board (plot 2, unclaimed, Enabled), 5.6 studs away: local reach 0, not drawn. The server's reach was still 18.
+- Back at my own board: reach 18 and drawn.
+- No console errors. Store cleared (1 key, marker removed). Probe: 289 scripts, 0 differ, 0 ZZ.
+- Captures are in `output/plot-prompts-2026-10-08/play/`. The MCP capture skips AlwaysOnTop billboards; the client's own reading is the evidence.
+
+**Not verified:**
+- The phone size, by eye: the MCP can't switch the emulator.
+- Hatch on another player's READY pod: needs a second player. The rule is the same `PlotId` walk-up.
+- Two players.
+
+## Mill + BIOMES/OBBY: a teleport now ends the mill ride — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED, after 0edc766; NOT PUBLISHED: v1038 has the bug; SPECS GREEN; NO FULL SUITE; ONE GUARDED PLAY ON `SeedTest_millbiomes_20261008`, CLEARED)
+
+The owner's report: ride the mill, press the BIOMES pill, and you land unable to walk until you jump.
+
+**The cause.**
+- A mill mount parks the player: WalkSpeed 0, through `CarryService.RefreshWalkSpeed` reading `MillMounted`.
+- Only a jump or a death unmounted.
+- `PlotService.TeleportTo` (BIOMES and OBBY) moves the root and never unmounted, so the zero WalkSpeed travelled with the player.
+
+**The fix (`TreadmillService.luau` only).**
+- A mount also ends when the player is moved AWAY from the belt: more than `AWAY_STUDS` (12) outside its footprint, or a destroyed belt.
+- At once, when a script moves the root: the new `watchMount` listens to the root's CFrame signal beside Jumping and Died. Every teleport writes that CFrame.
+- On the next tick, for anything else: a check at the top of the pay loop.
+- Mount and Rebuild share `watchMount`.
+- A mill rebuilt under a mounted rider moves nobody, so it never counts. The Disco Mill is covered the same way.
+- The dismount guard (`mountBlocked`) clears as before once the player is off the belt.
+
+**Specs.**
+- MillTrainingSpec 22/0, with 6 new checks (section 5b):
+  - the mount's own move does not unmount;
+  - a 400-stud script move unmounts before any tick;
+  - a belt moved away unmounts on the next tick;
+  - a small move over the belt keeps the mount;
+  - Mount and Rebuild use the one watcher.
+- Two deliberate defects were caught: no CFrame watcher (1 fail), and no tick check (2 fails).
+- DiscoPartySpec 19/0, WalkModeSpec 30/0, AdminSpec 125/0, BoostIconsSpec 41/0, TreadmillFunSpec 110/0.
+
+**Guarded Play** (desktop 1065x716, emulator off):
+- Walked onto the own belt: mounted, WalkSpeed 0.
+- One REAL click on the BIOMES button: landed at the road (0, 3, -160), `MillMounted` nil, WalkSpeed 19.6.
+- W held 1.5 s with a real key: walked about 30 studs, no jump.
+- No snap-back to the belt in the 3 s watched.
+- Console: no errors. Store cleared (1 key, marker removed). Probe: 289 scripts, 0 differ, 0 ZZ. Captures are in `output/mill-biomes-2026-10-08/play/`.
+
+**Not verified:** OBBY in Play (the same `TeleportTo` path, spec-covered by the generic move), the Disco Mill in Play, a phone, a full suite.
+
 ## Batch committed and pushed: 849fa7a + a001e27 on origin/wip, published as v1038 — 2026-10-08 (CLAUDE)
 
 - **Published.** The owner published v1038 at 2026-10-08 08:43 UTC (Studio log, "Add publish notes to v1038"). It shipped the working tree. Just before the commit, the probe found Studio and disk equal: 289 scripts, 0 differ, 0 ZZ, test-store marker absent.
