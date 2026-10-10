@@ -858,6 +858,9 @@ local CONFIG = {
 		SearchMinW = 140,
 		HeartW = 40,
 		SearchGap = 6,
+		-- The SORT button (2026-10-10, GameConfig.Sort) between the search and
+		-- the heart: a small SORT over RARITY / INCOME / NEWEST.
+		SortW = 78,
 	},
 	--==========================================================================
 	-- THE TEN-FOOT PROFILE (see below): the logical canvas a TV's title-safe
@@ -3920,7 +3923,7 @@ end
 -- panel's logical units. Answers the search box and the heart.
 --==============================================================================
 function HudLayout.bagSearch(bag: Bag, shellW: number, titleWidth: number, padLeft: number,
-	padRight: number): (Rect, Rect)
+	padRight: number): (Rect, Rect, Rect)
 	local B = CONFIG.Bag
 	local x, y, right
 	if bag.compactHeader then
@@ -3934,8 +3937,10 @@ function HudLayout.bagSearch(bag: Bag, shellW: number, titleWidth: number, padLe
 		right = shellW - 12
 	end
 	local heart = rect(right - B.HeartW, y, B.HeartW, B.SearchH)
-	local search = rect(x, y, math.max(0, heart.x - B.SearchGap - x), B.SearchH)
-	return search, heart
+	-- The SORT button (2026-10-10) stands between the search and the heart.
+	local sort = rect(heart.x - B.SearchGap - B.SortW, y, B.SortW, B.SearchH)
+	local search = rect(x, y, math.max(0, sort.x - B.SearchGap - x), B.SearchH)
+	return search, heart, sort
 end
 
 --==============================================================================

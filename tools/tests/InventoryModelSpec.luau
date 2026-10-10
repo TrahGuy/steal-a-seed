@@ -274,7 +274,8 @@ local ok, err = pcall(function()
 			loadout = s.Source
 		end
 	end
-	check(string.find(loadout, "InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held)", 1, true)
+	-- (2026-10-10: the player's sort follows `held` as a sixth argument; SortSpec.)
+	check(string.find(loadout, "InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held", 1, true)
 			~= nil, "LoadoutUI asks for every bar item in the grid (shown 0)")
 	local counts = InventoryModel.counts(set)
 	check(counts.all == 7 and counts.plants == 5 and counts.equipment == 1 and counts.tickets == 12,

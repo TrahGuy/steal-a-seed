@@ -498,9 +498,10 @@ function InventoryModel.groupKey(item: Item, face: Face, badge: number?): string
 end
 
 -- `bar` the shown bar (ten refs), `shown` how many slots are on screen, `heldRef`
--- / `heldTool` what is in the hands now.
+-- / `heldTool` what is in the hands now; `mode` the player's sort (2026-10-10,
+-- InventoryModel.sort; nil is the Bag's old order).
 function InventoryModel.groups(items: { Item }, bar: { string }, shown: number, heldRef: string?,
-	heldTool: any?): { Group }
+	heldTool: any?, mode: string?): { Group }
 	local list: { Group } = {}
 	local byKey: { [string]: Group } = {}
 	for _, item in ipairs(items) do
@@ -533,7 +534,7 @@ function InventoryModel.groups(items: { Item }, bar: { string }, shown: number, 
 			end
 		end
 	end
-	InventoryModel.sort(list)
+	InventoryModel.sort(list, mode)
 	return list
 end
 
@@ -545,10 +546,27 @@ local function firstOrder(group: Group): number
 	return best
 end
 
--- The fixed order (no SORT button, the owner's spec lists none): favourites
--- first; then plants by base income, pods by biome and then size, equipment in
--- shop order, tickets. A pod's place reads its shell, never its species.
-function InventoryModel.sort(list: { Group })
+local function lastOrder(group: Group): number
+	local latest = -math.huge
+	for _, item in ipairs(group.items) do
+		latest = math.max(latest, item.order)
+	end
+	return latest
+end
+
+-- THE ORDER (2026-10-10, the owner's SORT button; GameConfig.Sort), favourites
+-- first whatever it is:
+--   "income" (and nil: the order the Bag always had) -- plants by base income,
+--            pods by biome and then size, equipment in shop order, tickets;
+--   "rarity" -- the rarest first (GameConfig.RarityTier, high to low) across
+--            every category, what shows no rarity (an ordinary pod -- its shell
+--            says nothing -- tickets, the trail) after every rarity; within one
+--            rarity, by category and then as income;
+--   "newest" -- by category, then the latest item first (item ids only grow);
+--            equipment, which keeps no date, the dearest first.
+-- A pod's place reads its shell, never its species.
+function InventoryModel.sort(list: { Group }, mode: string?)
+	local tierOf: { [string]: number } = (GameConfig.RarityTier :: any)
 	local rank: { [Group]: { number } } = {}
 	for _, g in ipairs(list) do
 		local item = g.items[1]
@@ -563,13 +581,24 @@ function InventoryModel.sort(list: { Group })
 			b = -item.tier
 			c = if item.sealed then 1 else 0
 		elseif g.category == "equipment" then
-			a = item.order
+			-- Newest: the dearest bat or trap first; the trail after them all.
+			a = if mode == "newest" and item.kind == "weapon" then -item.order else item.order
 		end
-		rank[g] = { if g.favourite then 0 else 1, CATEGORY_RANK[g.category] or 9, a, b, c, firstOrder(g) }
+		local category = CATEGORY_RANK[g.category] or 9
+		local favourite = if g.favourite then 0 else 1
+		if mode == "rarity" then
+			local rarity = g.face.rarity
+			local tier = if rarity then tierOf[rarity] else nil
+			rank[g] = { favourite, -(tier or 0), category, a, b, c, firstOrder(g) }
+		elseif mode == "newest" and g.category ~= "equipment" then
+			rank[g] = { favourite, category, -lastOrder(g), a, b, c, 0 }
+		else
+			rank[g] = { favourite, category, a, b, c, firstOrder(g), 0 }
+		end
 	end
 	table.sort(list, function(x: Group, y: Group): boolean
 		local rx, ry = rank[x], rank[y]
-		for i = 1, 6 do
+		for i = 1, 7 do
 			if rx[i] ~= ry[i] then
 				return rx[i] < ry[i]
 			end

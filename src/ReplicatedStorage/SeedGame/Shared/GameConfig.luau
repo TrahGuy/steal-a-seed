@@ -1780,6 +1780,40 @@ GameConfig.MenuSize = {
 }
 
 --==============================================================================
+-- SORT: THE BAG'S AND MY PLANTS' ORDER, SAVED (2026-10-10, the owner: "dont
+-- forget to add sort", then a SORT button stepping Rarity, Income and Newest,
+-- in the Bag and in MY PLANTS)
+--
+-- A third saved setting, the MenuSize way: the profile keeps one option id per
+-- panel (BagSort, PlantsSort), PlayerDataService stamps the attribute of the
+-- same name, and each panel's SORT button sends its own verb on the GameEvent
+-- remote. Anything that is not an option is refused, and an old save with no
+-- key reads as the Default. In the Bag, favourites stay first whatever the
+-- order.
+--
+--   rarity  rarest first (GameConfig.RarityTier, high to low), bats and traps
+--           by their own; what shows no rarity (an ordinary pod, tickets, the
+--           trail) after every rarity; within one rarity, as income
+--   income  the order the Bag always had -- plants by income, pods by biome
+--           and size, equipment in shop order -- and MY PLANTS' earners best
+--           first
+--   newest  the latest item first (its item id, which only grows); equipment,
+--           which keeps no date, the dearest first
+--==============================================================================
+GameConfig.Sort = {
+	Default = "rarity",
+	Options = {
+		{ Id = "rarity", Label = "RARITY" },
+		{ Id = "income", Label = "INCOME" },
+		{ Id = "newest", Label = "NEWEST" },
+	},
+	-- The small word over the option on each SORT button.
+	Word = "SORT",
+	Bag = { Action = "BagSort", Attribute = "BagSort" },
+	Plants = { Action = "PlantsSort", Attribute = "PlantsSort" },
+}
+
+--==============================================================================
 -- THE FREELY ASSIGNABLE HOTBAR AND THE BAG'S HEARTS (2026-10-03, the owner's
 -- compact Bag + free hotbar; HotbarSlots is the grammar)
 --
@@ -2131,6 +2165,38 @@ function GameConfig.nextMenuSize(id: any): string
 		end
 	end
 	return options[1].Id
+end
+
+-- A GameConfig.Sort option id as given, or nil for anything else (2026-10-10).
+function GameConfig.sortOption(id: any): string?
+	for _, option in ipairs(GameConfig.Sort.Options) do
+		if option.Id == id then
+			return option.Id
+		end
+	end
+	return nil
+end
+
+-- The sort after `id`, round again after the last; unknown ids start over.
+function GameConfig.nextSort(id: any): string
+	local options = GameConfig.Sort.Options
+	for i, option in ipairs(options) do
+		if option.Id == id then
+			return options[i % #options + 1].Id
+		end
+	end
+	return options[1].Id
+end
+
+-- What a SORT button says for `id` ("RARITY"); the Default's for anything else.
+function GameConfig.sortLabel(id: any): string
+	local want = GameConfig.sortOption(id) or GameConfig.Sort.Default
+	for _, option in ipairs(GameConfig.Sort.Options) do
+		if option.Id == want then
+			return option.Label
+		end
+	end
+	return GameConfig.Sort.Options[1].Label
 end
 
 GameConfig.Tags = {

@@ -395,6 +395,9 @@ MenuLayout.Plants = {
 	TabsShort = 196,
 	TabsTall = 220,
 	CountW = 92,
+	-- The SORT button (2026-10-10, GameConfig.Sort): before the count, and it
+	-- outlasts it on a narrow header.
+	SortW = 84,
 	FooterH = 44,
 	-- The footer's pieces: the income line, then three buttons.
 	IncomeMinW = 104,
@@ -409,6 +412,7 @@ function MenuLayout.plantsHeader(p: Panel, titleW: number): { [string]: Rect }
 	return MenuLayout.pack(x0, x1, C.Gap, {
 		{ id = "tabs", w = if p.short then P.TabsShort else P.TabsTall },
 		{ id = "spacer", grow = true, minW = 0, maxW = 10000 },
+		{ id = "sort", w = P.SortW, drop = 2 },
 		{ id = "count", w = P.CountW, drop = 1 },
 	})
 end

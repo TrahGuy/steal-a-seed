@@ -292,12 +292,17 @@ export type Callbacks = {
 	changed: () -> (),
 	-- HATCH ALL held to the end (2026-10-09).
 	hatchAll: (() -> ())?,
+	-- The SORT button stepped (2026-10-10): the new option id, to be saved.
+	sorted: ((string) -> ())?,
 }
 
 type Rect = HudLayout.Rect
 
 export type Panel = {
-	state: { category: string, search: string, favouritesOnly: boolean },
+	-- `sort` (2026-10-10): the player's GameConfig.Sort option, InventoryModel.sort's mode.
+	state: { category: string, search: string, favouritesOnly: boolean, sort: string },
+	-- The saved sort put on the button and the grid (the attribute's, LoadoutUI).
+	setSort: (string?) -> (),
 	paint: (View) -> (),
 	layout: (HudLayout.Bag, number) -> (),
 	contains: (Vector2) -> boolean,
@@ -370,7 +375,7 @@ end
 function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks): Panel
 	local shell: Frame = modal.shell
 	local body: Frame = modal.body
-	local state = { category = "all", search = "", favouritesOnly = false }
+	local state = { category = "all", search = "", favouritesOnly = false, sort = GameConfig.Sort.Default }
 	local player = Players.LocalPlayer
 
 	--==========================================================================
@@ -444,6 +449,9 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	local filterHeart = InventoryTile.heart(heartButton, 18, 6)
 	filterHeart.frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	filterHeart.frame.Position = UDim2.fromScale(0.5, 0.5)
+	-- SORT (2026-10-10, the owner): Rarity, Income, Newest, saved per player.
+	local sortButton = MenuKit.sortButton(shell, 5)
+	sortButton.set(state.sort)
 
 	--==========================================================================
 	-- THE CATEGORY COLUMN
@@ -1362,7 +1370,7 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		local shellW = bag.panel.w / bag.scale - RAIL.OutlineThickness * 2
 		-- The sprout stands before the title's words, so the title is that wide.
 		titleWidth += TITLE_ICON + TITLE_ICON_GAP
-		local box, heart = HudLayout.bagSearch(bag, shellW, titleWidth, padLeft, padRight)
+		local box, heart, sortAt = HudLayout.bagSearch(bag, shellW, titleWidth, padLeft, padRight)
 		--======================================================================
 		-- THE RIM'S LIFT, TAKEN BACK (2026-10-04)
 		--
@@ -1382,6 +1390,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		glass.Visible = search.Visible
 		heartButton.Position = UDim2.fromOffset(heart.x, heartY)
 		heartButton.Size = UDim2.fromOffset(heart.w, heart.h)
+		sortButton.button.Position = UDim2.fromOffset(sortAt.x, boxY + (sortAt.y - box.y))
+		sortButton.button.Size = UDim2.fromOffset(sortAt.w, sortAt.h)
 		local B = HudLayout.Config.Bag
 		body.Position = UDim2.fromOffset(12, (if bag.compactHeader then B.BodyTopCompact else B.BodyTop) - lift)
 		body.Size = UDim2.new(1, -24, 1, -((if bag.compactHeader then B.BodyTrimCompact else B.BodyTrim) - lift))
@@ -1451,6 +1461,24 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		grid.CanvasPosition = Vector2.zero
 		cb.changed()
 	end)
+	-- SORT steps to the next order at once; LoadoutUI saves it (cb.sorted).
+	sortButton.button.Activated:Connect(function()
+		state.sort = GameConfig.nextSort(state.sort)
+		sortButton.set(state.sort)
+		grid.CanvasPosition = Vector2.zero
+		if cb.sorted then
+			cb.sorted(state.sort)
+		end
+		cb.changed()
+	end)
+	local function setSort(id: string?)
+		local want = GameConfig.sortOption(id) or GameConfig.Sort.Default
+		if state.sort ~= want then
+			state.sort = want
+			sortButton.set(want)
+			cb.changed()
+		end
+	end
 
 	--==========================================================================
 	-- LB / RB STEP THE CATEGORIES AND RT OPENS A TILE'S MENU, WHILE OPEN
@@ -1547,6 +1575,7 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			dimSheet.Visible = false
 		end,
 		setOpen = setOpen,
+		setSort = setSort,
 		grid = grid,
 	}
 	if player then

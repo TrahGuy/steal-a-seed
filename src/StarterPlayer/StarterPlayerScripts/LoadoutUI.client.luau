@@ -329,6 +329,9 @@ local channel: RemoteEvent? = nil
 local trapRemove: TrapRemove.Handle? = nil
 local podHatch: PodHatch.Handle? = nil
 
+-- The Bag's sort last sent and not yet echoed by the saved attribute (2026-10-10).
+local bagSortPending: string? = nil
+
 local panel = InventoryPanel.build(gui, modal, GameConfig.Hotbar, {
 	activate = function(key: string, by: string)
 		activateKey(key, by)
@@ -367,6 +370,14 @@ local panel = InventoryPanel.build(gui, modal, GameConfig.Hotbar, {
 		local remote = channel
 		if remote then
 			remote:FireServer(HATCH_BAG.HatchAll)
+		end
+	end,
+	-- SORT stepped (2026-10-10): saved as the player's own (GameConfig.Sort.Bag).
+	sorted = function(id: string)
+		bagSortPending = id
+		local remote = channel
+		if remote then
+			remote:FireServer(GameConfig.Sort.Bag.Action, id)
 		end
 	end,
 })
@@ -1137,7 +1148,8 @@ end
 --==============================================================================
 local function refreshBag()
 	local held = heldTool()
-	local groups = InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held)
+	local groups = InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held,
+		panel.state.sort)
 	table.clear(view.byKey)
 	for _, group in ipairs(groups) do
 		view.byKey[group.key] = group
@@ -1329,6 +1341,24 @@ if remotes then
 		channel = ev
 	end
 end
+
+--==============================================================================
+-- THE SAVED SORT (2026-10-10): the attribute PlayerDataService stamps from the
+-- profile, on the Bag's SORT button and its grid. The echo of an older press,
+-- while a newer one is on its way, is not put back.
+--==============================================================================
+local function applyBagSort()
+	local id = player:GetAttribute(GameConfig.Sort.Bag.Attribute)
+	if bagSortPending ~= nil then
+		if id ~= bagSortPending then
+			return
+		end
+		bagSortPending = nil
+	end
+	panel.setSort(id)
+end
+player:GetAttributeChangedSignal(GameConfig.Sort.Bag.Attribute):Connect(applyBagSort)
+applyBagSort()
 
 --==============================================================================
 -- AN EDIT TO THE BAR: drawn now, sent once per frame, answered by the server

@@ -382,6 +382,48 @@ function PlayerDataService.MarkLikeReminderShown(player: Player): boolean
 	return true
 end
 
+--==============================================================================
+-- SORT: THE THIRD SAVED SETTING, THE MENU SIZE'S THREE MOVES (2026-10-10)
+--
+-- One GameConfig.Sort option id per panel (`which`: "Bag" or "Plants"), kept
+-- in the profile's BagSort / PlantsSort, stamped on the attribute of the same
+-- name, changed only by the panel's own GameEvent verb. Anything that is not
+-- an option is refused here: the profile is the save.
+--==============================================================================
+local SORT = GameConfig.Sort
+local SORT_FIELD = { Bag = "BagSort", Plants = "PlantsSort" }
+
+function PlayerDataService.PublishSorts(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local profile = entry.profile :: any
+	for which, field in pairs(SORT_FIELD) do
+		local id = GameConfig.sortOption(profile[field]) or SORT.Default
+		local attribute = (SORT :: any)[which].Attribute
+		if player:GetAttribute(attribute) ~= id then
+			player:SetAttribute(attribute, id)
+		end
+	end
+end
+
+function PlayerDataService.SetSort(player: Player, which: any, id: any): boolean
+	local entry = entries[player]
+	local field = if type(which) == "string" then SORT_FIELD[which] else nil
+	if not entry or player.Parent ~= Players or not field or GameConfig.sortOption(id) == nil then
+		return false
+	end
+	local profile = entry.profile :: any
+	if profile[field] == id then
+		return false
+	end
+	profile[field] = id
+	touch(player)
+	PlayerDataService.PublishSorts(player)
+	return true
+end
+
 function PlayerDataService.MenuSizeOf(player: Player): string
 	local entry = entries[player]
 	local id = entry and (entry.profile :: any).MenuSize
@@ -1272,6 +1314,9 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		MenuSize = if GameConfig.menuSizeScale(profile.MenuSize) ~= nil
 			then profile.MenuSize
 			else GameConfig.MenuSize.Default,
+		-- Settings, not progress (2026-10-10): the two sorts.
+		BagSort = GameConfig.sortOption(profile.BagSort) or GameConfig.Sort.Default,
+		PlantsSort = GameConfig.sortOption(profile.PlantsSort) or GameConfig.Sort.Default,
 		-- Not progress (2026-09-27): spins somebody bought, prizes the wheel
 		-- still owes, and the cosmetics they won and wear.
 		WheelBought = profile.WheelBought or 0,
@@ -1338,6 +1383,7 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 	PlayerDataService.PublishSpeedTier(player)
 	PlayerDataService.PublishWalkMode(player)
 	PlayerDataService.PublishMenuSize(player)
+	PlayerDataService.PublishSorts(player)
 	PlayerDataService.PublishDiscoDance(player)
 	PlayerDataService.PublishOffline(player)
 	PlayerDataService.PublishInvites(player)
@@ -1518,6 +1564,9 @@ local function onPlayerAdded(player: Player)
 		-- And the saved menu size, so the first menu opened is already the size
 		-- the player chose.
 		PlayerDataService.PublishMenuSize(player)
+		-- And the two saved sorts (2026-10-10): the Bag and MY PLANTS open in
+		-- the order the player chose.
+		PlayerDataService.PublishSorts(player)
 		-- And the saved disco-dancing choice (2026-10-03).
 		PlayerDataService.PublishDiscoDance(player)
 		-- And the like reminder's state: a reminder still pending from an earlier
@@ -1688,6 +1737,15 @@ function PlayerDataService.Start()
 				if action == GameConfig.MiniEvent.Dance.Action then
 					if PlayerDataService.SetDiscoDance(player, payload) then
 						log(string.format("%s turned disco dancing %s.", player.Name, if payload then "on" else "off"))
+					end
+					return
+				end
+				-- A panel's SORT button (2026-10-10): one option id, saved like the
+				-- menu size.
+				if action == GameConfig.Sort.Bag.Action or action == GameConfig.Sort.Plants.Action then
+					local which = if action == GameConfig.Sort.Bag.Action then "Bag" else "Plants"
+					if type(payload) == "string" and PlayerDataService.SetSort(player, which, payload) then
+						log(string.format("%s set the %s sort %s.", player.Name, which, payload))
 					end
 					return
 				end

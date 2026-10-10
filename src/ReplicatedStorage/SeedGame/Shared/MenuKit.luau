@@ -288,6 +288,43 @@ function MenuKit.frame(parent: Instance, name: string, z: number, colour: Color3
 end
 
 --==============================================================================
+-- THE SORT BUTTON (2026-10-10, the owner's SORT; GameConfig.Sort): a well like
+-- the search's, a small SORT over the order it shows ("RARITY") -- the Bag's
+-- and MY PLANTS' alike. `set(id)` says which. A press is its owner's
+-- (Activated): it steps the id with GameConfig.nextSort and sends its verb.
+--==============================================================================
+export type SortButton = { button: TextButton, set: (string?) -> () }
+
+function MenuKit.sortButton(parent: Instance, z: number): SortButton
+	local b = Instance.new("TextButton")
+	b.Name = "Sort"
+	b.BackgroundColor3 = L.Well
+	b.BackgroundTransparency = L.WellTransparency
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = false
+	b.Text = ""
+	b.ZIndex = z
+	b.Parent = parent
+	UIKit.corner(b, 9)
+	MenuKit.keyline(b, L.WellEdge, 1)
+	UIKit.clicks(b)
+	local word = MenuKit.body(b, "Word", 10, L.Muted, z + 1)
+	word.Text = GameConfig.Sort.Word
+	word.AnchorPoint = Vector2.new(0.5, 0)
+	word.Position = UDim2.new(0.5, 0, 0, 2)
+	word.Size = UDim2.new(1, -6, 0, 11)
+	local option = MenuKit.text(b, "Option", 14, L.Text, z + 1)
+	option.AnchorPoint = Vector2.new(0.5, 1)
+	option.Position = UDim2.new(0.5, 0, 1, -2)
+	option.Size = UDim2.new(1, -6, 0, 18)
+	local function set(id: string?)
+		option.Text = GameConfig.sortLabel(id)
+	end
+	set(nil)
+	return { button = b, set = set }
+end
+
+--==============================================================================
 -- THE BASEPLATE (2026-10-06): the studded plate a list of cards stands on --
 -- the Shop's products, the Index's plants -- still while the list scrolls over
 -- it. The plate's green, its studs raised as the rims' are (UIKit.studs), a

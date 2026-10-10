@@ -422,17 +422,24 @@ end
 do
 	local bag = client("LoadoutUI")
 	local model = string.match(sourceOf(Shared:FindFirstChild("InventoryModel")) or "", "function InventoryModel%.sort(.-)\nend\n") or ""
-	check(has(model, "PlantInfo.BaseIncome(item.speciesId, item.tier, true)") and has(model, "rank[g] = { if g.favourite then 0 else 1")
-			and not has(bag, "SORT") and not has(bag, "PlantInfo.Sort("),
-		"the Bag's one fixed order (2026-10-03): favourites first, plants by base income -- no SORT button")
+	-- 2026-10-10: the owner asked for SORT (SortSpec); INCOME is this old order.
+	check(has(model, "PlantInfo.BaseIncome(item.speciesId, item.tier, true)")
+			and has(model, "local favourite = if g.favourite then 0 else 1")
+			and has(model, "rank[g] = { favourite, category, a, b, c, firstOrder(g), 0 }")
+			and has(bag, "panel.state.sort)") and not has(bag, "PlantInfo.Sort("),
+		"the Bag's order (2026-10-03): favourites first, plants by base income -- under the SORT button's INCOME since "
+			.. "2026-10-10")
 	check(has(bag, "scale = UIKit.menuScale(),") and has(bag, "modal.setUserScale(bag.scale)")
 			and has(bag, "UIKit.onMenuSize(layoutBag)"),
 		"the Bag takes the menu size on its own panel and re-lays out when it changes")
 	local garden = client("GardenUI")
 	-- MY PLANTS (2026-10-04): earners first by income (placement id on a tie),
-	-- pods after by their clock; a selection that has gone is let go.
-	check(has(garden, "if a.rate ~= b.rate then\n\t\t\treturn a.rate > b.rate")
-			and has(garden, "return (a.id or 0) < (b.id or 0)")
+	-- pods after by their clock; a selection that has gone is let go. Since
+	-- 2026-10-10 the player's SORT picks the earners' order (SortSpec); income
+	-- is the tie-break of every one.
+	check(has(garden, "if a.rate ~= b.rate then\n\t\treturn a.rate > b.rate")
+			and has(garden, "return fresh(a) < fresh(b)") and has(garden, "return e.id or 0")
+			and has(garden, "return (a.hatchAt or 0) < (b.hatchAt or 0)")
 			and has(garden, "if selectedKey and not byKey[selectedKey :: string] then"),
 		"MY PLANTS orders by income with stable ties, pods by their clock, and drops a stale selection")
 	for _, name in ipairs({ "GardenUI", "IndexUI", "ShopUI", "MarigoldShopUI", "SettingsUI" }) do

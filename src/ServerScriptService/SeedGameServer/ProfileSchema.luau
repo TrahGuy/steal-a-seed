@@ -356,6 +356,11 @@ export type Profile = {
 	-- GameConfig.MenuSize option id, default "normal", and anything that is not
 	-- an option -- an old save with no key included -- reads as "normal".
 	MenuSize: string,
+	-- SORT, the third (2026-10-10, GameConfig.Sort): the Bag's and MY PLANTS'
+	-- order, each a GameConfig.Sort option id; no key, or no such option, reads
+	-- as the Default.
+	BagSort: string,
+	PlantsSort: string,
 	CreatedAt: number,
 	LastSeen: number,
 	-- An unclaimed offline claim (see OfflineEarnings): cash before the x2
@@ -495,6 +500,8 @@ function ProfileSchema.Default(): Profile
 		EquippedTrap = "",
 		WalkMode = false,
 		MenuSize = GameConfig.MenuSize.Default,
+		BagSort = GameConfig.Sort.Default,
+		PlantsSort = GameConfig.Sort.Default,
 		CreatedAt = now,
 		LastSeen = now,
 		OfflineCash = 0,
@@ -943,6 +950,9 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.MenuSize = if GameConfig.menuSizeScale(raw.MenuSize) ~= nil
 		then raw.MenuSize
 		else GameConfig.MenuSize.Default
+	-- And the two sorts (2026-10-10), the same way.
+	p.BagSort = GameConfig.sortOption(raw.BagSort) or GameConfig.Sort.Default
+	p.PlantsSort = GameConfig.sortOption(raw.PlantsSort) or GameConfig.Sort.Default
 
 	--==========================================================================
 	-- THE ONE-SLOT SAVE, SORTED INTO THE RIGHT DRAWER

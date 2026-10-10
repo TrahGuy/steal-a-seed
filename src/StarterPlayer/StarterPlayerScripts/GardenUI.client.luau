@@ -186,6 +186,13 @@ MenuKit.keyline(count, LOOK.WellEdge, 1, 0.3)
 local countLabel = MenuKit.text(count, "Label", 15, LOOK.Text, Z + 1)
 countLabel.Size = UDim2.fromScale(1, 1)
 countLabel.RichText = true
+-- SORT (2026-10-10, the owner): Rarity, Income, Newest -- the earners' order and
+-- the stored creatures', saved per player (GameConfig.Sort.Plants). A sent
+-- press waits for its own echo (plantsSortPending), as the Bag's does.
+local sortButton = MenuKit.sortButton(body, Z)
+local plantsSort: string = GameConfig.Sort.Default
+local plantsSortPending: string? = nil
+sortButton.set(plantsSort)
 
 --==============================================================================
 -- THE GRID
@@ -527,6 +534,35 @@ local function creature(speciesId: string, tier: number, hatched: boolean): any
 	}
 end
 
+-- Which of two creatures comes first under the player's sort (2026-10-10):
+-- `rarity` the rarer (GameConfig.RarityTier), `newest` the larger `fresh` (a
+-- placement or an item id: they only grow); then -- and always for `income` --
+-- the better earner, and the smaller `fresh` on a tie.
+local TIER: { [string]: number } = (GameConfig.RarityTier :: any)
+local function before(a: Entry, b: Entry, fresh: (Entry) -> number): boolean
+	if plantsSort == "rarity" then
+		local ta, tb = TIER[a.face.rarity or ""] or 0, TIER[b.face.rarity or ""] or 0
+		if ta ~= tb then
+			return ta > tb
+		end
+	elseif plantsSort == "newest" then
+		local fa, fb = fresh(a), fresh(b)
+		if fa ~= fb then
+			return fa > fb
+		end
+	end
+	if a.rate ~= b.rate then
+		return a.rate > b.rate
+	end
+	return fresh(a) < fresh(b)
+end
+local function placedOf(e: Entry): number
+	return e.id or 0
+end
+local function itemOf(e: Entry): number
+	return tonumber(e.itemId) or 0
+end
+
 local function plantedEntries(plot: Model?): ({ Entry }, number, number)
 	local out: { Entry } = {}
 	local growingPods, grown = 0, 0
@@ -566,7 +602,8 @@ local function plantedEntries(plot: Model?): ({ Entry }, number, number)
 			end
 		end
 	end
-	-- Earners first, best first; then the pods, soonest first.
+	-- Earners first, in the player's sort (`before`; newest = last planted);
+	-- then the pods, soonest first, whatever the sort.
 	table.sort(out, function(a: Entry, b: Entry): boolean
 		if (a.kind == "pod") ~= (b.kind == "pod") then
 			return a.kind ~= "pod"
@@ -574,10 +611,7 @@ local function plantedEntries(plot: Model?): ({ Entry }, number, number)
 		if a.kind == "pod" then
 			return (a.hatchAt or 0) < (b.hatchAt or 0)
 		end
-		if a.rate ~= b.rate then
-			return a.rate > b.rate
-		end
-		return (a.id or 0) < (b.id or 0)
+		return before(a, b, placedOf)
 	end)
 	return out, growingPods, grown
 end
@@ -634,11 +668,9 @@ local function storedEntries(): { Entry }
 			end
 		end
 	end
+	-- In the player's sort (`before`; newest = the latest item).
 	table.sort(out, function(a: Entry, b: Entry): boolean
-		if a.rate ~= b.rate then
-			return a.rate > b.rate
-		end
-		return (tonumber(a.itemId) or 0) < (tonumber(b.itemId) or 0)
+		return before(a, b, itemOf)
 	end)
 	return out
 end
@@ -847,6 +879,12 @@ local function relayout()
 		count.Position = UDim2.fromOffset(cr.x, rowY + 4)
 		count.Size = UDim2.fromOffset(cr.w, touch - 8)
 	end
+	local sr = row.sort
+	sortButton.button.Visible = sr ~= nil
+	if sr then
+		sortButton.button.Position = UDim2.fromOffset(sr.x, rowY + 2)
+		sortButton.button.Size = UDim2.fromOffset(sr.w, touch - 4)
+	end
 	-- The grid over the footer; the footer at the main block's foot.
 	local main = b.main
 	local footerY = main.y + main.h - PL.FooterH
@@ -1033,6 +1071,38 @@ tabs.changed(function(id: string)
 	grid.CanvasPosition = Vector2.zero
 	refresh()
 end)
+
+-- SORT steps to the next order at once and asks the server to keep it; the
+-- saved attribute (PlayerDataService) is followed whenever it is not the echo
+-- of an older press.
+sortButton.button.Activated:Connect(function()
+	plantsSort = GameConfig.nextSort(plantsSort)
+	sortButton.set(plantsSort)
+	plantsSortPending = plantsSort
+	local channel = gameEvent
+	if channel then
+		channel:FireServer(GameConfig.Sort.Plants.Action, plantsSort)
+	end
+	grid.CanvasPosition = Vector2.zero
+	refresh()
+end)
+local function applyPlantsSort()
+	local id = player:GetAttribute(GameConfig.Sort.Plants.Attribute)
+	if plantsSortPending ~= nil then
+		if id ~= plantsSortPending then
+			return
+		end
+		plantsSortPending = nil
+	end
+	local want = GameConfig.sortOption(id) or GameConfig.Sort.Default
+	if want ~= plantsSort then
+		plantsSort = want
+		sortButton.set(want)
+		refresh()
+	end
+end
+player:GetAttributeChangedSignal(GameConfig.Sort.Plants.Attribute):Connect(applyPlantsSort)
+applyPlantsSort()
 
 --==============================================================================
 -- OPEN AND SHUT (the OpenPanel mutex; LB / RB switch the tabs)
