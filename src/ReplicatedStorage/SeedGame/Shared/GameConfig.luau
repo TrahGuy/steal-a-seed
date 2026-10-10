@@ -9372,6 +9372,25 @@ GameConfig.Card = {
 	Ambient = Color3.fromRGB(132, 134, 146),
 	LightColour = Color3.fromRGB(255, 250, 236),
 	LightDirection = Vector3.new(-0.45, -1, -0.62),
+	--==========================================================================
+	-- THE FACE AND UPPER BODY (2026-10-10, the owner: "can we zoom their
+	-- appearance than using a whole body?" -- the Bag's tiles, the hotbar, MY
+	-- PLANTS, the Index and the plot's board): a grown creature's picture
+	-- frames everything from BelowEyes of its height under its eyes up --
+	-- where its builder names its eyes (a part with "eye" in its name) -- or
+	-- else its top TopShare; the rest is cut by the picture's edge. Each
+	-- surface its own switch. A pod, a bat, a trap and the Index's big stage
+	-- are never zoomed.
+	--==========================================================================
+	Zoom = {
+		BelowEyes = 0.3,
+		TopShare = 0.55,
+		Bag = true,
+		Hotbar = true,
+		Plants = true,
+		Board = true,
+		Index = true,
+	},
 
 	--==========================================================================
 	-- THE BACKDROP IS TURNED DOWN

@@ -382,7 +382,9 @@ local function cardFor(key: string): Card
 	UIKit.corner(innerFrame, 7)
 	local innerRing = MenuKit.keyline(innerFrame, WHITE, 2)
 	innerRing.Enabled = false
-	local preview = UIKit.itemPreview(face, { name = "Preview", scrim = 1, fit = 0.9 })
+	-- A creature's face and upper body (2026-10-10, GameConfig.Card.Zoom).
+	local preview = UIKit.itemPreview(face, { name = "Preview", scrim = 1, fit = 0.9,
+		zoom = (GameConfig.Card.Zoom :: any).Plants })
 	preview.hero.Ambient = LOOK.PreviewAmbient
 	for _, d in ipairs(preview.holder:GetDescendants()) do
 		if d:IsA("GuiObject") then

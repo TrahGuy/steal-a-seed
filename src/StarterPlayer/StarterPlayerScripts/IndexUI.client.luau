@@ -688,7 +688,10 @@ local function buildVisible()
 			local ok, model = pcall(CreatureModel.Build, species, SeedData.BaseTier,
 				CreatureModel.STAGE_GROWN, CFrame.new(), c.view)
 			if ok and model then
-				local camera = UIKit.framePlant(c.view, model, species.Form, CARD_FILL)
+				-- Its face and upper body (2026-10-10, GameConfig.Card.Zoom); the
+				-- detail's big stage keeps the whole creature.
+				local camera = UIKit.framePlant(c.view, model, species.Form, CARD_FILL,
+					(GameConfig.Card.Zoom :: any).Index)
 				c.view.CurrentCamera = camera
 			end
 			tintView(c.view, almanac[species.Id] == true)

@@ -155,6 +155,9 @@ function ItemArt.builder(key: string, art: Art): (Builder?, string)
 			local known = species :: SeedData.Species
 			local tier = art.tier
 			if art.kind == "plant" then
+				-- A grown creature (2026-10-10): framed as a plant is, and a
+				-- surface may zoom it (UIKit.frameItem). A pod stays "plant".
+				kind = "creature"
 				make = function(parent: Instance): Model?
 					return CreatureModel.BuildCreature(known, tier, CreatureModel.STAGE_GROWN, CFrame.new(), parent)
 				end

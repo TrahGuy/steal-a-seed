@@ -475,7 +475,9 @@ local function refreshPreviews(view: View)
 		if want then
 			local preview = card.preview
 			if not preview then
-				local made = UIKit.itemPreview(card.previewHost, { name = "Preview", scrim = 1, fit = 0.9 })
+				-- A creature's face and upper body (2026-10-10, GameConfig.Card.Zoom).
+				local made = UIKit.itemPreview(card.previewHost, { name = "Preview", scrim = 1, fit = 0.9,
+					zoom = (GameConfig.Card.Zoom :: any).Board })
 				made.hero.Ambient = LOOK.PreviewAmbient
 				for _, d in ipairs(made.holder:GetDescendants()) do
 					if d:IsA("GuiObject") then

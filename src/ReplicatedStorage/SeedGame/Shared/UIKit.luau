@@ -3465,6 +3465,63 @@ local function drawnBounds(model: Model): (Vector3?, Vector3?, { Vector3 })
 end
 
 --==============================================================================
+-- THE FACE AND UPPER BODY (2026-10-10, the owner: "can we zoom their
+-- appearance than using a whole body?"; GameConfig.Card.Zoom)
+--
+-- Which of a creature's drawn corners a zoomed picture frames: everything from
+-- BelowEyes of its height under its eyes up -- its face, its crown, its
+-- shoulders -- where its builder names its eyes (a drawn part with "eye" in
+-- its name); else its top TopShare. The rest is still drawn and the picture's
+-- edge cuts it. Fewer than eight corners above the cut (nothing there to
+-- frame) keeps the whole creature.
+--==============================================================================
+local function faceCorners(model: Model, points: { Vector3 }): { Vector3 }
+	local zoom: any = CARD.Zoom
+	local lo, hi = math.huge, -math.huge
+	for _, p in ipairs(points) do
+		lo = math.min(lo, p.Y)
+		hi = math.max(hi, p.Y)
+	end
+	local height = hi - lo
+	if height <= 0 then
+		return points
+	end
+	local eyes, count = 0, 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 and string.find(string.lower(d.Name), "eye", 1, true) then
+			eyes += d.Position.Y
+			count += 1
+		end
+	end
+	local cut = if count > 0 then eyes / count - zoom.BelowEyes * height else hi - zoom.TopShare * height
+	local kept: { Vector3 } = {}
+	for _, p in ipairs(points) do
+		if p.Y >= cut then
+			table.insert(kept, p)
+		end
+	end
+	if #kept < 8 then
+		return points
+	end
+	return kept
+end
+UIKit.faceCorners = faceCorners
+
+-- The lowest and highest corner of a list, or nil for an empty one.
+local function cornersBox(points: { Vector3 }): (Vector3?, Vector3?)
+	if #points == 0 then
+		return nil, nil
+	end
+	local lo = Vector3.new(math.huge, math.huge, math.huge)
+	local hi = -lo
+	for _, q in ipairs(points) do
+		lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
+		hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+	end
+	return lo, hi
+end
+
+--==============================================================================
 -- FRAME A PLANT THE WAY A CARD DOES
 --
 -- The plant card's camera solve, lifted out of UIKit.plantCard unchanged so the
@@ -3480,11 +3537,16 @@ end
 -- Returns the camera, and the distance and focus it settled on.
 --==============================================================================
 function UIKit.framePlant(hero: ViewportFrame, model: Model, formName: string?,
-	fill: number?): (Camera, number, Vector3)
+	fill: number?, zoom: boolean?): (Camera, number, Vector3)
 	local pivot, size = model:GetBoundingBox()
 	addPedestal(model, pivot, size)
 
 	local lo, hi, points = drawnBounds(model)
+	-- Zoomed (2026-10-10): only the face and upper body are framed.
+	if zoom and lo and hi then
+		points = faceCorners(model, points)
+		lo, hi = cornersBox(points)
+	end
 	if not (lo and hi) then
 		-- Nothing drawn: keep the old behaviour rather than divide by zero.
 		pivot, size = model:GetBoundingBox()
@@ -4361,7 +4423,7 @@ end
 -- laid out yet and still reports a zero AbsoluteSize.
 --==============================================================================
 local function fitToSilhouette(hero: ViewportFrame, camera: Camera, model: Model,
-	fit: number, aspectHint: number?)
+	fit: number, aspectHint: number?, zoom: boolean?)
 	-- Not drawnBounds: that one excludes the plant card's Pedestal by asking
 	-- `IsDescendantOf(Pedestal or model)`, which on a model with no pedestal is
 	-- every part, and it would return nothing at all here.
@@ -4385,6 +4447,12 @@ local function fitToSilhouette(hero: ViewportFrame, camera: Camera, model: Model
 	end
 	if #points == 0 then
 		return
+	end
+	-- Zoomed (2026-10-10): only the face and upper body are fitted.
+	if zoom then
+		points = faceCorners(model, points)
+		local zlo, zhi = cornersBox(points)
+		lo, hi = zlo or lo, zhi or hi
 	end
 	local half = math.tan(math.rad(camera.FieldOfView * 0.5))
 	local box = hero.AbsoluteSize
@@ -4430,13 +4498,15 @@ local function fitToSilhouette(hero: ViewportFrame, camera: Camera, model: Model
 	camera.CFrame = cf
 end
 
+-- `zoom` (2026-10-10): a grown creature ("creature", ItemArt's kind for one)
+-- framed to its face and upper body (faceCorners); only with `fit`.
 function UIKit.frameItem(hero: ViewportFrame, model: Model, kind: string,
-	fit: number?, aspectHint: number?): Camera
+	fit: number?, aspectHint: number?, zoom: boolean?): Camera
 	local camera
 	if kind == "trap" then
 		model:PivotTo(CFrame.new())
 		camera = UIKit.frameViewport(hero, model, Vector3.new(0.45, 0.62, -1), 1.02)
-	elseif kind == "plant" then
+	elseif kind == "plant" or kind == "creature" then
 		model:PivotTo(CFrame.new())
 		camera = UIKit.frameViewport(hero, model, Vector3.new(0.62, 0.30, -1), 1.06)
 	else
@@ -4444,7 +4514,7 @@ function UIKit.frameItem(hero: ViewportFrame, model: Model, kind: string,
 		camera = UIKit.frameViewport(hero, model, Vector3.new(0.55, 0.22, -1), 0.96)
 	end
 	if fit then
-		fitToSilhouette(hero, camera, model, fit, aspectHint)
+		fitToSilhouette(hero, camera, model, fit, aspectHint, zoom == true and kind == "creature")
 	end
 	return camera
 end
@@ -4477,6 +4547,9 @@ export type ItemPreviewOptions = {
 	-- Frame the drawn silhouette to this fraction of the glass instead of the
 	-- default margins -- see UIKit.frameItem. nil keeps the shop's framing.
 	fit: number?,
+	-- A grown creature framed to its face and upper body (2026-10-10,
+	-- GameConfig.Card.Zoom); needs `fit`. Pods and weapons are never zoomed.
+	zoom: boolean?,
 }
 
 export type ItemPreview = {
@@ -4548,7 +4621,7 @@ function UIKit.itemPreview(parent: Instance, options: ItemPreviewOptions?): Item
 			local aspectHint = if size.Y.Offset > 0 and size.X.Scale == 0 and size.Y.Scale == 0
 				then size.X.Offset / size.Y.Offset
 				else nil
-			pcall(UIKit.frameItem, hero, model, kind or "bat", opts.fit, aspectHint)
+			pcall(UIKit.frameItem, hero, model, kind or "bat", opts.fit, aspectHint, opts.zoom)
 		end
 	end
 

@@ -1,5 +1,13 @@
 # Steal a Seed — Session Handoff
 
+## CREATURE PICTURES ZOOMED TO THE FACE AND UPPER BODY — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; CardZoomSpec 11/0 (NEW); FULL SUITE 139 OF 139 GREEN; SEEN IN A GUARDED PLAY ON `SeedTest_zoom_20261010`, DESKTOP 1148 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
+
+The owner: "can we zoom their appearance than using a whole body? is that doable? on plants?"; asked where and how, picked the Bag tiles, the hotbar, MY PLANTS and the Index + plot board, and "Eyes, else top half (Recommended)".
+- **The crop** (UIKit.faceCorners; GameConfig.Card.Zoom BelowEyes 0.3, TopShare 0.55): a zoomed picture frames a creature's drawn corners from 0.3 of its height under its eyes up (a drawn part with "eye" in its name), else its top 55%; the rest is drawn and the picture's edge cuts it; fewer than eight corners above the cut keeps the whole creature. 38 of the 39 creatures name their eyes; Supernovus takes the top half.
+- **Who**: ItemArt now calls a grown creature's picture kind "creature" (a pod stays "plant"); UIKit.frameItem frames both as before and zooms only a "creature", only with `fit`, only when the surface asks (`itemPreview { zoom = ... }`). The Index's cards pass it to UIKit.framePlant (new `zoom` argument); its detail stage keeps the whole creature. Switches: Card.Zoom.Bag / Hotbar / Plants / Board / Index, all on.
+- **Reviewed in Studio first**: a board of all 39, whole against zoomed (output/zoom-2026-10-10/board_p1.png, board_p2.png), sent to the owner. Weak zooms (still correct, just little closer): Drizzlet and its colossal (a cloud above it), Lotusling (petals), Monsoad and Thundershell (eye parts low on the body) -- per-species overrides if the owner asks.
+- **Seen in Play** (output/zoom-2026-10-10/play_01_bag.png, play_sheet.png): the Bag's tiles and the hotbar's slots, MY PLANTS' STORED cards and the Index's cards (found and silhouettes) all show the face and upper body. **Spec-only**: the plot's TOP CREATURES board (the same itemPreview), a phone.
+
 ## RARITY CARDS IN MARIGOLD'S SHOP AND THE INDEX — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; RarityCardsSpec 49/0 (SECTIONS 6 AND 7 NEW) AND 15 NEIGHBOURING SPECS GREEN; SEEN IN A GUARDED PLAY ON `SeedTest_shop_20261010`, DESKTOP 1148 x 716 AND 1251 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
 
 The owner: "yes do the marigold shop cards too"; then "also apply them on index, and their background too".

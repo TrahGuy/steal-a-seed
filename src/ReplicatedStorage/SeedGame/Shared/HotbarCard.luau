@@ -250,6 +250,8 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 		position = UDim2.fromOffset(H.PreviewInset, H.PreviewTop),
 		scrim = 1,
 		fit = H.PreviewFit,
+		-- A grown creature's face and upper body (2026-10-10, GameConfig.Card.Zoom).
+		zoom = (GameConfig.Card.Zoom :: any).Hotbar,
 	})
 	preview.hero.Ambient = H.PreviewAmbient
 

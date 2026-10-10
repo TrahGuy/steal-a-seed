@@ -279,6 +279,8 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 		position = UDim2.fromOffset(4, 3),
 		scrim = 1,
 		fit = 0.92,
+		-- A grown creature's face and upper body (2026-10-10, GameConfig.Card.Zoom).
+		zoom = (GameConfig.Card.Zoom :: any).Bag,
 	})
 	preview.hero.Ambient = T.PreviewAmbient
 
