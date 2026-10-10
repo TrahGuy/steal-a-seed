@@ -78,6 +78,8 @@ export type Card = {
 	stack: TextLabel,
 	-- A trap's placements still available, bottom centre (2026-10-04).
 	uses: TextLabel,
+	-- A pod's size word, top right (2026-10-10).
+	size: TextLabel,
 	-- The trigger cooldown's seconds, over the picture (2026-10-05), and
 	-- whether it is running (the picture's dim is then cool's, not paint's).
 	timer: TextLabel,
@@ -127,7 +129,28 @@ export type Paint = {
 	-- ("4:05"), where a trap's count goes. nil and false for anything else.
 	podReady: boolean?,
 	podClock: string?,
+	-- 2026-10-10 (Michael on v1047: "No way to view the size of eggs in the
+	-- hotbar"): a pod's size word ("Titan") and its tier's colour; nil for
+	-- anything else, and for a Secret or Rain pod, whose word is its rarity.
+	size: string?,
+	sizeColour: Color3?,
 }
+
+-- Where a pod's size word stands, at the card's sizes: top right, from 2 px
+-- past the slot number's one digit (at most 0.6 of its size wide, measured:
+-- "0" is 6 px at 10) to the right inset, as tall as the stack's numeral; the
+-- word shrinks to fit (never under SIZE_MIN), never past StackSize. COLOSSAL is
+-- 35 px at 7: a phone's card has 38 for it, a desktop's 47.
+local SIZE_MIN = 7
+local function placeSize(label: TextLabel, H: any)
+	label.Position = UDim2.new(1, -H.StackInset, 0, H.NumeralInset - 1)
+	label.Size = UDim2.fromOffset(H.SlotWidth - H.NumeralInset - math.ceil(H.NumeralSize * 0.6) - 2 - H.StackInset,
+		H.StackSize + 3)
+	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MaxTextSize = H.StackSize
+	end
+end
 
 function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: number): Card
 	--==========================================================================
@@ -277,6 +300,27 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 	uses.Parent = button
 	UIKit.stroke(uses, H.Ink, H.NumeralOutline + 0.3)
 
+	-- A pod's size (2026-10-10): its size word in its tier's colour, top right
+	-- beside the slot number -- what the Bag tile says, on the card.
+	local size = Instance.new("TextLabel")
+	size.Name = "Size"
+	size.AnchorPoint = Vector2.new(1, 0)
+	size.BackgroundTransparency = 1
+	size.Font = Enum.Font.FredokaOne
+	size.TextScaled = true
+	size.TextColor3 = WHITE
+	size.TextXAlignment = Enum.TextXAlignment.Right
+	size.TextYAlignment = Enum.TextYAlignment.Top
+	size.Text = ""
+	size.Visible = false
+	size.ZIndex = zIndex + 5
+	size.Parent = button
+	UIKit.stroke(size, H.Ink, H.NumeralOutline)
+	local sizeFit = Instance.new("UITextSizeConstraint")
+	sizeFit.MinTextSize = SIZE_MIN
+	sizeFit.Parent = size
+	placeSize(size, H)
+
 	-- A trap's trigger cooldown (2026-10-05): the seconds left, centred over the
 	-- picture, white on a dark keyline, above the count. Hidden the rest of the
 	-- time.
@@ -367,6 +411,7 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 		numberEdge = numberEdge,
 		stack = stack,
 		uses = uses,
+		size = size,
 		timer = timer,
 		cooling = false,
 		timerText = "",
@@ -405,6 +450,7 @@ function HotbarCard.restyle(card: Card, H: any)
 	card.uses.Position = UDim2.new(0.5, 0, 1, -H.TrapCountBottom)
 	card.uses.Size = UDim2.new(1, -4, 0, H.TrapCountSize + 3)
 	card.uses.TextSize = H.TrapCountSize
+	placeSize(card.size, H)
 	card.timer.Size = UDim2.new(1, -4, 0, H.TrapCoolSize + 4)
 	card.timer.TextSize = H.TrapCoolSize
 	card.accent.Position = UDim2.new(0.5, 0, 1, -H.AccentBottom)
@@ -439,6 +485,12 @@ function HotbarCard.paint(card: Card, H: any, p: Paint)
 		card.uses.Visible = true
 		card.uses.Text = podText
 		card.uses.TextColor3 = if p.podReady then POD_READY else WHITE
+	end
+	local sizeWord = p.size
+	card.size.Visible = sizeWord ~= nil and not empty
+	if sizeWord then
+		card.size.Text = string.upper(sizeWord)
+		card.size.TextColor3 = p.sizeColour or WHITE
 	end
 	local accent = p.accent
 	card.accent.Visible = accent ~= nil and not empty

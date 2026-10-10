@@ -439,7 +439,16 @@ local hotSlots: { HotSlot } = {}
 
 -- The name a player knows an item by: the visible face's, never a pod's species.
 local function visibleName(item: InventoryModel.Item?): string
-	return if item then InventoryModel.face(item).name else ""
+	if not item then
+		return ""
+	end
+	local face = InventoryModel.face(item)
+	-- A pod's size with its name (2026-10-10, Michael on v1047), as its card
+	-- says it: "Greenhollow pod · Titan". A Secret or Rain pod's word is its rarity.
+	if item.kind == "pod" and not item.hatched and face.variant ~= "" and not face.variantIsRarity then
+		return face.name .. " · " .. face.variant
+	end
+	return face.name
 end
 
 local function acquireHotSlot(index: number): HotSlot
@@ -997,6 +1006,11 @@ local function refreshHotbar()
 				-- A trap's placements still available, the server's own count.
 				uses = if isTrap and traps and traps.known then WeaponData.TrapsLeftText(traps.left) else nil,
 				usesEmpty = isTrap and traps ~= nil and traps.left == 0,
+				-- A pod's size word in its tier's colour (2026-10-10, Michael on v1047):
+				-- what its Bag tile says. Not a Secret or Rain pod's rarity word.
+				size = if item and item.kind == "pod" and not item.hatched and face and face.variant ~= ""
+					and not face.variantIsRarity then face.variant else nil,
+				sizeColour = if face then face.variantColour else nil,
 				-- A pod on the bar (2026-10-09): READY, or the time it has left.
 				podReady = item ~= nil and item.kind == "pod" and not item.hatched and item.hatchAt ~= nil
 					and Workspace:GetServerTimeNow() >= (item.hatchAt :: number),

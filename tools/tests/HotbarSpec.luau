@@ -171,6 +171,34 @@ local ok, err = pcall(function()
 			and math.abs(card.stroke.Transparency - HOT.EdgeTransparency) < 1e-4 and not card.stack.Visible
 			and not card.accent.Visible and card.preview.hero.ImageTransparency == 0,
 		"and back to plain")
+	-- A POD'S SIZE (2026-10-10, Michael on v1047: "No way to view the size of eggs
+	-- in the hotbar"): its size word, top right, in its tier's colour; it fits the
+	-- room beside the number at both faces, never drawn under 7 px; gone for
+	-- anything else.
+	do
+		local titan = Color3.fromRGB(240, 80, 70)
+		HotbarCard.paint(card, HOT, { empty = false, held = false, number = "4", name = "???", podClock = "4:05",
+			size = "Colossal", sizeColour = titan })
+		local fit = card.size:FindFirstChildOfClass("UITextSizeConstraint")
+		local roomFull = card.size.Size.X.Offset
+		local words = TextService:GetTextSize("COLOSSAL", 7, Enum.Font.FredokaOne, Vector2.new(400, 40)).X
+		check(card.size.Visible and card.size.Text == "COLOSSAL" and card.size.TextColor3 == titan
+				and card.size.AnchorPoint.X == 1 and card.size.TextScaled and fit ~= nil and fit.MinTextSize == 7
+				and fit.MaxTextSize == HOT.StackSize and words <= roomFull and card.uses.Text == "4:05",
+			"a pod's card says its size, top right in its tier's colour, beside its clock",
+			string.format("room %d, COLOSSAL at 7 px %d", roomFull, words))
+		local compactHot = table.clone(HOT)
+		for key, value in pairs(HOT.Compact) do
+			compactHot[key] = value
+		end
+		HotbarCard.restyle(card, compactHot)
+		local roomCompact = card.size.Size.X.Offset
+		check(words <= roomCompact and fit.MaxTextSize == HOT.Compact.StackSize,
+			"and still fits a phone's smaller card", string.format("room %d", roomCompact))
+		HotbarCard.restyle(card, HOT)
+		HotbarCard.paint(card, HOT, { empty = false, held = false, number = "4", name = "Nubkin" })
+		check(not card.size.Visible, "anything else has no size word")
+	end
 	HotbarCard.paint(card, HOT, { empty = false, held = false, number = "4", name = "Nubkin", restoring = true })
 	check(card.preview.hero.ImageTransparency > 0.5, "restoring after a respawn: the item is drawn dimmed")
 	HotbarCard.paint(card, HOT, { empty = false, held = false, number = "1", name = "Rootwood Bat", pending = true })
