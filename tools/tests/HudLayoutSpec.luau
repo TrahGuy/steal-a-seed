@@ -1245,13 +1245,13 @@ check(loadout:find("HudLayout.bag(layout,", 1, true) ~= nil
 check(layoutSource:find("right = shellW - 12 - 52 - padRight", 1, true) ~= nil
 		and panelSrc:find("HudLayout.bagSearch(bag, shellW, titleWidth, padLeft, padRight)", 1, true) ~= nil,
 	"the search row stops short of the close button wherever the header has moved it")
--- The second ScrollingFrame is the item menu's column (2026-10-10): its words
--- and its buttons, each built once by menuColumn (BagMenuSpec).
+-- The second ScrollingFrame is the item menu's part (2026-10-10): its words
+-- and its buttons, each built once by menuPart (BagMenuSpec).
 check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 0
 		and select(2, panelSrc:gsub('Instance.new%("ScrollingFrame"%)', "")) == 2
-		and select(2, panelSrc:gsub("menuColumn%(\"Menu", "")) == 2
+		and select(2, panelSrc:gsub("menuPart%(\"Menu", "")) == 2
 		and select(2, panelSrc:gsub('Instance.new%("UIGridLayout"%)', "")) == 1,
-	"one Bag grid, InventoryPanel's, built once -- nothing rebuilt; the menu's two columns built once too")
+	"one Bag grid, InventoryPanel's, built once -- nothing rebuilt; the menu's two parts built once too")
 
 local kit = Shared:FindFirstChild("UIKit").Source
 check(kit:find("function UIKit.railShape", 1, true) and kit:find("function UIKit.railBadge", 1, true)

@@ -73,15 +73,17 @@ local TEXT = LOOK.Text
 local function onLight(colour: Color3): Color3
 	return colour:Lerp(LOOK.Ink, 0.4)
 end
--- The item menu's measures (two columns since 2026-10-10: InventoryPanel.menuFit).
+-- The item menu's measures (drawn to fit since 2026-10-10: InventoryPanel.menuFit).
 local MENU_W = 228
 local MENU_PAD_X, MENU_PAD_TOP, MENU_PAD_BOTTOM = 10, 8, 10
 local MENU_INNER = MENU_W - 2 * MENU_PAD_X
-local MENU_ROW_GAP, MENU_SIDE_GAP = 4, 10
+local MENU_ROW_GAP = 4
 local MENU_BUTTON_H, MENU_BUTTON_GAP = 44, 4
 -- placeBeside's margin, on every edge of the screen.
 local MENU_MARGIN = 8
--- A column that scrolls: its bar, and the room its buttons keep clear of the
+-- Never drawn under half size: the owner's own "50% smaller".
+local MENU_MIN_SCALE = 0.5
+-- A part that scrolls: its bar, and the room its buttons keep clear of the
 -- clip on each side (a plate's keyline, and its hover growth).
 local MENU_BAR, MENU_CLEAR = 4, 6
 -- A Bag menu action's face (MenuKit), by the action's id.
@@ -411,30 +413,26 @@ local function inside(pt: Vector2, object: GuiObject): boolean
 end
 
 --==============================================================================
--- THE MENU'S SHAPE ON A SCREEN (2026-10-10)
+-- THE MENU'S SIZE ON A SCREEN (2026-10-10)
 --
 -- The owner's phone screenshot: a pod's menu -- six lines of details over
 -- INSTANT HATCH, Assign to slot, Favourite, Hold in hands, WHAT'S INSIDE? --
 -- ran off the bottom of a landscape phone, its last buttons out of reach. The
--- menu is two columns now, its words (MenuInfo) and its buttons (MenuActions):
---
---   * one over the other where the screen's height holds both -- a desktop,
---     and a phone's shorter menus: the menu every screen had before;
---   * side by side where it does not and the screen is wide enough for two (a
---     landscape phone always is);
---   * and a column still taller than the room scrolls, its bar showing --
---     never the menu off the screen. On a screen too narrow for two, the
---     buttons give way first, never to less than one button's height.
+-- owner's call: shrink it to fit. Its words over its buttons as ever, at full
+-- size wherever that fits (every desktop), else drawn smaller (a UIScale) by
+-- just as much as the screen needs, in steps of 0.01, never under half size.
+-- Past that (no listed screen) the buttons scroll, their bar showing, never
+-- under one button's height: never the menu off the screen.
 --
 -- `screen` is the gui's whole size, `info` the words' own height, `count` the
--- buttons. Every number in the gui's units, the menu's padding included; the
--- room is MENU_MARGIN clear of each edge (placeBeside's).
+-- buttons. `width` and `height` are the menu's own, its padding included,
+-- before `scale`; the room is MENU_MARGIN clear of each edge (placeBeside's).
 --==============================================================================
 export type MenuFit = {
-	side: boolean,
+	scale: number,
 	width: number,
 	height: number,
-	-- Each column's window: a column scrolls where its content is taller.
+	-- Each part's window: a part scrolls where its content is taller.
 	infoView: number,
 	actionsView: number,
 	-- The buttons' whole column.
@@ -445,18 +443,15 @@ function InventoryPanel.menuFit(screen: Vector2, info: number, count: number): M
 	local pad = MENU_PAD_TOP + MENU_PAD_BOTTOM
 	local actions = if count > 0 then count * MENU_BUTTON_H + (count - 1) * MENU_BUTTON_GAP else 0
 	local gap = if count > 0 then MENU_ROW_GAP else 0
-	local roomY = math.max(0, screen.Y - 2 * MENU_MARGIN) - pad
+	local roomY = math.max(0, screen.Y - 2 * MENU_MARGIN)
 	local roomX = math.max(0, screen.X - 2 * MENU_MARGIN)
-	local sideW = MENU_W + MENU_SIDE_GAP + MENU_INNER
-	if info + gap + actions <= roomY or count == 0 or sideW > roomX then
-		local actionsView = math.min(actions, math.max(MENU_BUTTON_H, roomY - info - gap))
-		local infoView = math.min(info, math.max(MENU_BUTTON_H, roomY - gap - actionsView))
-		return { side = false, width = MENU_W, height = pad + infoView + gap + actionsView, infoView = infoView,
-			actionsView = actionsView, actions = actions }
-	end
-	local actionsView = math.min(actions, math.max(MENU_BUTTON_H, roomY))
-	local infoView = math.min(info, math.max(MENU_BUTTON_H, roomY))
-	return { side = true, width = sideW, height = pad + math.max(infoView, actionsView), infoView = infoView,
+	local whole = pad + info + gap + actions
+	local scale = math.clamp(math.floor(math.min(roomY / whole, roomX / MENU_W) * 100) / 100, MENU_MIN_SCALE, 1)
+	-- The room inside the padding, in the menu's own units at that scale.
+	local inner = roomY / scale - pad
+	local actionsView = math.min(actions, math.max(MENU_BUTTON_H, inner - info - gap))
+	local infoView = math.min(info, math.max(MENU_BUTTON_H, inner - gap - actionsView))
+	return { scale = scale, width = MENU_W, height = pad + infoView + gap + actionsView, infoView = infoView,
 		actionsView = actionsView, actions = actions }
 end
 
@@ -814,10 +809,10 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	backdrop.ZIndex = 81
 	backdrop.Parent = gui
 	--==========================================================================
-	-- THE MENU: ITS WORDS AND ITS BUTTONS, TWO COLUMNS (2026-10-10)
+	-- THE MENU: ITS WORDS OVER ITS BUTTONS, DRAWN TO FIT (2026-10-10)
 	--
-	-- One over the other, or side by side where a screen is too short for that
-	-- (InventoryPanel.menuFit); fitMenu lays them out on every open, and again
+	-- Full size where it fits, else smaller by its own UIScale, never under half
+	-- (InventoryPanel.menuFit); fitMenu sizes it on every open, and again
 	-- whenever the words or the screen change size.
 	--==========================================================================
 	local menu = Instance.new("Frame")
@@ -836,6 +831,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	menu.Parent = gui
 	UIKit.corner(menu, 10)
 	keyline(menu, LOOK.SheetEdge, 1.5, 0.15)
+	local menuScale = Instance.new("UIScale")
+	menuScale.Parent = menu
 	local menuPad = Instance.new("UIPadding")
 	menuPad.PaddingLeft = UDim.new(0, MENU_PAD_X)
 	menuPad.PaddingRight = UDim.new(0, MENU_PAD_X)
@@ -846,31 +843,31 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 	menuLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	menuLayout.Padding = UDim.new(0, MENU_ROW_GAP)
 	menuLayout.Parent = menu
-	-- A column of the menu: it scrolls only while its content is taller than it.
-	local function menuColumn(name: string, order: number, gap: number): (ScrollingFrame, UIListLayout)
-		local column = Instance.new("ScrollingFrame")
-		column.Name = name
-		column.BackgroundTransparency = 1
-		column.BorderSizePixel = 0
-		column.Size = UDim2.fromOffset(MENU_INNER, 0)
-		column.CanvasSize = UDim2.new()
-		column.ScrollingDirection = Enum.ScrollingDirection.Y
-		column.ScrollingEnabled = false
-		column.ClipsDescendants = false
-		column.ScrollBarThickness = 0
-		column.ScrollBarImageColor3 = LOOK.WellEdge
-		column.Selectable = false
-		column.LayoutOrder = order
-		column.ZIndex = 83
-		column.Parent = menu
+	-- A part of the menu: it scrolls only while its content is taller than it.
+	local function menuPart(name: string, order: number, gap: number): (ScrollingFrame, UIListLayout)
+		local part = Instance.new("ScrollingFrame")
+		part.Name = name
+		part.BackgroundTransparency = 1
+		part.BorderSizePixel = 0
+		part.Size = UDim2.fromOffset(MENU_INNER, 0)
+		part.CanvasSize = UDim2.new()
+		part.ScrollingDirection = Enum.ScrollingDirection.Y
+		part.ScrollingEnabled = false
+		part.ClipsDescendants = false
+		part.ScrollBarThickness = 0
+		part.ScrollBarImageColor3 = LOOK.WellEdge
+		part.Selectable = false
+		part.LayoutOrder = order
+		part.ZIndex = 83
+		part.Parent = menu
 		local list = Instance.new("UIListLayout")
 		list.SortOrder = Enum.SortOrder.LayoutOrder
 		list.Padding = UDim.new(0, gap)
-		list.Parent = column
-		return column, list
+		list.Parent = part
+		return part, list
 	end
-	local menuInfo, infoList = menuColumn("MenuInfo", 1, 4)
-	local menuActions = menuColumn("MenuActions", 2, MENU_BUTTON_GAP)
+	local menuInfo, infoList = menuPart("MenuInfo", 1, 4)
+	local menuActions = menuPart("MenuActions", 2, MENU_BUTTON_GAP)
 	-- The buttons' bar takes its own width (their height never changes with it);
 	-- the words' bar lies over them, so it can never re-wrap them.
 	menuActions.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
@@ -922,20 +919,33 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			local rarity = entry.rarity
 			if rarity and RarityFX.style(rarity) then
 				-- "Rarity:" in cream, the word in its own label beside it, so the
-				-- light crosses the word and nothing else.
-				local row = line(parent, i + 1, entry.key .. ":", 12, TEXT, z)
+				-- light crosses the word and nothing else. Side by side by a list,
+				-- never by TextBounds: a UIScale over the sheet (the menu drawn to
+				-- fit, a TV's) changes what TextBounds reads, never a list's gap.
+				local row = line(parent, i + 1, "", 12, TEXT, z)
 				row.AutomaticSize = Enum.AutomaticSize.None
 				row.TextWrapped = false
+				local rowList = Instance.new("UIListLayout")
+				rowList.FillDirection = Enum.FillDirection.Horizontal
+				rowList.SortOrder = Enum.SortOrder.LayoutOrder
+				rowList.Padding = UDim.new(0, 4)
+				rowList.Parent = row
+				local key = line(row, i + 1, entry.key .. ":", 12, TEXT, z)
+				key.Name = "Key"
+				key.Size = UDim2.new(0, 0, 1, 0)
+				key.AutomaticSize = Enum.AutomaticSize.X
+				key.TextWrapped = false
+				key.LayoutOrder = 1
 				local word = Instance.new("TextLabel")
 				word.Name = "RarityWord"
 				word.BackgroundTransparency = 1
-				word.Position = UDim2.fromOffset(row.TextBounds.X + 4, 0)
 				word.Size = UDim2.new(0, 0, 1, 0)
 				word.AutomaticSize = Enum.AutomaticSize.X
 				word.Font = Enum.Font.FredokaOne
 				word.TextSize = 12
 				word.TextXAlignment = Enum.TextXAlignment.Left
 				word.Text = entry.value
+				word.LayoutOrder = 2
 				-- One layer up, so a Secret's halo (one under the word) still
 				-- clears the sheet behind it.
 				word.ZIndex = z + 1
@@ -946,10 +956,6 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 				RarityFX.setText(h, rarity, entry.colour or TEXT)
 				RarityFX.setActive(h, true)
 				table.insert(handles, h)
-				-- The key's width is only known once it is drawn.
-				row:GetPropertyChangedSignal("TextBounds"):Connect(function()
-					word.Position = UDim2.fromOffset(row.TextBounds.X + 4, 0)
-				end)
 			else
 				local l = line(parent, i + 1, entry.key .. ": " .. entry.value, 12, TEXT, z)
 				local colour = entry.colour
@@ -1032,43 +1038,52 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		end
 	end
 
-	-- A column's window: scrolling, clipped and barred only while its content is
+	-- A part's window: scrolling, clipped and barred only while its content is
 	-- taller than the window. Answers whether it scrolls.
-	local function window(column: ScrollingFrame, view: number, content: number): boolean
+	local function window(part: ScrollingFrame, view: number, content: number): boolean
 		local scrolls = content > view + 0.5
-		column.Size = UDim2.fromOffset(MENU_INNER, view)
-		column.CanvasSize = UDim2.fromOffset(0, if scrolls then content else 0)
-		column.ScrollingEnabled = scrolls
-		column.ClipsDescendants = scrolls
-		column.ScrollBarThickness = if scrolls then MENU_BAR else 0
+		part.Size = UDim2.fromOffset(MENU_INNER, view)
+		part.CanvasSize = UDim2.fromOffset(0, if scrolls then content else 0)
+		part.ScrollingEnabled = scrolls
+		part.ClipsDescendants = scrolls
+		part.ScrollBarThickness = if scrolls then MENU_BAR else 0
 		if not scrolls then
-			column.CanvasPosition = Vector2.zero
+			part.CanvasPosition = Vector2.zero
 		end
 		return scrolls
 	end
 
-	-- The open menu laid out to the screen (InventoryPanel.menuFit), its words
-	-- measured as drawn: on an open, and whenever they or the screen change size.
-	local function fitMenu()
+	-- The open menu drawn to the screen (InventoryPanel.menuFit), its words
+	-- measured as drawn -- under the gui's scale and the menu's own -- on an
+	-- open (`fresh`) and whenever the screen changes size, and again when the
+	-- words do. A re-measure moves the scale by 0.02 or more only: a word drawn
+	-- at a new scale can round a hair differently, and the two must never chase.
+	local function fitMenu(fresh: boolean?)
 		local anchor = menuAnchor
 		if not anchor or not menu.Visible then
 			return
 		end
 		local k = scaleNow()
-		local words = infoList.AbsoluteContentSize.Y / k
+		local words = infoList.AbsoluteContentSize.Y / (k * menuScale.Scale)
 		local fit = InventoryPanel.menuFit(gui.AbsoluteSize / k, words, menuCount)
-		menuLayout.FillDirection = if fit.side then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
-		menuLayout.Padding = UDim.new(0, if fit.side then MENU_SIDE_GAP else MENU_ROW_GAP)
+		if fresh or math.abs(fit.scale - menuScale.Scale) >= 0.02 then
+			menuScale.Scale = fit.scale
+		end
 		window(menuInfo, fit.infoView, words)
 		local scrolls = window(menuActions, fit.actionsView, fit.actions)
 		actionsClear.PaddingLeft = UDim.new(0, if scrolls then MENU_CLEAR else 0)
 		actionsClear.PaddingRight = UDim.new(0, if scrolls then MENU_CLEAR else 0)
 		menuActions.Visible = menuCount > 0
 		menu.Size = UDim2.fromOffset(fit.width, fit.height)
-		placeBeside(menu, anchor, fit.width, fit.height)
+		local drawn = menuScale.Scale
+		placeBeside(menu, anchor, fit.width * drawn, fit.height * drawn)
 	end
-	infoList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(fitMenu)
-	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitMenu)
+	infoList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		fitMenu()
+	end)
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		fitMenu(true)
+	end)
 
 	local function openMenu(anchor: Rect, spec: MenuSpec, onPick: (string) -> ())
 		hideTooltip()
@@ -1103,7 +1118,7 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 				-- HATCH (2026-10-09): held to the end, never a tap.
 				table.insert(menuHolds, holdButton(mb, hold, chosen))
 			else
-				-- A tap, never the end of a scroll: on a short screen the buttons scroll.
+				-- A tap, never the end of a scroll (past half size the buttons scroll).
 				MenuKit.tap(b, menuActions, function()
 					chosen()
 				end)
@@ -1114,8 +1129,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		menuCount = #spec.actions
 		backdrop.Visible = true
 		menu.Visible = true
-		fitMenu()
-		task.defer(fitMenu)
+		fitMenu(true)
+		task.defer(fitMenu, true)
 		-- B closes the menu before it closes the Bag (priority over the panel's).
 		ContextActionService:BindActionAtPriority("SeedBagMenuBack", function(_, inputState)
 			if inputState == Enum.UserInputState.Begin then
