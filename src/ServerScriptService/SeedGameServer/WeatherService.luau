@@ -216,6 +216,46 @@ local function moveCharacter(player: any, cf: CFrame): boolean
 end
 local mover: (any, CFrame) -> boolean = moveCharacter
 
+--==============================================================================
+-- WHO IS DOWN (2026-10-10, Michael on v1047: "In the rain biome I got hit right
+-- at the timer and wasn't teleported out ... def can get ragdolled and skip the
+-- teleport")
+--
+-- A knocked-down body -- a guardian's throw or a bat's hit, both NestService's
+-- ragdoll -- is moved by its own player's computer: the ragdoll hands every
+-- assembly to the victim, and ThrowFX keeps setting the body where it landed
+-- until its joints are back. A server move made while it is down is undone, and
+-- a body in the air over the void is not "on" the terrain for a tick, which let
+-- the terrain go while it was still coming down.
+--
+-- So the evacuation leaves a player who is down alone -- no move, no word --
+-- and moves them on the first tick they are up; and the terrain is kept while
+-- anybody is still down, LimpHoldSeconds past the fade at the most. Anybody:
+-- a throw can carry a body far off the terrain and the nest can set it back on
+-- it, and a knock-down elsewhere only keeps a faded biome a few seconds longer.
+--==============================================================================
+local function isDown(player: any): boolean
+	local character = player.Character
+	if typeof(character) ~= "Instance" or not character:IsA("Model") then
+		return false
+	end
+	if NestService.IsRagdolled(character) then
+		return true
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	return humanoid ~= nil and humanoid.PlatformStand
+end
+local limp: (any) -> boolean = isDown
+
+local function anyDown(): boolean
+	for _, player in ipairs(playersNow()) do
+		if limp(player) then
+			return true
+		end
+	end
+	return false
+end
+
 local function remote(): RemoteEvent?
 	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
 	local remotes = if seedGame then seedGame:FindFirstChild("Remotes") else nil
@@ -259,6 +299,11 @@ end
 
 function WeatherService.useMover(fn: ((any, CFrame) -> boolean)?)
 	mover = fn or moveCharacter
+end
+
+-- Who is knocked down (WHO IS DOWN); a spec stands in its own.
+function WeatherService.useLimp(fn: ((any) -> boolean)?)
+	limp = fn or isDown
 end
 
 function WeatherService.useBroadcast(fn: ((string, any, { any }?) -> ())?)
@@ -357,7 +402,8 @@ end
 -- Only those on the terrain, only to the grass before the ramp: the next clear
 -- spot in the landing grid for each, so nobody lands in anything or on anyone.
 -- Each is told once. Run at the close and again every tick of the closing, so
--- anyone who was still on the bridge, or who got past the gate, is put back.
+-- anyone who was still on the bridge, or who got past the gate, is put back --
+-- and anyone who was down is moved the tick they stand (WHO IS DOWN).
 --==============================================================================
 local function evacuate(event: Event): number
 	local occupants = WeatherService.Occupants()
@@ -367,6 +413,11 @@ local function evacuate(event: Event): number
 	local moved = 0
 	local slot = 0
 	for _, player in ipairs(occupants) do
+		if limp(player) then
+			-- Down: their own computer would undo the move. Not told either: they
+			-- are told when they are really moved.
+			continue
+		end
 		local own: { Instance } = {}
 		if typeof(player.Character) == "Instance" then
 			table.insert(own, player.Character)
@@ -483,11 +534,13 @@ function WeatherService.Step(now: number)
 	if event.state == "closing" then
 		-- Anyone still on the terrain is put back; the terrain goes only on a
 		-- step that found it empty AND moved nobody -- a straggler put back this
-		-- step keeps it one more tick, so they are off it before it is gone.
+		-- step keeps it one more tick, so they are off it before it is gone --
+		-- and nobody is still down (WHO IS DOWN), LimpHoldSeconds at the most.
 		local moved = evacuate(event)
 		local closingAt = event.closingAt or now
-		if moved == 0 and now >= closingAt + W.ThickenSeconds + W.FadeSeconds
-			and #WeatherService.Occupants() == 0 then
+		local faded = closingAt + W.ThickenSeconds + W.FadeSeconds
+		local held = now < faded + W.LimpHoldSeconds and anyDown()
+		if moved == 0 and now >= faded and not held and #WeatherService.Occupants() == 0 then
 			finish(event)
 		end
 	end

@@ -4795,6 +4795,11 @@ GameConfig.Weather = {
 	-- is removed only after both, and only once nobody is standing on it.
 	ThickenSeconds = 2,
 	FadeSeconds = 4,
+	-- And it waits, this long past the fade at most, while anybody is still
+	-- knocked down (2026-10-10): a body that is down is moved by its own player's
+	-- computer, so it is evacuated once it stands (WeatherService, WHO IS DOWN).
+	-- A guardian's throw lasts about 12 s at the most.
+	LimpHoldSeconds = 15,
 	-- How long the rain and the fog take to fade in, and out, on a client.
 	RainFadeSeconds = 2.5,
 	--==========================================================================

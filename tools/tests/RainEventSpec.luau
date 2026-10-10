@@ -50,6 +50,7 @@ local BonusChestService = require(Server.BonusChestService)
 local SacrificeService = require(Server.SacrificeService)
 local OfflineEarnings = require(Server.OfflineEarnings)
 local CarryService = require(Server.CarryService)
+local NestService = require(Server.NestService)
 
 local out = {}
 local pass, fail = 0, 0
@@ -494,6 +495,63 @@ local ok, err = pcall(function()
 	now += 0.5
 	WeatherService.Step(now)
 	check(WeatherService.State() == nil and destroys == 1, "the next tick, with nobody on it, the terrain goes")
+	-- WHO IS DOWN (2026-10-10, Michael on v1047: knocked down at the timer and not
+	-- teleported out). A player who is down is left alone -- no move, no word --
+	-- and moved the first tick they stand; the terrain waits while anybody is
+	-- down, LimpHoldSeconds past the fade at the most.
+	do
+		reset()
+		local downSet = {}
+		WeatherService.useLimp(function(p)
+			return downSet[p] == true
+		end)
+		local e = standIn("DownInside", 1005, Vector3.new(450, 3, 140))
+		local f = standIn("DownElsewhere", 1006, Vector3.new(120, 3, 40))
+		players = { owner, e, f }
+		ask(owner, "start", 60)
+		now += W.ToastDelaySeconds
+		WeatherService.Step(now)
+		downSet[e] = true
+		ask(owner, "end", nil)
+		check(#moves == 0 and #sentOf(EVENTS.Evacuated) == 0,
+			"a player knocked down on the terrain at the end is neither moved nor told while down", #moves)
+		-- Thrown off it (below the floor, so not on it for a tick): past the fade
+		-- the terrain still waits.
+		e.Character:PivotTo(CFrame.new(450, -30, 140))
+		now += W.ThickenSeconds + W.FadeSeconds + 0.5
+		WeatherService.Step(now)
+		check(WeatherService.State() ~= nil and destroys == 0 and #WeatherService.Occupants() == 0,
+			"past the fade the terrain waits while they are down, even thrown off it", destroys)
+		-- Set back on it (the nest's set-down) and up: moved and told, once.
+		e.Character:PivotTo(CFrame.new(872, 3, 186))
+		downSet[e] = nil
+		now += 0.25
+		WeatherService.Step(now)
+		check(#moves == 1 and moves[1].player == e and #sentOf(EVENTS.Evacuated) == 1
+				and not RainBiome.Contains(e.Character:GetPivot().Position),
+			"the tick they stand they are moved off the terrain, and told once", #moves)
+		now += 0.5
+		WeatherService.Step(now)
+		check(WeatherService.State() == nil and destroys == 1, "and the next tick, nobody on it or down, the terrain goes")
+		-- The cap: somebody down (here, nowhere near it) never holds it for ever.
+		reset()
+		ask(owner, "start", 60)
+		now += W.ToastDelaySeconds
+		WeatherService.Step(now)
+		downSet[f] = true
+		ask(owner, "end", nil)
+		now += W.ThickenSeconds + W.FadeSeconds + 1
+		WeatherService.Step(now)
+		local held = WeatherService.State() ~= nil and destroys == 0
+		now += W.LimpHoldSeconds
+		WeatherService.Step(now)
+		check(held and WeatherService.State() == nil and destroys == 1 and #moves == 0
+				and W.LimpHoldSeconds >= 12 and W.LimpHoldSeconds <= 20,
+			"a player down anywhere holds the terrain, LimpHoldSeconds (12-20 s) past the fade at the most",
+			string.format("held %s, destroys %d", tostring(held), destroys))
+		downSet[f] = nil
+		players = { owner, a }
+	end
 	-- The real mover: a body is pivoted to the spot with its momentum taken off.
 	WeatherService.useMover(nil)
 	players = { owner, a }
@@ -515,6 +573,14 @@ local ok, err = pcall(function()
 		"a carrier moved by the server keeps the pod: the travel guard is re-anchored, never undone")
 	local okNote = pcall(CarryService.NoteServerMove, a, Vector3.new(232, 3, 70))
 	check(okNote, "telling the guard about a player who carries nothing is a no-op")
+	-- WHO IS DOWN, in the real game: NestService's ragdoll (a guardian's throw and
+	-- a bat's hit both) or PlatformStand; skipped before any move; the hold.
+	check(string.find(weatherSrc, "if NestService.IsRagdolled(character) then\n\t\treturn true", 1, true) ~= nil
+			and string.find(weatherSrc, "return humanoid ~= nil and humanoid.PlatformStand", 1, true) ~= nil
+			and string.find(weatherSrc, "if limp(player) then", 1, true) ~= nil
+			and string.find(weatherSrc, "local held = now < faded + W.LimpHoldSeconds and anyDown()", 1, true) ~= nil
+			and type(NestService.IsRagdolled) == "function",
+		"down is NestService's ragdoll or PlatformStand: never moved while down, and the terrain waits for it")
 	players = {}
 
 	--==========================================================================
@@ -992,6 +1058,7 @@ WeatherService.usePlayers(nil)
 WeatherService.useTerrain(nil)
 WeatherService.useBroadcast(nil)
 WeatherService.useMover(nil)
+WeatherService.useLimp(nil)
 WeatherService.Init()
 scratch:Destroy()
 if not ok then

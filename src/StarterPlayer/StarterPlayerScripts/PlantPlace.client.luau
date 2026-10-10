@@ -316,7 +316,7 @@ end
 --
 -- BOUND ONLY WHILE SOMETHING IS HELD, because createTouchButton draws a button
 -- on a phone and a button that does nothing is worse than no button. It
--- appears with the plant in your hands and goes when they are empty.
+-- appears with a plant or a pod in your hands and goes when they are empty.
 --
 -- It cannot touch a raid carry. That pod is a Model welded to the root, not a
 -- Tool, and UnequipTools does not know it exists -- which is exactly the
@@ -398,8 +398,9 @@ end
 -- button use: back into the Backpack, whole, in its slot.
 --
 -- Only while a plant is in the hands, the last input was a controller, and no
--- panel is open. A press that lands while the player is steering a UI
--- selection is the UI's, never the world's.
+-- panel is open -- except B, which puts a held pod away too (2026-10-10). A
+-- press that lands while the player is steering a UI selection is the UI's,
+-- never the world's.
 --==============================================================================
 local VALID = Color3.fromRGB(142, 220, 68)
 local INVALID = Color3.fromRGB(255, 118, 100)
@@ -656,12 +657,16 @@ end
 local PAD_PLACE_ACTION = "SeedPadPlant"
 local PAD_AWAY_ACTION = "SeedPadPutAway"
 local padBound = false
+local padPlantBound = false
 
 local function padPlant(_name: string, state: Enum.UserInputState): Enum.ContextActionResult?
 	if state ~= Enum.UserInputState.Begin then
 		return Enum.ContextActionResult.Pass
 	end
-	if uiHasTheButtons() or not heldTool() then
+	-- A plant only: a pod is never placed (the frame below binds RT for plants
+	-- only; this covers the frame a pod is swapped in).
+	local held = heldTool()
+	if uiHasTheButtons() or not held or held:GetAttribute("Hatched") ~= true then
 		return Enum.ContextActionResult.Pass
 	end
 	local point, soil = soilPoint(padAim())
@@ -689,21 +694,28 @@ local function padPutAway(name: string, state: Enum.UserInputState): Enum.Contex
 	return unequip(name, state)
 end
 
-local function setPadBound(want: boolean)
-	if want == padBound then
-		return
+-- B for anything in the hands; RT only while that is a plant (`plant`).
+local function setPadBound(want: boolean, plant: boolean?)
+	if want ~= padBound then
+		padBound = want
+		if want then
+			ContextActionService:BindActionAtPriority(PAD_AWAY_ACTION, padPutAway, false,
+				Enum.ContextActionPriority.Medium.Value, Enum.KeyCode.ButtonB)
+		else
+			ContextActionService:UnbindAction(PAD_AWAY_ACTION)
+		end
 	end
-	padBound = want
-	if want then
-		-- Above the engine's own RT-activates-the-tool, so planting is the whole
-		-- of what the trigger does while a plant is in the hands.
-		ContextActionService:BindActionAtPriority(PAD_PLACE_ACTION, padPlant, false,
-			Enum.ContextActionPriority.High.Value, Enum.KeyCode.ButtonR2)
-		ContextActionService:BindActionAtPriority(PAD_AWAY_ACTION, padPutAway, false,
-			Enum.ContextActionPriority.Medium.Value, Enum.KeyCode.ButtonB)
-	else
-		ContextActionService:UnbindAction(PAD_PLACE_ACTION)
-		ContextActionService:UnbindAction(PAD_AWAY_ACTION)
+	local wantPlant = want and plant == true
+	if wantPlant ~= padPlantBound then
+		padPlantBound = wantPlant
+		if wantPlant then
+			-- Above the engine's own RT-activates-the-tool, so planting is the whole
+			-- of what the trigger does while a plant is in the hands.
+			ContextActionService:BindActionAtPriority(PAD_PLACE_ACTION, padPlant, false,
+				Enum.ContextActionPriority.High.Value, Enum.KeyCode.ButtonR2)
+		else
+			ContextActionService:UnbindAction(PAD_PLACE_ACTION)
+		end
 	end
 end
 
@@ -715,26 +727,35 @@ player.CharacterRemoving:Connect(function()
 end)
 
 RunService.RenderStepped:Connect(function()
+	--==========================================================================
+	-- PUT AWAY IS FOR WHATEVER IS IN THE HANDS, PODS TOO (2026-10-10, Michael on
+	-- v1047: "Eggs in the hotbar don't have a put away prompt. I had to buy a
+	-- bat to stop carrying my massive egg."). Q, the touch Put away button and B
+	-- on a controller follow `held`. From 10-09 they followed the plant-only
+	-- filter below, so a held pod had none of them -- and a controller with one
+	-- filled slot had no other way to empty its hands (LB/RB land on the pod).
+	--==========================================================================
+	local held = heldTool()
+	setBound(held ~= nil)
 	-- A PLANT, not a pod (2026-10-09, pods hatch in the Bag): a pod is never
 	-- placed, so no disc or reticle offers to. A click with one still reaches
 	-- the server, which answers "Pods hatch in your Bag now".
-	local tool = heldTool()
+	local tool = held
 	if tool and tool:GetAttribute("Hatched") ~= true then
 		tool = nil
 	end
-	setBound(tool ~= nil)
 	-- On a controller with a panel up, the panel has the buttons and the world
 	-- shows nothing: no disc behind it, no reticle over it. The same while the
 	-- selection is out on the HUD: RT and B are the UI's then, and a reticle
 	-- still offering "RT PLANT" would be offering a press that does nothing.
-	local pad = tool ~= nil and PadInput.active()
+	local pad = held ~= nil and PadInput.active()
 	if pad and uiHasTheButtons() then
 		setPadBound(false)
 		showPad(false)
 		hideGhost()
 		return
 	end
-	setPadBound(pad)
+	setPadBound(pad, tool ~= nil)
 	if not tool then
 		hideGhost()
 		showPad(false)

@@ -1,13 +1,52 @@
 # Steal a Seed — Session Handoff
 
-## MICHAEL'S v1047 REPORT — PLAN AWAITING THE OWNER'S APPROVAL, 2026-10-10 (CLAUDE)
+## v1047 FEEDBACK, BATCH 1 — THREE LIVE BUGS FIXED, 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+The owner approved KB/V1047-FEEDBACK-PLAN.md: "approve all your picks, start batch 1, terminal will still work". The other session confirmed it builds nothing and handed Batch 2 to this one.
+
+1. **A held pod can be put away again** (PlantPlace).
+   - Q, the touch Put away button and B on a controller follow whatever is held. From aad1639 (v1047) they followed the plant-only filter, so a held pod had none of them, and a controller with one filled slot could not empty its hands.
+   - The disc, the reticle and RT stay plant-only until pods become placeable (Batch 2). `setPadBound(want, plant)` binds B for anything held and RT for a plant only; padPlant passes for a pod.
+2. **The wheel keeps the controller in the panel** (WheelUI `paint()`).
+   - SPIN stays Selectable while the wheel turns. A press mid-spin already did nothing: Activated's guard.
+   - Where the selection sat on a panel button that is no longer selectable or shown (SPIN after the last spin, CLAIM once claimed), it returns to `padFirst`.
+   - Before, the engine re-homed it to the HUD's BIOMES / TELEPORT / OBBY row, and the next A asked for a teleport.
+3. **The rain's evacuation waits out a knock-down** (WeatherService, WHO IS DOWN).
+   - A player who is down (NestService.IsRagdolled, which covers guardian throws and bat hits, or PlatformStand) is neither moved nor told; they are moved the first tick they stand.
+   - The terrain is kept while anybody in the server is down, `GameConfig.Weather.LimpHoldSeconds` (15) past the fade at the most.
+   - Carried pods banking on evacuation is unchanged; the owner deferred that.
+   - Seam: `WeatherService.useLimp`.
+
+**Specs**:
+- ControllerSpec 65/0 (2 new);
+- WheelSpec 163/0 (1 new);
+- RainEventSpec 94/0 (6 new: down at the end, held past the fade even thrown off it, moved and told once on standing, the cap, the source pins);
+- AutoWeatherSpec, RainPodsSpec, SecretToastSpec, PlacementCircleSpec, HatchInBagSpec green.
+- 3 of 3 rain mutants caught: moving the down, no hold, no cap. Each mutant swapped WeatherService.Source in Studio Edit for its run and restored it; the probe proved Studio equals the disk afterwards.
+- The full suite runs once at the end of Batch 2, before that push (the owner's lean rules). Run it first if Batch 1 is to be published alone.
+
+**Seen in Play** (desktop 1251 x 716, throwaway store `SeedTest_v1047b1_20261010`, cleared: probe 336 / 0 differ / 0 ZZ / marker absent). Captures are in `output/v1047-batch1/` 01-06.
+- **Rain:**
+  - A player ragdolled in the entrance room (NestService.RagdollOn) when the rain was ended was not moved.
+  - The biome stayed "closing" 8 s after the end (the fade is 6).
+  - On RagdollOff they were moved to the landing grass (232, 3, 55), "BACK AT THE ENTRANCE" showed, and the biome went within 1.5 s.
+- **Pod:**
+  - A banked petalpip pod in hand bound SeedUnequip, and Q put it back in the Backpack.
+  - In forced controller mode (PadInput.active patched), SeedPadPutAway (B) was bound and SeedPadPlant (RT) was not.
+- **Wheel**, forced controller mode, 2 spins granted:
+  - the selection stayed on SPIN during and after spin 1;
+  - after the last spin it went to the panel's "?" button, not the HUD.
+  - Real controller presses cannot be sent from here; Michael confirms on Xbox.
+
+## MICHAEL'S v1047 REPORT — PLAN APPROVED 2026-10-10 (CLAUDE)
 
 - [KB/V1047-FEEDBACK-PLAN.md](V1047-FEEDBACK-PLAN.md): his ten points traced to code.
 - Batch 1, three live bugs:
   - **held pods lost "put away"** (Q / touch PUT AWAY / pad B) in aad1639;
   - **the console wheel loses its selection after every spin**, and the next A press asks for a teleport;
   - **the rain's evacuation skips ragdolled players**.
-- Batch 2, seven owner calls: hotbar items also in the Bag, size on pod cards, hatch from the hand, tap a bed with a ready pod, hands full while carrying, no ground drop, the signs.
+- Batch 2, every pick approved: hotbar items also in the Bag, the size word on pod cards, HOLD TO HATCH for a held READY pod, hands full while carrying, no ground drop, the signs (REBIRTH x1.5, BAT SHOP! x1.1, Pod Guide x1.5).
+  - "Tap a bed with a ready pod" was replaced the same day by the owner: **pods can be planted in beds again**. A planted pod keeps its time left and gets the hold-E Hatch and INSTANT HATCH in the bed, as before 10-09.
 - It goes BEFORE the queue below ("TOMORROW (2026-10-10)").
 
 ## PUBLISHED AS v1047 — 2026-10-09 16:31 UTC (00:31 on 2026-10-10, the owner's time) (CLAUDE)

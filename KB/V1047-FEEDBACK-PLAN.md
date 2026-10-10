@@ -1,6 +1,24 @@
 # MICHAEL'S v1047 REPORT — three fixes now, seven owner calls (plan, 2026-10-10)
 
-**Status: AWAITING THE OWNER'S APPROVAL.** Nothing is built yet.
+**Status: APPROVED 2026-10-10** (the owner: "approve all your picks, start batch 1, terminal will
+still work"). Every recommendation was taken:
+
+1. Batch 1 (fixes 1-3): go, now.
+2. Hotbar items also show in the Bag, framed with their slot number. This reverses the 2026-10-03 rule.
+3. The size word on pod cards.
+4. HOLD TO HATCH for a held READY pod; no Instant Hatch on a held growing pod.
+5. ~~Tapping a bed with a READY pod hatches it there.~~ **Replaced the same day** (the owner: "i think
+   we also need to make the pods placeable on plots again too"): **pods can be planted in a bed again**,
+   as before 10-09, or left to hatch in the Bag. The defaults, told to the owner:
+   - planting keeps the time the pod has left (its Bag row's HatchAt; before 10-09 the timer restarted);
+   - in the bed: its countdown, INSTANT HATCH while growing, the hold-E Hatch when ready;
+   - it takes a bed like a plant, and thieves can't take it.
+   The nursery shelf stays a later idea.
+6. Carriers have full hands: the bat is put away, and there are no swings and no traps while carrying.
+7. No ground drop.
+8. Signs: REBIRTH x1.5, BAT SHOP! x1.1 where it hangs, Pod Guide boards x1.5 with the stands 3.5 studs further in.
+
+Batch 1 is being built first.
 
 ## Why
 

@@ -1575,6 +1575,19 @@ check(ui:find("if confirm.Visible and not may then", 1, true) ~= nil
 		and ui:find("padFirst.Value = if shop.open then shop.first()", 1, true) ~= nil,
 	"a card over the hub keeps the controller inside it (nothing behind is selectable, and a controller picked up "
 		.. "starts on the card), and the question goes too when the server stops saying this player may")
+-- THE CONTROLLER STAYS IN THE PANEL THROUGH A SPIN (2026-10-10, Michael on v1047:
+-- the selection left for the HUD's teleport row after every spin). SPIN stays
+-- selectable while the wheel turns -- a press then does nothing -- and a selection
+-- left on something no longer selectable or shown comes back to padFirst.
+check(ui:find("hubButton.Selectable = ready and not behind", 1, true) ~= nil
+		and ui:find("hubButton.Selectable = ready and not busy", 1, true) == nil
+		and ui:find("if spinning or waiting or usable() <= 0 then\n\t\treturn", 1, true) ~= nil
+		and ui:find("local had = GuiService.SelectedObject", 1, true) ~= nil
+		and ui:find("if open and had and had:IsDescendantOf(gui) and PadInput.active()\n\t\tand not (had.Selectable and "
+			.. "had.Visible) then", 1, true) ~= nil
+		and ui:find("GuiService.SelectedObject = first", 1, true) ~= nil,
+	"on a controller SPIN keeps the selection through a spin (a press mid-spin does nothing), and a selection left on "
+		.. "a button that went -- SPIN after the last spin, CLAIM -- comes back to the panel's first button")
 -- WHERE THE BUYING CONTROLS STAND, ON EVERY SCREEN. The panel's own layout code,
 -- cut out of its source and run over stand-ins that only record what they were
 -- given: a LocalScript cannot be required, and these are numbers, not drawing.

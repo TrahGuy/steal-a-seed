@@ -1371,6 +1371,9 @@ local function paint()
 		return
 	end
 
+	-- Where the controller's selection is before anything below changes it (THE
+	-- CONTROLLER STAYS IN THE PANEL, at the end).
+	local had = GuiService.SelectedObject
 	local count = usable()
 	local busy = spinning or waiting
 	local ready = count > 0
@@ -1385,10 +1388,13 @@ local function paint()
 	local card = shop.open == true or confirm.Visible
 	local behind = sheetOpen or card
 
-	-- Not tappable at 0 (screen 2), nor while a spin is in the air.
+	-- Not tappable at 0 (screen 2), nor while a spin is in the air. Still
+	-- SELECTABLE while one is (2026-10-10): a selected button that stops being
+	-- selectable sends the controller out of the panel, and a press mid-spin
+	-- already does nothing (Activated's guard).
 	hubButton.Active = ready and not busy
 	hubButton.AutoButtonColor = false
-	hubButton.Selectable = ready and not busy and not behind
+	hubButton.Selectable = ready and not behind
 
 	local words, colour, claim, rainbow, prize = lineState()
 	-- The prize's picture before its words, and TITAN or COLOSSAL lettering for
@@ -1463,6 +1469,24 @@ local function paint()
 	claimButton.NextSelectionUp = if hubButton.Selectable then hubButton else info
 	getSpins.NextSelectionLeft = if hubButton.Selectable then hubButton else info
 	getSpins.NextSelectionUp = close
+
+	--==========================================================================
+	-- THE CONTROLLER STAYS IN THE PANEL (2026-10-10, Michael on v1047: "when
+	-- using the spin wheel on console it deselects the wheel and goes up to the
+	-- teleport options after each spin"). SPIN stopped being selectable for the
+	-- spin, so the engine re-homed the selection to the HUD's top row -- and the
+	-- next A asked for a teleport. Where the selection sat on something here
+	-- that is no longer selectable or shown -- SPIN after the last spin, CLAIM
+	-- once claimed -- it comes back to the panel's first button, as showConfirm
+	-- does.
+	--==========================================================================
+	if open and had and had:IsDescendantOf(gui) and PadInput.active()
+		and not (had.Selectable and had.Visible) then
+		local first = padFirst.Value
+		if first and first:IsA("GuiObject") then
+			GuiService.SelectedObject = first
+		end
+	end
 
 	if sheetOpen then
 		paintFooter()
