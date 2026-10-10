@@ -23,6 +23,10 @@
 -- ownerTitleLook). Checked with the rainbow's steps, so a turned or resized
 -- screen follows. A desktop's titles are never touched.
 --
+-- THE PULSE (2026-10-10, the 100 titles): a rank-only rebirth's title grows its
+-- words once and settles back (Rebirth.Celebration.Pulse), told by RebirthFX on
+-- this screen at the celebration's burst; this loop runs smooth while it lasts.
+--
 -- LEAVES, FLOWERS AND MIST (2026-10-10, the owner's brief; GameConfig.TitleFX,
 -- TitleFX): round a rebirth title's words, under them, inside its band. Which
 -- profile is its PLAYER'S: their Rebirths attribute through Rebirth.title,
@@ -41,6 +45,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
+local RebirthCelebration = require(Shared:WaitForChild("RebirthCelebration"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local TitleFX = require(Shared:WaitForChild("TitleFX"))
 local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
@@ -49,6 +54,7 @@ local TITLE = GameConfig.OwnerTitle
 local REBIRTH = GameConfig.Rebirth.Title
 local REBIRTHS = GameConfig.Rebirth.Attributes.Rebirths
 local FX = GameConfig.TitleFX
+local PULSE = GameConfig.Rebirth.Celebration.Pulse
 local TRAPPED_UNTIL = GameConfig.Attributes.TrappedUntil
 
 -- Whether TrapUI's countdown is over this title's player right now.
@@ -118,9 +124,22 @@ end
 -- A rebirth title at this screen's size, or ADMIN at this screen's size and
 -- lift over it. Writes only what differs, so at scale 1 the server's values
 -- stand.
-local function place(gui: BillboardGui, scale: number, adminScale: number)
+local function place(gui: BillboardGui, scale: number, adminScale: number): boolean
+	local pulsing = false
 	if gui.Name == REBIRTH.Name then
 		local box, words, sub = GameConfig.rebirthTitleLook(scale)
+		-- A rank-only rebirth's pulse (2026-10-10; RebirthFX marks the title on
+		-- this screen at the burst): the words grow and settle back.
+		local at = gui:GetAttribute(PULSE.Attribute)
+		if type(at) == "number" then
+			local since = os.clock() - at
+			if since >= PULSE.Seconds or since < 0 then
+				gui:SetAttribute(PULSE.Attribute, nil)
+			else
+				pulsing = true
+				words = math.floor(words * RebirthCelebration.pulse(since) + 0.5)
+			end
+		end
 		local size = UDim2.fromOffset(box.X, box.Y)
 		if gui.Size ~= size then
 			gui.Size = size
@@ -148,6 +167,7 @@ local function place(gui: BillboardGui, scale: number, adminScale: number)
 			gui.SizeOffset = lift
 		end
 	end
+	return pulsing
 end
 
 local function track(instance: Instance)
@@ -205,12 +225,13 @@ task.spawn(function()
 		local camera = Workspace.CurrentCamera
 		local scale, adminScale = screenScales()
 		local seen = false
+		local pulsing = false
 		local colours: ColorSequence? = nil
 		for gui, rainbows in pairs(titles) do
 			if not gui.Parent then
 				titles[gui] = nil
 			else
-				place(gui, scale, adminScale)
+				pulsing = place(gui, scale, adminScale) or pulsing
 				local clear = not trapped(gui)
 				if gui.Enabled ~= clear then
 					gui.Enabled = clear
@@ -261,6 +282,6 @@ task.spawn(function()
 				layer.hide()
 			end
 		end
-		task.wait(if seen and not still then 1 / 30 else 0.5)
+		task.wait(if (seen and not still) or pulsing then 1 / 30 else 0.5)
 	end
 end)

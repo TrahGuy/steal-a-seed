@@ -112,23 +112,48 @@ local ok, err = pcall(function()
 		local s = Rebirth.title(n)
 		return s and s.Text or "-"
 	end
-	check(titleText(0) == "-" and titleText(1) == "SPROUT" and titleText(2) == "SEEDLING" and titleText(3) == "GARDENER"
-		and titleText(4) == "GREEN THUMB" and titleText(6) == "BOTANIST" and titleText(7) == "HERBALIST"
-		and titleText(14) == "GROVE KEEPER" and titleText(15) == "BLOOM WARDEN" and titleText(20) == "THORN KNIGHT"
-		and titleText(29) == "ELDER ROOT" and titleText(30) == "CANOPY LORD" and titleText(40) == "ANCIENT OAK"
-		and titleText(50) == "WORLD TREE" and titleText(75) == "EVERBLOOM" and titleText(100) == "GAIA"
-		and titleText(400) == "GAIA",
-		"fifteen steps (the owner: \"yes add more titles\"): SPROUT at 1 ... WORLD TREE at 50, EVERBLOOM at 75, GAIA at 100")
-	local rising, previous = #TITLE.Ladder == 15, 0
-	for _, step in ipairs(TITLE.Ladder) do
+	-- THE 100 TITLES (2026-10-10, the owner: "approve the rebirth titles, let terminal do it"; the design in
+	-- output/design/rebirth-titles-fx-v1): each step's first rebirth and the one before it.
+	local BOUNDS = {
+		{ 0, "-" }, { 1, "SPROUT" }, { 2, "SEEDLING" }, { 3, "GARDENER" }, { 4, "GREEN THUMB" }, { 5, "BOTANIST" },
+		{ 7, "BOTANIST" }, { 8, "LEAF TENDER" }, { 19, "GARDEN KEEPER" }, { 20, "GROVE KEEPER" }, { 24, "GROVE KEEPER" },
+		{ 25, "GROVE SCOUT" }, { 51, "GROVE MASTER" }, { 52, "THORN KNIGHT" }, { 66, "ROOT KEEPER" },
+		{ 67, "ELDER ROOT" }, { 71, "ELDER ROOT" }, { 72, "ROOT GUARDIAN" }, { 113, "FOREST ASCENDANT" },
+		{ 114, "ANCIENT OAK" }, { 143, "ANCIENT WORLD" }, { 144, "WORLD TREE" }, { 148, "WORLD TREE" },
+		{ 149, "SKYROOT" }, { 176, "ETERNAL ROOT" }, { 220, "BOUNDLESS BLOOM" }, { 221, "EVERBLOOM" },
+		{ 225, "EVERBLOOM" }, { 226, "EVERBLOOM HEART" }, { 238, "STARROOT" }, { 268, "PRIMAL SPIRIT" },
+		{ 297, "GENESIS SOUL" }, { 298, "GAIA" }, { 302, "GAIA" }, { 303, "GAIA" }, { 1000, "GAIA" },
+	}
+	local wrongStep = {}
+	for _, b in ipairs(BOUNDS) do
+		if titleText(b[1]) ~= b[2] then
+			table.insert(wrongStep, string.format("%d: %s", b[1], titleText(b[1])))
+		end
+	end
+	check(#wrongStep == 0 and #TITLE.Ladder == 100,
+		"a hundred steps: SPROUT at 1 ... GROVE KEEPER at 20, ELDER ROOT at 67, WORLD TREE at 144, EVERBLOOM at 221, "
+			.. "GAIA at 298 and on", table.concat(wrongStep, "; "))
+	-- Each step lasts until the next: SPROUT to GREEN THUMB one rebirth, the five landmarks five, the rest three.
+	local rising, previous, shapeBad = true, 0, {}
+	local LANDMARKS = { [10] = 20, [25] = 67, [50] = 144, [75] = 221, [100] = 298 }
+	for i, step in ipairs(TITLE.Ladder) do
 		if step.At <= previous then
 			rising = false
 		end
 		previous = step.At
+		local first, last = Rebirth.span(i)
+		local length = last - first + 1
+		local want = if i <= 4 then 1 elseif LANDMARKS[i] then 5 else 3
+		if length ~= want or (LANDMARKS[i] and LANDMARKS[i] ~= step.At) then
+			table.insert(shapeBad, string.format("%d %s %d-%d", i, step.Text, first, last))
+		end
 	end
-	check(rising and TITLE.Ladder[13].Rainbow == nil and TITLE.Ladder[15].Rainbow == true
-		and Rebirth.priceFor(100) <= GameConfig.Save.MaxCash,
-		"thresholds strictly rising; WORLD TREE gold and still, the rainbow GAIA's alone; 100 rebirths payable")
+	local top = TITLE.Ladder[#TITLE.Ladder]
+	check(rising and #shapeBad == 0 and top.Rainbow == true and top.Ranks == 5 and select(2, Rebirth.span(100)) == 302
+			and TITLE.Ladder[50].Rainbow == nil and Rebirth.priceFor(302) <= GameConfig.Save.MaxCash,
+		"thresholds strictly rising; one rebirth for each of the first four, five for each landmark (GROVE KEEPER, "
+			.. "ELDER ROOT, WORLD TREE, EVERBLOOM, GAIA), three for every other; GAIA I to V at 298-302, the rainbow "
+			.. "its alone; 302 rebirths payable", table.concat(shapeBad, "; "))
 	local function lum(c)
 		local function lin(v)
 			return if v <= 0.03928 then v / 12.92 else ((v + 0.055) / 1.055) ^ 2.4
@@ -147,22 +172,66 @@ local ok, err = pcall(function()
 		string.format("lowest: %s at %.1f:1", worstWord, worstContrast))
 	local rows0, high0, next0 = Rebirth.ladder(0)
 	local _, high6, next6 = Rebirth.ladder(6)
-	local rows100, high100, next100 = Rebirth.ladder(100)
-	check(#rows0 == 15 and high0 == 0 and next0 == 1 and rows0[1].state == "next" and rows0[2].state == "locked"
-		and high6 == 5 and next6 == 6 and high100 == 15 and next100 == 0 and rows100[15].state == "reached",
-		"the ladder's states: the highest reached (BOTANIST at six), the next (HERBALIST), the rest locked")
-	local colours, rainbowOnlyTop = {}, true
+	local rowsTop, highTop, nextTop = Rebirth.ladder(302)
+	check(#rows0 == 100 and high0 == 0 and next0 == 1 and rows0[1].state == "next" and rows0[2].state == "locked"
+		and high6 == 5 and next6 == 6 and highTop == 100 and nextTop == 0 and rowsTop[100].state == "reached",
+		"the ladder's states: the highest reached (BOTANIST at six), the next (LEAF TENDER), the rest locked")
+	-- The colours as the design drew them: the fifteen founders' kept, the rainbow GAIA's alone.
+	local FOUNDERS = {
+		SPROUT = "96eb64", SEEDLING = "3ccd73", GARDENER = "ffbe46", ["GREEN THUMB"] = "aaff3c", BOTANIST = "5ac8ff",
+		HERBALIST = "28d7be", ["GROVE KEEPER"] = "be7dff", ["BLOOM WARDEN"] = "ff78c8", ["THORN KNIGHT"] = "eb3c50",
+		["ELDER ROOT"] = "ff7d50", ["CANOPY LORD"] = "1ebe6e", ["ANCIENT OAK"] = "cd965a", ["WORLD TREE"] = "ffd750",
+		EVERBLOOM = "ff5ae6", GAIA = "ffffff",
+	}
+	local founderBad, rainbowOnlyTop, seenNames = {}, true, {}
 	for i, step in ipairs(TITLE.Ladder) do
-		colours[hex(step.Colour)] = true
+		local want = FOUNDERS[step.Text]
+		if want and string.lower(hex(step.Colour)) ~= want then
+			table.insert(founderBad, step.Text)
+		end
 		if (step.Rainbow == true) ~= (i == #TITLE.Ladder) then
 			rainbowOnlyTop = false
 		end
+		if seenNames[step.Text] then
+			table.insert(founderBad, step.Text .. " twice")
+		end
+		seenNames[step.Text] = true
 	end
-	local distinct = 0
-	for _ in pairs(colours) do
-		distinct += 1
+	check(#founderBad == 0 and rainbowOnlyTop,
+		"a hundred names, none twice; the fifteen founders' colours kept; only the top one a rainbow",
+		table.concat(founderBad, ", "))
+	-- THE ELEVEN FAMILIES: in the design's runs of title slots, each in one piece, their first and last rebirths.
+	local RUNS = {
+		{ "seedlight", 1, 9, 1, 19 }, { "petal", 10, 19, 20, 51 }, { "thorn", 20, 29, 52, 83 },
+		{ "canopy", 30, 39, 84, 113 }, { "elder", 40, 49, 114, 143 }, { "world", 50, 59, 144, 175 },
+		{ "dawn", 60, 69, 176, 205 }, { "everbloom", 70, 79, 206, 237 }, { "astral", 80, 89, 238, 267 },
+		{ "genesis", 90, 99, 268, 297 }, { "gaia", 100, 100, 298, 302 },
+	}
+	local familyBad = {}
+	for k, run in ipairs(RUNS) do
+		local f = TITLE.Families[k]
+		local a, b, from, to = Rebirth.familySpan(run[1])
+		if not f or f.Id ~= run[1] or a ~= run[2] or b ~= run[3] or from ~= run[4] or to ~= run[5] then
+			table.insert(familyBad, string.format("%s %d-%d %d-%d", run[1], a, b, from, to))
+		end
+		for i = run[2], run[3] do
+			local fam = Rebirth.family(TITLE.Ladder[i])
+			if not fam or fam.Id ~= run[1] then
+				table.insert(familyBad, TITLE.Ladder[i].Text)
+			end
+		end
 	end
-	check(distinct == #TITLE.Ladder and rainbowOnlyTop, "each in its own colour; only the top one a rainbow")
+	local signatures = {}
+	for _, f in ipairs(TITLE.Families) do
+		if f.Signature then
+			table.insert(signatures, f.Id .. ":" .. f.Signature)
+		end
+	end
+	table.sort(signatures)
+	check(#familyBad == 0 and #TITLE.Families == 11 and table.concat(signatures, ",") == "seedlight:Seedlight,world:Halo"
+			and Rebirth.family(nil) == nil and Rebirth.familySpan("none") == 0,
+		"eleven families in the design's runs (Garden apprentices 1-9 ... GAIA 100); signatures only for the two "
+			.. "prototypes, Seedlight and World Tree Halo", table.concat(familyBad, ", "))
 	local F = CFG.Fence
 	local fences = {}
 	for n = 0, 7 do
@@ -459,11 +528,11 @@ local ok, err = pcall(function()
 	local admin = Instance.new("BillboardGui")
 	admin.Name = GameConfig.OwnerTitle.Name
 	admin.Parent = heroHead
-	profiles[hero].Rebirths = 50
+	profiles[hero].Rebirths = 144
 	Service.ApplyTitle(hero, hero.Character)
 	local gold = heroHead:FindFirstChild(TITLE.Name)
 	local goldStill = gold ~= nil and gold.Words.Text == "WORLD TREE I" and gold.Words:FindFirstChild("Rainbow") == nil
-	profiles[hero].Rebirths = 100
+	profiles[hero].Rebirths = 298
 	Service.ApplyTitle(hero, hero.Character)
 	local top = heroHead:FindFirstChild(TITLE.Name)
 	local adminBottom = (GameConfig.ownerTitleLift(true) - 0.5) * GameConfig.OwnerTitle.Size.Y
@@ -471,7 +540,7 @@ local ok, err = pcall(function()
 	check(goldStill and top ~= nil and top.Words.Text == "GAIA I" and top.Words:FindFirstChild("Rainbow") ~= nil
 		and #heroHead:GetChildren() == 2 and near(admin.SizeOffset.Y, GameConfig.ownerTitleLift(true))
 		and adminBottom >= rebirthTop + 1 and GameConfig.ownerTitleLift(false) == GameConfig.OwnerTitle.Lift,
-		"WORLD TREE I at fifty in plain gold, GAIA I at a hundred in the rainbow; one title per head; with ADMIN "
+		"WORLD TREE I at 144 in plain gold, GAIA I at 298 in the rainbow; one title per head; with ADMIN "
 			.. "both show, ADMIN on top", string.format("ADMIN's foot %.1f px, the title's top %.1f px", adminBottom, rebirthTop))
 	-- A phone draws the title at PhoneScale (OwnerTitleUI); ADMIN comes down with it.
 	local phoneTitle = GameConfig.rebirthTitleLook(TITLE.PhoneScale)
@@ -610,8 +679,15 @@ local ok, err = pcall(function()
 			and has(ownerUI, "fitWord(gui:FindFirstChild(\"Glow\"), look.text, look.glow)")
 			and has(ownerUI, "fitWord(gui:FindFirstChild(\"Letters\"), look.text, look.edge)")
 			and has(ownerUI, "local lift = Vector2.new(0, GameConfig.ownerTitleLift(stacked, scale, adminScale))")
-			and has(ownerUI, "\t\t\t\tplace(gui, scale, adminScale)") and has(ownerUI, "\tplace(instance, scale, adminScale)"),
+			and has(ownerUI, "\t\t\t\tpulsing = place(gui, scale, adminScale) or pulsing")
+			and has(ownerUI, "\tplace(instance, scale, adminScale)"),
 		"each screen redraws the rebirth titles and ADMIN at its own size (smaller on a phone) and keeps ADMIN over the title")
+	-- A rank-only rebirth's pulse (2026-10-10): RebirthFX marks the title on that screen; this grows its words.
+	check(has(ownerUI, "local at = gui:GetAttribute(PULSE.Attribute)")
+			and has(ownerUI, "words = math.floor(words * RebirthCelebration.pulse(since) + 0.5)")
+			and has(ownerUI, "gui:SetAttribute(PULSE.Attribute, nil)")
+			and has(ownerUI, "task.wait(if (seen and not still) or pulsing then 1 / 30 else 0.5)"),
+		"a rank-only rebirth's title pulses on each screen that saw the celebration, smooth while it lasts, then clears")
 	local ui = sourceOf(Scripts, "RebirthUI")
 	check(has(ui, 'r:FireServer(CFG.Action, "confirm", { token = q.token })') and has(ui, "button.set(WORDS.Confirm)")
 			and has(ui, "MenuKit.studdedTheme(CFG.Look)") and has(ui, "FloatingSign.new({")
@@ -850,6 +926,14 @@ local ok, err = pcall(function()
 	check(has(reworked, "help.Parent = menu.titleBar") and has(reworked, "help.Position = UDim2.new(1, -(touch + CFG.Layout.HelpGap), 0.5, 0)")
 			and has(reworked, "t.Image = GameConfig.StuddedLook.Texture") and has(reworked, "helpGlyph.Text = WORDS.Help"),
 		"a round, studded, blue \"?\" in the band, left of the X")
+	check(has(reworked, "local function buildTitleRows()") and has(reworked, "\t\tbuildTitleRows()\n\t\tlocal nextIndex")
+			and has(reworked, "local plate = MenuKit.frame(list, \"Family_\" .. f.Id, 6, DIM, 0.05, 8)")
+			and has(reworked, "local header = words(plate, \"Words\", 16, f.Primary, 8)")
+			and has(reworked, "then string.format(WORDS.FamilyRowFrom, f.Name, from)")
+			and has(reworked, "else string.format(WORDS.FamilyRow, f.Name, from, to)")
+			and has(reworked, "local rowY = if row then row.top else 0"),
+		"the 100 rows are built the first time the list opens, under a header for each family; the NEXT row is "
+			.. "found by its kept top")
 	check(has(reworked, "for i, step in ipairs(CFG.Title.Ladder) do") and has(reworked, "local rows, highest, nextIndex = Rebirth.ladder(rebirths)")
 			and has(reworked, "WORDS.Reached elseif state == \"next\" then WORDS.NextChip else WORDS.Locked")
 			and has(reworked, "string.format(WORDS.RowBonus, Rebirth.times(Rebirth.training(step.At)),"),
@@ -885,12 +969,12 @@ local ok, err = pcall(function()
 	end
 	local CASES = {
 		{ 0, "-" }, { 1, "SPROUT" }, { 2, "SEEDLING" }, { 3, "GARDENER" }, { 4, "GREEN THUMB" },
-		{ 5, "BOTANIST I" }, { 6, "BOTANIST II" }, { 7, "HERBALIST I" }, { 9, "HERBALIST III" },
-		{ 10, "GROVE KEEPER I" }, { 14, "GROVE KEEPER V" }, { 15, "BLOOM WARDEN I" }, { 29, "ELDER ROOT V" },
-		{ 30, "CANOPY LORD I" }, { 39, "CANOPY LORD X" }, { 49, "ANCIENT OAK X" }, { 50, "WORLD TREE I" },
-		{ 74, "WORLD TREE XXV" }, { 75, "EVERBLOOM I" }, { 99, "EVERBLOOM XXV" }, { 100, "GAIA I" },
-		{ 101, "GAIA II" }, { 187, "GAIA LXXXVIII" }, { 1099, "GAIA M" }, { 4098, "GAIA MMMCMXCIX" },
-		{ 4099, "GAIA 4000" },
+		{ 5, "BOTANIST I" }, { 6, "BOTANIST II" }, { 7, "BOTANIST III" }, { 8, "LEAF TENDER I" },
+		{ 19, "GARDEN KEEPER III" }, { 20, "GROVE KEEPER I" }, { 24, "GROVE KEEPER V" }, { 25, "GROVE SCOUT I" },
+		{ 67, "ELDER ROOT I" }, { 71, "ELDER ROOT V" }, { 72, "ROOT GUARDIAN I" }, { 134, "ELDERWOOD WARDEN III" },
+		{ 144, "WORLD TREE I" }, { 148, "WORLD TREE V" }, { 149, "SKYROOT I" }, { 221, "EVERBLOOM I" },
+		{ 225, "EVERBLOOM V" }, { 297, "GENESIS SOUL III" }, { 298, "GAIA I" }, { 302, "GAIA V" }, { 303, "GAIA V" },
+		{ 1000, "GAIA V" }, { 1e9, "GAIA V" },
 	}
 	local wrongTitles = {}
 	for _, c in ipairs(CASES) do
@@ -899,13 +983,18 @@ local ok, err = pcall(function()
 		end
 	end
 	check(#wrongTitles == 0,
-		"BOTANIST I at 5 and II at 6, GROVE KEEPER I to V for 10 to 14, WORLD TREE I to XXV, GAIA I at 100 and on "
-			.. "(LXXXVIII at 187, M at 1099); SPROUT to GREEN THUMB, one rebirth each, carry none",
+		"BOTANIST I at 5 to III at 7, GROVE KEEPER I to V for 20 to 24, WORLD TREE I to V for 144 to 148, GAIA I at "
+			.. "298, GAIA V from 302 on; SPROUT to GREEN THUMB, one rebirth each, carry none",
 		table.concat(wrongTitles, "; "))
-	local repeats = {}
-	for n = 2, 5000 do
+	local repeats, stays = {}, {}
+	for n = 2, 302 do
 		if wears(n) == wears(n - 1) and #repeats < 5 then
 			table.insert(repeats, tostring(n))
+		end
+	end
+	for n = 302, 5000 do
+		if wears(n) ~= "GAIA V" and #stays < 5 then
+			table.insert(stays, tostring(n))
 		end
 	end
 	local stepsOk = true
@@ -915,21 +1004,29 @@ local ok, err = pcall(function()
 			stepsOk = stepsOk and wears(first) == step.Text
 		else
 			stepsOk = stepsOk and wears(first) == step.Text .. " I"
-				and (last == nil or wears(last) == step.Text .. " " .. Rebirth.roman(last - first + 1))
+				and wears(last) == step.Text .. " " .. Rebirth.roman(last - first + 1)
 		end
 	end
-	check(#repeats == 0 and stepsOk,
-		"no two rebirths in a row wear the same title (2 to 5000); every longer step starts at I and ends at its length",
-		table.concat(repeats, ","))
+	check(#repeats == 0 and #stays == 0 and stepsOk,
+		"no two rebirths in a row wear the same title (2 to 302); every longer step starts at I and ends at its "
+			.. "length; from 302 on GAIA V stays while REBIRTH N counts", table.concat(repeats, ",") .. " / "
+			.. table.concat(stays, ","))
+	-- A new name or a rank only (what the celebration throws, RebirthCelebration.accent).
+	check(Rebirth.change(0, 1) == "name" and Rebirth.change(5, 6) == "rank" and Rebirth.change(7, 8) == "name"
+			and Rebirth.change(143, 144) == "name" and Rebirth.change(147, 148) == "rank"
+			and Rebirth.change(301, 302) == "rank" and Rebirth.change(302, 303) == "rank"
+			and Rebirth.change(0, 0) == "none" and Rebirth.change(4, 50) == "name"
+			and Rebirth.stepIndex(0) == 0 and Rebirth.stepIndex(298) == 100 and Rebirth.stepIndex(1e9) == 100,
+		"SPROUT, LEAF TENDER I, WORLD TREE I are new names; BOTANIST II, WORLD TREE V and GAIA V kept are ranks only")
 	local function rowWords(i)
 		local a, b = Rebirth.stepWords(i)
 		return a .. " / " .. b
 	end
 	check(rowWords(1) == "SPROUT / REBIRTH 1" and rowWords(4) == "GREEN THUMB / REBIRTH 4"
-			and rowWords(5) == "BOTANIST I-II / REBIRTH 5-6" and rowWords(7) == "GROVE KEEPER I-V / REBIRTH 10-14"
-			and rowWords(13) == "WORLD TREE I-XXV / REBIRTH 50-74" and rowWords(15) == "GAIA I+ / REBIRTH 100+",
-		"the TITLES list names each step's range: BOTANIST I-II for rebirths 5-6, GAIA I+ from 100",
-		rowWords(5) .. "; " .. rowWords(15))
+			and rowWords(5) == "BOTANIST I-III / REBIRTH 5-7" and rowWords(10) == "GROVE KEEPER I-V / REBIRTH 20-24"
+			and rowWords(50) == "WORLD TREE I-V / REBIRTH 144-148" and rowWords(100) == "GAIA I-V / REBIRTH 298+",
+		"the TITLES list names each step's range: BOTANIST I-III for rebirths 5-7, GAIA I-V from 298 on",
+		rowWords(5) .. "; " .. rowWords(100))
 
 	-- The fit, measured in the fonts the game draws with.
 	local TextService = game:GetService("TextService")
@@ -937,16 +1034,17 @@ local ok, err = pcall(function()
 		return TextService:GetTextSize(text, size, Enum.Font.FredokaOne, Vector2.new(20000, 1000)).X
 	end
 	local widest, widestText = 0, ""
-	for n = 1, 4200 do
+	for n = 1, 303 do
 		local w = wide(wears(n), TITLE.TextSize)
 		if w > widest then
 			widest, widestText = w, wears(n)
 		end
 	end
-	-- RebirthService outlines the words 3 px.
+	-- RebirthService outlines the words 3 px. Measured 2026-10-10: ELDERWOOD WARDEN III 206 px of 228.
 	check(widest + 6 <= TITLE.Size.X and wide(wears(1e9), TITLE.TextSize) + 6 <= TITLE.Size.X,
-		"every title over a head, to rebirth 4200 and far past it, fits its billboard at full size with its outline",
+		"every one of the 100 titles, every rank, fits its billboard at full size with its outline",
 		string.format("widest %s, %d px of %d", widestText, widest, TITLE.Size.X))
+	say(string.format("    (the widest over a head: %s, %d + 6 px of %d)", widestText, widest, TITLE.Size.X))
 	-- SMALLER (2026-10-09, the owner: "make the title smaller, it looks huge
 	-- specially on phones"): under the old 320 x 46 at 28 / 14 everywhere, three
 	-- quarters again on a phone, REBIRTH N never under its floor.
@@ -962,9 +1060,10 @@ local ok, err = pcall(function()
 			and GameConfig.rebirthTitleScale(nil, true) == 1,
 		"a phone (touch, its shorter side under 500) draws it at three quarters; a tablet, a desktop, an unknown screen at 1")
 	local phoneWidest = 0
-	for n = 1, 4200 do
+	for n = 1, 303 do
 		phoneWidest = math.max(phoneWidest, wide(wears(n), phoneWords))
 	end
+	say(string.format("    (on a phone: %d + 6 px of %d at %g px)", phoneWidest, phoneBox.X, phoneWords))
 	check(phoneWords == TITLE.TextSize * 0.75 and phoneSub == math.max(TITLE.SubTextSize * 0.75, TITLE.SubMinTextSize)
 			and phoneSub >= 10 and phoneBox.X <= TITLE.Size.X * 0.75 + 0.5 and phoneBox.Y <= TITLE.Size.Y * 0.75 + 0.5
 			and phoneWidest + 6 <= phoneBox.X and phoneWords <= phoneBox.Y * 0.6 and phoneSub <= phoneBox.Y * 0.4
@@ -979,7 +1078,8 @@ local ok, err = pcall(function()
 	-- every menu size (a phone's 85% included), by RebirthUI's own measures
 	-- (pinned below): the scroll bar 6, 4 more, the gap 10; the strip and the
 	-- title line span a column, the title line after its 34 px badge; a row's
-	-- words 42% of the row less 12 and the title effects' room (TitleFX.List).
+	-- words RowWords of the row less 12 and the title effects' room
+	-- (TitleFX.List); a family's header the row's whole width.
 	local column, listW = math.huge, math.huge
 	for _, s in ipairs(SCREENS) do
 		for _, option in ipairs(GameConfig.MenuSize.Options) do
@@ -1001,7 +1101,7 @@ local ok, err = pcall(function()
 			small[key], smallAt[key] = size, text
 		end
 	end
-	for n = 0, 1099 do
+	for n = 0, 303 do
 		local now = if n == 0 then CFG.Words.NotYet else string.format(CFG.Words.Strip, n, wears(n))
 		note("strip", Rebirth.fitSize(26, wide(now, 26), column - FIT), now)
 		local after = string.format(CFG.Words.NextStrip, n + 1, wears(n + 1))
@@ -1009,20 +1109,42 @@ local ok, err = pcall(function()
 		local line = string.format(CFG.Words.TitleLine, wears(n + 1))
 		note("titleLine", Rebirth.fitSize(17, wide(line, 17), column - 34 - FIT), line)
 	end
+	local LAYOUT = CFG.Layout
 	for i in ipairs(TITLE.Ladder) do
 		local text = Rebirth.stepWords(i)
-		note("row", Rebirth.fitSize(22, wide(text, 22), (listW - 10) * 0.42 - 12 - GameConfig.TitleFX.List.Room - FIT),
-			text)
+		note("row", Rebirth.fitSize(22, wide(text, 22),
+			(listW - 10) * LAYOUT.RowWords - 12 - GameConfig.TitleFX.List.Room - FIT), text)
 	end
-	-- Measured 2026-10-08: column 310, list 541; the strip 20 at worst (REBIRTH
-	-- 987 · GAIA DCCCLXXXVIII), the other three never shrink.
-	check(small.strip >= 18 and small.nextStrip >= 14 and small.titleLine >= 14 and small.row >= 20,
-		"in the panel, on the narrowest column of every listed screen and menu size, to rebirth 1099 (GAIA M): the "
-			.. "strip never under 18 px of its 26, the next line and NEXT UNLOCKS' title never under 14, a TITLES row "
-			.. "never under 20 of its 22",
-		string.format("column %.0f, list %.0f: strip %d (%s), next %d (%s), title %d (%s), row %d (%s)", column, listW,
-			small.strip, smallAt.strip, small.nextStrip, smallAt.nextStrip, small.titleLine, smallAt.titleLine,
-			small.row, smallAt.row))
+	small.header = math.huge
+	for _, f in ipairs(TITLE.Families) do
+		local _, _, from, to = Rebirth.familySpan(f.Id)
+		local text = string.format(CFG.Words.FamilyRow, f.Name, from, to)
+		note("header", Rebirth.fitSize(16, wide(text, 16), listW - 10 - 24 - FIT), text)
+	end
+	-- The bonus beside a row's words, wrapped in its RowBonus of the row: within the row at its 14 px.
+	local bonusTall, bonusText = 0, ""
+	for _, step in ipairs(TITLE.Ladder) do
+		local text = string.format(CFG.Words.RowBonus, Rebirth.times(Rebirth.training(step.At)),
+			Rebirth.times(Rebirth.income(step.At)))
+		local tall = TextService:GetTextSize(text, 14, Enum.Font.FredokaOne,
+			Vector2.new((listW - 10) * LAYOUT.RowBonus, 1000)).Y
+		if tall > bonusTall then
+			bonusTall, bonusText = tall, text
+		end
+	end
+	-- Measured 2026-10-10: column 310, list 541; the strip 18 at worst (REBIRTH
+	-- 133 · ELDERWOOD WARDEN II), a row's words 22 (ELDERWOOD WARDEN I-III).
+	check(small.strip >= 18 and small.nextStrip >= 14 and small.titleLine >= 14 and small.row >= 20
+			and small.header >= 14 and bonusTall <= LAYOUT.TitleRow,
+		"in the panel, on the narrowest column of every listed screen and menu size, for every title: the strip "
+			.. "never under 18 px of its 26, the next line and NEXT UNLOCKS' title never under 14, a TITLES row never "
+			.. "under 20 of its 22, a family's header never under 14 of its 16, a row's bonus within the row",
+		string.format("column %.0f, list %.0f: strip %d (%s), next %d (%s), title %d (%s), row %d (%s), header %d "
+			.. "(%s), bonus %d px tall (%s)", column, listW, small.strip, smallAt.strip, small.nextStrip,
+			smallAt.nextStrip, small.titleLine, smallAt.titleLine, small.row, smallAt.row, small.header,
+			smallAt.header, bonusTall, bonusText))
+	say(string.format("    (worst: strip %d, next %d, title %d, row %d, header %d; bonus %d px tall)", small.strip,
+		small.nextStrip, small.titleLine, small.row, small.header, bonusTall))
 	local serviceSrc = sourceOf(Server, "RebirthService")
 	check(has(serviceSrc, "local text, step = Rebirth.titleFor(n)") and has(serviceSrc, 'line(gui, "Words", text, step.Colour,')
 			and has(reworked, "local nowText, now = Rebirth.titleFor(n)")
@@ -1038,7 +1160,8 @@ local ok, err = pcall(function()
 			and has(reworked, "local inner = w - scroll.ScrollBarThickness - 4")
 			and has(reworked, "local half = (inner - GAP) * 0.5")
 			and has(reworked, "titleLine.Position = UDim2.fromOffset(34, 0)")
-			and has(reworked, "word.Size = UDim2.new(0.42, -FX_LEFT, 0, 30)")
+			and has(reworked, "word.Size = UDim2.new(LAYOUT.RowWords, -FX_LEFT, 0, 30)")
+			and has(reworked, "bonusWords.Size = UDim2.new(LAYOUT.RowBonus, 0, 1, 0)")
 			and has(reworked, "local FX_LEFT = 12 + (if fxAny then FX_LIST.Room else 0)"),
 		"the title over the head, the strip, NEXT UNLOCKS and the TITLES rows all wear Rebirth.titleFor / stepWords, "
 			.. "and each of those lines shrinks to fit its box")
@@ -1050,6 +1173,13 @@ local ok, err = pcall(function()
 		local ratio = (lum(step.Colour) + 0.05) / (lum(plate) + 0.05)
 		if ratio < worstPlate then
 			worstPlate, worstPlateWord = ratio, step.Text
+		end
+	end
+	-- And every family's header, on the same plate (2026-10-10).
+	for _, f in ipairs(TITLE.Families) do
+		local ratio = (lum(f.Primary) + 0.05) / (lum(plate) + 0.05)
+		if ratio < worstPlate then
+			worstPlate, worstPlateWord = ratio, f.Name
 		end
 	end
 	check(has(reworked, "local DIM = Color3.fromRGB(46, 30, 52)") and has(reworked, "r.frame.BackgroundColor3 = DIM")

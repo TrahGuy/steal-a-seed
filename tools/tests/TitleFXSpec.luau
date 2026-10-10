@@ -9,7 +9,7 @@
 --      none: GAIA keeps its rainbow alone), at most MaxSprites; every art key
 --      named; with no id uploaded, every profile is OFF
 --   2. where the sprites stand, for every title the ladder gives (rebirth 1 to
---      120) at desktop and phone size: inside the title's band (ADMIN over it,
+--      303, all 100 titles since 2026-10-10) at desktop and phone size: inside the title's band (ADMIN over it,
 --      the name under it), the leaves beside the words, the sprigs at their
 --      ends, the mist faint and off the words' middle, nothing flashing
 --   3. the four nearest move, never one out of range
@@ -125,7 +125,7 @@ local ok, err = pcall(function()
 		off = off and id == ""
 	end
 	local anyOn = false
-	for n = 1, 120 do
+	for n = 1, 303 do
 		local profileName = TitleFX.profileFor(Rebirth.title(n))
 		anyOn = anyOn or profileName ~= nil
 	end
@@ -143,7 +143,7 @@ local ok, err = pcall(function()
 		local scale = if phone then TITLE.PhoneScale else 1
 		local box, wordSize = GameConfig.rebirthTitleLook(scale)
 		local seenText = {}
-		for n = 1, 120 do
+		for n = 1, 303 do
 			local text, step = Rebirth.titleFor(n)
 			local wants = step and FX.Steps[step.Text]
 			if text and wants and not seenText[text] then

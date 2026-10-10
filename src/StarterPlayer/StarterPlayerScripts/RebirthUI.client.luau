@@ -522,7 +522,7 @@ listPad.PaddingBottom = UDim.new(0, 4)
 listPad.Parent = list
 
 type TitleRow = { frame: Frame, ring: UIStroke, word: TextLabel, rebirth: TextLabel, bonus: TextLabel,
-	chip: TextLabel, rainbow: UIGradient?, step: any, fx: TitleFX.Layer?, locked: boolean }
+	chip: TextLabel, rainbow: UIGradient?, step: any, fx: TitleFX.Layer?, locked: boolean, top: number }
 local titleRows: { TitleRow } = {}
 -- THE TITLES' LEAVES, FLOWERS AND MIST HERE TOO (2026-10-10, the owner: "add
 -- them to the ? list too"; TitleFX, GameConfig.TitleFX.List): each step wears
@@ -538,71 +538,110 @@ end
 local FX_LEFT = 12 + (if fxAny then FX_LIST.Room else 0)
 local GREY = Color3.fromRGB(150, 146, 156)
 local LIT = Color3.fromRGB(255, 220, 90)
-for i, step in ipairs(CFG.Title.Ladder) do
-	local row = MenuKit.frame(list, "Row" .. i, 6, DIM, 0.2, 10)
-	row.LayoutOrder = i
-	row.Size = UDim2.new(1, -10, 0, CFG.Layout.TitleRow)
-	-- The highest step reached and the next one are RINGED, never filled, so
-	-- every title colour stays on the same dark plate (2026-10-08: on a
-	-- filled pink row BLOOM WARDEN's pink words all but vanished).
-	local ring = Instance.new("UIStroke")
-	ring.Name = "Ring"
-	ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	ring.Enabled = false
-	ring.Parent = row
-	-- The step's words with its numerals' range, and its rebirths.
-	local stepText, stepRebirths = Rebirth.stepWords(i)
-	local word = words(row, "Word", 22, step.Colour, 8)
-	word.Position = UDim2.fromOffset(FX_LEFT, 4)
-	word.Size = UDim2.new(0.42, -FX_LEFT, 0, 30)
-	word.TextXAlignment = Enum.TextXAlignment.Left
-	word.Text = stepText
-	fitOne(word, 22)
-	local rainbow: UIGradient? = nil
-	if step.Rainbow then
-		local g = Instance.new("UIGradient")
-		g.Name = "Rainbow"
-		g.Color = WheelDraw.rainbow(0)
-		g.Parent = word
-		rainbow = g
+local LAYOUT = CFG.Layout
+
+-- THE 100 TITLES (2026-10-10): built the first time the list opens, not at
+-- join -- a header over each family's run ("GARDEN APPRENTICES · REBIRTH
+-- 1-19", in its colour), then a row per step; the step's words on RowWords of
+-- the row (ELDERWOOD WARDEN I-III at 22 px on the narrowest list), the bonus
+-- beside them, the chip at the right. Each row's top is kept, so opening the
+-- list can bring the NEXT one into view before the layout has run.
+local function buildTitleRows()
+	if #titleRows > 0 then
+		return
 	end
-	local rebirthWords = words(row, "Rebirth", 13, Color3.fromRGB(255, 236, 244), 8)
-	rebirthWords.Position = UDim2.fromOffset(FX_LEFT, 33)
-	rebirthWords.Size = UDim2.new(0.42, -FX_LEFT, 0, 18)
-	rebirthWords.TextXAlignment = Enum.TextXAlignment.Left
-	rebirthWords.Text = stepRebirths
-	local bonusWords = words(row, "Bonus", 14, WHITE, 8)
-	bonusWords.Position = UDim2.fromScale(0.42, 0)
-	bonusWords.Size = UDim2.new(0.36, 0, 1, 0)
-	bonusWords.TextWrapped = true
-	bonusWords.Text = string.format(WORDS.RowBonus, Rebirth.times(Rebirth.training(step.At)),
-		Rebirth.times(Rebirth.income(step.At)))
-	local chip = words(row, "State", 14, WHITE, 9)
-	chip.AnchorPoint = Vector2.new(1, 0.5)
-	chip.Position = UDim2.new(1, -10, 0.5, 0)
-	chip.Size = UDim2.new(0.2, 0, 0, 26)
-	chip.TextXAlignment = Enum.TextXAlignment.Right
-	-- Its title's sprites, on the words' line: between the row's plate (6) and
-	-- its texts (8), measured off the words as drawn.
-	local _, fxProfile, fxCount = TitleFX.profileFor(step)
-	local fx: TitleFX.Layer? = nil
-	if fxProfile then
-		local function width(): number
-			return MenuKit.textWidth(word.Text, word.TextSize, word.Font)
+	local order, y = 0, 0
+	local family: string? = nil
+	local lastStep = CFG.Title.Ladder[#CFG.Title.Ladder] :: any
+	for i, step in ipairs(CFG.Title.Ladder) do
+		local f = Rebirth.family(step)
+		if f and f.Id ~= family then
+			family = f.Id
+			order += 1
+			local _, _, from, to = Rebirth.familySpan(f.Id)
+			-- On the rows' own dark plate: a family's colour (GAIA's white, Dawn's
+			-- sky blue) vanished on the light shell (seen in Play 2026-10-10).
+			local plate = MenuKit.frame(list, "Family_" .. f.Id, 6, DIM, 0.05, 8)
+			plate.LayoutOrder = order
+			plate.Size = UDim2.new(1, -10, 0, LAYOUT.FamilyRow)
+			local header = words(plate, "Words", 16, f.Primary, 8)
+			header.Position = UDim2.fromOffset(12, 0)
+			header.Size = UDim2.new(1, -24, 1, 0)
+			header.TextXAlignment = Enum.TextXAlignment.Left
+			header.Text = if lastStep.Family == f.Id
+				then string.format(WORDS.FamilyRowFrom, f.Name, from)
+				else string.format(WORDS.FamilyRow, f.Name, from, to)
+			fitOne(header, 16)
+			y += LAYOUT.FamilyRow + listLayout.Padding.Offset
 		end
-		fx = TitleFX.attach(row, fxProfile, fxCount, {
-			at = UDim2.fromOffset(FX_LEFT, 4),
-			box = Vector2.new(GameConfig.Rebirth.Title.Size.X, 30),
-			z = 7,
-			words = width,
-			centre = function(): number
-				return width() / 2
-			end,
-			left = -FX_LEFT,
-		})
+		order += 1
+		local row = MenuKit.frame(list, "Row" .. i, 6, DIM, 0.2, 10)
+		row.LayoutOrder = order
+		row.Size = UDim2.new(1, -10, 0, CFG.Layout.TitleRow)
+		local top = y
+		y += CFG.Layout.TitleRow + listLayout.Padding.Offset
+		-- The highest step reached and the next one are RINGED, never filled, so
+		-- every title colour stays on the same dark plate (2026-10-08: on a
+		-- filled pink row BLOOM WARDEN's pink words all but vanished).
+		local ring = Instance.new("UIStroke")
+		ring.Name = "Ring"
+		ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		ring.Enabled = false
+		ring.Parent = row
+		-- The step's words with its numerals' range, and its rebirths.
+		local stepText, stepRebirths = Rebirth.stepWords(i)
+		local word = words(row, "Word", 22, step.Colour, 8)
+		word.Position = UDim2.fromOffset(FX_LEFT, 4)
+		word.Size = UDim2.new(LAYOUT.RowWords, -FX_LEFT, 0, 30)
+		word.TextXAlignment = Enum.TextXAlignment.Left
+		word.Text = stepText
+		fitOne(word, 22)
+		local rainbow: UIGradient? = nil
+		if step.Rainbow then
+			local g = Instance.new("UIGradient")
+			g.Name = "Rainbow"
+			g.Color = WheelDraw.rainbow(0)
+			g.Parent = word
+			rainbow = g
+		end
+		local rebirthWords = words(row, "Rebirth", 13, Color3.fromRGB(255, 236, 244), 8)
+		rebirthWords.Position = UDim2.fromOffset(FX_LEFT, 33)
+		rebirthWords.Size = UDim2.new(LAYOUT.RowWords, -FX_LEFT, 0, 18)
+		rebirthWords.TextXAlignment = Enum.TextXAlignment.Left
+		rebirthWords.Text = stepRebirths
+		local bonusWords = words(row, "Bonus", 14, WHITE, 8)
+		bonusWords.Position = UDim2.fromScale(LAYOUT.RowWords, 0)
+		bonusWords.Size = UDim2.new(LAYOUT.RowBonus, 0, 1, 0)
+		bonusWords.TextWrapped = true
+		bonusWords.Text = string.format(WORDS.RowBonus, Rebirth.times(Rebirth.training(step.At)),
+			Rebirth.times(Rebirth.income(step.At)))
+		local chip = words(row, "State", 14, WHITE, 9)
+		chip.AnchorPoint = Vector2.new(1, 0.5)
+		chip.Position = UDim2.new(1, -10, 0.5, 0)
+		chip.Size = UDim2.new(0.2, 0, 0, 26)
+		chip.TextXAlignment = Enum.TextXAlignment.Right
+		-- Its title's sprites, on the words' line: between the row's plate (6) and
+		-- its texts (8), measured off the words as drawn.
+		local _, fxProfile, fxCount = TitleFX.profileFor(step)
+		local fx: TitleFX.Layer? = nil
+		if fxProfile then
+			local function width(): number
+				return MenuKit.textWidth(word.Text, word.TextSize, word.Font)
+			end
+			fx = TitleFX.attach(row, fxProfile, fxCount, {
+				at = UDim2.fromOffset(FX_LEFT, 4),
+				box = Vector2.new(GameConfig.Rebirth.Title.Size.X, 30),
+				z = 7,
+				words = width,
+				centre = function(): number
+					return width() / 2
+				end,
+				left = -FX_LEFT,
+			})
+		end
+		table.insert(titleRows, { frame = row, ring = ring, word = word, rebirth = rebirthWords, bonus = bonusWords,
+			chip = chip, rainbow = rainbow, step = step, fx = fx, locked = true, top = top })
 	end
-	table.insert(titleRows, { frame = row, ring = ring, word = word, rebirth = rebirthWords, bonus = bonusWords,
-		chip = chip, rainbow = rainbow, step = step, fx = fx, locked = true })
 end
 
 -- The rows in view move, from the panel's own loop (setTurning's); none at all
@@ -654,12 +693,14 @@ local function showTitles(on: boolean, rebirths: number?)
 	scroll.Visible = not on
 	foot.Visible = not on
 	if on then
+		buildTitleRows()
 		local nextIndex = paintTitles(rebirths or 0)
 		-- The NEXT row in view (the last one once every step is reached).
 		task.defer(function()
 			local k = UIKit.scaleOf(gui)
 			local index = if nextIndex > 0 then nextIndex else #titleRows
-			local rowY = (index - 1) * (CFG.Layout.TitleRow + 6)
+			local row = titleRows[index]
+			local rowY = if row then row.top else 0
 			local view = list.AbsoluteSize.Y / k
 			list.CanvasPosition = Vector2.new(0, math.max(0, rowY - (view - CFG.Layout.TitleRow) * 0.5) * k)
 		end)

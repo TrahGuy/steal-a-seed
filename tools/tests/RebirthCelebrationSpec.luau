@@ -241,19 +241,81 @@ local ok, err = pcall(function()
 	local w1 = RebirthCelebration.words(1, "junk", -5)
 	check(w1.line == "REBIRTH 1 · SPROUT" and w1.bonus == "x1.5 training · x1.25 income",
 		"numbers that are not numbers read as Rebirth's own", w1.bonus)
-	local w100 = RebirthCelebration.words(100)
-	check(w100.rainbow and w100.line == "REBIRTH 100 · GAIA I" and not RebirthCelebration.words(99).rainbow,
-		"GAIA's card line is the rainbow; EVERBLOOM's is not")
+	local w298 = RebirthCelebration.words(298)
+	check(w298.rainbow and w298.line == "REBIRTH 298 · GAIA I" and not RebirthCelebration.words(297).rainbow
+			and RebirthCelebration.words(1000).line == "REBIRTH 1000 · GAIA V",
+		"GAIA's card line is the rainbow (GAIA V from 302 on); GENESIS SOUL's is not")
 	check(RebirthCelebration.serverLine("Pat", 6) == "Pat reached REBIRTH 6 · BOTANIST II!"
-			and RebirthCelebration.serverLine("Pat", 187) == "Pat reached REBIRTH 187 · GAIA LXXXVIII!",
+			and RebirthCelebration.serverLine("Pat", 298) == "Pat reached REBIRTH 298 · GAIA I!",
 		"the line for everybody else: \"Pat reached REBIRTH 6 · BOTANIST II!\"")
-	local longest = RebirthCelebration.serverLine(string.rep("W", 20), 4098)
-	check(#longest <= Notice.ServerTitleMax, "the longest line (a 20-letter name at GAIA MMMCMXCIX) is never cut",
+	local longest = RebirthCelebration.serverLine(string.rep("W", 20), 134)
+	check(#longest <= Notice.ServerTitleMax, "the longest line (a 20-letter name at ELDERWOOD WARDEN III) is never cut",
 		#longest)
+	-- THE 100 TITLES (2026-10-10): the leaves and sparkles wear the title's family's palette.
+	local TITLE = CFG.Title
+	local seedlight = TITLE.Families[1]
 	local tint6 = RebirthCelebration.tint(6)
-	local tint100 = RebirthCelebration.tint(100)
-	check(#tint6.Keypoints == 2 and tint6.Keypoints[1].Value == botanist.Colour and #tint100.Keypoints > 2,
-		"leaves and sparkles in the new title's colour, the rainbow at GAIA")
+	local tint298 = RebirthCelebration.tint(298)
+	local tint144 = RebirthCelebration.tint(144)
+	check(#tint6.Keypoints == 2 and tint6.Keypoints[1].Value == seedlight.Primary
+			and tint6.Keypoints[2].Value == seedlight.Secondary and #tint298.Keypoints > 2
+			and tint144.Keypoints[1].Value == TITLE.Families[6].Primary,
+		"leaves and sparkles in the family's palette (Garden apprentices' green to lime at 6, World Tree's gold at "
+			.. "144), the rainbow at GAIA")
+
+	--==========================================================================
+	say("5b. The accent at the burst (2026-10-10, the 100 titles)")
+	--==========================================================================
+	local a6 = RebirthCelebration.accent(6)
+	local a8 = RebirthCelebration.accent(8)
+	local a144 = RebirthCelebration.accent(144)
+	local a145 = RebirthCelebration.accent(145)
+	local a52 = RebirthCelebration.accent(52)
+	local a303 = RebirthCelebration.accent(303)
+	local aJump = RebirthCelebration.accent(50, 4)
+	check(a6.change == "rank" and a6.pulse and a6.signature == nil and a6.leaves == C.Motes.Leaves
+			and a6.sparkles == C.Motes.Sparkles and C.Motes.Leaves < C.Leaves.Count
+			and C.Motes.Sparkles < C.Sparkles.Count,
+		"a rank only (BOTANIST II at 6): a few motes and the title's pulse, never the full accent")
+	check(a8.change == "name" and a8.signature == "Seedlight" and not a8.pulse and a8.leaves == 0 and a8.sparkles == 0
+			and a144.signature == "Halo" and a144.family == TITLE.Families[6]
+			and a145.change == "rank" and a145.signature == nil and a145.pulse,
+		"a new name in a prototype family: its own accent (LEAF TENDER I, Seedlight; WORLD TREE I, World Tree Halo)")
+	check(a52.change == "name" and a52.signature == nil and not a52.pulse and a52.leaves == C.Leaves.Count
+			and a52.sparkles == C.Sparkles.Count and a52.family == TITLE.Families[3]
+			and a303.change == "rank" and a303.pulse and aJump.change == "name",
+		"any other new name (THORN KNIGHT I): the full leaves and sparkles in its palette; GAIA V kept is a rank")
+	-- The pulse, and the two signatures' poses: inside the celebration, from nothing back to nothing.
+	local P = C.Pulse
+	check(RebirthCelebration.pulse(0) == 1 and RebirthCelebration.pulse(P.Seconds) == 1
+			and near(RebirthCelebration.pulse(P.Seconds / 2), P.Scale, 1e-9) and P.Scale <= 1.25
+			and C.SpinSeconds + P.Seconds <= C.Seconds,
+		"the pulse grows the words to Scale halfway and back, inside the celebration")
+	local SL, H = C.Seedlight, C.Halo
+	local arcOk, haloOk = true, true
+	for i = 1, SL.Leaves do
+		local before, a0 = RebirthCelebration.seedlightLeaf(i, SL.Leaves, -0.01)
+		local start = RebirthCelebration.seedlightLeaf(i, SL.Leaves, (i - 1) * SL.Stagger)
+		local mid, aMid = RebirthCelebration.seedlightLeaf(i, SL.Leaves, (i - 1) * SL.Stagger + SL.ArcSeconds / 2)
+		local _, aEnd = RebirthCelebration.seedlightLeaf(i, SL.Leaves, (i - 1) * SL.Stagger + SL.ArcSeconds)
+		arcOk = arcOk and a0 == 0 and aEnd < 1e-6 and aMid == 1 and start.X < 0 and math.abs(mid.X) < 0.05
+			and mid.Y > start.Y and near(Vector3.new(mid.X, mid.Y / 0.75, 0).Magnitude, SL.Radius, 1e-6)
+			and before.Z == 0
+	end
+	for i = 1, H.Leaves do
+		local _, a0 = RebirthCelebration.haloLeaf(i, H.Leaves, 0)
+		local open, aMid = RebirthCelebration.haloLeaf(i, H.Leaves, H.Seconds * 0.4)
+		local wide, aEnd = RebirthCelebration.haloLeaf(i, H.Leaves, H.Seconds)
+		haloOk = haloOk and a0 == 0 and aEnd == 0 and aMid == 1 and open.Y >= H.Above
+			and Vector3.new(wide.X, 0, wide.Z).Magnitude > Vector3.new(open.X, 0, open.Z).Magnitude
+			and near(Vector3.new(wide.X, 0, wide.Z).Magnitude, H.To, 1e-6)
+	end
+	check(arcOk and C.SpinSeconds + (SL.Leaves - 1) * SL.Stagger + SL.ArcSeconds <= C.Seconds,
+		"Seedlight: each leaf rides one arc over the head from the left shoulder to the right, unseen before and after")
+	check(haloOk and RebirthCelebration.haloRays(0) == 0 and RebirthCelebration.haloRays(H.RaysSeconds) == 0
+			and RebirthCelebration.haloRays(H.RaysSeconds / 2) > 0.99 and C.SpinSeconds + H.Seconds <= C.Seconds,
+		"World Tree Halo: the ring opens over the head from From to To studs while it turns, then fades; the rays in "
+			.. "and out")
 
 	--==========================================================================
 	say("6. Who sees it: the real RebirthService")
@@ -525,7 +587,7 @@ local ok, err = pcall(function()
 	-- The longest words, at the size the card draws them on the smallest phone.
 	local room = RebirthFX.cardRoom()
 	local small = {}
-	for _, n in ipairs({ 1, 4, 6, 16, 23, 50, 74, 100, 187, 388, 987, 1099, 3888, 4098, 4200 }) do
+	for _, n in ipairs({ 1, 4, 6, 16, 23, 50, 74, 100, 133, 134, 187, 264, 267, 298, 302, 303, 1000, 4200 }) do
 		local w = RebirthCelebration.words(n)
 		for _, part in ipairs({ { "Line", w.line }, { "Bonus", w.bonus }, { "Reborn", w.reborn } }) do
 			local key = part[1]
@@ -537,7 +599,7 @@ local ok, err = pcall(function()
 			end
 		end
 	end
-	check(#small == 0, "every line it can say, to rebirth 4200, is 12 px or more on the smallest phone's card",
+	check(#small == 0, "every line it can say (ELDERWOOD WARDEN III the longest) is 12 px or more on the smallest phone's card",
 		table.concat(small, "; "))
 
 	--==========================================================================
@@ -644,9 +706,11 @@ local ok, err = pcall(function()
 	check(leafEmitter.FlipbookLayout == Enum.ParticleFlipbookLayout.Grid2x2
 			and leafEmitter.FlipbookMode == Enum.ParticleFlipbookMode.PingPong
 			and sparkEmitter.FlipbookMode == Enum.ParticleFlipbookMode.OneShot
-			and leafEmitter.Color.Keypoints[1].Value == botanist.Colour
-			and sparkEmitter.Color.Keypoints[1].Value == botanist.Colour,
-		"the leaves tumble back and forth (their last frame jumps), the sparkles once; both in BOTANIST's colour")
+			and leafEmitter.Color.Keypoints[1].Value == seedlight.Primary
+			and sparkEmitter.Color.Keypoints[1].Value == seedlight.Primary
+			and world:FindFirstChild("SeedlightLeaf", true) == nil and world:FindFirstChild("Pollen", true) == nil,
+		"the leaves tumble back and forth (their last frame jumps), the sparkles once; both in Garden apprentices' "
+			.. "palette; a rank only (BOTANIST II) wears no signature")
 	check(leafEmitter.Lifetime.Max + C.SpinSeconds <= C.Seconds and sparkEmitter.Lifetime.Max + C.SpinSeconds <= C.Seconds
 			and burstEmitter.Lifetime.Max + C.SpinSeconds <= C.Seconds,
 		"every particle has lived its life before the celebration ends")
@@ -715,7 +779,7 @@ local ok, err = pcall(function()
 	local h4 = RebirthFX.play({
 		character = other,
 		own = false,
-		rebirths = 100,
+		rebirths = 298,
 		reduced = false,
 		manual = true,
 		world = worldBox,
@@ -738,7 +802,7 @@ local ok, err = pcall(function()
 	local h5 = RebirthFX.play({
 		character = hero5,
 		own = true,
-		rebirths = 100,
+		rebirths = 298,
 		reduced = false,
 		manual = true,
 		world = worldBox,
@@ -748,7 +812,7 @@ local ok, err = pcall(function()
 		sound = function() end,
 	})
 	local line5 = guiBox[RebirthFX.Names.Card].Card.Line
-	check(line5.Text == "REBIRTH 100 · GAIA I" and line5:FindFirstChild("Rainbow") ~= nil
+	check(line5.Text == "REBIRTH 298 · GAIA I" and line5:FindFirstChild("Rainbow") ~= nil
 			and line5.TextColor3 == Color3.new(1, 1, 1),
 		"GAIA's card line: white words under the turning rainbow")
 	-- E. Played again before it ends: the first is stopped and handed back.
@@ -756,7 +820,7 @@ local ok, err = pcall(function()
 	local h5b = RebirthFX.play({
 		character = hero5,
 		own = true,
-		rebirths = 101,
+		rebirths = 299,
 		reduced = false,
 		manual = true,
 		world = worldBox,
@@ -775,23 +839,97 @@ local ok, err = pcall(function()
 			and #guiBox:GetChildren() == 0,
 		"a body lost midway: the camera handed back and every piece gone at once")
 
+	-- G. THE TWO PROTOTYPES (2026-10-10): Seedlight at LEAF TENDER I (8), World
+	-- Tree Halo at WORLD TREE I (144) -- somebody else's, stepped by hand.
+	local seedBody = body("Seedlight", Vector3.new(100, 10, 0))
+	local hs = RebirthFX.play({ character = seedBody, own = false, rebirths = 8, reduced = false, manual = true,
+		world = worldBox, gui = guiBox, sound = function() end })
+	local ws = worldBox:FindFirstChild(RebirthFX.Names.World)
+	local seedLeaves = {}
+	for _, d in ipairs(ws:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name == "SeedlightLeaf" then
+			table.insert(seedLeaves, d)
+		end
+	end
+	local leafImage = seedLeaves[1] and seedLeaves[1]:FindFirstChild("Leaf")
+	check(#seedLeaves == C.Seedlight.Leaves and ws:FindFirstChild("Pollen", true) and ws:FindFirstChild("Twinkles", true)
+			and leafImage and leafImage.Image == T.Leaf and leafImage.ImageTransparency == 1
+			and (leafImage.ImageColor3 == seedlight.Primary or leafImage.ImageColor3 == seedlight.Secondary),
+		"Seedlight: its leaves on the arc (the white leaf in the family's palette, unseen till the burst), the pollen "
+			.. "and the twinkles")
+	hs.step(C.SpinSeconds + C.Seedlight.ArcSeconds / 2)
+	local midLeaf = seedLeaves[1]
+	check(midLeaf.Leaf.ImageTransparency < 0.5 and midLeaf.StudsOffset.Y > 0,
+		"halfway along the arc a leaf shows, over the head")
+	hs.step(C.Seconds)
+	check(hs.finished() and #worldBox:GetChildren() == 0, "and it is all gone at the end")
+	local haloBody = body("Halo", Vector3.new(120, 10, 0))
+	local hh = RebirthFX.play({ character = haloBody, own = false, rebirths = 144, reduced = false, manual = true,
+		world = worldBox, gui = guiBox, sound = function() end })
+	local wh = worldBox:FindFirstChild(RebirthFX.Names.World)
+	local haloLeaves = {}
+	for _, d in ipairs(wh:GetDescendants()) do
+		if d:IsA("BillboardGui") and d.Name == "HaloLeaf" then
+			table.insert(haloLeaves, d)
+		end
+	end
+	local rays = wh:FindFirstChild("HaloRays", true)
+	check(#haloLeaves == C.Halo.Leaves and wh:FindFirstChild("Pollen", true) and wh:FindFirstChild("Twinkles", true) == nil
+			and (C.Rays == "" or (rays and rays.Rays.Image == C.Rays and rays.Rays.ImageColor3 == C.Halo.Gold)),
+		"World Tree Halo: its ring of leaves, gold pollen and the owner's sunburst behind the head")
+	local headOf = haloBody:FindFirstChild("Head")
+	hh.step(C.SpinSeconds + C.Halo.Seconds * 0.5)
+	local att = haloLeaves[1].Parent
+	local fromHead = att.WorldPosition - headOf.Position
+	check(att:IsA("Attachment") and fromHead.Y > C.Halo.Above - 0.01 and haloLeaves[1].Leaf.ImageTransparency < 0.5
+			and Vector3.new(fromHead.X, 0, fromHead.Z).Magnitude > C.Halo.From,
+		"halfway, a leaf of the ring shows over the head, the ring opening", tostring(fromHead))
+	hh.step(C.Seconds)
+	check(hh.finished() and #worldBox:GetChildren() == 0, "and it is all gone at the end")
+	-- H. A rank only marks the title over that head for its pulse (OwnerTitleUI grows it); a new name does not.
+	local pulseBody = body("Pulse", Vector3.new(140, 10, 0))
+	local pulseTitle = Instance.new("BillboardGui")
+	pulseTitle.Name = TITLE.Name
+	pulseTitle.Parent = pulseBody:FindFirstChild("Head")
+	local hp = RebirthFX.play({ character = pulseBody, own = false, rebirths = 6, reduced = false, manual = true,
+		world = worldBox, gui = guiBox, sound = function() end })
+	hp.step(C.SpinSeconds - 0.05)
+	local early = pulseTitle:GetAttribute(C.Pulse.Attribute)
+	hp.step(C.SpinSeconds + 0.01)
+	local marked = pulseTitle:GetAttribute(C.Pulse.Attribute)
+	hp.step(C.Seconds)
+	pulseTitle:SetAttribute(C.Pulse.Attribute, nil)
+	local hn = RebirthFX.play({ character = pulseBody, own = false, rebirths = 8, reduced = false, manual = true,
+		world = worldBox, gui = guiBox, sound = function() end })
+	hn.step(C.SpinSeconds + 0.01)
+	local unmarked = pulseTitle:GetAttribute(C.Pulse.Attribute)
+	hn.step(C.Seconds)
+	local hr = RebirthFX.play({ character = pulseBody, own = false, rebirths = 6, reduced = true, manual = true,
+		world = worldBox, gui = guiBox, sound = function() end })
+	hr.step(C.SpinSeconds + 0.01)
+	local reducedMark = pulseTitle:GetAttribute(C.Pulse.Attribute)
+	hr.step(C.Seconds)
+	check(early == nil and type(marked) == "number" and unmarked == nil and reducedMark == nil
+			and RebirthFX.PulseAttribute == C.Pulse.Attribute,
+		"a rank only marks the title for its pulse at the burst; a new name and REDUCED FX never do")
+
 	--==========================================================================
 	say("9. The aura")
 	--==========================================================================
 	check(not RebirthCelebration.auraFor(49) and RebirthCelebration.auraFor(50) and RebirthCelebration.auraFor(4098)
-			and not RebirthCelebration.auraFor("junk"),
-		"the aura from WORLD TREE (50) up, and not before")
+			and not RebirthCelebration.auraFor("junk") and C.Aura.From == 50,
+		"the aura from rebirth 50 up, and not before -- not moved to WORLD TREE's 144 by the 100 titles")
 	local auraBody, auraRoot = body("Aura", Vector3.new(80, 10, 0))
 	local auraBox = Instance.new("Folder")
 	auraBox.Name = "Auras"
 	auraBox.Parent = scratch
 	local holder = RebirthFX.aura(auraRoot, 50, auraBox)
-	local _, worldTree = Rebirth.titleFor(50)
+	local petal = TITLE.Families[2]
 	check(holder:IsA("BasePart") and holder.Parent == auraBox and not holder:IsDescendantOf(auraBody)
 			and holder.Anchored and not holder.CanCollide and not holder.CanQuery and not holder.CanTouch
 			and holder.Transparency == 1 and holder:GetAttribute("Rebirths") == 50
 			and RebirthFX.auraOf(auraRoot) == holder and holder.CFrame == auraRoot.CFrame,
-		"WORLD TREE's aura is a part of its own outside the character, invisible, anchored, touching nothing, on the "
+		"the aura at 50 is a part of its own outside the character, invisible, anchored, touching nothing, on the "
 			.. "body's root")
 	local A = C.Aura
 	local boards = {}
@@ -807,13 +945,14 @@ local ok, err = pcall(function()
 	for i, board in ipairs(boards) do
 		local frame = board:FindFirstChild("Frame")
 		boardsOK = boardsOK and frame and frame:IsA("ImageLabel") and frame.Image == T.Aura
-			and frame.ImageRectSize == Vector2.new(256, 256) and frame.ImageColor3 == worldTree.Colour
+			and frame.ImageRectSize == Vector2.new(256, 256)
+			and frame.ImageColor3 == (if i == 1 then petal.Primary else petal.Secondary)
 			and board.Size == UDim2.fromScale(A.Size, A.Size) and board.LightInfluence == 0 and not board.AlwaysOnTop
 			and near(math.abs(board.StudsOffset.X), A.Side, 1e-4) and board.StudsOffset.Z < 0
 			and (i == 1) == (board.StudsOffset.X < 0)
 	end
 	check(boardsOK, "its wisp sheet plays on two billboards, to the left and the right of the body in camera space and "
-		.. "a little behind it, in the title's colour, never drawn on top")
+		.. "a little behind it, in the family's palette (GROVE MASTER's violet and pink), never drawn on top")
 	RebirthFX.followAuras(0)
 	local f1 = boards[1].Frame.ImageRectOffset
 	local f2 = boards[2].Frame.ImageRectOffset
@@ -828,14 +967,58 @@ local ok, err = pcall(function()
 	auraRoot.CFrame = CFrame.new(90, 12, 3) * CFrame.Angles(0, 1, 0)
 	RebirthFX.followAuras()
 	check(holder.CFrame == auraRoot.CFrame, "every frame it is put back on the body's root, wherever the body went")
-	local gaia = RebirthFX.aura(auraRoot, 100, auraBox)
+	local gaia = RebirthFX.aura(auraRoot, 298, auraBox)
 	local gaiaFrame = gaia:FindFirstChild("Frame", true)
 	check(holder.Parent == nil and gaia.Parent == auraBox and #auraBox:GetChildren() == 1
 			and RebirthFX.auraOf(auraRoot) == gaia and gaiaFrame and gaiaFrame:FindFirstChild("Rainbow") ~= nil
 			and gaiaFrame.ImageColor3 == Color3.new(1, 1, 1),
 		"a new count replaces it (one aura a body); GAIA's is the rainbow")
+	-- GAIA's rainbow turns with the frames.
+	local gaiaRainbow = gaiaFrame:FindFirstChild("Rainbow")
+	RebirthFX.followAuras(0, auraRoot.Position)
+	local c0 = gaiaRainbow.Color.Keypoints[1].Value
+	RebirthFX.followAuras(C.Aura.RainbowSeconds / 4, auraRoot.Position)
+	check(gaiaRainbow.Color.Keypoints[1].Value ~= c0, "GAIA's rainbow turns slowly")
 	RebirthFX.clearAura(auraRoot)
 	check(gaia.Parent == nil and RebirthFX.auraOf(auraRoot) == nil, "taking it off takes it all")
+	-- World Tree Halo's two accent leaves (its family's AuraAccents) go round the body.
+	local tree = RebirthFX.aura(auraRoot, 150, auraBox)
+	local accents = {}
+	for _, d in ipairs(tree:GetDescendants()) do
+		if d:IsA("BillboardGui") and string.sub(d.Name, 1, 6) == "Accent" then
+			table.insert(accents, d)
+		end
+	end
+	RebirthFX.followAuras(1, auraRoot.Position)
+	local a1 = accents[1] and accents[1].StudsOffset
+	RebirthFX.followAuras(2, auraRoot.Position)
+	local a2 = accents[1] and accents[1].StudsOffset
+	check(#accents == 2 and accents[1].Leaf.Image == T.Leaf and accents[1].Leaf.ImageColor3 == TITLE.Families[6].Primary
+			and a1 ~= a2 and select(4, RebirthCelebration.auraLook(60)) == 0,
+		"World Tree's aura wears two small leaves going round it; other families none")
+	RebirthFX.clearAura(auraRoot)
+	-- Only the Nearest bodies within MaxDistance show theirs (2026-10-10's budget).
+	local crowd = {}
+	for k = 1, C.Aura.Nearest + 2 do
+		local _, r = body("Crowd" .. k, Vector3.new(200 + k * 10, 10, 0))
+		table.insert(crowd, RebirthFX.aura(r, 60, auraBox))
+	end
+	RebirthFX.followAuras(10, Vector3.new(200, 10, 0))
+	local shownCount, farShown = 0, false
+	for k, h in ipairs(crowd) do
+		if RebirthFX.auraShown(h) then
+			shownCount += 1
+			farShown = farShown or k > C.Aura.Nearest
+		end
+	end
+	local picked = RebirthCelebration.nearest({ 5, 200, 1, 3, 9, 2 }, 4, 160)
+	local beyond = RebirthCelebration.nearest({ 170, 5 }, 4, 160)
+	check(C.Aura.Nearest == 4 and shownCount == C.Aura.Nearest and not farShown and picked[1] and picked[3]
+			and picked[4] and picked[6] and not picked[2] and not picked[5] and beyond[1] == nil and beyond[2],
+		"only the four nearest auras show on a screen; a fifth and sixth wait", tostring(shownCount))
+	for _, h in ipairs(crowd) do
+		h:Destroy()
+	end
 	local last = RebirthFX.aura(auraRoot, 60, auraBox)
 	auraBody:Destroy()
 	RebirthFX.followAuras()
@@ -843,7 +1026,8 @@ local ok, err = pcall(function()
 	local fx = sourceOf(Shared, "RebirthFX")
 	check(has(fx, "player:GetAttributeChangedSignal(CFG.Attributes.Rebirths)") and has(fx, "player.CharacterAdded")
 			and has(fx, "if not RebirthCelebration.auraFor(n) or StatusText.reducedMotion() then")
-			and has(fx, "local shown = head.LocalTransparencyModifier < 0.5"),
+			and has(fx, "local shown = head.LocalTransparencyModifier < 0.5")
+			and has(fx, "RebirthFX.hideAura(holder, not shown)"),
 		"every body's aura follows its count and its respawns, goes for REDUCED FX, and not round your own "
 			.. "camera in first person")
 

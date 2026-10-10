@@ -1,5 +1,57 @@
 # Steal a Seed — Session Handoff
 
+## THE 100 REBIRTH TITLES AND THE TWO PROTOTYPE EFFECTS — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; RebirthSpec 78/0, RebirthCelebrationSpec 92/0, TitleFXSpec 28/0, PhoneMenuSpec 29/0; 14 OF 14 RANK-MATH MUTANTS CAUGHT; FULL SUITE: 136 OF 136 GREEN (569 S); SEEN IN A GUARDED PLAY ON `SeedTest_item3_20261010`, DESKTOP 1251 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
+
+Queue item 3 (item 11). The owner: "approve the rebirth titles, let terminal do it"; on the overlap with the other session's TitleFX: "both stay, and add them to the ? list too". The design: `output/design/rebirth-titles-fx-v1/` (README and JSON, read in full).
+
+**The ladder** (GameConfig.Rebirth.Title.Ladder; Rebirth.luau):
+- 100 steps from the design's JSON: its names, ranges and colours, the fifteen founder colours kept.
+- SPROUT to GREEN THUMB one rebirth each, with no numeral.
+- The five landmarks I-V: GROVE KEEPER at 20, ELDER ROOT at 67, WORLD TREE at 144, EVERBLOOM at 221, GAIA at 298. Every other step I-III.
+- GAIA V from 302 on, REBIRTH N still counting: the design's proposal, in force until the owner says otherwise.
+- No migration: rebirth was never published (v1038 predates it).
+- New helpers: Rebirth.stepIndex, Rebirth.family and familySpan, Rebirth.change ("name", "rank" or "none").
+
+**The fit**, measured in Studio for every rank:
+- Over a head, no title shrinks. The widest, ELDERWOOD WARDEN III, is 206 + 6 px of 228 at 20 px, and 156 + 6 of a phone's 171 at 15 px.
+- The panel: the strip 18 px at worst (of 26), NEXT 15, NEXT UNLOCKS' title 17. The card's line stays at 12 px or more on the smallest phone.
+- The TITLES rows: the words now take 56% of the row (42% before), so ELDERWOOD WARDEN I-III draws at its full 22 px. The bonus takes 24%, wrapped (28 of the row's 56 px).
+
+**The "?" TITLES list** (RebirthUI):
+- 100 rows under 11 family headers ("GARDEN APPRENTICES · REBIRTH 1-19", in the family's colour on the rows' dark plate).
+- Built the first time the list opens, not at join; the NEXT row brought into view.
+
+**The families' effects** (GameConfig.Rebirth.Title.Families, the design's 11 palettes; RebirthCelebration, RebirthFX):
+- The celebration's leaves and sparkles wear the family's palette (Primary to Secondary; GAIA the rainbow).
+- A NEW name throws its family's accent: the two prototypes' own; the other nine the common leaves and sparkles in their palette.
+- A RANK only (BOTANIST I to II) throws Motes (4 leaves, 8 sparkles) and pulses the title over the head once (OwnerTitleUI: 1.18x and back in 0.5 s). It never holds the controls longer.
+- **Seedlight** (slots 1-9): five leaves ride one arc over the head, from the left shoulder to the right; a pollen puff; a few twinkles.
+- **World Tree Halo** (slots 50-59): a ring of ten gold and green leaves opens over the head while it turns; gold pollen; the owner's sunburst behind the head.
+- Existing art only: the white leaf, sparkle and aura sheets, the sunburst. The baked burst stays shared and untinted.
+- Reduced FX: none of it, as before.
+
+**The aura** (the gate stays at rebirth 50):
+- Its two wisps wear the family's palette; GAIA's rainbow turns slowly.
+- World Tree's two accent leaves go round the body.
+- Only the 4 nearest bodies within 160 studs show theirs on a screen.
+- Reduced FX and first person as before.
+
+**TitleFX** (the other session's leaves round the head titles): all 99 new steps mapped into GameConfig.TitleFX.Steps by family. Three new profiles cover the families no profile fitted (dawn, astral, genesis). All still off until the 8 PNGs are uploaded. TitleFXSpec now samples every title (rebirths 1-303).
+
+**Seen in Play** (captures in `output/item3-2026-10-10/`):
+- **Seedlight** on LEAF TENDER I: 03, frozen mid-arc (01a-c live).
+- **World Tree Halo** on WORLD TREE I: 04, frozen.
+- **The aura** at 50, 150 and 298 (05-07; 08 in the open), faint as the aura always was. World Tree's accent leaf at the chest: 12.
+- **A rank only**, 150 to 151 (11a-b): the card, a few motes, no signature. The pulse is too quick for a capture; RebirthCelebrationSpec holds it.
+- **The TITLES list** (10, 13, 14): the World Tree header and NEXT; the top (Garden apprentices); the bottom (GAIA, its rainbow).
+- **The console**: no error.
+- Not seen: a phone (no emulator here). RebirthSpec measures every title at the phone's 171 x 26.
+- Not seen: several bodies with auras at once (one player here). RebirthCelebrationSpec holds the nearest four.
+
+**For the owner to decide:** GAIA V kept after 302 (the design's proposal); the other nine families' own unlock effects (the design's profiles, waiting on a yes).
+
+**Files**: GameConfig (Rebirth.Title's Ladder and Families; Celebration's Motes, Pulse, Seedlight, Halo; Aura's RainbowSeconds, Nearest, Accent; Layout's FamilyRow, RowWords, RowBonus; Words' FamilyRow, FamilyRowFrom; TitleFX's Steps and three profiles), Rebirth, RebirthCelebration, RebirthFX, RebirthUI, OwnerTitleUI; RebirthSpec, RebirthCelebrationSpec, TitleFXSpec.
+
 ## THE MILL'S PROGRESS BAR BACK, SOLID; NO PROGRESS BAR TRANSPARENT — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; TreadmillFunSpec 115/0, PodRushSpec 98/0, HudLayoutSpec 1458/0; SEEN IN A GUARDED PLAY ON `SeedTest_item4_20261010`, DESKTOP 1148 x 716 THEN 1251 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
 
 Queue item 4. The owner: "add the progress bar back again for the mill, progress bars must not be transparent".
@@ -201,7 +253,7 @@ In this order. Each its own commit on wip, pushed once green; never published by
 
 1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1. -- DONE (its entry above).
 2. **Rarity edges** (item 10). -- DONE (its entry above).
-3. **The 100 rebirth titles and the two prototype effects** (item 11). Built AFTER item 4: the other session first puts its TitleFX (the leaves, flowers and mist round the head titles, 4a57f6e) on the "?" TITLES list too. The owner on the overlap: "both stay, and add them to the ? list too" -- item 3 keeps its own effects (the family palettes on the rebirth-50 aura, the unlock effects, the accent, the rank pulse) and maps its new steps into GameConfig.TitleFX.Steps.
+3. **The 100 rebirth titles and the two prototype effects** (item 11). -- DONE (its entry above). Built AFTER item 4: the other session first puts its TitleFX (the leaves, flowers and mist round the head titles, 4a57f6e) on the "?" TITLES list too. The owner on the overlap: "both stay, and add them to the ? list too" -- item 3 keeps its own effects (the family palettes on the rebirth-50 aura, the unlock effects, the accent, the rank pulse) and maps its new steps into GameConfig.TitleFX.Steps.
 4. **The mill's progress bar back, and no progress bar transparent.** -- DONE (its entry above).
    - TreadmillFunUI's MilestoneBar (A2, "NEXT: 5K SPEED · CASH" over the player's own belt). Its track has drawn nothing since 2026-10-09, under the owner's rule of that day, "everything must be transparent" (the comment at TreadmillFunUI.client.luau:223). Give it a solid track again, a dark well with an edge, with the gold fill on it.
    - It did not show at all in the v1048 batch's Play: output/v1047-batch2/05_minigame_in_hotbar_place.png, riding the own mill at 20 speed, desktop 1148 x 716. The A1 pop ("+2 WALK SPEED · NOW 18") showed; the bar did not. `bar.Visible = barRect ~= nil` (line 604): find which condition failed there (the 45-stud check, the projected point off the screen, or SpeedMilestones.clearOf finding no clear place), and make the bar show while the player is on or by their own mill.

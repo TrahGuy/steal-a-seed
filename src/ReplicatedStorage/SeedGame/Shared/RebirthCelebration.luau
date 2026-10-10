@@ -216,11 +216,16 @@ function RebirthCelebration.serverLine(name: string, rebirths: any): string
 	return string.format(W.Server, name, n, title or "")
 end
 
--- The particles' colour: the title's, or the rainbow at the top of the ladder.
+-- The particles' colour: the title's family's palette, Primary to Secondary
+-- over each one's life (since the 100 titles, 2026-10-10), or the rainbow at
+-- GAIA; the orbs' gold with no title.
 function RebirthCelebration.tint(rebirths: any): ColorSequence
-	local _, step = Rebirth.titleFor(rebirths)
-	if step and step.Rainbow then
+	local step = Rebirth.title(rebirths)
+	local family = Rebirth.family(step)
+	if (step and step.Rainbow) or (family and family.Rainbow) then
 		return WheelDraw.rainbow(0)
+	elseif family then
+		return ColorSequence.new(family.Primary, family.Secondary)
 	end
 	return ColorSequence.new(if step then step.Colour else C.Orbs.Colour)
 end
@@ -228,6 +233,144 @@ end
 -- Whether a count wears the aura (Aura.From rebirths and up).
 function RebirthCelebration.auraFor(rebirths: any): boolean
 	return Rebirth.count(rebirths) >= C.Aura.From
+end
+
+--==============================================================================
+-- THE ACCENT AT THE BURST (2026-10-10, the 100 titles; Celebration's Motes,
+-- Pulse, Seedlight and Halo)
+--==============================================================================
+export type Accent = {
+	-- Rebirth.change: "name", "rank" or "none".
+	change: string,
+	family: Rebirth.Family?,
+	-- A prototype family's own accent on a new name: "Seedlight" or "Halo".
+	signature: string?,
+	-- How many of the common leaves and sparkles the burst throws (none under a
+	-- signature), and whether the title over the head pulses (a rank only).
+	leaves: number,
+	sparkles: number,
+	pulse: boolean,
+}
+
+-- What the burst throws for a rebirth to `rebirths` from `before` (one less
+-- when left out): a new name its family's signature, or the full leaves and
+-- sparkles in its palette; a rank only, Motes of them and the pulse.
+function RebirthCelebration.accent(rebirths: any, before: any?): Accent
+	local n = Rebirth.count(rebirths)
+	local was = if before == nil then math.max(0, n - 1) else Rebirth.count(before)
+	local change = Rebirth.change(was, n)
+	local family = Rebirth.family(Rebirth.title(n))
+	local a: Accent = {
+		change = change,
+		family = family,
+		signature = nil,
+		leaves = C.Leaves.Count,
+		sparkles = C.Sparkles.Count,
+		pulse = false,
+	}
+	if change == "rank" then
+		a.leaves, a.sparkles, a.pulse = C.Motes.Leaves, C.Motes.Sparkles, true
+	elseif change == "name" and family and family.Signature then
+		a.signature, a.leaves, a.sparkles = family.Signature, 0, 0
+	end
+	return a
+end
+
+-- The title's pulse `u` seconds after the burst: its scale, 1 outside Pulse.
+function RebirthCelebration.pulse(u: number): number
+	local P = C.Pulse
+	if u <= 0 or u >= P.Seconds then
+		return 1
+	end
+	return 1 + (P.Scale - 1) * math.sin(math.pi * u / P.Seconds)
+end
+
+-- SEEDLIGHT: leaf `i` of `count`, `u` seconds after the burst. Its offset from
+-- the head in CAMERA space (a billboard's StudsOffset: x right, y up), on an
+-- arc Radius round it from the left shoulder over the top to the right, each
+-- one Stagger after the last; and its opacity (0 before it sets off and once it
+-- has landed).
+function RebirthCelebration.seedlightLeaf(i: number, count: number, u: number): (Vector3, number)
+	local S = C.Seedlight
+	local start = (i - 1) * S.Stagger
+	local p = math.clamp((u - start) / S.ArcSeconds, 0, 1)
+	local a = math.rad(-80 + 160 * RebirthCelebration.ease(p))
+	local at = Vector3.new(math.sin(a) * S.Radius, math.cos(a) * S.Radius * 0.75, 0)
+	local alpha = if u < start then 0 elseif p < 0.15 then p / 0.15 elseif p > 0.8 then (1 - p) / 0.2 else 1
+	return at, math.clamp(alpha, 0, 1)
+end
+
+-- WORLD TREE HALO: leaf `i` of `count`, `u` seconds after the burst. Its offset
+-- from the head in the WORLD (an attachment's), round a ring Above it opening
+-- from From to To studs in Seconds while it turns Turn of a circle; and its
+-- opacity.
+function RebirthCelebration.haloLeaf(i: number, count: number, u: number): (Vector3, number)
+	local H = C.Halo
+	local p = math.clamp(u / H.Seconds, 0, 1)
+	local e = easeOut(p)
+	local r = H.From + (H.To - H.From) * e
+	local a = (i - 1) * TAU / math.max(1, count) + H.Turn * TAU * e
+	local at = Vector3.new(math.cos(a) * r, H.Above + 0.4 * e, math.sin(a) * r)
+	local alpha = if u <= 0 then 0 elseif p < 0.1 then p / 0.1 elseif p > 0.7 then (1 - p) / 0.3 else 1
+	return at, math.clamp(alpha, 0, 1)
+end
+
+-- The halo's sunburst `u` seconds after the burst: its opacity, in and out over
+-- RaysSeconds.
+function RebirthCelebration.haloRays(u: number): number
+	local H = C.Halo
+	if u <= 0 or u >= H.RaysSeconds then
+		return 0
+	end
+	return math.sin(math.pi * u / H.RaysSeconds)
+end
+
+--==============================================================================
+-- THE AURA'S COLOURS AND WHO WEARS IT (2026-10-10)
+--==============================================================================
+-- The two wisps' colours for a count -- its family's Primary and Secondary --
+-- and whether they wear the rainbow instead (GAIA); with how many accent
+-- leaves go round it (the family's AuraAccents, at most two).
+function RebirthCelebration.auraLook(rebirths: any): (Color3, Color3, boolean, number)
+	local step = Rebirth.title(rebirths)
+	local family = Rebirth.family(step)
+	local rainbow = (step ~= nil and step.Rainbow == true) or (family ~= nil and family.Rainbow == true)
+	local accents = math.clamp(math.floor(if family then family.AuraAccents or 0 else 0), 0, 2)
+	if family then
+		return family.Primary, family.Secondary, rainbow, accents
+	end
+	local colour = if step then step.Colour else C.Orbs.Colour
+	return colour, colour, rainbow, accents
+end
+
+-- Accent leaf `i` of `count` round an aura at `now`: its offset in camera space
+-- (once round every Accent.Seconds, the two half a turn apart, bobbing).
+function RebirthCelebration.auraAccent(i: number, count: number, now: number): Vector3
+	local A = C.Aura.Accent
+	local a = (now / A.Seconds) * TAU + (i - 1) * TAU / math.max(1, count)
+	return Vector3.new(math.cos(a) * A.Radius, A.Lift + math.sin(a * 2) * A.Bob, math.sin(a) * A.Radius)
+end
+
+-- Which of these distances (a viewer's camera to each aura's body) show their
+-- aura: the `keep` nearest within `within`, by index; ties to the first.
+function RebirthCelebration.nearest(distances: { number }, keep: number, within: number): { [number]: boolean }
+	local order: { number } = {}
+	for i, d in ipairs(distances) do
+		if d == d and d <= within then
+			table.insert(order, i)
+		end
+	end
+	table.sort(order, function(a: number, b: number): boolean
+		if distances[a] ~= distances[b] then
+			return distances[a] < distances[b]
+		end
+		return a < b
+	end)
+	local shown: { [number]: boolean } = {}
+	for k = 1, math.min(keep, #order) do
+		shown[order[k]] = true
+	end
+	return shown
 end
 
 --==============================================================================

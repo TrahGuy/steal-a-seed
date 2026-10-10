@@ -57,18 +57,26 @@ function Rebirth.millNeeded(): (number, string)
 	return CFG.MinMillTier, if tier then tier.name else tostring(CFG.MinMillTier)
 end
 
-export type Step = { At: number, Text: string, Colour: Color3, Rainbow: boolean? }
+export type Step = { At: number, Text: string, Colour: Color3, Family: string?, Rainbow: boolean?, Ranks: number? }
+
+-- The index of the highest title step a count has reached, 0 before the first.
+-- The ladder rises (RebirthSpec), so the first step not reached ends the look.
+function Rebirth.stepIndex(rebirths: any): number
+	local n = Rebirth.count(rebirths)
+	local index = 0
+	for i, step in ipairs(CFG.Title.Ladder) do
+		if n < step.At then
+			break
+		end
+		index = i
+	end
+	return index
+end
 
 -- The highest title step a count has reached, or nil before the first.
 function Rebirth.title(rebirths: any): Step?
-	local n = Rebirth.count(rebirths)
-	local best: Step? = nil
-	for _, step in ipairs(CFG.Title.Ladder) do
-		if n >= step.At then
-			best = step :: any
-		end
-	end
-	return best
+	local index = Rebirth.stepIndex(rebirths)
+	return if index > 0 then CFG.Title.Ladder[index] :: any else nil
 end
 
 --==============================================================================
@@ -101,24 +109,24 @@ function Rebirth.roman(n: number): string
 	return table.concat(parts)
 end
 
--- The rebirths the ladder's i-th step spans: its first, and its last (nil for
--- the top step, which never ends).
-function Rebirth.span(index: number): (number, number?)
+-- The rebirths the ladder's i-th step spans: its first, and its last. The top
+-- step's last is where its Ranks end (GAIA V at 302); it is worn on after it.
+function Rebirth.span(index: number): (number, number)
 	local ladder = CFG.Title.Ladder
+	local step = ladder[index] :: any
 	local after = ladder[index + 1]
-	return ladder[index].At, if after then after.At - 1 else nil
+	if after then
+		return step.At, after.At - 1
+	end
+	return step.At, step.At + math.max(1, math.floor(tonumber(step.Ranks) or 1)) - 1
 end
 
 -- The words a count wears over its name and in the panel -- "BOTANIST II" --
--- with its step (colour, rainbow); nil before the first rebirth.
+-- with its step (colour, family, rainbow); nil before the first rebirth. Past
+-- the top step's last rank the numeral stays there: GAIA V at 302 and on.
 function Rebirth.titleFor(rebirths: any): (string?, Step?)
 	local n = Rebirth.count(rebirths)
-	local index = 0
-	for i, step in ipairs(CFG.Title.Ladder) do
-		if n >= step.At then
-			index = i
-		end
-	end
+	local index = Rebirth.stepIndex(n)
 	if index == 0 then
 		return nil, nil
 	end
@@ -127,22 +135,81 @@ function Rebirth.titleFor(rebirths: any): (string?, Step?)
 	if last == first then
 		return step.Text, step
 	end
-	return string.format(CFG.Title.Numbered, step.Text, Rebirth.roman(n - first + 1)), step
+	return string.format(CFG.Title.Numbered, step.Text, Rebirth.roman(math.min(n, last) - first + 1)), step
 end
 
 -- A step as the TITLES list names it: the words with their numerals' range
--- ("BOTANIST I-II", "GAIA I+", "SPROUT") and its rebirths ("REBIRTH 5-6",
--- "REBIRTH 100+", "REBIRTH 1").
+-- ("BOTANIST I-III", "GAIA I-V", "SPROUT") and its rebirths ("REBIRTH 5-7",
+-- "REBIRTH 1"; the top step's run on: "REBIRTH 298+").
 function Rebirth.stepWords(index: number): (string, string)
 	local step = CFG.Title.Ladder[index]
 	local first, last = Rebirth.span(index)
-	if last == nil then
-		return string.format(CFG.Title.From, step.Text, Rebirth.roman(1)), string.format(WORDS.RowRebirthFrom, first)
-	elseif last == first then
-		return step.Text, string.format(WORDS.RowRebirth, first)
+	local rebirths = if CFG.Title.Ladder[index + 1] == nil then string.format(WORDS.RowRebirthFrom, first)
+		elseif last == first then string.format(WORDS.RowRebirth, first)
+		else string.format(WORDS.RowRebirths, first, last)
+	if last == first then
+		return step.Text, rebirths
 	end
-	return string.format(CFG.Title.Span, step.Text, Rebirth.roman(1), Rebirth.roman(last - first + 1)),
-		string.format(WORDS.RowRebirths, first, last)
+	return string.format(CFG.Title.Span, step.Text, Rebirth.roman(1), Rebirth.roman(last - first + 1)), rebirths
+end
+
+--==============================================================================
+-- THE FAMILIES (2026-10-10, the 100 titles): GameConfig.Rebirth.Title.Families,
+-- each step's by its Family. What the TITLES list heads each run with, and what
+-- the celebration and the aura are tinted by.
+--==============================================================================
+export type Family = {
+	Id: string,
+	Name: string,
+	Fx: string,
+	Primary: Color3,
+	Secondary: Color3,
+	Signature: string?,
+	AuraAccents: number?,
+	Rainbow: boolean?,
+}
+
+local familyById: { [string]: Family } = {}
+for _, f in ipairs(CFG.Title.Families) do
+	familyById[f.Id] = f :: any
+end
+
+-- A step's family, or nil (no step, or one with none).
+function Rebirth.family(step: any): Family?
+	local id = if type(step) == "table" then step.Family else nil
+	return if type(id) == "string" then familyById[id] else nil
+end
+
+-- A family's run of the ladder: its first step's index and its last (0, 0 for
+-- an id no step wears), and the rebirths from the first one's first to the last
+-- one's last.
+function Rebirth.familySpan(id: string): (number, number, number, number)
+	local firstIndex, lastIndex = 0, 0
+	for i, step in ipairs(CFG.Title.Ladder) do
+		if (step :: any).Family == id then
+			if firstIndex == 0 then
+				firstIndex = i
+			end
+			lastIndex = i
+		end
+	end
+	if firstIndex == 0 then
+		return 0, 0, 0, 0
+	end
+	local from = Rebirth.span(firstIndex)
+	local _, to = Rebirth.span(lastIndex)
+	return firstIndex, lastIndex, from, to
+end
+
+-- What a rebirth from `before` to `after` does to the title: "name" (a step it
+-- had not reached: SPROUT, or BOTANIST III to LEAF TENDER I), "rank" (the same
+-- step's next numeral, or GAIA V kept) or "none" (no title yet).
+function Rebirth.change(before: any, after: any): string
+	local now = Rebirth.stepIndex(after)
+	if now == 0 then
+		return "none"
+	end
+	return if Rebirth.stepIndex(before) ~= now then "name" else "rank"
 end
 
 -- The size one line of words is drawn at: `base`, unless the words need more

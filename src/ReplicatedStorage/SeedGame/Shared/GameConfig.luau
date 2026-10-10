@@ -6066,9 +6066,9 @@ GameConfig.Rebirth = {
 		Tag = "SeedRebirthTitle",
 		-- SMALLER (2026-10-09, the owner: "make the title smaller, it looks huge
 		-- specially on phones"; it was 320 x 46, the words at 28 and REBIRTH N
-		-- at 14). 228 wide for the numerals: at 20 the widest title to rebirth
-		-- 4200, GAIA MMMDCCCLXXXVIII, is 212 px and its outline 6 more
-		-- (RebirthSpec measures every one). The box is invisible; only the
+		-- at 14). 228 wide: at 20 the widest of the 100 titles, ELDERWOOD
+		-- WARDEN III, is 206 px and its outline 6 more; 156 + 6 of a phone's 171
+		-- at 15 (RebirthSpec measures every one). The box is invisible; only the
 		-- words show.
 		Size = Vector2.new(228, 34),
 		Rise = 2.4,
@@ -6087,34 +6087,157 @@ GameConfig.Rebirth = {
 		Sub = "REBIRTH %d",
 		-- ROMAN NUMERALS (2026-10-08, the owner: "Add roman numerals so that
 		-- players wont think it's repepitive"): a step that lasts more than one
-		-- rebirth counts through it from I -- BOTANIST I at 5, BOTANIST II at 6,
-		-- GROVE KEEPER I to V for 10 to 14, GAIA I at 100 and on with no end. A
-		-- step of one rebirth (SPROUT to GREEN THUMB) has none: a lone I would
-		-- promise a II that never comes. The TITLES list names each step's
-		-- range (Span, or From for the top step). A plain hyphen: these fonts'
-		-- dashes are unchecked (memory: the tofu list).
+		-- rebirth counts through it from I -- BOTANIST I at 5 to III at 7. A step
+		-- of one rebirth (SPROUT to GREEN THUMB) has none: a lone I would promise
+		-- a II that never comes. The TITLES list names each step's range (Span). A
+		-- plain hyphen: these fonts' dashes are unchecked (memory: the tofu list).
 		Numbered = "%s %s",
 		Span = "%s %s-%s",
-		From = "%s %s+",
-		-- Fifteen steps (2026-10-08, the owner: "yes add more titles"; the other
-		-- session's proposed names and colours, DEFAULTS the owner may rename).
-		-- The rainbow is the last step's alone.
+		--======================================================================
+		-- THE 100 TITLES (2026-10-10, the owner: "approve the rebirth titles, let
+		-- terminal do it"). The design: output/design/rebirth-titles-fx-v1 (the
+		-- owner's Cursor session) -- its names, ranges and colours as drawn, the
+		-- fifteen founder colours kept. Each step lasts until the next one's At:
+		-- SPROUT to GREEN THUMB one rebirth each, the five landmarks five (I-V:
+		-- GROVE KEEPER at 20, ELDER ROOT at 67, WORLD TREE at 144, EVERBLOOM at
+		-- 221, GAIA at 298), every other step three (I-III). The top step's Ranks
+		-- ends its numerals: GAIA V from 302 on, REBIRTH N under it still
+		-- counting. Family: its family in Families. The rainbow is GAIA's alone.
+		-- No migration: rebirth was never published (v1038 predates it).
+		--======================================================================
 		Ladder = {
-			{ At = 1, Text = "SPROUT", Colour = Color3.fromRGB(150, 235, 100) },
-			{ At = 2, Text = "SEEDLING", Colour = Color3.fromRGB(60, 205, 115) },
-			{ At = 3, Text = "GARDENER", Colour = Color3.fromRGB(255, 190, 70) },
-			{ At = 4, Text = "GREEN THUMB", Colour = Color3.fromRGB(170, 255, 60) },
-			{ At = 5, Text = "BOTANIST", Colour = Color3.fromRGB(90, 200, 255) },
-			{ At = 7, Text = "HERBALIST", Colour = Color3.fromRGB(40, 215, 190) },
-			{ At = 10, Text = "GROVE KEEPER", Colour = Color3.fromRGB(190, 125, 255) },
-			{ At = 15, Text = "BLOOM WARDEN", Colour = Color3.fromRGB(255, 120, 200) },
-			{ At = 20, Text = "THORN KNIGHT", Colour = Color3.fromRGB(235, 60, 80) },
-			{ At = 25, Text = "ELDER ROOT", Colour = Color3.fromRGB(255, 125, 80) },
-			{ At = 30, Text = "CANOPY LORD", Colour = Color3.fromRGB(30, 190, 110) },
-			{ At = 40, Text = "ANCIENT OAK", Colour = Color3.fromRGB(205, 150, 90) },
-			{ At = 50, Text = "WORLD TREE", Colour = Color3.fromRGB(255, 215, 80) },
-			{ At = 75, Text = "EVERBLOOM", Colour = Color3.fromRGB(255, 90, 230) },
-			{ At = 100, Text = "GAIA", Colour = Color3.fromRGB(255, 255, 255), Rainbow = true },
+			{ At = 1, Text = "SPROUT", Colour = Color3.fromRGB(150, 235, 100), Family = "seedlight" },
+			{ At = 2, Text = "SEEDLING", Colour = Color3.fromRGB(60, 205, 115), Family = "seedlight" },
+			{ At = 3, Text = "GARDENER", Colour = Color3.fromRGB(255, 190, 70), Family = "seedlight" },
+			{ At = 4, Text = "GREEN THUMB", Colour = Color3.fromRGB(170, 255, 60), Family = "seedlight" },
+			{ At = 5, Text = "BOTANIST", Colour = Color3.fromRGB(90, 200, 255), Family = "seedlight" },
+			{ At = 8, Text = "LEAF TENDER", Colour = Color3.fromRGB(60, 205, 115), Family = "seedlight" },
+			{ At = 11, Text = "HERBALIST", Colour = Color3.fromRGB(40, 215, 190), Family = "seedlight" },
+			{ At = 14, Text = "SEED WARDEN", Colour = Color3.fromRGB(60, 205, 115), Family = "seedlight" },
+			{ At = 17, Text = "GARDEN KEEPER", Colour = Color3.fromRGB(60, 205, 115), Family = "seedlight" },
+			{ At = 20, Text = "GROVE KEEPER", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 25, Text = "GROVE SCOUT", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 28, Text = "GROVE GUARD", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 31, Text = "PETAL GUARDIAN", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 34, Text = "BLOOM SENTINEL", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 37, Text = "BLOOM WARDEN", Colour = Color3.fromRGB(255, 120, 200), Family = "petal" },
+			{ At = 40, Text = "BLOOM KNIGHT", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 43, Text = "BLOOM CHAMPION", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 46, Text = "GROVE COMMANDER", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 49, Text = "GROVE MASTER", Colour = Color3.fromRGB(190, 125, 255), Family = "petal" },
+			{ At = 52, Text = "THORN KNIGHT", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 55, Text = "THORN SENTINEL", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 58, Text = "THORN CAPTAIN", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 61, Text = "THORN CHAMPION", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 64, Text = "ROOT KEEPER", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 67, Text = "ELDER ROOT", Colour = Color3.fromRGB(255, 125, 80), Family = "thorn" },
+			{ At = 72, Text = "ROOT GUARDIAN", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 75, Text = "ROOT COMMANDER", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 78, Text = "ROOT MASTER", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 81, Text = "ROOT SOVEREIGN", Colour = Color3.fromRGB(235, 60, 80), Family = "thorn" },
+			{ At = 84, Text = "CANOPY LORD", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 87, Text = "EMERALD REGENT", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 90, Text = "WILDWOOD REGENT", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 93, Text = "VERDANT REGENT", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 96, Text = "CANOPY KING", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 99, Text = "FOREST KING", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 102, Text = "WILD SOVEREIGN", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 105, Text = "GROVE EMPEROR", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 108, Text = "CANOPY MONARCH", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 111, Text = "FOREST ASCENDANT", Colour = Color3.fromRGB(30, 190, 110), Family = "canopy" },
+			{ At = 114, Text = "ANCIENT OAK", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 117, Text = "TIMELESS OAK", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 120, Text = "IRONBARK", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 123, Text = "DEEPWOOD", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 126, Text = "PRIMEVAL ROOT", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 129, Text = "PRIMAL GROVE", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 132, Text = "ELDERWOOD WARDEN", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 135, Text = "ELDERWOOD TITAN", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 138, Text = "FOREST COLOSSUS", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 141, Text = "ANCIENT WORLD", Colour = Color3.fromRGB(205, 150, 90), Family = "elder" },
+			{ At = 144, Text = "WORLD TREE", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 149, Text = "SKYROOT", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 152, Text = "SKY CANOPY", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 155, Text = "SUNROOT", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 158, Text = "SUN CANOPY", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 161, Text = "SUNWARD TREE", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 164, Text = "WORLDHEART", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 167, Text = "WORLDROOT", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 170, Text = "WORLD CROWN", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 173, Text = "WORLD SOUL", Colour = Color3.fromRGB(255, 215, 80), Family = "world" },
+			{ At = 176, Text = "ETERNAL ROOT", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 179, Text = "ETERNAL GROVE", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 182, Text = "ETERNAL CANOPY", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 185, Text = "ETERNAL BLOOM", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 188, Text = "DAWNROOT", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 191, Text = "DAWNWEAVER", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 194, Text = "SUNWEAVER", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 197, Text = "RADIANT GROVE", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 200, Text = "RADIANT CROWN", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 203, Text = "EVERGREEN SOUL", Colour = Color3.fromRGB(90, 200, 255), Family = "dawn" },
+			{ At = 206, Text = "PRIMEVAL BLOOM", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 209, Text = "VERDANT ETERNAL", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 212, Text = "UNDYING ROOT", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 215, Text = "UNDYING CANOPY", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 218, Text = "BOUNDLESS BLOOM", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 221, Text = "EVERBLOOM", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 226, Text = "EVERBLOOM HEART", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 229, Text = "EVERBLOOM CROWN", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 232, Text = "EVERBLOOM SOUL", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 235, Text = "BLOOM ASCENDANT", Colour = Color3.fromRGB(255, 90, 230), Family = "everbloom" },
+			{ At = 238, Text = "STARROOT", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 241, Text = "STAR CANOPY", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 244, Text = "STARBLOOM", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 247, Text = "ASTRAL ROOT", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 250, Text = "ASTRAL CANOPY", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 253, Text = "CELESTIAL BLOOM", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 256, Text = "COSMIC GROVE", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 259, Text = "GALAXY WEAVER", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 262, Text = "STELLAR SOVEREIGN", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 265, Text = "COSMIC ASCENDANT", Colour = Color3.fromRGB(181, 156, 255), Family = "astral" },
+			{ At = 268, Text = "PRIMAL SPIRIT", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 271, Text = "VITAL SPIRIT", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 274, Text = "NATURE AVATAR", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 277, Text = "EARTHHEART", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 280, Text = "EARTHSOUL", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 283, Text = "LIFEWEAVER", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 286, Text = "LIFE ARCHITECT", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 289, Text = "LIFE SOVEREIGN", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 292, Text = "GENESIS BLOOM", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 295, Text = "GENESIS SOUL", Colour = Color3.fromRGB(241, 190, 164), Family = "genesis" },
+			{ At = 298, Text = "GAIA", Colour = Color3.fromRGB(255, 255, 255), Family = "gaia", Rainbow = true, Ranks = 5 },
+		},
+		-- THE ELEVEN FAMILIES, in the ladder's order: the TITLES list's headers,
+		-- each one's palette -- the celebration's leaves and sparkles, the aura's
+		-- two wisps (Primary, Secondary; GAIA's the rainbow) -- and its unlock
+		-- accent. Signature: a family's own accent on a NEW name (RebirthFX), two
+		-- prototypes for the owner: Seedlight and World Tree Halo; the other nine
+		-- throw the common leaves and sparkles in their palette until the owner
+		-- says yes. AuraAccents: small leaves round its aura (Aura.Accent), at
+		-- most two.
+		Families = {
+			{ Id = "seedlight", Name = "GARDEN APPRENTICES", Fx = "SEEDLIGHT", Primary = Color3.fromRGB(60, 205, 115),
+				Secondary = Color3.fromRGB(170, 255, 60), Signature = "Seedlight" },
+			{ Id = "petal", Name = "GROVE WARDENS", Fx = "PETAL RING", Primary = Color3.fromRGB(190, 125, 255),
+				Secondary = Color3.fromRGB(255, 120, 200) },
+			{ Id = "thorn", Name = "THORN AND ROOT GUARD", Fx = "THORN CIRCLE", Primary = Color3.fromRGB(235, 60, 80),
+				Secondary = Color3.fromRGB(255, 125, 80) },
+			{ Id = "canopy", Name = "CANOPY NOBILITY", Fx = "CANOPY CROWN", Primary = Color3.fromRGB(30, 190, 110),
+				Secondary = Color3.fromRGB(182, 243, 204) },
+			{ Id = "elder", Name = "ANCIENT FOREST", Fx = "ELDER POLLEN", Primary = Color3.fromRGB(205, 150, 90),
+				Secondary = Color3.fromRGB(255, 240, 210) },
+			{ Id = "world", Name = "WORLD TREE", Fx = "WORLD TREE HALO", Primary = Color3.fromRGB(255, 215, 80),
+				Secondary = Color3.fromRGB(138, 228, 119), Signature = "Halo", AuraAccents = 2 },
+			{ Id = "dawn", Name = "DAWN AND RADIANCE", Fx = "DAWN RAYS", Primary = Color3.fromRGB(90, 200, 255),
+				Secondary = Color3.fromRGB(240, 247, 255) },
+			{ Id = "everbloom", Name = "IMMORTAL BLOOM", Fx = "EVERBLOOM PETALS", Primary = Color3.fromRGB(255, 90, 230),
+				Secondary = Color3.fromRGB(255, 240, 250) },
+			{ Id = "astral", Name = "ASTRAL GROVE", Fx = "ASTRAL POLLEN", Primary = Color3.fromRGB(181, 156, 255),
+				Secondary = Color3.fromRGB(124, 232, 255) },
+			{ Id = "genesis", Name = "GENESIS", Fx = "GENESIS ORBIT", Primary = Color3.fromRGB(241, 190, 164),
+				Secondary = Color3.fromRGB(255, 246, 226) },
+			{ Id = "gaia", Name = "GAIA", Fx = "GAIA RAINBOW", Primary = Color3.fromRGB(255, 255, 255),
+				Secondary = Color3.fromRGB(255, 255, 255), Rainbow = true },
 		},
 	},
 	--==========================================================================
@@ -6265,11 +6388,41 @@ GameConfig.Rebirth = {
 		Burst = { Size = 14, Ground = 11, Lifetime = 0.9 },
 		Leaves = { Count = 18 },
 		Sparkles = { Count = 28 },
-		-- THE AURA, from WORLD TREE up: the owner's looping wisp sheet played as a
+		--==========================================================================
+		-- THE ACCENT AT THE BURST, BY WHAT CHANGED (2026-10-10, the 100 titles;
+		-- the design's FX rules). The rest of the celebration is every rebirth's.
+		--   a NEW NAME (BOTANIST III to LEAF TENDER I): its family's accent -- the
+		--     two prototypes' own (Families' Signature: Seedlight, Halo), or the
+		--     leaves and sparkles above in its family's palette;
+		--   a RANK ONLY (BOTANIST I to II): Motes leaves and sparkles in the
+		--     palette, and the title over the head pulses once (Pulse) -- never the
+		--     full accent, never a longer hold of the controls.
+		-- All of it world pieces made at the start and gone at the end; none for
+		-- REDUCED FX.
+		--==========================================================================
+		Motes = { Leaves = 4, Sparkles = 8 },
+		-- The pulse: the reborn title's words grow to Scale and back in Seconds
+		-- (OwnerTitleUI, told by the title's Attribute on that screen only).
+		Pulse = { Seconds = 0.5, Scale = 1.18, Attribute = "SeedRebirthPulse" },
+		-- SEEDLIGHT (slots 1-9): a small upward pollen puff and a few bright leaf
+		-- twinkles; one leaf arc over the head, no crown. Leaves leaf pictures
+		-- ride the arc (Radius studs round the head, ArcSeconds from the left
+		-- shoulder over to the right), staggered by Stagger.
+		Seedlight = { Leaves = 5, Radius = 2.6, ArcSeconds = 0.9, Stagger = 0.08, LeafSize = 1.1, Pollen = 16,
+			Twinkles = 6 },
+		-- WORLD TREE HALO (slots 50-59): a fuller leaf halo opens once over the
+		-- head with golden pollen, a short gold ring of rays behind it. Leaves
+		-- leaf pictures in a ring Above studs over the head, from From to To
+		-- studs round in Seconds while it turns Turn of a circle, then fading; the
+		-- owner's sunburst (Rays) behind, RaysSize studs, for RaysSeconds.
+		Halo = { Leaves = 10, Above = 1.4, From = 0.6, To = 2.8, Seconds = 1.2, Turn = 0.35, LeafSize = 1.0,
+			Pollen = 24, RaysSize = 7, RaysSeconds = 1.0, Gold = Color3.fromRGB(255, 214, 90) },
+		-- THE AURA, from rebirth 50 up: the owner's looping wisp sheet played as a
 		-- 16-frame picture (Framerate a second) on two billboards Size studs
 		-- square, Side studs to the left and the right of the body in camera
 		-- space, Back studs behind it and Lift up -- so from any side they stand
-		-- beside the body and never over it. Tinted by the title. Billboards, not
+		-- beside the body and never over it. In the family's palette (since the
+		-- 100 titles; the title's colour before). Billboards, not
 		-- particles: the same sheet as a flipbook ParticleEmitter drew only now
 		-- and then in Play (2026-10-09, on the body and off it), the billboards
 		-- every time.
@@ -6282,6 +6435,15 @@ GameConfig.Rebirth = {
 			Framerate = 10,
 			Transparency = 0,
 			MaxDistance = 160,
+			-- THE 100 TITLES (2026-10-10): the wisps wear the family's palette (the
+			-- first Primary, the second Secondary; GAIA's the rainbow, turning once
+			-- every RainbowSeconds). Only the Nearest bodies within MaxDistance of
+			-- this camera show theirs. A family's AuraAccents (World Tree Halo's
+			-- two) are small leaves going round the body once every Accent.Seconds,
+			-- Radius studs out, bobbing Bob studs about Lift.
+			RainbowSeconds = 12,
+			Nearest = 4,
+			Accent = { Size = 0.9, Radius = 2.4, Seconds = 7, Lift = 1.2, Bob = 0.3 },
 		},
 		-- The owner's four effect sheets (uploaded 2026-10-09; checked by the
 		-- other session: Image, CrazyCozy Games, Edit IsLoaded, real alpha).
@@ -6368,6 +6530,13 @@ GameConfig.Rebirth = {
 		BackW = 140,
 		BackH = 36,
 		TitleRow = 56,
+		-- THE 100 TITLES (2026-10-10): a header row over each family's steps, and
+		-- each row's words (the step and its numerals' range, its rebirths) on
+		-- RowWords of its width -- the narrowest list's widest, ELDERWOOD WARDEN
+		-- I-III, at 22 px (RebirthSpec); the bonus beside them, the chip right.
+		FamilyRow = 30,
+		RowWords = 0.56,
+		RowBonus = 0.24,
 		HelpGap = 8,
 	},
 	-- YOU KEEP / YOU LOSE as chips: a word and an existing icon where there is
@@ -6418,6 +6587,9 @@ GameConfig.Rebirth = {
 		RowRebirth = "REBIRTH %d",
 		RowRebirths = "REBIRTH %d-%d",
 		RowRebirthFrom = "REBIRTH %d+",
+		-- A family's header in the TITLES list: "GARDEN APPRENTICES · REBIRTH 1-19".
+		FamilyRow = "%s · REBIRTH %d-%d",
+		FamilyRowFrom = "%s · REBIRTH %d+",
 		RowBonus = "x%s training · x%s income",
 		Reached = "✓ REACHED",
 		NextChip = "NEXT",
@@ -11639,24 +11811,153 @@ GameConfig.TitleFX = {
 			Transparency = 0.8,
 			Breathe = 0.05,
 		},
+		-- THE 100 TITLES' OWN (2026-10-10), for the families no profile above
+		-- wore: DAWN, MYSTIC's mist in sky blue and soft white (Dawn and
+		-- radiance); ASTRAL, the mist in lavender and cyan (Astral grove);
+		-- GENESIS, GOLD's sprigs and leaves in rose gold and ivory (Genesis).
+		dawn = {
+			Motion = "mist",
+			Art = { "MistA", "MistB" },
+			Tints = { Color3.fromRGB(150, 215, 255), Color3.fromRGB(225, 240, 255) },
+			Size = 32,
+			Seconds = 9,
+			Drift = 6,
+			Turn = 12,
+			Transparency = 0.8,
+			Breathe = 0.05,
+		},
+		astral = {
+			Motion = "mist",
+			Art = { "MistA", "MistB" },
+			Tints = { Color3.fromRGB(190, 170, 255), Color3.fromRGB(150, 235, 255) },
+			Size = 32,
+			Seconds = 9,
+			Drift = 6,
+			Turn = 12,
+			Transparency = 0.8,
+			Breathe = 0.05,
+		},
+		genesis = {
+			Motion = "laurel",
+			Art = { "SprigLeft", "SprigRight", "LeafSerrate" },
+			Tints = { Color3.fromRGB(241, 190, 164), Color3.fromRGB(255, 236, 214) },
+			Size = 22,
+			LeafArt = "LeafSerrate",
+			LeafSize = 9,
+			Seconds = 6,
+			Sway = 5,
+			Travel = 12,
+			Fall = 5,
+			Turn = 30,
+			Transparency = 0.15,
+		},
 	},
 	-- The ladder's steps by their words (GameConfig.Rebirth.Title.Ladder), each
 	-- to a profile and how many sprites. GAIA is left out: its rainbow is its own.
+	-- The 100 titles (2026-10-10) by family: Garden apprentices NATURE; Grove
+	-- wardens MYSTIC (the GROVE names) and BLOOM; Thorn and root, Canopy NATURE;
+	-- Ancient forest and World tree GOLD; Dawn DAWN; Immortal bloom BLOOM; Astral
+	-- ASTRAL; Genesis GENESIS. The fifteen founders' as they were.
 	Steps = {
 		["SPROUT"] = { Profile = "nature", Count = 2 },
 		["SEEDLING"] = { Profile = "nature", Count = 3 },
 		["GARDENER"] = { Profile = "nature", Count = 3 },
 		["GREEN THUMB"] = { Profile = "nature", Count = 4 },
 		["BOTANIST"] = { Profile = "nature", Count = 4 },
+		["LEAF TENDER"] = { Profile = "nature", Count = 4 },
 		["HERBALIST"] = { Profile = "nature", Count = 4 },
+		["SEED WARDEN"] = { Profile = "nature", Count = 4 },
+		["GARDEN KEEPER"] = { Profile = "nature", Count = 4 },
 		["GROVE KEEPER"] = { Profile = "mystic", Count = 4 },
+		["GROVE SCOUT"] = { Profile = "mystic", Count = 4 },
+		["GROVE GUARD"] = { Profile = "mystic", Count = 4 },
+		["PETAL GUARDIAN"] = { Profile = "bloom", Count = 4 },
+		["BLOOM SENTINEL"] = { Profile = "bloom", Count = 4 },
 		["BLOOM WARDEN"] = { Profile = "bloom", Count = 4 },
+		["BLOOM KNIGHT"] = { Profile = "bloom", Count = 4 },
+		["BLOOM CHAMPION"] = { Profile = "bloom", Count = 5 },
+		["GROVE COMMANDER"] = { Profile = "mystic", Count = 5 },
+		["GROVE MASTER"] = { Profile = "mystic", Count = 5 },
 		["THORN KNIGHT"] = { Profile = "nature", Count = 5 },
+		["THORN SENTINEL"] = { Profile = "nature", Count = 5 },
+		["THORN CAPTAIN"] = { Profile = "nature", Count = 5 },
+		["THORN CHAMPION"] = { Profile = "nature", Count = 5 },
+		["ROOT KEEPER"] = { Profile = "nature", Count = 5 },
 		["ELDER ROOT"] = { Profile = "nature", Count = 5 },
+		["ROOT GUARDIAN"] = { Profile = "nature", Count = 5 },
+		["ROOT COMMANDER"] = { Profile = "nature", Count = 5 },
+		["ROOT MASTER"] = { Profile = "nature", Count = 5 },
+		["ROOT SOVEREIGN"] = { Profile = "nature", Count = 5 },
 		["CANOPY LORD"] = { Profile = "nature", Count = 6 },
+		["EMERALD REGENT"] = { Profile = "nature", Count = 6 },
+		["WILDWOOD REGENT"] = { Profile = "nature", Count = 6 },
+		["VERDANT REGENT"] = { Profile = "nature", Count = 6 },
+		["CANOPY KING"] = { Profile = "nature", Count = 6 },
+		["FOREST KING"] = { Profile = "nature", Count = 6 },
+		["WILD SOVEREIGN"] = { Profile = "nature", Count = 6 },
+		["GROVE EMPEROR"] = { Profile = "nature", Count = 6 },
+		["CANOPY MONARCH"] = { Profile = "nature", Count = 6 },
+		["FOREST ASCENDANT"] = { Profile = "nature", Count = 6 },
 		["ANCIENT OAK"] = { Profile = "gold", Count = 4 },
+		["TIMELESS OAK"] = { Profile = "gold", Count = 4 },
+		["IRONBARK"] = { Profile = "gold", Count = 4 },
+		["DEEPWOOD"] = { Profile = "gold", Count = 4 },
+		["PRIMEVAL ROOT"] = { Profile = "gold", Count = 4 },
+		["PRIMAL GROVE"] = { Profile = "gold", Count = 4 },
+		["ELDERWOOD WARDEN"] = { Profile = "gold", Count = 4 },
+		["ELDERWOOD TITAN"] = { Profile = "gold", Count = 4 },
+		["FOREST COLOSSUS"] = { Profile = "gold", Count = 5 },
+		["ANCIENT WORLD"] = { Profile = "gold", Count = 5 },
 		["WORLD TREE"] = { Profile = "gold", Count = 6 },
+		["SKYROOT"] = { Profile = "gold", Count = 6 },
+		["SKY CANOPY"] = { Profile = "gold", Count = 6 },
+		["SUNROOT"] = { Profile = "gold", Count = 6 },
+		["SUN CANOPY"] = { Profile = "gold", Count = 6 },
+		["SUNWARD TREE"] = { Profile = "gold", Count = 6 },
+		["WORLDHEART"] = { Profile = "gold", Count = 6 },
+		["WORLDROOT"] = { Profile = "gold", Count = 6 },
+		["WORLD CROWN"] = { Profile = "gold", Count = 6 },
+		["WORLD SOUL"] = { Profile = "gold", Count = 6 },
+		["ETERNAL ROOT"] = { Profile = "dawn", Count = 4 },
+		["ETERNAL GROVE"] = { Profile = "dawn", Count = 4 },
+		["ETERNAL CANOPY"] = { Profile = "dawn", Count = 4 },
+		["ETERNAL BLOOM"] = { Profile = "dawn", Count = 4 },
+		["DAWNROOT"] = { Profile = "dawn", Count = 4 },
+		["DAWNWEAVER"] = { Profile = "dawn", Count = 4 },
+		["SUNWEAVER"] = { Profile = "dawn", Count = 5 },
+		["RADIANT GROVE"] = { Profile = "dawn", Count = 5 },
+		["RADIANT CROWN"] = { Profile = "dawn", Count = 5 },
+		["EVERGREEN SOUL"] = { Profile = "dawn", Count = 5 },
+		["PRIMEVAL BLOOM"] = { Profile = "bloom", Count = 6 },
+		["VERDANT ETERNAL"] = { Profile = "bloom", Count = 6 },
+		["UNDYING ROOT"] = { Profile = "bloom", Count = 6 },
+		["UNDYING CANOPY"] = { Profile = "bloom", Count = 6 },
+		["BOUNDLESS BLOOM"] = { Profile = "bloom", Count = 6 },
 		["EVERBLOOM"] = { Profile = "bloom", Count = 6 },
+		["EVERBLOOM HEART"] = { Profile = "bloom", Count = 6 },
+		["EVERBLOOM CROWN"] = { Profile = "bloom", Count = 6 },
+		["EVERBLOOM SOUL"] = { Profile = "bloom", Count = 6 },
+		["BLOOM ASCENDANT"] = { Profile = "bloom", Count = 6 },
+		["STARROOT"] = { Profile = "astral", Count = 5 },
+		["STAR CANOPY"] = { Profile = "astral", Count = 5 },
+		["STARBLOOM"] = { Profile = "astral", Count = 5 },
+		["ASTRAL ROOT"] = { Profile = "astral", Count = 5 },
+		["ASTRAL CANOPY"] = { Profile = "astral", Count = 5 },
+		["CELESTIAL BLOOM"] = { Profile = "astral", Count = 5 },
+		["COSMIC GROVE"] = { Profile = "astral", Count = 5 },
+		["GALAXY WEAVER"] = { Profile = "astral", Count = 5 },
+		["STELLAR SOVEREIGN"] = { Profile = "astral", Count = 5 },
+		["COSMIC ASCENDANT"] = { Profile = "astral", Count = 5 },
+		["PRIMAL SPIRIT"] = { Profile = "genesis", Count = 6 },
+		["VITAL SPIRIT"] = { Profile = "genesis", Count = 6 },
+		["NATURE AVATAR"] = { Profile = "genesis", Count = 6 },
+		["EARTHHEART"] = { Profile = "genesis", Count = 6 },
+		["EARTHSOUL"] = { Profile = "genesis", Count = 6 },
+		["LIFEWEAVER"] = { Profile = "genesis", Count = 6 },
+		["LIFE ARCHITECT"] = { Profile = "genesis", Count = 6 },
+		["LIFE SOVEREIGN"] = { Profile = "genesis", Count = 6 },
+		["GENESIS BLOOM"] = { Profile = "genesis", Count = 6 },
+		["GENESIS SOUL"] = { Profile = "genesis", Count = 6 },
 	},
 }
 

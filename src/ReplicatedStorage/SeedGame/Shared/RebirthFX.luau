@@ -64,12 +64,19 @@ RebirthFX.Names = {
 	Auras = "SeedRebirthAuras",
 }
 
+-- A rank-only rebirth's pulse (2026-10-10): the title over that head is told,
+-- on this screen only, when it began (os.clock); OwnerTitleUI, which draws the
+-- title, grows its words by RebirthCelebration.pulse.
+RebirthFX.PulseAttribute = C.Pulse.Attribute
+
 export type Options = {
 	character: Model,
 	-- This screen's own rebirth: the card, the flash, the spin, the camera and
 	-- the controls. Otherwise only the world pieces, round that body.
 	own: boolean,
 	rebirths: number,
+	-- The count before it (one less when left out): a new name or a rank only.
+	before: number?,
 	-- The server's numbers for the card (Rebirth's own otherwise).
 	training: number?,
 	income: number?,
@@ -95,6 +102,10 @@ export type Handle = {
 }
 
 type Orb = { at: Attachment, image: ImageLabel, trail: ParticleEmitter }
+-- A signature's leaf: its billboard (on the head's attachment, offset in camera
+-- space: Seedlight's arc) or its own attachment (World Tree's ring), and its
+-- picture.
+type Flier = { board: BillboardGui, at: Attachment?, image: ImageLabel }
 type Fade = { instance: Instance, property: string, base: number }
 type Hold = { cameraType: any, cframe: CFrame, subject: any, autoRotate: boolean?, jump: boolean? }
 
@@ -258,8 +269,11 @@ RebirthFX.Sizes = { Reborn = 40, Line = 26, Bonus = 19 }
 
 --==============================================================================
 -- THE AURA (Aura.From rebirths and up): the owner's looping wisp sheet, played
--- as a 16-frame picture on two billboards either side of the body, tinted by
--- the title (the rainbow at GAIA).
+-- as a 16-frame picture on two billboards either side of the body, in the
+-- title's family's palette (since the 100 titles, 2026-10-10: the first wisp
+-- Primary, the second Secondary; GAIA's the rainbow, turning slowly), with a
+-- family's accent leaves going round it (World Tree Halo's two). Only the
+-- Aura.Nearest bodies nearest this camera show theirs.
 --
 -- BILLBOARDS, NOT PARTICLES. Measured in Play 2026-10-09: the very same sheet
 -- as a flipbook ParticleEmitter drew only now and then -- on the body and in a
@@ -272,12 +286,31 @@ RebirthFX.Sizes = { Reborn = 40, Line = 26, Bonus = 19 }
 -- the frames. Gone with its body.
 --==============================================================================
 local auraFolder: Folder? = nil
-type Aura = { root: BasePart, frames: { ImageLabel }, shown: { number } }
+type Aura = {
+	root: BasePart,
+	frames: { ImageLabel },
+	shown: { number },
+	-- Every billboard of it (wisps and accents), the accents, their leaves and
+	-- the frame each shows, GAIA's rainbows.
+	boards: { BillboardGui },
+	accents: { BillboardGui },
+	leaves: { ImageLabel },
+	leafShown: number,
+	rainbows: { UIGradient },
+	-- Among the Nearest to this camera; hidden round your own camera in first
+	-- person; and whether its billboards are on now (nil: not yet set).
+	near: boolean,
+	hidden: boolean,
+	on: boolean?,
+}
 local auras: { [BasePart]: Aura } = {}
 local following: RBXScriptConnection? = nil
+local nearestAt = -math.huge
 -- The sheet: 4 x 4 frames of 256 px, left to right, top row first.
 local AURA_CELL = 256
 local AURA_FRAMES = 16
+-- The leaf sheet: 2 x 2 frames of 256 px, played back and forth.
+local LEAF_CELL = 256
 
 local function aurasFolder(): Folder
 	local f = auraFolder
@@ -296,19 +329,73 @@ function RebirthFX.auraFrame(i: number, now: number): number
 	return (math.floor(now * C.Aura.Framerate) + (i - 1) * (AURA_FRAMES // 2)) % AURA_FRAMES
 end
 
+-- The leaf sheet's frame at `now`, back and forth through its four (0 1 2 3 2 1).
+function RebirthFX.leafFrame(now: number): number
+	local k = math.floor(now * 6) % 6
+	return if k <= 3 then k else 6 - k
+end
+
 -- Every aura onto its body's root and on to its next frame; an aura whose body
--- is gone goes with it. The game runs it every frame while any aura stands; a
--- spec steps it by hand with its own clock.
-function RebirthFX.followAuras(now: number?)
+-- is gone goes with it. Which ones show: the Aura.Nearest within MaxDistance of
+-- `viewer` (this camera unless given; a spec gives one), looked at again four
+-- times a second. The game runs it every frame while any aura stands; a spec
+-- steps it by hand with its own clock.
+function RebirthFX.followAuras(now: number?, viewer: Vector3?)
 	local t = now or os.clock()
+	local A = C.Aura
+	if viewer or t - nearestAt >= 0.25 or t < nearestAt then
+		nearestAt = t
+		local camera = Workspace.CurrentCamera
+		local from = viewer or (if camera then camera.CFrame.Position else nil)
+		local keys: { BasePart } = {}
+		local distances: { number } = {}
+		for part, a in pairs(auras) do
+			if a.root.Parent and part.Parent then
+				table.insert(keys, part)
+				table.insert(distances, if from then (a.root.Position - from).Magnitude else 0)
+			end
+		end
+		local shown = RebirthCelebration.nearest(distances, A.Nearest, A.MaxDistance)
+		for i, part in ipairs(keys) do
+			(auras[part] :: Aura).near = shown[i] == true
+		end
+	end
 	for part, a in pairs(auras) do
 		if a.root.Parent and part.Parent then
 			part.CFrame = a.root.CFrame
+			local on = a.near and not a.hidden
+			if a.on ~= on then
+				a.on = on
+				for _, board in ipairs(a.boards) do
+					board.Enabled = on
+				end
+			end
+			local stepped = false
 			for i, label in ipairs(a.frames) do
 				local f = RebirthFX.auraFrame(i, t)
 				if a.shown[i] ~= f then
 					a.shown[i] = f
+					stepped = true
 					label.ImageRectOffset = Vector2.new((f % 4) * AURA_CELL, (f // 4) * AURA_CELL)
+				end
+			end
+			if on then
+				for i, board in ipairs(a.accents) do
+					board.StudsOffset = RebirthCelebration.auraAccent(i, #a.accents, t)
+				end
+				local leaf = RebirthFX.leafFrame(t)
+				if a.leafShown ~= leaf then
+					a.leafShown = leaf
+					for _, label in ipairs(a.leaves) do
+						label.ImageRectOffset = Vector2.new((leaf % 2) * LEAF_CELL, (leaf // 2) * LEAF_CELL)
+					end
+				end
+				-- GAIA's rainbow turns with the frames (Framerate a second).
+				if stepped and #a.rainbows > 0 then
+					local colours = WheelDraw.rainbow((t / A.RainbowSeconds) % 1)
+					for _, g in ipairs(a.rainbows) do
+						g.Color = colours
+					end
 				end
 			end
 		else
@@ -343,12 +430,28 @@ function RebirthFX.clearAura(root: Instance)
 	end
 end
 
+-- Hides one aura on this screen (this player's own round a first-person
+-- camera) or shows it again, from the next followAuras.
+function RebirthFX.hideAura(holder: BasePart, hidden: boolean)
+	local a = auras[holder]
+	if a and a.hidden ~= hidden then
+		a.hidden = hidden
+		a.on = nil
+	end
+end
+
+-- Whether an aura's billboards are on now (a spec's look).
+function RebirthFX.auraShown(holder: BasePart): boolean
+	local a = auras[holder]
+	return a ~= nil and a.on ~= false
+end
+
 -- Puts the aura for `rebirths` round a body (any one it had goes first).
 -- `parent` is a seam for RebirthCelebrationSpec; the game passes none.
 function RebirthFX.aura(root: BasePart, rebirths: number, parent: Instance?): BasePart
 	RebirthFX.clearAura(root)
 	local A = C.Aura
-	local _, step = Rebirth.titleFor(rebirths)
+	local first, second, rainbow, accentCount = RebirthCelebration.auraLook(rebirths)
 	local holder = Instance.new("Part")
 	holder.Name = RebirthFX.Names.Aura
 	holder.Size = Vector3.new(1, 1, 1)
@@ -365,6 +468,8 @@ function RebirthFX.aura(root: BasePart, rebirths: number, parent: Instance?): Ba
 	centre.Name = "Centre"
 	centre.Parent = holder
 	local frames: { ImageLabel } = {}
+	local boards: { BillboardGui } = {}
+	local rainbows: { UIGradient } = {}
 	for i, side in ipairs({ -A.Side, A.Side }) do
 		local board = Instance.new("BillboardGui")
 		board.Name = "Wisp" .. i
@@ -384,21 +489,62 @@ function RebirthFX.aura(root: BasePart, rebirths: number, parent: Instance?): Ba
 		frame.Image = T.Aura
 		frame.ImageRectSize = Vector2.new(AURA_CELL, AURA_CELL)
 		frame.ImageRectOffset = Vector2.zero
-		frame.ImageColor3 = if step and not step.Rainbow then step.Colour else WHITE
+		frame.ImageColor3 = if rainbow then WHITE elseif i == 1 then first else second
 		frame.ImageTransparency = A.Transparency
 		frame.Parent = board
-		if step and step.Rainbow then
-			-- GAIA: the ladder's rainbow over the white wisp, still.
+		if rainbow then
+			-- GAIA: the ladder's rainbow over the white wisp, turning slowly.
 			local g = Instance.new("UIGradient")
 			g.Name = "Rainbow"
 			g.Color = WheelDraw.rainbow(0)
 			g.Rotation = 90
 			g.Parent = frame
+			table.insert(rainbows, g)
 		end
 		table.insert(frames, frame)
+		table.insert(boards, board)
+	end
+	-- The family's accent leaves (World Tree Halo's two), going round the body.
+	local accents: { BillboardGui } = {}
+	local leaves: { ImageLabel } = {}
+	for i = 1, accentCount do
+		local board = Instance.new("BillboardGui")
+		board.Name = "Accent" .. i
+		board.Size = UDim2.fromScale(A.Accent.Size, A.Accent.Size)
+		board.StudsOffset = RebirthCelebration.auraAccent(i, accentCount, 0)
+		board.LightInfluence = 0
+		board.AlwaysOnTop = false
+		board.MaxDistance = A.MaxDistance
+		board.ResetOnSpawn = false
+		board.Active = false
+		board.Parent = centre
+		local leaf = Instance.new("ImageLabel")
+		leaf.Name = "Leaf"
+		leaf.BackgroundTransparency = 1
+		leaf.Size = UDim2.fromScale(1, 1)
+		leaf.Image = T.Leaf
+		leaf.ImageRectSize = Vector2.new(LEAF_CELL, LEAF_CELL)
+		leaf.ImageRectOffset = Vector2.zero
+		leaf.ImageColor3 = if i == 1 then first else second
+		leaf.Parent = board
+		table.insert(accents, board)
+		table.insert(leaves, leaf)
+		table.insert(boards, board)
 	end
 	holder.Parent = parent or aurasFolder()
-	auras[holder] = { root = root, frames = frames, shown = {} }
+	auras[holder] = {
+		root = root,
+		frames = frames,
+		shown = {},
+		boards = boards,
+		accents = accents,
+		leaves = leaves,
+		leafShown = 0,
+		rainbows = rainbows,
+		near = true,
+		hidden = false,
+		on = nil,
+	}
 	if not following and RunService:IsRunning() then
 		following = RunService.RenderStepped:Connect(function()
 			RebirthFX.followAuras()
@@ -437,11 +583,7 @@ function RebirthFX.watchAuras()
 			local head = character:FindFirstChild("Head")
 			if head and head:IsA("BasePart") then
 				local shown = head.LocalTransparencyModifier < 0.5
-				for _, d in ipairs(holder:GetDescendants()) do
-					if d:IsA("BillboardGui") then
-						d.Enabled = shown
-					end
-				end
+				RebirthFX.hideAura(holder, not shown)
 			end
 		end
 	end
@@ -502,6 +644,9 @@ function RebirthFX.play(o: Options): Handle?
 	local n = Rebirth.count(o.rebirths)
 	local said = RebirthCelebration.words(n, o.training, o.income)
 	local tint = RebirthCelebration.tint(n)
+	-- What the burst throws (the 100 titles, 2026-10-10): a new name its
+	-- family's accent, a rank only a few motes and the title's pulse.
+	local accent = RebirthCelebration.accent(n, o.before)
 	counter += 1
 	local stepName = "SeedRebirthFX" .. counter
 	local stopped = false
@@ -519,6 +664,11 @@ function RebirthFX.play(o: Options): Handle?
 	local bursts: { ParticleEmitter } = {}
 	local leaves: ParticleEmitter? = nil
 	local sparkles: ParticleEmitter? = nil
+	local headAt: Attachment? = nil
+	local pollen: ParticleEmitter? = nil
+	local twinkles: ParticleEmitter? = nil
+	local fliers: { Flier } = {}
+	local haloRays: ImageLabel? = nil
 	if not reduced then
 		local base = piece("Anchor", folder, Vector3.new(4, 0.4, 4), WHITE, Enum.Material.SmoothPlastic)
 		anchor = base
@@ -630,6 +780,102 @@ function RebirthFX.play(o: Options): Handle?
 		spark.Drag = 3
 		spark.LightEmission = 1
 		sparkles = spark
+
+		-- THE FAMILY'S OWN ACCENT ON A NEW NAME (2026-10-10, the two prototypes):
+		-- Seedlight's leaf arc over the head with a pollen puff and twinkles;
+		-- World Tree Halo's ring of leaves opening over the head, gold pollen and
+		-- the owner's sunburst behind. In place of the leaves and sparkles above.
+		local signature = accent.signature
+		if signature then
+			local family = accent.family
+			local first = if family then family.Primary else C.Orbs.Colour
+			local second = if family then family.Secondary else C.Orbs.Colour
+			local halo = signature == "Halo"
+			local head = Instance.new("Attachment")
+			head.Name = "Head"
+			head.Position = Vector3.new(0, drop + 1.5, 0)
+			head.Parent = base
+			headAt = head
+			local puff = sheet("Pollen", head, T.Sparkle, Enum.ParticleFlipbookLayout.Grid2x2,
+				Enum.ParticleFlipbookMode.OneShot)
+			puff.Color = ColorSequence.new(if halo then C.Halo.Gold else second)
+			puff.Size = keys({ { 0, 0.25 }, { 1, 0.5 } })
+			puff.Lifetime = NumberRange.new(0.8, 1.3)
+			puff.Speed = NumberRange.new(3, 6)
+			puff.SpreadAngle = Vector2.new(40, 40)
+			puff.EmissionDirection = Enum.NormalId.Top
+			puff.Acceleration = Vector3.new(0, 1, 0)
+			puff.Drag = 2
+			puff.LightEmission = 1
+			pollen = puff
+			local count = if halo then C.Halo.Leaves else C.Seedlight.Leaves
+			local size = if halo then C.Halo.LeafSize else C.Seedlight.LeafSize
+			for i = 1, count do
+				local holder: Instance = head
+				local at: Attachment? = nil
+				if halo then
+					-- Round the head in the world: an attachment each.
+					local a = Instance.new("Attachment")
+					a.Name = "HaloLeaf" .. i
+					a.Parent = base
+					at = a
+					holder = a
+				end
+				local bill = Instance.new("BillboardGui")
+				bill.Name = if halo then "HaloLeaf" else "SeedlightLeaf"
+				bill.Size = UDim2.fromScale(size, size)
+				bill.LightInfluence = 0
+				bill.AlwaysOnTop = false
+				bill.MaxDistance = 220
+				bill.ResetOnSpawn = false
+				bill.Active = false
+				bill.Parent = holder
+				local image = Instance.new("ImageLabel")
+				image.Name = "Leaf"
+				image.BackgroundTransparency = 1
+				image.Size = UDim2.fromScale(1, 1)
+				image.Image = T.Leaf
+				image.ImageRectSize = Vector2.new(256, 256)
+				image.ImageColor3 = if i % 2 == 1 then first else second
+				image.ImageTransparency = 1
+				image.Rotation = (i * 47) % 360
+				image.Parent = bill
+				table.insert(fliers, { board = bill, at = at, image = image })
+			end
+			if not halo then
+				local twinkle = sheet("Twinkles", head, T.Sparkle, Enum.ParticleFlipbookLayout.Grid2x2,
+					Enum.ParticleFlipbookMode.OneShot)
+				twinkle.Color = ColorSequence.new(WHITE, first)
+				twinkle.Size = keys({ { 0, 0.4 }, { 0.5, 0.9 }, { 1, 0.3 } })
+				twinkle.Lifetime = NumberRange.new(0.5, 0.8)
+				twinkle.Speed = NumberRange.new(1.5, 3)
+				twinkle.SpreadAngle = Vector2.new(180, 180)
+				twinkle.LightEmission = 1
+				twinkles = twinkle
+			elseif C.Rays ~= "" then
+				local bill = Instance.new("BillboardGui")
+				bill.Name = "HaloRays"
+				bill.Size = UDim2.fromScale(C.Halo.RaysSize, C.Halo.RaysSize)
+				-- Behind the head in camera space, never over the face.
+				bill.StudsOffset = Vector3.new(0, 0.6, -1.2)
+				bill.LightInfluence = 0
+				bill.AlwaysOnTop = false
+				bill.MaxDistance = 220
+				bill.ResetOnSpawn = false
+				bill.Active = false
+				bill.Parent = head
+				local image = Instance.new("ImageLabel")
+				image.Name = "Rays"
+				image.BackgroundTransparency = 1
+				image.Size = UDim2.fromScale(1, 1)
+				image.ScaleType = Enum.ScaleType.Fit
+				image.Image = C.Rays
+				image.ImageColor3 = C.Halo.Gold
+				image.ImageTransparency = 1
+				image.Parent = bill
+				haloRays = image
+			end
+		end
 	end
 	folder.Parent = o.world or Workspace
 
@@ -988,11 +1234,51 @@ function RebirthFX.play(o: Options): Handle?
 				for _, b in ipairs(bursts) do
 					b:Emit(1)
 				end
-				if leaves then
-					leaves:Emit(C.Leaves.Count)
+				if leaves and accent.leaves > 0 then
+					leaves:Emit(accent.leaves)
 				end
-				if sparkles then
-					sparkles:Emit(C.Sparkles.Count)
+				if sparkles and accent.sparkles > 0 then
+					sparkles:Emit(accent.sparkles)
+				end
+				if pollen then
+					pollen:Emit(if accent.signature == "Halo" then C.Halo.Pollen else C.Seedlight.Pollen)
+				end
+				if twinkles then
+					twinkles:Emit(C.Seedlight.Twinkles)
+				end
+				if accent.pulse then
+					-- A rank only: the title over the head pulses once (OwnerTitleUI).
+					local headPart = character:FindFirstChild("Head")
+					local title = headPart and headPart:FindFirstChild(CFG.Title.Name)
+					if title then
+						title:SetAttribute(RebirthFX.PulseAttribute, os.clock())
+					end
+				end
+			end
+			-- The signature's leaves (and the halo's rays), round the head.
+			local head = headAt
+			if head then
+				local headPart = character:FindFirstChild("Head")
+				head.Position = if headPart and headPart:IsA("BasePart")
+					then headPart.Position - feet
+					else Vector3.new(0, drop + 1.5, 0)
+				local u = t - C.SpinSeconds
+				for i, flier in ipairs(fliers) do
+					local at = flier.at
+					if at then
+						local offset, alpha = RebirthCelebration.haloLeaf(i, #fliers, u)
+						at.Position = head.Position + offset
+						flier.image.ImageTransparency = 1 - alpha
+					else
+						local offset, alpha = RebirthCelebration.seedlightLeaf(i, #fliers, u)
+						flier.board.StudsOffset = offset
+						flier.image.ImageTransparency = 1 - alpha
+					end
+				end
+				local rays = haloRays
+				if rays then
+					rays.ImageTransparency = 1 - (1 - C.RayFade) * RebirthCelebration.haloRays(u)
+					rays.Rotation = (math.max(0, u) * C.RaySpin) % 360
 				end
 			end
 		end
