@@ -171,8 +171,12 @@ local ok, err = pcall(function()
 							if p.transparency < 0.7 then
 								table.insert(notFaint, tag)
 							end
-						elseif fromMid < half - 5 * k then
-							table.insert(overWords, string.format("%s %.0f from the middle, words %.0f", tag, fromMid, half))
+						elseif fromMid - p.size / 2 < half - (if p.art == "SprigLeft" or p.art == "SprigRight" then 1 else 0.5) then
+							-- A leaf's or petal's inner edge clears the words (a sprig's leans to
+							-- within a pixel): seen in Play, a petal inside the last letter read
+							-- as part of it.
+							table.insert(overWords, string.format("%s edge %.1f from the middle, words %.1f", tag,
+								fromMid - p.size / 2, half))
 						end
 						if last and math.abs(p.transparency - last) > 0.2 then
 							table.insert(flashing, tag)
@@ -294,10 +298,16 @@ local ok, err = pcall(function()
 			and has(ui, "layer.step(now)"),
 		"moved from the one loop on the nearest four; hidden under Reduced FX, a trap's hiding, or no camera")
 	local tf = sourceOf(Shared, "TitleFX")
-	local loops = select(2, ui:gsub("task%.spawn%(function%(%)", "")) + select(2, tf:gsub("task%.spawn", ""))
+	-- TitleFX's one task.spawn is a layer's one-shot fetch of its pictures, not a loop.
+	local loops = select(2, ui:gsub("task%.spawn%(function%(%)", ""))
 	check(loops == 1 and not has(ui, "RenderStepped") and not has(ui, "Heartbeat") and not has(tf, "RenderStepped")
-			and not has(tf, "Heartbeat") and not has(tf, "while true"),
-		"one loop for every title: no frame connection or endless loop of a sprite's own")
+			and not has(tf, "Heartbeat") and not has(tf, "while true") and select(2, tf:gsub("task%.spawn", "")) == 1
+			and has(tf, "ContentProvider:PreloadAsync(sprites)"),
+		"one loop for every title: no frame connection or endless loop of a sprite's own (a layer's fetch is one-shot)")
+	check(has(tf, "label.ImageTransparency = if settled and TitleFX.fetched(label.Image)")
+			and has(tf, "return ok and status == Enum.AssetFetchStatus.Success") and not has(tf, "IsLoaded then"),
+		"a sprite shows once ContentProvider says its picture arrived -- never on IsLoaded, which a clear label "
+			.. "never earns -- and one that failed never shows")
 	check(has(ui, "forget(instance :: any)") and has(ui, "if not gui.Parent then\n\t\t\t\tforget(gui)"),
 		"a title gone takes its layer out of the loop")
 	local untouched = true
@@ -378,6 +388,10 @@ local ok, err = pcall(function()
 			and select(2, rb:gsub("RunService%.RenderStepped:Connect", "")) == 1,
 		"moved from the panel's one loop while the list shows, only the rows in view, faded when LOCKED, none under "
 			.. "Reduced FX")
+	check(has(rb, "attach = function(): TitleFX.Layer") and has(rb, "fx = make()")
+			and has(rb, "if not fx and make and not still and y + r.frame.AbsoluteSize.Y >= top and y <= bottom then")
+			and select(2, rb:gsub("TitleFX%.attach%(", "")) == 1,
+		"a row's sprites are made the first time it comes into view, never a hundred rows' at the list's first open")
 end)
 
 fixture:Destroy()

@@ -522,7 +522,8 @@ listPad.PaddingBottom = UDim.new(0, 4)
 listPad.Parent = list
 
 type TitleRow = { frame: Frame, ring: UIStroke, word: TextLabel, rebirth: TextLabel, bonus: TextLabel,
-	chip: TextLabel, rainbow: UIGradient?, step: any, fx: TitleFX.Layer?, locked: boolean, top: number }
+	chip: TextLabel, rainbow: UIGradient?, step: any, fx: TitleFX.Layer?, attach: (() -> TitleFX.Layer)?,
+	locked: boolean, top: number }
 local titleRows: { TitleRow } = {}
 -- THE TITLES' LEAVES, FLOWERS AND MIST HERE TOO (2026-10-10, the owner: "add
 -- them to the ? list too"; TitleFX, GameConfig.TitleFX.List): each step wears
@@ -621,26 +622,30 @@ local function buildTitleRows()
 		chip.Size = UDim2.new(0.2, 0, 0, 26)
 		chip.TextXAlignment = Enum.TextXAlignment.Right
 		-- Its title's sprites, on the words' line: between the row's plate (6) and
-		-- its texts (8), measured off the words as drawn.
+		-- its texts (8), measured off the words as drawn. Made the first time the
+		-- row comes into view (stepTitleFX), not here: a hundred rows' sprites at
+		-- once, up to six each, would hitch the list's first open.
 		local _, fxProfile, fxCount = TitleFX.profileFor(step)
-		local fx: TitleFX.Layer? = nil
+		local attach: (() -> TitleFX.Layer)? = nil
 		if fxProfile then
 			local function width(): number
 				return MenuKit.textWidth(word.Text, word.TextSize, word.Font)
 			end
-			fx = TitleFX.attach(row, fxProfile, fxCount, {
-				at = UDim2.fromOffset(FX_LEFT, 4),
-				box = Vector2.new(GameConfig.Rebirth.Title.Size.X, 30),
-				z = 7,
-				words = width,
-				centre = function(): number
-					return width() / 2
-				end,
-				left = -FX_LEFT,
-			})
+			attach = function(): TitleFX.Layer
+				return TitleFX.attach(row, fxProfile, fxCount, {
+					at = UDim2.fromOffset(FX_LEFT, 4),
+					box = Vector2.new(GameConfig.Rebirth.Title.Size.X, 30),
+					z = 7,
+					words = width,
+					centre = function(): number
+						return width() / 2
+					end,
+					left = -FX_LEFT,
+				})
+			end
 		end
 		table.insert(titleRows, { frame = row, ring = ring, word = word, rebirth = rebirthWords, bonus = bonusWords,
-			chip = chip, rainbow = rainbow, step = step, fx = fx, locked = true, top = top })
+			chip = chip, rainbow = rainbow, step = step, fx = nil, attach = attach, locked = true, top = top })
 	end
 end
 
@@ -651,9 +656,15 @@ local function stepTitleFX(still: boolean)
 	local bottom = top + list.AbsoluteSize.Y
 	local now = os.clock()
 	for _, r in ipairs(titleRows) do
+		local y = r.frame.AbsolutePosition.Y
 		local fx = r.fx
+		local make = r.attach
+		if not fx and make and not still and y + r.frame.AbsoluteSize.Y >= top and y <= bottom then
+			fx = make()
+			r.fx = fx
+			r.attach = nil
+		end
 		if fx then
-			local y = r.frame.AbsolutePosition.Y
 			if still or y + r.frame.AbsoluteSize.Y < top or y > bottom then
 				fx.hide()
 			else

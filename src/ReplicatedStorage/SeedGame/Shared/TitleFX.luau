@@ -24,6 +24,8 @@
 -- it and the player's name under it. The words and REBIRTH N stay on top, and
 -- nothing here makes a light, a panel or anything opaque.
 --==============================================================================
+local ContentProvider = game:GetService("ContentProvider")
+
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
@@ -141,7 +143,9 @@ function TitleFX.pose(profile: any, i: number, n: number, t: number, box: Vector
 	-- the words' end and a little down, turning, fading in and out.
 	local u = cycle(profile.Seconds, t, i, n)
 	local size = (if motion == "laurel" then profile.LeafSize else profile.Size) * k
-	local start = half + (if motion == "outward" then -4 else 4) * k
+	-- Its inner edge 2 px clear of the words: a petal started inside the last
+	-- letter read as part of it on a pink title (seen in Play, 2026-10-10).
+	local start = half + size / 2 + 2 * k
 	if motion == "laurel" then
 		-- Beyond the sprigs, and never a sprig's own picture.
 		start = half + profile.Size * k + 2 * k
@@ -158,6 +162,18 @@ function TitleFX.pose(profile: any, i: number, n: number, t: number, box: Vector
 		rotation = side * (u - 0.5) * profile.Turn + (i * 37) % 360,
 		transparency = 1 - (1 - profile.Transparency) * envelope(u),
 	}
+end
+
+-- Whether a picture has arrived on this client (ContentProvider's fetch, which
+-- a label never drawn still gets; see attach).
+function TitleFX.fetched(id: string): boolean
+	if id == "" then
+		return false
+	end
+	local ok, status = pcall(function()
+		return ContentProvider:GetAssetFetchStatus(id)
+	end)
+	return ok and status == Enum.AssetFetchStatus.Success
 end
 
 -- Which of `titles` move: the `max` nearest, each within `range`. Answers a set.
@@ -243,6 +259,16 @@ function TitleFX.attach(gui: GuiObject | BillboardGui, profile: any, count: numb
 		label.Parent = frame
 		sprites[i] = label
 	end
+	-- LOADED IS THE FETCH'S WORD, NOT ISLOADED (seen in Play, 2026-10-10): a
+	-- label kept clear is never drawn, so its IsLoaded never turns true, and a
+	-- sprite waiting on it waited for ever. So the pictures are fetched here,
+	-- off the frame (PreloadAsync on the labels themselves), and a sprite shows
+	-- once ContentProvider says its picture arrived; one that failed never does.
+	task.spawn(function()
+		pcall(function()
+			ContentProvider:PreloadAsync(sprites)
+		end)
+	end)
 	local words = gui:FindFirstChild("Words")
 	local shown = false
 	local layer: Layer
@@ -281,7 +307,7 @@ function TitleFX.attach(gui: GuiObject | BillboardGui, profile: any, count: numb
 				label.Size = UDim2.fromOffset(pose.size, pose.size)
 				label.Rotation = pose.rotation
 				-- A picture that never loads stays clear: the words alone.
-				label.ImageTransparency = if settled and label.IsLoaded
+				label.ImageTransparency = if settled and TitleFX.fetched(label.Image)
 					then pose.transparency + (1 - pose.transparency) * away
 					else 1
 			end

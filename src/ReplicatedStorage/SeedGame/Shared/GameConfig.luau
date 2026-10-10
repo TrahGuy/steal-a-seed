@@ -11734,17 +11734,19 @@ end
 -- (Rebirth.Title.Size); a phone's smaller title shrinks them with it.
 --==============================================================================
 GameConfig.TitleFX = {
+	-- The owner's uploads (2026-10-10, CrazyCozy Games, each an Image; Edit
+	-- fetched every one), art/title-fx-2026-10-10/upload/<name>.png.
 	Art = {
 		-- Kenney Foliage Sprites, PNG/Flat (white silhouettes, tinted here).
-		LeafRound = "", -- sprite_0030: a teardrop leaf; pink, a petal
-		LeafPoint = "", -- sprite_0031: a pointed leaf
-		LeafSerrate = "", -- sprite_0038: a toothed leaf on its stalk
-		Blossom = "", -- sprite_0040: a round blossom
-		SprigLeft = "", -- sprite_0041 mirrored: a leafy sprig for the left side
-		SprigRight = "", -- sprite_0041: the same sprig for the right side
+		LeafRound = "rbxassetid://105951895064835", -- sprite_0030: a teardrop leaf; pink, a petal
+		LeafPoint = "rbxassetid://96967429910080", -- sprite_0031: a pointed leaf
+		LeafSerrate = "rbxassetid://133671352096183", -- sprite_0038: a toothed leaf on its stalk
+		Blossom = "rbxassetid://118683858092487", -- sprite_0040: a round blossom
+		SprigLeft = "rbxassetid://87735916751330", -- sprite_0041 mirrored: a leafy sprig for the left side
+		SprigRight = "rbxassetid://96083382301295", -- sprite_0041: the same sprig for the right side
 		-- Kenney Smoke Particles, PNG/White puff (white, tinted lilac here).
-		MistA = "", -- whitePuff00
-		MistB = "", -- whitePuff04
+		MistA = "rbxassetid://72752875696615", -- whitePuff00
+		MistB = "rbxassetid://131352141653475", -- whitePuff04
 	},
 	MaxSprites = 6,
 	MaxAnimated = 4,
@@ -11755,6 +11757,9 @@ GameConfig.TitleFX = {
 	-- a LOCKED row's sprites keep only (1 - LockedFade) of themselves, like its
 	-- words.
 	List = { Room = 14, LockedFade = 0.5 },
+	-- Seen with the owner's art in Play (2026-10-10, desktop, day): the leaves at
+	-- 11 px and the sprigs at 22 read as specks and the mist at 0.8 was all but
+	-- gone, so the leaves are 13, the sprigs 24, the mist 0.72 -- still faint.
 	Profiles = {
 		-- NATURE: small leaves drifting out from beside the words and a little
 		-- down, turning as they go, fading in and out.
@@ -11762,7 +11767,7 @@ GameConfig.TitleFX = {
 			Motion = "drift",
 			Art = { "LeafRound", "LeafPoint", "LeafSerrate" },
 			Tints = { Color3.fromRGB(165, 235, 120), Color3.fromRGB(110, 215, 125), Color3.fromRGB(215, 245, 140) },
-			Size = 11,
+			Size = 13,
 			Seconds = 4.5,
 			Travel = 16,
 			Fall = 6,
@@ -11774,7 +11779,7 @@ GameConfig.TitleFX = {
 			Motion = "outward",
 			Art = { "LeafRound", "Blossom" },
 			Tints = { Color3.fromRGB(255, 150, 210), Color3.fromRGB(255, 205, 232) },
-			Size = 11,
+			Size = 13,
 			Seconds = 5.5,
 			Travel = 20,
 			Fall = 5,
@@ -11787,10 +11792,10 @@ GameConfig.TitleFX = {
 			Motion = "laurel",
 			Art = { "SprigLeft", "SprigRight", "LeafSerrate" },
 			Tints = { Color3.fromRGB(255, 214, 95), Color3.fromRGB(240, 185, 70) },
-			Size = 22,
+			Size = 24,
 			-- The loose leaves beyond the sprigs.
 			LeafArt = "LeafSerrate",
-			LeafSize = 9,
+			LeafSize = 11,
 			Seconds = 6,
 			Sway = 5,
 			Travel = 12,
@@ -11808,8 +11813,8 @@ GameConfig.TitleFX = {
 			Seconds = 9,
 			Drift = 6,
 			Turn = 12,
-			Transparency = 0.8,
-			Breathe = 0.05,
+			Transparency = 0.72,
+			Breathe = 0.02,
 		},
 		-- THE 100 TITLES' OWN (2026-10-10), for the families no profile above
 		-- wore: DAWN, MYSTIC's mist in sky blue and soft white (Dawn and
@@ -11823,8 +11828,8 @@ GameConfig.TitleFX = {
 			Seconds = 9,
 			Drift = 6,
 			Turn = 12,
-			Transparency = 0.8,
-			Breathe = 0.05,
+			Transparency = 0.72,
+			Breathe = 0.02,
 		},
 		astral = {
 			Motion = "mist",
@@ -11834,16 +11839,16 @@ GameConfig.TitleFX = {
 			Seconds = 9,
 			Drift = 6,
 			Turn = 12,
-			Transparency = 0.8,
-			Breathe = 0.05,
+			Transparency = 0.72,
+			Breathe = 0.02,
 		},
 		genesis = {
 			Motion = "laurel",
 			Art = { "SprigLeft", "SprigRight", "LeafSerrate" },
 			Tints = { Color3.fromRGB(241, 190, 164), Color3.fromRGB(255, 236, 214) },
-			Size = 22,
+			Size = 24,
 			LeafArt = "LeafSerrate",
-			LeafSize = 9,
+			LeafSize = 11,
 			Seconds = 6,
 			Sway = 5,
 			Travel = 12,

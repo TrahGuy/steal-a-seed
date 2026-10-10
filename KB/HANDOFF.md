@@ -1,5 +1,42 @@
 # Steal a Seed — Session Handoff
 
+## TITLE FX SWITCHED ON: THE OWNER'S 8 UPLOADS WIRED, SEEN IN PLAY — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+**The 8 uploads** are in `GameConfig.TitleFX.Art`:
+- leaf_round 105951895064835, leaf_point 96967429910080, leaf_serrate 133671352096183, blossom 118683858092487;
+- sprig_left 87735916751330, sprig_right 96083382301295;
+- mist_a 72752875696615, mist_b 131352141653475.
+
+Each was checked in Edit: AssetTypeId 1 (Image), named as the file, creator CrazyCozy Games (Group), IsLoaded true.
+
+**Found and fixed in the guarded Play** (throwaway store SeedTest_20261010, desktop 1251 x 716):
+1. **No sprite ever showed.**
+   - A label kept fully clear is never drawn, so its IsLoaded never turns, and the gate waited for ever.
+   - TitleFX now fetches each layer's pictures once (`ContentProvider:PreloadAsync` on its labels, one-shot).
+   - A sprite shows once `GetAssetFetchStatus` says Success (`TitleFX.fetched`). A failed picture still never shows.
+2. **Too faint by day.**
+   - At 11 px, leaves and petals read as specks, and the 22-px sprigs barely showed.
+   - The mist at 0.8 was all but gone on a day sky.
+   - Now leaves and petals are 13, sprigs 24, loose gold leaves 11, and the mist 0.72 ± 0.02, still faint. This covers the terminal's dawn, astral and genesis profiles too.
+3. **A petal read as part of the last letter.** Pink on PETAL GUARDIAN looked like "I-IIſ". Drifting and blooming sprites now start with their inner edge 2 px clear of the words.
+4. **The 100-row list's first open.** A row's sprites are now made the first time the row comes into view (RebirthUI `attach`, then `make()` in stepTitleFX), not all at once.
+
+**Seen**:
+- by day: nature (SEED WARDEN), mystic (GROVE KEEPER), bloom (PETAL GUARDIAN), gold (ANCIENT OAK), dawn (ETERNAL ROOT), astral (STARROOT), genesis (PRIMAL SPIRIT);
+- by night: nature, mystic and gold;
+- GAIA with its rainbow alone, every title under ADMIN;
+- the "?" list's rows, faded when LOCKED;
+- Reduced FX clearing the list at once;
+- a respawn leaving one layer;
+- no script errors.
+- Captures in output/title-fx-2026-10-10/real/.
+
+**Not seen**: a phone (the emulator is never switched). TitleFXSpec checks the phone sizes.
+
+**Cleared**: test store off, hosts removed, probe 339 / 0 differ / 0 ZZ / marker absent.
+
+**Specs**: TitleFXSpec 30/0 (new: the fetch gate, the one-shot fetch, a leaf's edge clear of the words, the lazy rows), RebirthSpec 78/0, RebirthCelebrationSpec 92/0, AdminSpec 127/0, PhoneMenuSpec 29/0.
+
 ## THE 100 REBIRTH TITLES AND THE TWO PROTOTYPE EFFECTS — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; RebirthSpec 78/0, RebirthCelebrationSpec 92/0, TitleFXSpec 28/0, PhoneMenuSpec 29/0; 14 OF 14 RANK-MATH MUTANTS CAUGHT; FULL SUITE: 136 OF 136 GREEN (569 S); SEEN IN A GUARDED PLAY ON `SeedTest_item3_20261010`, DESKTOP 1251 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
 
 Queue item 3 (item 11). The owner: "approve the rebirth titles, let terminal do it"; on the overlap with the other session's TitleFX: "both stay, and add them to the ? list too". The design: `output/design/rebirth-titles-fx-v1/` (README and JSON, read in full).
