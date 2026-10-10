@@ -803,7 +803,10 @@ GameConfig.Weapon = {
 		Text = "BAT SHOP!",
 		SubText = "BATS & TRAPS",
 		Colour = Color3.fromRGB(255, 105, 40), -- red orange #FF6928
-		Width = 10,
+		-- 11 since 2026-10-10 (Michael on v1047: bigger signs): the headline is
+		-- width-bound, so it grows a tenth -- the most it can where it hangs,
+		-- between the prompt's panel under it and SPIN THE WHEEL! over it.
+		Width = 11,
 		Height = 2.4,
 		SubHeight = 1.3,
 		Above = 9.1,
@@ -6015,10 +6018,13 @@ GameConfig.Rebirth = {
 		Text = "REBIRTH",
 		SubText = "+50% TRAINING · +25% INCOME",
 		Colour = Color3.fromRGB(255, 80, 200), -- magenta #FF50C8
-		Width = 11,
-		Height = 2.4,
-		SubHeight = 1.1,
-		Above = 10.5,
+		-- HALF AGAIN AS BIG since 2026-10-10 (Michael on v1047; the owner
+		-- approved): 11 x (2.4 + 1.1) at 10.5 until then. Nothing stands over the
+		-- shrine; its foot (9.7) stays over the seed's glow and the prompt.
+		Width = 16.5,
+		Height = 3.6,
+		SubHeight = 1.65,
+		Above = 12.3,
 	},
 	--==========================================================================
 	-- THE TITLE OVER A REBORN PLAYER'S NAME: built on the Head by RebirthService
@@ -11025,12 +11031,14 @@ GameConfig.PodGuide = {
 	-- in), In studs inside its arch. Clear of the racing line (|X| under 24)
 	-- and of the props near each arch (MapDecor, measured 2026-10-09):
 	-- Starbloom's right side is its fan trees', so its stand is on the left.
+	-- In was 9.5 until the board grew half again (2026-10-10, below): 13 keeps
+	-- the wider board inside the arch.
 	Spots = {
-		greenhollow = { X = 40, In = 9.5 },
-		dustbowl = { X = 40, In = 9.5 },
-		tanglemire = { X = 40, In = 9.5 },
-		emberroot = { X = 40, In = 9.5 },
-		starbloom = { X = -40, In = 9.5 },
+		greenhollow = { X = 40, In = 13 },
+		dustbowl = { X = 40, In = 13 },
+		tanglemire = { X = 40, In = 13 },
+		emberroot = { X = 40, In = 13 },
+		starbloom = { X = -40, In = 13 },
 	},
 	-- THE CAROUSEL: the five pods at PodTier (Big), Radius from the centre of a
 	-- turntable TurntableRadius wide and TurntableHeight tall, each facing out;
@@ -11050,12 +11058,16 @@ GameConfig.PodGuide = {
 	-- the ground. Not drawn past MaxDistance; its pictures built within
 	-- PreviewNearStuds and freed past PreviewFarStuds, checked every
 	-- CheckSeconds (TOP CREATURES' own rule).
+	-- HALF AGAIN AS BIG since 2026-10-10 (Michael on v1047: "scale up the size
+	-- on them 50% maybe"; the owner approved): 15 x 8.4 at 60 px a stud until
+	-- then. The canvas is the same 900 x 504 px, so every line grows with it;
+	-- its foot stays 3.0 over the ground.
 	BoardBack = 8,
-	BoardSize = Vector3.new(15, 8.4, 0.46),
-	BoardTopY = 11.4,
+	BoardSize = Vector3.new(22.5, 12.6, 0.46),
+	BoardTopY = 15.6,
 	PostWidth = 0.7,
 	RimStuds = 0.14,
-	PixelsPerStud = 60,
+	PixelsPerStud = 40,
 	MaxDistance = 120,
 	PreviewNearStuds = 60,
 	PreviewFarStuds = 75,
