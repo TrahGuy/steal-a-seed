@@ -1578,7 +1578,9 @@ openMenuFor = function(key: string?, slotIndex: number?, anchor: HudLayout.Rect)
 					elseif price then string.format("%s  R$%s", HATCH_BAG.Words.Instant, RobuxPrice.format(price))
 					else HATCH_BAG.Words.Instant })
 		end
-		table.insert(actions, { id = "hold", label = "Hold in hands" })
+		-- Already in hand, the same press puts it away (holdTool), and says so.
+		table.insert(actions, { id = "hold",
+			label = if held ~= nil and it.tool == held then "Put away" else "Hold in hands" })
 		-- WHAT'S INSIDE? (the Pod Guide, 2026-10-09): the Almanac at the plant
 		-- this pod's own look already shows -- an ordinary pod's only, one of
 		-- its biome's five (HatchRoll.candidates); never a Secret's or a Rain's.
