@@ -309,7 +309,60 @@ end
 --==============================================================================
 local transitioning = false
 
-local function transition(toNightNow: boolean): (boolean, string, number?, number?)
+--==============================================================================
+-- A COMPLETED DAWN, FOR WHOEVER WAITS ON ONE (2026-10-11, Enchanted Mist)
+--
+-- Told after a dawn has run to its end -- the nests stocked (or a short batch
+-- warned about: the road reopens anyway), Day published, the index bumped, the
+-- barrier asked open -- once, each listener on its own thread and never inside
+-- the transition's pcall, so a listener that throws or yields can neither fail
+-- the dawn nor make BUSY reachable. A failed dawn tells nobody. `source` says
+-- who asked: "cycle" (the loop at its deadline) or "admin" (StartDay / the
+-- command bar). Boot is no dawn and tells nobody.
+--==============================================================================
+export type Dawn = {
+	cycleIndex: number,
+	built: number?,
+	wanted: number?,
+	short: boolean,
+	barrierOpen: boolean,
+	source: string,
+	at: number,
+}
+local dawnListeners: { [number]: (Dawn) -> () } = {}
+local dawnListenerCount = 0
+
+function WorldCycleService.OnDawn(fn: (Dawn) -> ()): () -> ()
+	dawnListenerCount += 1
+	local id = dawnListenerCount
+	dawnListeners[id] = fn
+	return function()
+		dawnListeners[id] = nil
+	end
+end
+
+local function tellDawn(built: number?, wanted: number?, source: string)
+	local barrier = MapService.GetNightBarrier()
+	local info: Dawn = {
+		cycleIndex = WorldCycleService.CycleIndex(),
+		built = built,
+		wanted = wanted,
+		short = built ~= nil and wanted ~= nil and built < wanted,
+		barrierOpen = barrier == nil or not barrier.CanCollide,
+		source = source,
+		at = Workspace:GetServerTimeNow(),
+	}
+	for _, fn in pairs(dawnListeners) do
+		task.spawn(function()
+			local okListener, err = pcall(fn, info)
+			if not okListener then
+				warn("[Seed/WorldCycleService] a dawn listener failed: " .. tostring(err))
+			end
+		end)
+	end
+end
+
+local function transition(toNightNow: boolean, source: string?): (boolean, string, number?, number?)
 	if transitioning then
 		return false, "BUSY", nil, nil
 	end
@@ -328,6 +381,9 @@ local function transition(toNightNow: boolean): (boolean, string, number?, numbe
 		publish(WorldCycleService.Phase(),
 			if WorldCycleService.IsDay() then CYCLE.DaySeconds else CYCLE.NightSeconds)
 		return false, "FAILED", nil, nil
+	end
+	if not toNightNow then
+		tellDawn(built, wanted, source or "cycle")
 	end
 	return true, "OK", built, wanted
 end
@@ -417,7 +473,7 @@ function WorldCycleService.StartDay(): (boolean, string, number?, number?)
 	if WorldCycleService.IsDay() then
 		return false, "ALREADY_DAY", nil, nil
 	end
-	local ok, why, built, wanted = transition(false)
+	local ok, why, built, wanted = transition(false, "admin")
 	runLoop()
 	return ok, why, built, wanted
 end
