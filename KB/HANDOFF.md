@@ -1,5 +1,36 @@
 # Steal a Seed — Session Handoff
 
+## THE TUTORIAL'S WORLD HAND STANDS CLEAR OF THE HUD — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; TutorialSpotlightSpec 51/0, TutorialSpec 121/0, FirstMinuteSpec 117/0, TutorialPodSpec 263 checks; NOT YET SEEN IN PLAY: THAT IS ITEM 2'S PLAY, ITS ENTRY ABOVE WHEN DONE)
+
+Queue item 1 of the owner's queue after v1048. Found in the HUD layout's phone Play on 2026-10-09: on 705 x 338, at the spawn view, the guide's world hand pointed at the mill from UNDER the open panel row. The hand is TutorialUI's SeedGuideMarker, DisplayOrder 12, under every HUD layer by design, so a new player's first pointer started hidden.
+
+**TutorialSpotlight.worldHand** (pure):
+- **Kept as before where it can be.** The hand points down with its fingertip on the target's projected point. That holds wherever its square, at rest and at the top of a tap, keeps `WorldBodyGap` (3 px) off every HUD rect and `Margin` inside the screen.
+- **Else it points AT the point from the cheapest clear place:**
+  - the point within `WorldGap` (6 px) of the HUD: the fingertip stops 6 px outside the nearest edge in line with the point. On the phone that means up from just under the panel row;
+  - only the square meets the HUD: it turns on the point itself, up from under it or from a side.
+- **Cost:** the fingertip's distance, plus `TurnCost` (12) for a turn. A corner, out of line with the point, is tried only where nothing in line clears. With nothing clear, it stands as before.
+- **Speed:** it builds nothing while it looks (reused arrays; only the answer is new). 0.045 ms a call on average in Studio Edit, 2.5 ms at the slowest (a first call).
+
+**TutorialUI:**
+- **The HUD as the marker gui sees it:**
+  - what counts: HudLayout.occupied without the notices' line; the clock; ADMIN; Roblox's topbar buttons either side of its free span;
+  - when it is measured: on a resize, on a fold of the phone's row, when the boost icons or a REMOVE row change, and once a second. Never per frame.
+  - The guide's own words (banner, Skip, Resume) are added live each frame.
+- **The tap** moves the hand in screen space, whichever way it points (as far as 0.7 studs is on a 3.2-stud hand).
+- **The words** beside it come from TutorialSpotlight.wordsFor: off the point and the hand, clear of the HUD where a side allows.
+
+**Spec** (TutorialSpotlightSpec):
+- **A grid** of 20,826 projected points over the 15 listed screens, at the hand's least and largest size:
+  - 10,195 kept as before;
+  - 9,959 moved clear: up 4,075, down 2,577, left 1,969, right 1,338;
+  - 672 (3.2%) with no clear place, as before.
+  - Every moved hand stays on the screen, clear of the HUD, and points at its point.
+- **Studio's 705 x 338 phone** with the mill behind EVENTS: the hand points up from 6 px under the row, in line with the mill. With the row tucked, the fingertip is on the mill itself.
+- The other session's Play (its rebirth titles, a fresh test profile) ran this code with no error from TutorialUI or TutorialSpotlight. The hand itself was not looked at.
+
+**Files**: TutorialSpotlight, TutorialUI; TutorialSpotlightSpec.
+
 ## REBIRTH TITLE FX: KENNEY LEAVES, FLOWERS AND MIST ROUND THE TITLES — BUILT 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; EVERY EFFECT OFF UNTIL THE OWNER UPLOADS 8 PNGs)
 
 The owner's brief: cosmetic FX round the existing rebirth titles, from the Kenney packs on the Desktop. Title decoration only:
@@ -70,7 +101,7 @@ The owner: "add the progress bar back again for the mill, progress bars must not
 
 In this order. Each its own commit on wip, pushed once green; never published by an agent. "Testing for items 7-11" below still holds: per item only the specs that touch its files (plus HudLayoutSpec for a HUD move), mutants only for game logic, the full suite once at the end, few guarded Plays.
 
-1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1.
+1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1. -- DONE (its entry above).
 2. **Rarity edges** (item 10).
 3. **The 100 rebirth titles and the two prototype effects** (item 11).
 4. **The mill's progress bar back, and no progress bar transparent.**

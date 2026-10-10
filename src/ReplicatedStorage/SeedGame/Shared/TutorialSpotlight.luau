@@ -350,6 +350,195 @@ function Spotlight.wordsFor(hand: Hand, window: Rect, screen: Rect, w: number, h
 end
 
 --==============================================================================
+-- THE HAND IN THE WORLD, CLEAR OF THE HUD (2026-10-10)
+--
+-- Found in the layout's phone Play the night before: on a 705 x 338 phone, at
+-- the spawn view, the hand pointing at the mill stood under the panel's row,
+-- and every HUD layer draws over the world hand (TutorialUI's marker gui is
+-- DisplayOrder 12) -- a new player's first pointer started hidden.
+--
+-- `point` is the target's projected point, `screen` the whole gui it is drawn
+-- in, `size` the drawn square, `bob` how far a tap carries it, `hud` every HUD
+-- rect -- all in that gui's pixels. The hand points DOWN with its fingertip on
+-- the point, as it always has, wherever that keeps the hand's square -- at rest
+-- and at the top of a tap -- WorldBodyGap clear of every HUD rect and Margin
+-- inside the screen. Else:
+--
+--   the point under the HUD   the fingertip stops WorldGap outside the nearest
+--   (within WorldGap of it)   edge it can, in line with the point, and the
+--                             hand points AT it from there: up from under the
+--                             phone's panel row
+--   only the hand's square    it turns on the point itself: up from under it,
+--   meets the HUD             or from a side
+--
+-- The cheapest clear place wins: the fingertip's distance from the point, a
+-- turn costing TurnCost more (and a place out of line with the point, where no
+-- place in line is clear, twice that). With none clear it stands as it always
+-- did, pointing down at the point. Answers the hand and whether it moved.
+--
+-- ONCE A FRAME, SO NOTHING IS BUILT WHILE IT LOOKS: the places tried are kept
+-- in arrays this module reuses, and only the answer is a new table.
+--==============================================================================
+Spotlight.WorldGap = 6
+-- The square stands a little past the fingertip (Hand.Tip), so it keeps only
+-- this much: what keeps a fingertip WorldGap off an edge never trips it.
+Spotlight.WorldBodyGap = 3
+Spotlight.TurnCost = 12
+
+-- The hand for `dir` whose fingertip, at the top of a tap, is at `touch`.
+local function pose(dir: string, touch: Vector2, size: number, bob: number): Hand
+	local d = DIRS[dir]
+	local rest = touch - d.push * bob
+	local centre = rest - Spotlight.tipOffset(d.rotation, size)
+	local rect: Rect = { x = centre.X - size / 2, y = centre.Y - size / 2, w = size, h = size }
+	return {
+		dir = dir,
+		rotation = d.rotation,
+		push = d.push,
+		rect = rect,
+		tapped = shifted(rect, d.push * bob),
+		tip = rest,
+		size = size,
+	}
+end
+
+-- The four ways the hand can point, by index (1 is the natural one), and the
+-- fingertip's offset for each at the last size asked -- kept, not rebuilt.
+local WORLD_DIRS = { "down", "up", "left", "right" }
+local tipSize = -1
+local tipX: { number } = { 0, 0, 0, 0 }
+local tipY: { number } = { 0, 0, 0, 0 }
+-- The places tried, reused from call to call (only 1..count is read).
+local tryX: { number } = {}
+local tryY: { number } = {}
+local tryDir: { number } = {}
+local tryCost: { number } = {}
+
+function Spotlight.worldHand(point: Vector2, screen: Rect, size: number, bob: number, hud: { Rect }): (Hand, boolean)
+	local px, py = point.X, point.Y
+	local gap, body, turn = Spotlight.WorldGap, Spotlight.WorldBodyGap, Spotlight.TurnCost
+	local m = Spotlight.Margin
+	local lox, loy = screen.x + m - 0.01, screen.y + m - 0.01
+	local hix, hiy = screen.x + screen.w - m + 0.01, screen.y + screen.h - m + 0.01
+	local half = size / 2
+	local n = #hud
+	if size ~= tipSize then
+		tipSize = size
+		for i, dir in ipairs(WORLD_DIRS) do
+			local off = Spotlight.tipOffset(DIRS[dir].rotation, size)
+			tipX[i], tipY[i] = off.X, off.Y
+		end
+	end
+	-- The square centred at (cx, cy): on the screen, WorldBodyGap off the HUD.
+	local function squareClear(cx: number, cy: number): boolean
+		local x0, y0, x1, y1 = cx - half, cy - half, cx + half, cy + half
+		if x0 < lox or y0 < loy or x1 > hix or y1 > hiy then
+			return false
+		end
+		for i = 1, n do
+			local r = hud[i]
+			if r.w > 0 and r.h > 0 and x0 < r.x + r.w + body and r.x - body < x1 and y0 < r.y + r.h + body
+				and r.y - body < y1 then
+				return false
+			end
+		end
+		return true
+	end
+	-- The hand pointing `dir` (an index) with its fingertip at (tx, ty) at the
+	-- top of a tap: clear at rest and there.
+	local function handClear(dir: number, tx: number, ty: number): boolean
+		local push = DIRS[WORLD_DIRS[dir]].push
+		local cx, cy = tx - tipX[dir], ty - tipY[dir]
+		return squareClear(cx, cy) and squareClear(cx - push.X * bob, cy - push.Y * bob)
+	end
+	-- Strictly within WorldGap of a HUD rect: a fingertip ON that line is clear.
+	local function under(x: number, y: number): boolean
+		for i = 1, n do
+			local r = hud[i]
+			if r.w > 0 and r.h > 0 and x > r.x - gap + 0.01 and x < r.x + r.w + gap - 0.01 and y > r.y - gap + 0.01
+				and y < r.y + r.h + gap - 0.01 then
+				return true
+			end
+		end
+		return false
+	end
+	local pointUnder = under(px, py)
+	if not pointUnder and handClear(1, px, py) then
+		return pose("down", point, size, bob), false
+	end
+
+	-- The places worth trying, each with its cost; the cheapest clear one wins.
+	local count = 0
+	local function add(x: number, y: number, extra: number)
+		if under(x, y) then
+			return
+		end
+		local dx, dy = px - x, py - y
+		local dir = if math.abs(dy) >= math.abs(dx) then (if dy < 0 then 2 else 1) elseif dx > 0 then 4 else 3
+		count += 1
+		tryX[count], tryY[count], tryDir[count] = x, y, dir
+		tryCost[count] = math.sqrt(dx * dx + dy * dy) + extra + (if dir == 1 then 0 else turn)
+	end
+	-- The cheapest of 1..count that is clear (each tried at most once), or 0.
+	local function cheapestClear(): number
+		for _ = 1, count do
+			local best, bestCost = 0, math.huge
+			for i = 1, count do
+				if tryCost[i] < bestCost then
+					best, bestCost = i, tryCost[i]
+				end
+			end
+			if best == 0 then
+				return 0
+			end
+			if handClear(tryDir[best], tryX[best], tryY[best]) then
+				return best
+			end
+			tryCost[best] = math.huge
+		end
+		return 0
+	end
+	-- Turned on the point itself (only where the point shows), then in line with
+	-- it, WorldGap off every edge: a few dozen places, never per pixel.
+	if not pointUnder then
+		for dir = 2, 4 do
+			count += 1
+			tryX[count], tryY[count], tryDir[count], tryCost[count] = px, py, dir, turn
+		end
+	end
+	for i = 1, n do
+		local r = hud[i]
+		if r.w > 0 and r.h > 0 then
+			add(px, r.y - gap, 0)
+			add(px, r.y + r.h + gap, 0)
+			add(r.x - gap, py, 0)
+			add(r.x + r.w + gap, py, 0)
+		end
+	end
+	local found = cheapestClear()
+	if found == 0 then
+		-- Out of line only where nothing in line is clear: a corner, WorldGap
+		-- out, of a rect the point stands under.
+		count = 0
+		for i = 1, n do
+			local r = hud[i]
+			if r.w > 0 and r.h > 0 and px > r.x - gap and px < r.x + r.w + gap and py > r.y - gap
+				and py < r.y + r.h + gap then
+				add(r.x - gap, r.y - gap, turn * 2)
+				add(r.x + r.w + gap, r.y - gap, turn * 2)
+				add(r.x - gap, r.y + r.h + gap, turn * 2)
+				add(r.x + r.w + gap, r.y + r.h + gap, turn * 2)
+			end
+		end
+		found = cheapestClear()
+	end
+	if found == 0 then
+		return pose("down", point, size, bob), false
+	end
+	return pose(WORLD_DIRS[tryDir[found]], Vector2.new(tryX[found], tryY[found]), size, bob), true
+end
+
+--==============================================================================
 -- NEVER SHOWN, AND DROPPED AT ONCE IF IT BECOMES TRUE (the owner's list, in
 -- order, plus the guide's own state): the first reason that holds, or nil when
 -- the spotlight may show.

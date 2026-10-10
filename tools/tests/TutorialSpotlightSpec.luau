@@ -341,6 +341,169 @@ local ok, err = pcall(function()
 			first and moved and string.format("(%g,%g) -> (%g,%g)", first.x, first.y, moved.x, moved.y))
 	end
 
+	-- THE HAND IN THE WORLD, CLEAR OF THE HUD (2026-10-10; found the night before
+	-- in the layout's phone Play: at the spawn view on 705 x 338 the hand pointing
+	-- at the mill stood under the panel's row). On every listed screen, a grid of
+	-- projected points at the hand's least and largest size: the hand points DOWN
+	-- with its fingertip ON the point wherever that is clear, else AT the point
+	-- from a clear place -- on the screen, its square WorldBodyGap clear of every
+	-- HUD rect, its fingertip at the top of a tap never within WorldGap of one.
+	do
+		local G, BG = Spot.WorldGap, Spot.WorldBodyGap
+		local function grownR(r, by)
+			by = by or G
+			return rect(r.x - by, r.y - by, r.w + by * 2, r.h + by * 2)
+		end
+		local function strictlyIn(p, b)
+			return p.X > b.x + 0.01 and p.X < b.x + b.w - 0.01 and p.Y > b.y + 0.01 and p.Y < b.y + b.h - 0.01
+		end
+		local function hudOf(c, input)
+			local L = HudLayout.solve(input)
+			local hud = {}
+			for _, r in ipairs(HudLayout.occupied(L)) do
+				if r ~= L.toast and r.w > 0 and r.h > 0 then
+					table.insert(hud, toSpot(c, r))
+				end
+			end
+			-- The clock and ADMIN: window space, the notch in front of it.
+			for _, r in ipairs({ L.clock, L.admin }) do
+				if r and r.w > 0 then
+					table.insert(hud, rect(r.x * c.k + c.ox, r.y * c.k, r.w * c.k, r.h * c.k))
+				end
+			end
+			return hud, L
+		end
+		local worldProblems, tried, kept, movedN, fallback = {}, 0, 0, 0, 0
+		local dirs = {}
+		local spent, slowest = 0, 0
+		local fallbackAt = {}
+		for _, c in ipairs(cases) do
+			local hud = hudOf(c, c.input)
+			local grown, bodyGrown = {}, {}
+			for _, r in ipairs(hud) do
+				table.insert(grown, grownR(r))
+				table.insert(bodyGrown, grownR(r, BG))
+			end
+			local scr = rect(0, 0, c.W, c.H)
+			for _, base in ipairs({ 40, 96 }) do
+				local size = base * c.k
+				local bob = size * 0.7 / 3.2
+				for x = 3, c.W - 3, 37 * c.k do
+					for y = 3, c.H - 3, 29 * c.k do
+						tried += 1
+						local p = Vector2.new(x, y)
+						local t0 = os.clock()
+						local h, moved = Spot.worldHand(p, scr, size, bob, hud)
+						local took = os.clock() - t0
+						spent += took
+						slowest = math.max(slowest, took)
+						local top = h.tip + h.push * bob
+						local tag = string.format("%s size %d at (%d,%d)", c.tag, base, x, y)
+						local clearOfHud = Spot.inside(h.rect, scr, Spot.Margin) and Spot.inside(h.tapped, scr, Spot.Margin)
+						for _, b in ipairs(bodyGrown) do
+							if Spot.overlaps(h.rect, b) or Spot.overlaps(h.tapped, b) then
+								clearOfHud = false
+							end
+						end
+						local under = false
+						for _, b in ipairs(grown) do
+							if strictlyIn(p, b) then
+								under = true
+							end
+						end
+						if not moved then
+							if h.dir ~= "down" or (top - p).Magnitude > 0.01 then
+								table.insert(worldProblems, tag .. ": unmoved, yet not the natural hand")
+							elseif clearOfHud and not under then
+								kept += 1
+							else
+								fallback += 1
+								if #fallbackAt < 6 and base == 40 then
+									table.insert(fallbackAt, tag)
+								end
+							end
+						else
+							movedN += 1
+							dirs[h.dir] = (dirs[h.dir] or 0) + 1
+							if not clearOfHud then
+								table.insert(worldProblems, tag .. ": moved onto the HUD or off the screen")
+							end
+							for _, b in ipairs(grown) do
+								if strictlyIn(top, b) then
+									table.insert(worldProblems, tag .. ": its fingertip stops under the HUD")
+								end
+							end
+							local toward = p - top
+							if toward.Magnitude > 0.01 and toward:Dot(h.push) <= 0 then
+								table.insert(worldProblems, tag .. ": it points away from the point")
+							end
+						end
+					end
+				end
+			end
+		end
+		check(#worldProblems == 0, string.format("the world hand on %d screens, %d projected points at its least and "
+			.. "largest size: down with its fingertip on the point where that is clear, else at the point from a "
+			.. "clear place -- on the screen, %d px clear of every HUD rect, its fingertip never under the HUD",
+			#cases, tried, G), table.concat(worldProblems, " | ", 1, math.min(#worldProblems, 8)))
+		local average = spent / math.max(1, tried)
+		check(average < 0.0002, "one placement costs a sliver of a frame: under 0.2 ms on average in Studio Edit "
+			.. "(it runs once a frame, and builds nothing while it looks)",
+			string.format("%.3f ms average, %.2f ms at the slowest", average * 1000, slowest * 1000))
+		say(string.format("    (the world hand: %.3f ms a call on average, %.2f ms at the slowest)", average * 1000,
+			slowest * 1000))
+		say(string.format("    (the world hand: %d kept as it was, %d moved clear (%s), %d with no clear place, as "
+			.. "before)", kept, movedN, (function()
+				local list = {}
+				for dir, n in pairs(dirs) do
+					table.insert(list, dir .. " " .. n)
+				end
+				table.sort(list)
+				return table.concat(list, ", ")
+			end)(), fallback))
+		check(movedN > 0 and fallback * 20 < tried,
+			"the hand moves clear wherever the HUD would cover it; with no clear place at all only in a corner case",
+			string.format("%d kept, %d moved, %d with no clear place of %d; e.g. %s", kept, movedN, fallback, tried,
+				table.concat(fallbackAt, "; ")))
+
+		-- The case found in Play: the Studio phone, the mill seen behind the panel's
+		-- row (EVENTS' square). The hand points UP at it from just under the row;
+		-- with the row tucked away it points down at it, as before.
+		local studio = nil
+		for _, c in ipairs(cases) do
+			if c.tag == "phone 705x338 (Studio, notched)" then
+				studio = c
+			end
+		end
+		if studio then
+			local hud, L = hudOf(studio, studio.input)
+			local ev = toSpot(studio, L.events)
+			local p = Vector2.new(ev.x + ev.w / 2, ev.y + ev.h / 2)
+			local scr = rect(0, 0, studio.W, studio.H)
+			local size, bob = 40, 40 * 0.7 / 3.2
+			local h, moved = Spot.worldHand(p, scr, size, bob, hud)
+			local top = h.tip + h.push * bob
+			local row = toSpot(studio, L.dock)
+			check(moved and h.dir == "up" and math.abs(top.X - p.X) < 0.01
+					and math.abs(top.Y - (row.y + row.h + G)) < 0.01,
+				"Studio's 705 x 338 phone, the mill behind EVENTS: the hand points UP at it from just under the panel's "
+					.. "row, in line with it",
+				string.format("%s (%.1f,%.1f) row foot %.1f", h.dir, top.X, top.Y, row.y + row.h))
+			-- Tucked, the point shows: the fingertip on the mill itself, the hand
+			-- turned only as far as the clock's chip above it asks.
+			local tucked = table.clone(studio.input)
+			tucked.dockShut = true
+			local hud2 = hudOf(studio, tucked)
+			local h2 = Spot.worldHand(p, scr, size, bob, hud2)
+			local top2 = h2.tip + h2.push * bob
+			check((top2 - p).Magnitude < 0.01,
+				"and with the row tucked into the right edge, its fingertip on the mill itself",
+				string.format("%s (%.1f,%.1f) vs (%.1f,%.1f)", h2.dir, top2.X, top2.Y, p.X, p.Y))
+		else
+			check(false, "Studio's 705 x 338 phone is listed")
+		end
+	end
+
 	-- THE LOCKED CHEST'S WORDS (the owner's words, 2026-10-08): on every listed
 	-- phone a notice's detail line (GothamBold 12, ActionToastUI's PHONE size)
 	-- holds them in the two lines it allows, across the toast rect's width.
@@ -529,8 +692,24 @@ local ok, err = pcall(function()
 			and has(uiSrc, "reach = layout.skip.y + layout.skip.h + wordsShift")
 			and has(uiSrc, "makeRoom(h, wordsAt)"),
 		"on a desktop the guide's banner steps down under a hand pointing up at the top row (and says how far)")
-	check(has(uiSrc, "local left = x + w > view.X - 4"),
-		"the world hand's words stand on its left where the right would run off the screen")
+	-- The world hand clear of the HUD (2026-10-10): TutorialSpotlight.worldHand
+	-- and wordsFor, against HudLayout's rects in the marker gui's pixels (not the
+	-- notices' line; the clock, ADMIN and Roblox's topbar buttons too) and the
+	-- guide's own words, measured on a change and once a second -- never per frame.
+	check(has(uiSrc, "local h = Spot.worldHand(Vector2.new(v.X, v.Y), screen, size, bob, hud)")
+			and has(uiSrc, "Spot.wordsFor(h, { x = v.X - 2, y = v.Y - 2, w = 4, h = 4 }, screen, w, tall, hud)")
+			and has(uiSrc, "worldHand.Rotation = h.rotation")
+			and not has(uiSrc, "local left = x + w > view.X - 4"),
+		"the world hand and its words stand clear of the HUD (TutorialSpotlight.worldHand, wordsFor)")
+	check(has(uiSrc, "for _, r in ipairs(HudLayout.occupied(L)) do\n\t\tif r ~= L.toast then")
+			and has(uiSrc, "add(L.clock, originX, insetTop)") and has(uiSrc, "add(L.admin, originX, insetTop)")
+			and has(uiSrc, "add(HudLayout.rect(0, bar.y, bar.x, bar.h), originX, insetTop)")
+			and has(uiSrc, "for _, object in ipairs({ banner, skip, resume }) do")
+			and has(uiSrc, "if os.clock() - worldHudAt > 1 then")
+			and has(uiSrc, "[HudLayout.Config.Phone.Panel.ShutAttribute] = true")
+			and has(uiSrc, "gui:GetPropertyChangedSignal(\"AbsoluteSize\"):Connect(stale)"),
+		"its HUD: every group but the notices' line, the clock, ADMIN, Roblox's topbar buttons and the guide's "
+			.. "words; measured again on a resize or a fold, and once a second -- never per frame")
 	check(has(uiSrc, "if pressedAt.biomes then") and has(uiSrc, "pressedAt[key] = os.clock()"),
 		"a pressed button is not pointed at again in its step (BIOMES lands in the Safe Zone)")
 	-- Step 4's words fit the desktop banner's one line.

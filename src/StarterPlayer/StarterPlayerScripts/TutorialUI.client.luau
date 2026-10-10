@@ -694,6 +694,83 @@ local function handOver(point: Vector3?, text: string?)
 end
 
 --==============================================================================
+-- THE HUD, AS THE MARKER GUI SEES IT (2026-10-10)
+--
+-- Every HUD layer draws over the world hand, so it stands clear of them
+-- (TutorialSpotlight.worldHand): HudLayout's rects for this screen -- every
+-- permanent group with its badges, the top row's buttons, the clock and ADMIN
+-- -- and Roblox's own topbar buttons either side of its free span, in the
+-- marker gui's pixels. Not the notices' line: it is theirs only while one
+-- passes. Measured again when the screen changes shape or the HUD's own
+-- attributes move it (the phone's panel row folding, the boost icons, a trap's
+-- REMOVE row), and once a second besides -- never per frame. The guide's own
+-- words are added live in drawWorld: they step down and back.
+--==============================================================================
+local worldHud: { Spot.Rect } = {}
+local worldHudAt = -math.huge
+
+local function measureWorldHud()
+	worldHudAt = os.clock()
+	local size = gui.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		worldHud = {}
+		return
+	end
+	local input = HudLayout.measure(gui)
+	local L = HudLayout.solve(input)
+	local k = HudLayout.scaleOf(gui)
+	local shift = gui.AbsolutePosition - markGui.AbsolutePosition
+	local insetTop = input.insetTop or 0
+	local view = input.viewport
+	local originX = if view then (view.X - input.safe.X) / 2 else 0
+	local rects: { Spot.Rect } = {}
+	-- `dx`, `dy`: how far a window-space rect is from safe space.
+	local function add(r: HudLayout.Rect?, dx: number?, dy: number?)
+		if r and r.w > 0 and r.h > 0 then
+			table.insert(rects, {
+				x = (r.x - (dx or 0)) * k + shift.X,
+				y = (r.y - (dy or 0)) * k + shift.Y,
+				w = r.w * k,
+				h = r.h * k,
+			})
+		end
+	end
+	for _, r in ipairs(HudLayout.occupied(L)) do
+		if r ~= L.toast then
+			add(r)
+		end
+	end
+	add(L.clock, originX, insetTop)
+	add(L.admin, originX, insetTop)
+	local bar = input.topbar
+	if bar and bar.h > 0 then
+		add(HudLayout.rect(0, bar.y, bar.x, bar.h), originX, insetTop)
+		local right = bar.x + bar.w
+		local width = if view then view.X else input.safe.X
+		add(HudLayout.rect(right, bar.y, width - right, bar.h), originX, insetTop)
+	end
+	worldHud = rects
+end
+
+do
+	local moves: { [string]: boolean } = {
+		[Config.BoostIcons.Attribute] = true,
+		[Config.Hotbar.RemoveRowAttribute] = true,
+		[HudLayout.Config.Phone.Panel.ShutAttribute] = true,
+	}
+	local function stale()
+		worldHudAt = -math.huge
+	end
+	table.insert(connections, player.AttributeChanged:Connect(function(name: string)
+		if moves[name] then
+			stale()
+		end
+	end))
+	table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(stale))
+	table.insert(connections, markGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(stale))
+end
+
+--==============================================================================
 -- WHAT THE GUIDE IS LOOKING AT
 --==============================================================================
 local function myPlot(): Model?
@@ -1642,8 +1719,7 @@ local function drawWorld(clock: number)
 		worldWords.Visible = false
 		return
 	end
-	local tip = point + Vector3.new(0, WorldHand.Bob * (1 - tapAt(clock)), 0)
-	local v = camera:WorldToViewportPoint(tip)
+	local v = camera:WorldToViewportPoint(point)
 	local view = camera.ViewportSize
 	if v.Z <= 0.1 then
 		worldHand.Visible = false
@@ -1653,29 +1729,51 @@ local function drawWorld(clock: number)
 	local k = UIKit.scaleOf(gui)
 	local px = WorldHand.Studs * view.Y / (2 * v.Z * math.tan(math.rad(camera.FieldOfView) * 0.5))
 	local size = math.clamp(px, WorldHand.Least * k, WorldHand.Most * k)
-	-- Its fingertip, pointing down, ON the projected point.
-	local off = Spot.tipOffset(180, size)
-	local cx, cy = v.X - off.X, v.Y - off.Y
+	-- A tap carries it as far as WorldHand.Bob studs is on a hand WorldHand.Studs
+	-- tall, in the gui's pixels: toward the target, whichever way it points.
+	local bob = size * WorldHand.Bob / WorldHand.Studs
+	if os.clock() - worldHudAt > 1 then
+		measureWorldHud()
+	end
+	-- The guide's own words over it too, where they stand this frame.
+	local hud = worldHud
+	local origin = markGui.AbsolutePosition
+	for _, object in ipairs({ banner, skip, resume }) do
+		if shown(object) then
+			if hud == worldHud then
+				hud = table.clone(worldHud)
+			end
+			local p, s = object.AbsolutePosition, object.AbsoluteSize
+			table.insert(hud, { x = p.X - origin.X, y = p.Y - origin.Y, w = s.X, h = s.Y })
+		end
+	end
+	local mark = markGui.AbsoluteSize
+	local screen: Spot.Rect = { x = 0, y = 0, w = mark.X, h = mark.Y }
+	-- Its fingertip ON the projected point, pointing down -- or, where the HUD
+	-- would cover it, at the point from the nearest clear place.
+	local h = Spot.worldHand(Vector2.new(v.X, v.Y), screen, size, bob, hud)
+	local tap = tapAt(clock)
+	local cx = h.rect.x + h.rect.w * 0.5 + h.push.X * bob * tap
+	local cy = h.rect.y + h.rect.h * 0.5 + h.push.Y * bob * tap
 	worldHand.Size = UDim2.fromOffset(size, size)
+	worldHand.Rotation = h.rotation
 	worldHand.Position = UDim2.fromOffset(cx, cy)
 	local onScreen = cx > -size and cx < view.X + size and cy > -size and cy < view.Y + size
 	worldHand.Visible = onScreen
 	if onScreen and worldText ~= "" then
 		local ws = math.floor(20 * tutorialScale * k + 0.5)
 		local m = measureWorld(worldText, ws)
-		local w = m.X + 8
-		-- Beside the hand on its right, or on its left where the right would run
-		-- off the screen.
-		local x = cx + size * 0.5 + 2
-		local left = x + w > view.X - 4
-		if left then
-			x = cx - size * 0.5 - 2 - w
-		end
+		local w, tall = m.X + 8, m.Y + 6
+		-- Beside the hand, never over the point, the hand or the HUD where a side
+		-- allows (TutorialSpotlight.wordsFor), read from the hand outward.
+		local at = Spot.wordsFor(h, { x = v.X - 2, y = v.Y - 2, w = 4, h = 4 }, screen, w, tall, hud)
 		worldWords.TextSize = ws
 		worldWords.Text = worldText
-		worldWords.TextXAlignment = if left then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
-		worldWords.Size = UDim2.fromOffset(w, m.Y + 6)
-		worldWords.Position = UDim2.fromOffset(x, cy - (m.Y + 6) * 0.5)
+		worldWords.TextXAlignment = if at.x >= h.rect.x + h.rect.w then Enum.TextXAlignment.Left
+			elseif at.x + at.w <= h.rect.x then Enum.TextXAlignment.Right
+			else Enum.TextXAlignment.Center
+		worldWords.Size = UDim2.fromOffset(w, tall)
+		worldWords.Position = UDim2.fromOffset(at.x, at.y)
 		worldWords.Visible = true
 	else
 		worldWords.Visible = false
