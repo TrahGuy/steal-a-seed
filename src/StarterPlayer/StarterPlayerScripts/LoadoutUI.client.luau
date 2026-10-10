@@ -261,6 +261,10 @@ local view = {
 	items = {} :: { InventoryModel.Item },
 	byRef = {} :: { [string]: InventoryModel.Item },
 	byKey = {} :: { [string]: InventoryModel.Group },
+	-- THE CONTEXT SLOT (2026-10-10): true while DROP or PLAY MINIGAME stands in
+	-- the strip's place (GameConfig.ContextSlot) -- the strip, its number keys
+	-- and LB / RB wait. See showStrip.
+	yield = false,
 }
 
 local function shownBar(): { string }
@@ -663,7 +667,7 @@ do
 
 	showStrip = function()
 		local layout = hud
-		hotbar.Visible = not (bagOpen and not lifted and layout ~= nil and layout.touch)
+		hotbar.Visible = not ((bagOpen and not lifted and layout ~= nil and layout.touch) or view.yield)
 		-- REMOVE stands with the strip, and steps aside while the strip is a
 		-- drop target (a drag, a phone's assignment).
 		local remove = trapRemove
@@ -671,6 +675,38 @@ do
 			remove.strip(hotbar.Visible and not lifted)
 		end
 	end
+
+	--==========================================================================
+	-- THE CONTEXT SLOT (2026-10-10, the owner: "we can remove the hotbar while
+	-- the drop button appears, so the button will replace hotbar position, we
+	-- could also apply it while riding the mill for the minigame button too")
+	--
+	-- While any client-local YieldPrefix attribute is raised -- DropButtonUI's
+	-- while a raid pod is carried, SproutDashUI's while the player rides their
+	-- own mill -- the strip steps aside and that button stands centred in its
+	-- place (HudLayout.contextButton). Only Visible changes: the strip's rect,
+	-- and everything placed round it, stay where they are.
+	--==========================================================================
+	local prefix = GameConfig.ContextSlot.YieldPrefix
+	local function readYield()
+		local any = false
+		for name, value in pairs(player:GetAttributes()) do
+			if value == true and string.sub(name, 1, #prefix) == prefix then
+				any = true
+				break
+			end
+		end
+		if view.yield ~= any then
+			view.yield = any
+			showStrip()
+		end
+	end
+	player.AttributeChanged:Connect(function(name: string)
+		if string.sub(name, 1, #prefix) == prefix then
+			readYield()
+		end
+	end)
+	readYield()
 end
 
 --==============================================================================
@@ -2230,7 +2266,8 @@ local KEYS = {
 }
 
 ContextActionService:BindAction("SeedHotbarKeys", function(_, state, input)
-	if state ~= Enum.UserInputState.Begin then
+	-- Nothing while the strip has stepped aside for the context slot (2026-10-10).
+	if state ~= Enum.UserInputState.Begin or view.yield then
 		return Enum.ContextActionResult.Pass
 	end
 	for i, key in ipairs(KEYS) do
@@ -2276,7 +2313,8 @@ do
 		if state ~= Enum.UserInputState.Begin then
 			return Enum.ContextActionResult.Pass
 		end
-		if PadInput.panelOpen() then
+		-- Nor while the strip has stepped aside for the context slot (2026-10-10).
+		if PadInput.panelOpen() or view.yield then
 			return Enum.ContextActionResult.Pass
 		end
 		local held = heldTool()

@@ -107,6 +107,7 @@ Metrics.Outcomes = {
 	captured = true, -- a guardian's swing landed (it took the pod, or threw the carrier and the pod fell)
 	died = true, -- the carrier died holding it
 	knocked = true, -- knocked down some other way (a bat, a trap) and the pod fell
+	dropped = true, -- put down on purpose: the DROP button (2026-10-10)
 	night = true, -- still out in a biome when night fell
 	left = true, -- left the game holding it
 	other = true, -- anything else that took it (an admin progress reset)

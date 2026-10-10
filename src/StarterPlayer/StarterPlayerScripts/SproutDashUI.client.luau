@@ -8,8 +8,8 @@
 -- will not affect the jump".
 --
 --   THE BUTTON   PLAY MINIGAME, while this player rides their OWN mill (not the
---                Disco Mill), at the nearest place clear of the HUD's rects
---                (HudLayout, SpeedMilestones.clearOf) above the hotbar.
+--                Disco Mill), in the hotbar's place while the strip steps aside
+--                (2026-10-10, GameConfig.ContextSlot; HudLayout.contextButton).
 --   THE JUMP     while the screen is open this client's humanoid cannot jump
 --                (its Jumping state off, the touch controls hidden; both back
 --                as they were on close) and Space and pad A are taken first,
@@ -47,7 +47,6 @@ local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
-local SpeedMilestones = require(Shared:WaitForChild("SpeedMilestones"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local CFG = GameConfig.SproutDash
@@ -129,7 +128,7 @@ measureGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 UIKit.tenFoot(measureGui)
 measureGui.Parent = playerGui
 
-local BUTTON_W, BUTTON_H, GAP = 230, 56, 8
+local BUTTON_W, BUTTON_H = 230, 56
 local playButton = Instance.new("TextButton")
 playButton.Name = "PlayMinigame"
 playButton.AnchorPoint = Vector2.new(0, 0)
@@ -170,41 +169,6 @@ end
 local buttonScale = Instance.new("UIScale")
 buttonScale.Parent = playButton
 UIKit.clicks(playButton)
-
-local function scale(): number
-	local cam = Workspace.CurrentCamera
-	local vp = if cam then cam.ViewportSize else Vector2.new(1100, 720)
-	return math.clamp(math.min(vp.X / 1100, vp.Y / 720), 0.6, 1.25)
-end
-
--- HudLayout's rects in this gui's pixels (TreadmillFunUI's measure).
-local function hudRects(): ({ SpeedMilestones.Rect }, SpeedMilestones.Rect?)
-	local size = measureGui.AbsoluteSize
-	if size.X <= 0 or size.Y <= 0 then
-		return {}, nil
-	end
-	local input = HudLayout.measure(measureGui)
-	local L = HudLayout.solve(input)
-	local k = HudLayout.scaleOf(measureGui)
-	local shift = measureGui.AbsolutePosition - buttonGui.AbsolutePosition
-	local insetTop = input.insetTop or 0
-	local rects: { SpeedMilestones.Rect } = {}
-	local function add(r: HudLayout.Rect?, lift: number?)
-		if r and r.w > 0 and r.h > 0 then
-			table.insert(rects, { x = r.x * k + shift.X, y = (r.y - (lift or 0)) * k + shift.Y, w = r.w * k, h = r.h * k })
-		end
-	end
-	for _, r in ipairs(HudLayout.occupied(L)) do
-		add(r)
-	end
-	local status, notice, boosts = HudLayout.statusRows(L, insetTop)
-	add(status)
-	add(notice)
-	add(boosts)
-	add(L.clock, insetTop)
-	add(L.admin, insetTop)
-	return rects, { x = shift.X, y = shift.Y, w = size.X, h = size.Y }
-end
 
 -- Riding their OWN mill: mounted, and standing on the belt of their own plot.
 local function ownBeltUnder(): boolean
@@ -1037,34 +1001,41 @@ RunService.RenderStepped:Connect(function(dt: number)
 end)
 
 --==============================================================================
--- THE BUTTON'S PLACE, A FEW TIMES A SECOND
+-- THE BUTTON'S PLACE: THE CONTEXT SLOT, A FEW TIMES A SECOND (2026-10-10, the
+-- owner: "we could also apply it while riding the mill for the minigame button
+-- too")
+--
+-- While this player rides their own mill the strip steps aside (the client-local
+-- YieldPrefix .. "Minigame" attribute, which LoadoutUI reads) and the button
+-- stands centred in the strip's rect (HudLayout.contextButton) at its own 230 x
+-- 56 aspect, as tall as the strip or 56. Until then it stood at the nearest spot
+-- clear of the HUD above the strip: a third of a phone's width, by the Treadmill
+-- Fun bar and the guide's words.
 --==============================================================================
+local YIELD = GameConfig.ContextSlot.YieldPrefix .. "Minigame"
 task.spawn(function()
 	local placedAt = -math.huge
 	while gui.Parent do
 		local want = CFG.Enabled and not open and ownBeltUnder()
 		if want and os.clock() - placedAt > 1 then
 			placedAt = os.clock()
-			local k = scale()
-			local rects, bounds = hudRects()
-			if bounds then
-				local w, h = BUTTON_W * k, BUTTON_H * k
-				local spot = SpeedMilestones.clearOf({
-					x = bounds.x + bounds.w / 2 - w / 2,
-					y = bounds.y + bounds.h - h - GAP,
-					w = w,
-					h = h,
-				}, rects, bounds, GAP)
-				if spot then
-					playButton.Position = UDim2.fromOffset(spot.x, spot.y)
-					playButton.Size = UDim2.fromOffset(BUTTON_W, BUTTON_H)
-					buttonScale.Scale = k
-				else
-					want = false
-				end
+			local size = measureGui.AbsoluteSize
+			if size.X > 0 and size.Y > 0 then
+				-- In this gui's pixels: the measure gui's units, times its TV scale,
+				-- from its corner (TreadmillFunUI's measure).
+				local L = HudLayout.solve(HudLayout.measure(measureGui))
+				local k = HudLayout.scaleOf(measureGui)
+				local shift = measureGui.AbsolutePosition - buttonGui.AbsolutePosition
+				local r = HudLayout.contextButton(L, BUTTON_W / BUTTON_H, BUTTON_H)
+				playButton.Position = UDim2.fromOffset(r.x * k + shift.X, r.y * k + shift.Y)
+				playButton.Size = UDim2.fromOffset(r.w, r.h)
+				buttonScale.Scale = k
 			end
 		end
 		playButton.Visible = want
+		if (player:GetAttribute(YIELD) == true) ~= want then
+			player:SetAttribute(YIELD, if want then true else nil)
+		end
 		task.wait(0.2)
 	end
 end)

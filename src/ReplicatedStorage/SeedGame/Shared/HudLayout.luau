@@ -1069,6 +1069,23 @@ local function removeRowOver(input: Input, hotbar: Rect): Rect?
 	return rect(hotbar.x, hotbar.y - HOT.RemoveGap - h, hotbar.w, h)
 end
 
+--==============================================================================
+-- THE CONTEXT SLOT'S BUTTON (2026-10-10; GameConfig.ContextSlot)
+--
+-- DROP while a raid pod is carried, PLAY MINIGAME while the player rides their
+-- own mill: in the strip's place while the strip steps aside, centred in its
+-- rect -- as tall as the strip (or `maxHeight`, if lower) at the button's own
+-- `aspect`, never wider than the strip. Inside the strip's rect, so it clears
+-- everything the strip clears and nothing else moves.
+--==============================================================================
+function HudLayout.contextButton(L: Layout, aspect: number, maxHeight: number?): Rect
+	local strip = L.hotbar
+	local h = math.min(strip.h, maxHeight or math.huge)
+	local w = math.min(h * aspect, strip.w)
+	h = math.min(h, w / aspect)
+	return rect(strip.x + (strip.w - w) / 2, strip.y + (strip.h - h) / 2, w, h)
+end
+
 -- Slot `index`'s square on the strip (1 is the left end), in the same space as
 -- `L.hotbar`: the strip's cells run left to right from its own left edge.
 function HudLayout.slotRect(L: Layout, index: number): Rect

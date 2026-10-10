@@ -1233,7 +1233,7 @@ for _, name in ipairs({ "IndexUI", "GardenUI", "SettingsUI", "ShopUI", "Marigold
 		string.format("%s vs hotbar %s, rail %s", tostring(order), tostring(hotbarOrder), tostring(railOrder)))
 end
 
-check(loadout:find("hotbar.Visible = not (bagOpen and not lifted and layout ~= nil and layout.touch)", 1, true) ~= nil
+check(loadout:find("hotbar.Visible = not ((bagOpen and not lifted and layout ~= nil and layout.touch) or view.yield)", 1, true) ~= nil
 		and loadout:find("	bagOpen = want\n	showStrip()", 1, true) ~= nil,
 	"on touch the strip hides while the Bag is open, shows while a card is in the air, and returns on close")
 check(loadout:find("stripHidden = layout.touch", 1, true) ~= nil,

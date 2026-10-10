@@ -3627,6 +3627,40 @@ function CarryService.Start()
 	end
 
 	--==========================================================================
+	-- THE DROP BUTTON, ON THE SAME REMOTE (2026-10-10, GameConfig.ContextSlot)
+	--
+	-- Michael, on v1047: "Once you steal an egg from a nest, a red 'Drop' button
+	-- appears at the bottom of the screen. Pressing it leaves the egg on the
+	-- ground, allowing any other player in the server to pick it up." The verb
+	-- carries nothing: the sender is engine-stamped, and only a RAID carry is
+	-- dropped -- the knock-down's own Drop, at their feet, anyone may take it.
+	-- A Bag pod held as a Tool is put away instead (Q / B), never dropped here.
+	-- Asks closer than PressGap count once.
+	--==========================================================================
+	do
+		local DROP = GameConfig.ContextSlot.Drop
+		local askedAt: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
+		local remotes = SeedGame:FindFirstChild("Remotes")
+		local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+		if channel and channel:IsA("RemoteEvent") then
+			table.insert(serviceConnections, channel.OnServerEvent:Connect(function(player: Player, action: any)
+				if action ~= DROP.Action or not carried[player] then
+					return
+				end
+				local now = os.clock()
+				if now - (askedAt[player] or -math.huge) < DROP.PressGap then
+					return
+				end
+				askedAt[player] = now
+				if CarryService.Drop(player, nil) then
+					Metrics.raidEnded(player, "dropped")
+					log(string.format("%s dropped the pod they carried.", player.Name))
+				end
+			end))
+		end
+	end
+
+	--==========================================================================
 	-- A DISCO PARTY STARTING OR STOPPING RECOMPUTES EVERYBODY (2026-10-04)
 	--
 	-- MiniEventService publishes the event's state and mode on Workspace from

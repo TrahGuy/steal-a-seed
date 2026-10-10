@@ -220,8 +220,8 @@ local ok, err = pcall(function()
 	say("\n-- the hotbar --")
 	check(has(loadoutSrc, 'BindAction("SeedHotbarCycle"') and has(loadoutSrc, "Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1"),
 		"LB and RB are bound on the hotbar")
-	check(has(loadoutSrc, "if PadInput.panelOpen() then\n\t\t\treturn Enum.ContextActionResult.Pass"),
-		"and do nothing while any panel is open")
+	check(has(loadoutSrc, "if PadInput.panelOpen() or view.yield then\n\t\t\treturn Enum.ContextActionResult.Pass"),
+		"and do nothing while any panel is open, or while the strip has stepped aside (the context slot)")
 	check(has(loadoutSrc, "PadInput.nextSlot(occupiedSlots()") and has(loadoutSrc, "holdRef(slot.ref)"),
 		"they walk the strip with nextSlot and hold through holdRef, the number row's path")
 

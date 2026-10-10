@@ -8093,6 +8093,41 @@ GameConfig.Hotbar = {
 }
 
 --==============================================================================
+-- THE CONTEXT SLOT (2026-10-10, the owner: "we can remove the hotbar while the
+-- drop button appears, so the button will replace hotbar position, we could
+-- also apply it while riding the mill for the minigame button too")
+--
+-- While a raid pod is carried the hands are full, so the hotbar steps aside and
+-- DROP stands in its place; while the player rides their own mill, PLAY
+-- MINIGAME does. The hotbar's rect stays reserved -- nothing else on the HUD
+-- moves -- and the button stands centred in it (HudLayout.contextButton). Each
+-- button's owner raises its own client-local attribute, YieldPrefix .. its
+-- name, while it stands; LoadoutUI hides the strip, its number keys and LB / RB
+-- while any is raised.
+--==============================================================================
+GameConfig.ContextSlot = {
+	YieldPrefix = "SeedHotbarYield_",
+	--==========================================================================
+	-- DROP (Michael, on v1047, passed on by the owner: "Once you steal an egg
+	-- from a nest, a red 'Drop' button appears at the bottom of the screen.
+	-- Pressing it leaves the egg on the ground, allowing any other player in the
+	-- server to pick it up."). The owner's picture (CrazyCozy Games, 1024 x 384,
+	-- opaque 985 x 312, transparent corners), as tall as the strip at its own
+	-- Aspect; Keys too (B on a controller is free: the hands are full). The
+	-- GameEvent verb is Action; a press is the knock-down's own drop
+	-- (CarryService.Drop) -- anyone may take the pod, until dusk. Presses closer
+	-- than PressGap count once, on both sides.
+	--==========================================================================
+	Drop = {
+		Image = "rbxassetid://77040710214310",
+		Aspect = 1024 / 384,
+		Action = "DropPod",
+		Keys = { Enum.KeyCode.Backspace, Enum.KeyCode.ButtonB },
+		PressGap = 0.5,
+	},
+}
+
+--==============================================================================
 -- THE SLATE LOOK: the Bag's palette of 2026-10-03, kept whole
 --
 -- Botanical Slate & Ink, from the owner's approved mockup
