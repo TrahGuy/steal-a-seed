@@ -1,5 +1,17 @@
 # Steal a Seed — Session Handoff
 
+## PUBLISHED AS v1048 — 2026-10-10 02:02 UTC (10:02 the owner's time) (CLAUDE)
+
+- The owner published the tree themselves: Michael's v1047 feedback, Batch 1 (4c1f1ef) and Batch 2 (da4e811 to 528a22a; the handoff a7f5442). No agent published.
+- From the Studio log `0.742.590.7421041_20261009T232607Z_Studio_EE02E_last.log`, line 15938: "Add publish notes to v1048" at 2026-10-10T02:02:11Z, right after "Published new changes in "[⛈️ RAIN] Steal a Sprout" to Roblox." The probe before it read Studio equal to disk (338 scripts, 0 differ, 0 ZZ, test-store marker absent), and nothing under src changed after it.
+- So these are LIVE from v1048: a held pod's put-away, the wheel keeping a controller's selection, the rain's evacuation waiting out a knock-down; pods in beds again, a carrier's full hands, the bigger signs, hotbar items in the Bag, the size word on pod cards, the context slot (DROP, PLAY MINIGAME), the Bag menu shrinking to fit, and HATCH over a READY pod in the hands. The previous publish was v1047.
+- The queue, in the owner's order; this session builds it (the owner: "we will not pass the task to terminal"):
+  1. the tutorial's world hand clear of the HUD;
+  2. rarity edges (item 10);
+  3. the 100 rebirth titles and the two prototype effects (item 11).
+  The minigame button LEFT of the column (item 9) is done another way: PLAY MINIGAME stands in the hotbar's place (the context slot).
+- Parked: the rain biome's close (the owner); the Secret Door (waiting for the owner's models); the nursery shelf; Codex's red studded Drop art (the owner's call: upload and swap, or keep 77040710214310).
+
 ## v1047 FEEDBACK, BATCH 2 — READY TO PUBLISH, 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 Michael's v1047 report, Batch 2 as the owner approved it (KB/V1047-FEEDBACK-PLAN.md, with that day's changes: pods in beds again, the DROP button, the context slot), and the owner's phone screenshot of the Bag's item menu running off the screen. On top of Batch 1 (4c1f1ef). Nothing was published by an agent.
