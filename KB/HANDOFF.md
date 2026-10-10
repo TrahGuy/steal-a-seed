@@ -1,5 +1,33 @@
 # Steal a Seed — Session Handoff
 
+## TITLE FX, LIVELIER: GAIA'S FAST RAINBOW, A GLINT, TWINKLES, TWICE AS QUICK — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+The owner: "title effects look lame, how can we improve it, like rapid animations, specially on gaia, a rapid rainbow color".
+
+**GAIA**:
+- Its words' rainbow flows a whole turn every `GameConfig.TitleFX.RainbowSeconds` (1.2 s; it was ADMIN's 7 s), over a head (OwnerTitleUI `fastShift`) and in the Rebirth panel (strip and "?" row). ADMIN keeps its own pace.
+- New profile `gaia` on the GAIA step: 6 rainbow petals and blossoms shooting from the words' ends (1.4 s cycle), each its own hue flowing with the words', and 4 twinkles.
+- A smooth hue flow at one brightness. Still under Reduced FX.
+
+**Every title**:
+- **Glint**: a white glint sweeps across the words every 2 s, taking 0.5 s. It is the words again in white, seen through a UIGradient band (Strength 0.15, Width 0.16), over the words.
+- **Twinkles**: three per title, from the owner's rebirth Sparkle sheet (`GameConfig.Rebirth.Celebration.Textures.Sparkle`). Each pops through the sheet's frames (dot, rays, largest, rays) in 0.4 s, 22 px, somewhere new on the words each time, over them.
+- **Faster**: every motion is about twice as quick. Leaves spin 140° a cycle; mist drifts 9.
+- Everything stays inside the title's band. Reduced FX hides the glint and twinkles with the sprites.
+
+**Kept**: nothing cycles faster than once a second, and no sprite fades fully in under a fifth of a second (TitleFXSpec). Twinkles are small, at most about four pops a second per title. The celebration card's GAIA line (3 s) and the aura's wisps (12 s) are the terminal's (RebirthFX) and unchanged.
+
+**Seen in Play** (throwaway store; desktop):
+- GAIA's colours changed between stills seconds apart, and rainbow blossoms streamed from both ends.
+- Sparkles landed on GAIA and PETAL GUARDIAN.
+- A 3-second sample of a title: the glint showed 25% of the time, the twinkles cycled through the sheet's frames.
+- No script errors. Cleared after: test store off, hosts removed, probe 339 / 0 differ / 0 ZZ / marker absent.
+- Captures: output/title-fx-2026-10-10/v2/.
+
+**Tunable in `GameConfig.TitleFX`**: `RainbowSeconds`, `Glint`, `Twinkle` (Count, Size, Pop, Rest), and each profile's Seconds, Travel and Turn.
+
+**Specs**: TitleFXSpec 37/0 (section 7, new: the glint's sweep and rest, the twinkles' frames, band and rate, GAIA's flowing hue at one brightness, the fast rainbow pins, the glint and twinkle instances). RebirthSpec 78/0, RebirthCelebrationSpec 92/0, AdminSpec 127/0.
+
 ## TITLE FX SWITCHED ON: THE OWNER'S 8 UPLOADS WIRED, SEEN IN PLAY — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 **The 8 uploads** are in `GameConfig.TitleFX.Art`:

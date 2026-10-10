@@ -96,8 +96,11 @@ local ok, err = pcall(function()
 	for index, step in ipairs(TITLE.Ladder) do
 		local wants = FX.Steps[step.Text]
 		if step.Rainbow then
-			if wants then
-				table.insert(unmapped, step.Text .. " (rainbow wears more)")
+			-- GAIA wears its own rainbow profile (2026-10-10, the owner: "specially
+			-- on gaia, a rapid rainbow color").
+			local profile = wants and FX.Profiles[wants.Profile]
+			if not (profile and profile.Rainbow) then
+				table.insert(unmapped, step.Text .. " (the rainbow step wears a Rainbow profile)")
 			end
 		elseif not wants or not FX.Profiles[wants.Profile] then
 			table.insert(unmapped, step.Text)
@@ -178,7 +181,7 @@ local ok, err = pcall(function()
 							table.insert(overWords, string.format("%s edge %.1f from the middle, words %.1f", tag,
 								fromMid - p.size / 2, half))
 						end
-						if last and math.abs(p.transparency - last) > 0.2 then
+						if last and math.abs(p.transparency - last) > 0.75 then
 							table.insert(flashing, tag)
 						end
 						last = p.transparency
@@ -195,8 +198,15 @@ local ok, err = pcall(function()
 	check(#overWords == 0, "the leaves, petals and sprigs stand beside the words, not on them", first(overWords))
 	check(#mistCore == 0 and #notFaint == 0, "the mist stays faint (never under 0.7 transparent) and off the words' middle",
 		first(mistCore) .. " / " .. first(notFaint))
-	check(#flashing == 0, "nothing flashes: no sprite changes by more than 0.2 transparency in a tenth of a second",
-		first(flashing))
+	-- Quicker since the owner's "rapid animations": a full fade still takes a
+	-- fifth of a second or more, and every sprite's cycle is a second or longer.
+	local slowest = math.huge
+	for _, profile in pairs(FX.Profiles) do
+		slowest = math.min(slowest, profile.Seconds)
+	end
+	check(#flashing == 0 and slowest >= 1,
+		"nothing flashes: no sprite fades fully in or out in under a fifth of a second, and none cycles faster than "
+			.. "once a second", first(flashing) .. " / quickest cycle " .. slowest)
 	local gold = FX.Profiles.gold
 	local left = TitleFX.pose(gold, 1, 4, 0, TITLE.Size, 120)
 	local right = TitleFX.pose(gold, 2, 4, 0, TITLE.Size, 120)
@@ -262,11 +272,13 @@ local ok, err = pcall(function()
 		"four ImageLabels in a clear frame under the words and REBIRTH N: no panel")
 	local lights = 0
 	for _, d in ipairs(gui:GetDescendants()) do
-		if d:IsA("Light") or d:IsA("UIStroke") or d:IsA("UIGradient") then
+		-- The one gradient is the glint's band, on its own copy of the words.
+		local glintBand = d:IsA("UIGradient") and d.Parent ~= nil and d.Parent.Name == "TitleGlint"
+		if d:IsA("Light") or d:IsA("UIStroke") or (d:IsA("UIGradient") and not glintBand) then
 			lights += 1
 		end
 	end
-	check(lights == 0, "no light, no outline, no gradient added")
+	check(lights == 0, "no light, no outline, and no gradient but the glint's band")
 	check(frame and not frame.Visible, "hidden until it is stepped")
 	layer.step(os.clock())
 	local clear = true
@@ -302,9 +314,10 @@ local ok, err = pcall(function()
 	local loops = select(2, ui:gsub("task%.spawn%(function%(%)", ""))
 	check(loops == 1 and not has(ui, "RenderStepped") and not has(ui, "Heartbeat") and not has(tf, "RenderStepped")
 			and not has(tf, "Heartbeat") and not has(tf, "while true") and select(2, tf:gsub("task%.spawn", "")) == 1
-			and has(tf, "ContentProvider:PreloadAsync(sprites)"),
+			and has(tf, "ContentProvider:PreloadAsync(all)"),
 		"one loop for every title: no frame connection or endless loop of a sprite's own (a layer's fetch is one-shot)")
-	check(has(tf, "label.ImageTransparency = if settled and TitleFX.fetched(label.Image)")
+	check(has(tf, "l.ImageTransparency = if settled and TitleFX.fetched(l.Image)")
+			and has(tf, "local sparkleReady = settled and TitleFX.fetched(T.Art)")
 			and has(tf, "return ok and status == Enum.AssetFetchStatus.Success") and not has(tf, "IsLoaded then"),
 		"a sprite shows once ContentProvider says its picture arrived -- never on IsLoaded, which a clear label "
 			.. "never earns -- and one that failed never shows")
@@ -392,6 +405,97 @@ local ok, err = pcall(function()
 			and has(rb, "if not fx and make and not still and y + r.frame.AbsoluteSize.Y >= top and y <= bottom then")
 			and select(2, rb:gsub("TitleFX%.attach%(", "")) == 1,
 		"a row's sprites are made the first time it comes into view, never a hundred rows' at the list's first open")
+
+	--==========================================================================
+	say("-- 7. livelier: the glint, the twinkles, GAIA's rainbow --")
+	--==========================================================================
+	-- The owner: "title effects look lame ... rapid animations, specially on
+	-- gaia, a rapid rainbow color".
+	local G, TW = FX.Glint, FX.Twinkle
+	local swept, resting, backwards, previous = 0, 0, false, nil
+	for f = 0, 239 do
+		local o = TitleFX.glint(f * 0.05)
+		if o then
+			swept += 1
+			backwards = backwards or (previous ~= nil and o < previous and o > -0.9)
+		else
+			resting += 1
+		end
+		previous = o
+	end
+	check(G.Every >= 2 and G.Sweep >= 0.3 and G.Sweep <= 0.8 and G.Strength >= 0.1 and swept > 0
+			and resting > swept * 2 and not backwards,
+		"the glint sweeps left to right across the words in half a second, rests most of the time, and is never solid "
+			.. "white", string.format("%d swept, %d resting", swept, resting))
+	local inBand, frames, pops = true, {}, 0
+	local box = TITLE.Size
+	for j = 1, 3 do
+		local was = false
+		for f = 0, 399 do
+			local tw = TitleFX.twinkle(j, f * 0.05, box, 120, nil)
+			if tw then
+				frames[tw.frame] = true
+				inBand = inBand and tw.y - tw.size / 2 >= -0.5 and tw.y <= box.Y * 0.6 + 0.5
+					and math.abs(tw.x - box.X / 2) <= 60 + 2 + 0.5
+				if not was then
+					pops += 1
+				end
+			end
+			was = tw ~= nil
+		end
+	end
+	check(inBand and frames[1] and frames[2] and frames[3] and TW.Pop >= 0.3 and TW.Rest[1] >= 0.25
+			and pops / 20 <= 4 and TW.Art == GameConfig.Rebirth.Celebration.Textures.Sparkle,
+		"the twinkles: the owner's rebirth sparkle sheet popping through its frames on the words' line -- small, "
+			.. "each a fifth of a title's height -- never more than four pops a second a title",
+		string.format("%d pops in 20 s for 3 twinkles", pops))
+	local gaia = FX.Profiles[FX.Steps["GAIA"].Profile]
+	local a1 = TitleFX.pose(gaia, 1, 6, 0, TITLE.Size, 60)
+	local a2 = TitleFX.pose(gaia, 1, 6, FX.RainbowSeconds / 3, TITLE.Size, 60)
+	local h1, s1, v1 = a1.tint:ToHSV()
+	local h2, s2, v2 = a2.tint:ToHSV()
+	check(gaia.Rainbow and FX.RainbowSeconds >= 1 and FX.RainbowSeconds <= 2 and math.abs(h1 - h2) > 0.2
+			and math.abs(s1 - s2) < 0.01 and math.abs(v1 - v2) < 0.01 and gaia.Twinkles == 4,
+		"GAIA: rainbow petals whose hue flows a whole turn every RainbowSeconds (1-2 s) at one brightness -- a "
+			.. "smooth hue flow, never a brightness jump -- and a fourth twinkle")
+	local ui2 = sourceOf(Scripts, "OwnerTitleUI")
+	local rb2 = sourceOf(Scripts, "RebirthUI")
+	check(has(ui2, "fastShift = (fastShift + dt / FX.RainbowSeconds) % 1")
+			and has(ui2, "fastColours = fastColours or WheelDraw.rainbow(if still then 0 else fastShift)")
+			and has(ui2, "shift = (shift + dt / TITLE.DriftSeconds) % 1")
+			and has(rb2, "((os.clock() - started) / GameConfig.TitleFX.RainbowSeconds) % 1)")
+			and has(rb2, "\t\t\t\t\tlabel = word,"),
+		"GAIA's words flow fast over a head and in the panel, ADMIN keeps its own pace, both still under Reduced FX")
+	local holder = Instance.new("BillboardGui")
+	holder.Name = TITLE.Name
+	holder.Size = UDim2.fromOffset(TITLE.Size.X, TITLE.Size.Y)
+	holder.Parent = fixture
+	local headWords = Instance.new("TextLabel")
+	headWords.Name = "Words"
+	headWords.Text = "GAIA I"
+	headWords.Size = UDim2.fromScale(1, 0.6)
+	headWords.Parent = holder
+	local liveLayer = TitleFX.attach(holder, gaia, 6)
+	local glintLabel = headWords:FindFirstChild("TitleGlint")
+	local twinkleFrame = holder:FindFirstChild("TitleTwinkles")
+	local twinkleCount = 0
+	for _, c in ipairs(if twinkleFrame then twinkleFrame:GetChildren() else {}) do
+		if c:IsA("ImageLabel") and c.Image == TW.Art then
+			twinkleCount += 1
+		end
+	end
+	local fill = glintLabel and glintLabel:FindFirstChildOfClass("UIGradient")
+	check(glintLabel and glintLabel:IsA("TextLabel") and glintLabel.ZIndex > headWords.ZIndex
+			and glintLabel.Text == headWords.Text and fill ~= nil and twinkleFrame
+			and twinkleFrame.ZIndex > headWords.ZIndex and twinkleCount == 4,
+		"the glint is the words again over them, seen through a sweeping band; the twinkles stand over the words")
+	liveLayer.step(os.clock())
+	liveLayer.hide()
+	check(twinkleFrame and not twinkleFrame.Visible and glintLabel and not glintLabel.Visible,
+		"hidden (Reduced FX, a trap, out of the nearest four): the glint and the twinkles go with the sprites")
+	liveLayer.destroy()
+	check(headWords:FindFirstChild("TitleGlint") == nil and holder:FindFirstChild("TitleTwinkles") == nil,
+		"and destroyed with them")
 end)
 
 fixture:Destroy()

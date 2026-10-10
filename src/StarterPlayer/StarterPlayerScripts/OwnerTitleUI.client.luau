@@ -213,13 +213,19 @@ end
 
 task.spawn(function()
 	local shift = 0
+	-- GAIA's rainbow flows a whole turn every TitleFX.RainbowSeconds (2026-10-10,
+	-- the owner: "specially on gaia, a rapid rainbow color"); ADMIN's keeps
+	-- DriftSeconds. Both still under Reduced FX.
+	local fastShift = 0
 	local last = os.clock()
 	while true do
 		local now = os.clock()
 		local still = StatusText.reducedMotion()
 		if not still then
 			-- Capped, so a hitch never jumps the colours.
-			shift = (shift + math.min(now - last, 0.1) / TITLE.DriftSeconds) % 1
+			local dt = math.min(now - last, 0.1)
+			shift = (shift + dt / TITLE.DriftSeconds) % 1
+			fastShift = (fastShift + dt / FX.RainbowSeconds) % 1
 		end
 		last = now
 		local camera = Workspace.CurrentCamera
@@ -227,6 +233,7 @@ task.spawn(function()
 		local seen = false
 		local pulsing = false
 		local colours: ColorSequence? = nil
+		local fastColours: ColorSequence? = nil
 		for gui, rainbows in pairs(titles) do
 			if not gui.Parent then
 				titles[gui] = nil
@@ -240,9 +247,16 @@ task.spawn(function()
 				if camera and adornee and adornee:IsA("BasePart")
 					and (camera.CFrame.Position - adornee.Position).Magnitude <= TITLE.MaxDistance then
 					seen = true
-					colours = colours or WheelDraw.rainbow(if still then 0 else shift)
+					local turned: ColorSequence
+					if gui.Name == REBIRTH.Name then
+						fastColours = fastColours or WheelDraw.rainbow(if still then 0 else fastShift)
+						turned = fastColours :: ColorSequence
+					else
+						colours = colours or WheelDraw.rainbow(if still then 0 else shift)
+						turned = colours :: ColorSequence
+					end
 					for _, g in ipairs(rainbows) do
-						g.Color = colours :: ColorSequence
+						g.Color = turned
 					end
 				end
 			end

@@ -11751,6 +11751,31 @@ GameConfig.TitleFX = {
 	MaxSprites = 6,
 	MaxAnimated = 4,
 	SettleSeconds = 0.3,
+	--==========================================================================
+	-- LIVELIER (2026-10-10, the owner: "title effects look lame, how can we
+	-- improve it, like rapid animations, specially on gaia, a rapid rainbow
+	-- color"): every motion about twice as quick; a white glint sweeping across
+	-- every title's words; the owner's rebirth sparkle sheet twinkling on them;
+	-- GAIA's rainbow flowing a whole turn every RainbowSeconds, with rainbow
+	-- petals and blossoms shooting from its ends. A smooth hue flow, never a
+	-- brightness jump; all of it still under Reduced FX.
+	--==========================================================================
+	RainbowSeconds = 1.2,
+	-- A band Width of the words wide, Strength opaque at its middle, crossing
+	-- in Sweep every Every seconds, leaning Rotation degrees.
+	Glint = { Every = 2, Sweep = 0.5, Width = 0.16, Strength = 0.15, Rotation = 18 },
+	-- Each twinkle pops through the sheet's Frames (2 x 2, 256 px each: dot,
+	-- short rays, the largest, short rays) in Pop seconds, rests Rest[1] to
+	-- Rest[2], then pops again somewhere else on the words. On top of the words.
+	Twinkle = {
+		Art = GameConfig.Rebirth.Celebration.Textures.Sparkle,
+		Count = 3,
+		Size = 22,
+		Pop = 0.4,
+		Rest = { 0.3, 1.1 },
+		Frames = { 1, 2, 3, 2 },
+		Cell = 256,
+	},
 	-- THE "?" TITLES LIST (2026-10-10, the owner: "add them to the ? list too"):
 	-- each row's words stand Room further in for the left sprites (no more: the
 	-- narrowest list's longest row must still draw at 20 of its 22, RebirthSpec);
@@ -11768,10 +11793,10 @@ GameConfig.TitleFX = {
 			Art = { "LeafRound", "LeafPoint", "LeafSerrate" },
 			Tints = { Color3.fromRGB(165, 235, 120), Color3.fromRGB(110, 215, 125), Color3.fromRGB(215, 245, 140) },
 			Size = 13,
-			Seconds = 4.5,
-			Travel = 16,
+			Seconds = 2.4,
+			Travel = 20,
 			Fall = 6,
-			Turn = 50,
+			Turn = 140,
 			Transparency = 0.1,
 		},
 		-- BLOOM: pink petals and blossoms easing outward from the words' ends.
@@ -11780,10 +11805,10 @@ GameConfig.TitleFX = {
 			Art = { "LeafRound", "Blossom" },
 			Tints = { Color3.fromRGB(255, 150, 210), Color3.fromRGB(255, 205, 232) },
 			Size = 13,
-			Seconds = 5.5,
-			Travel = 20,
+			Seconds = 2.8,
+			Travel = 24,
 			Fall = 5,
-			Turn = 30,
+			Turn = 100,
 			Transparency = 0.1,
 		},
 		-- GOLD: a sprig at each end of the words, swaying a few degrees, and the
@@ -11796,8 +11821,8 @@ GameConfig.TitleFX = {
 			-- The loose leaves beyond the sprigs.
 			LeafArt = "LeafSerrate",
 			LeafSize = 11,
-			Seconds = 6,
-			Sway = 5,
+			Seconds = 3,
+			Sway = 9,
 			Travel = 12,
 			Fall = 5,
 			Turn = 30,
@@ -11810,8 +11835,8 @@ GameConfig.TitleFX = {
 			Art = { "MistA", "MistB" },
 			Tints = { Color3.fromRGB(205, 175, 255), Color3.fromRGB(175, 145, 245) },
 			Size = 32,
-			Seconds = 9,
-			Drift = 6,
+			Seconds = 4.5,
+			Drift = 9,
 			Turn = 12,
 			Transparency = 0.72,
 			Breathe = 0.02,
@@ -11825,8 +11850,8 @@ GameConfig.TitleFX = {
 			Art = { "MistA", "MistB" },
 			Tints = { Color3.fromRGB(150, 215, 255), Color3.fromRGB(225, 240, 255) },
 			Size = 32,
-			Seconds = 9,
-			Drift = 6,
+			Seconds = 4.5,
+			Drift = 9,
 			Turn = 12,
 			Transparency = 0.72,
 			Breathe = 0.02,
@@ -11836,8 +11861,8 @@ GameConfig.TitleFX = {
 			Art = { "MistA", "MistB" },
 			Tints = { Color3.fromRGB(190, 170, 255), Color3.fromRGB(150, 235, 255) },
 			Size = 32,
-			Seconds = 9,
-			Drift = 6,
+			Seconds = 4.5,
+			Drift = 9,
 			Turn = 12,
 			Transparency = 0.72,
 			Breathe = 0.02,
@@ -11849,21 +11874,38 @@ GameConfig.TitleFX = {
 			Size = 24,
 			LeafArt = "LeafSerrate",
 			LeafSize = 11,
-			Seconds = 6,
-			Sway = 5,
+			Seconds = 3,
+			Sway = 9,
 			Travel = 12,
 			Fall = 5,
 			Turn = 30,
 			Transparency = 0.15,
 		},
+		-- GAIA (the rainbow step): rainbow petals and blossoms shooting from the
+		-- words' ends, each its own hue flowing with the words' (RainbowSeconds),
+		-- and a fourth twinkle.
+		gaia = {
+			Motion = "outward",
+			Rainbow = true,
+			Art = { "Blossom", "LeafRound" },
+			Tints = { Color3.fromRGB(255, 255, 255) },
+			Size = 12,
+			Seconds = 1.4,
+			Travel = 26,
+			Fall = 6,
+			Turn = 160,
+			Transparency = 0.05,
+			Twinkles = 4,
+		},
 	},
 	-- The ladder's steps by their words (GameConfig.Rebirth.Title.Ladder), each
-	-- to a profile and how many sprites. GAIA is left out: its rainbow is its own.
+	-- to a profile and how many sprites. GAIA wears its own rainbow profile.
 	-- The 100 titles (2026-10-10) by family: Garden apprentices NATURE; Grove
 	-- wardens MYSTIC (the GROVE names) and BLOOM; Thorn and root, Canopy NATURE;
 	-- Ancient forest and World tree GOLD; Dawn DAWN; Immortal bloom BLOOM; Astral
 	-- ASTRAL; Genesis GENESIS. The fifteen founders' as they were.
 	Steps = {
+		["GAIA"] = { Profile = "gaia", Count = 6 },
 		["SPROUT"] = { Profile = "nature", Count = 2 },
 		["SEEDLING"] = { Profile = "nature", Count = 3 },
 		["GARDENER"] = { Profile = "nature", Count = 3 },

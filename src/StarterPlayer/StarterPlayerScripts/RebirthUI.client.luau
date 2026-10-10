@@ -641,6 +641,7 @@ local function buildTitleRows()
 						return width() / 2
 					end,
 					left = -FX_LEFT,
+					label = word,
 				})
 			end
 		end
@@ -801,7 +802,8 @@ local function setTurning(on: boolean)
 		end
 		-- The rainbow title's colours turn like ADMIN's (OwnerTitleUI), still
 		-- for reduced motion.
-		local colours = WheelDraw.rainbow(if still then 0 else ((os.clock() - started) / GameConfig.OwnerTitle.DriftSeconds) % 1)
+		-- GAIA's rainbow flows as fast here as over a head (TitleFX.RainbowSeconds).
+		local colours = WheelDraw.rainbow(if still then 0 else ((os.clock() - started) / GameConfig.TitleFX.RainbowSeconds) % 1)
 		if stripRainbow.Enabled then
 			stripRainbow.Color = colours
 		end
