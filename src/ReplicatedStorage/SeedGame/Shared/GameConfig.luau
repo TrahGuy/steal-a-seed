@@ -11504,6 +11504,124 @@ do
 	GameConfig.Plot.DecorReach = GameConfig.Map.PlotRingInner + GameConfig.plotDepthFor(GameConfig.PlotTiers[5].rows)
 end
 
+--==============================================================================
+-- THE REBIRTH TITLES' LEAVES, FLOWERS AND MIST (2026-10-10, the owner's brief)
+--
+-- Cosmetic only, on each viewer's own screen (OwnerTitleUI, TitleFX): a few
+-- small Kenney silhouettes (CC0; art/title-fx-2026-10-10, its MANIFEST.md)
+-- round the words of a rebirth title, behind them and inside the title's own
+-- band, so ADMIN over it and the name under it stay clear. No panel, no light,
+-- no fog. The celebration and the body aura are not touched.
+--
+-- WHICH: a title's ladder step -- its player's Rebirths attribute through
+-- Rebirth.title, never the words on the board -- names a profile in Steps. A
+-- step not listed draws none: GAIA keeps its rainbow alone.
+--
+-- THE ART: the owner's uploads, by name. "" keeps every profile that needs it
+-- off: never another upload standing in. A sprite shows only once its picture
+-- has loaded (SettleSeconds after it was made, the IsLoaded rule), so one that
+-- fails leaves the words as they were.
+--
+-- BUDGET: at most MaxSprites a title, moving on the MaxAnimated titles nearest
+-- this camera (the others show their words alone), all from OwnerTitleUI's one
+-- loop; none at all under Reduced FX (StatusText.reducedMotion).
+--
+-- Every size and distance is in the title's own pixels at desktop size
+-- (Rebirth.Title.Size); a phone's smaller title shrinks them with it.
+--==============================================================================
+GameConfig.TitleFX = {
+	Art = {
+		-- Kenney Foliage Sprites, PNG/Flat (white silhouettes, tinted here).
+		LeafRound = "", -- sprite_0030: a teardrop leaf; pink, a petal
+		LeafPoint = "", -- sprite_0031: a pointed leaf
+		LeafSerrate = "", -- sprite_0038: a toothed leaf on its stalk
+		Blossom = "", -- sprite_0040: a round blossom
+		SprigLeft = "", -- sprite_0041 mirrored: a leafy sprig for the left side
+		SprigRight = "", -- sprite_0041: the same sprig for the right side
+		-- Kenney Smoke Particles, PNG/White puff (white, tinted lilac here).
+		MistA = "", -- whitePuff00
+		MistB = "", -- whitePuff04
+	},
+	MaxSprites = 6,
+	MaxAnimated = 4,
+	SettleSeconds = 0.3,
+	Profiles = {
+		-- NATURE: small leaves drifting out from beside the words and a little
+		-- down, turning as they go, fading in and out.
+		nature = {
+			Motion = "drift",
+			Art = { "LeafRound", "LeafPoint", "LeafSerrate" },
+			Tints = { Color3.fromRGB(165, 235, 120), Color3.fromRGB(110, 215, 125), Color3.fromRGB(215, 245, 140) },
+			Size = 11,
+			Seconds = 4.5,
+			Travel = 16,
+			Fall = 6,
+			Turn = 50,
+			Transparency = 0.1,
+		},
+		-- BLOOM: pink petals and blossoms easing outward from the words' ends.
+		bloom = {
+			Motion = "outward",
+			Art = { "LeafRound", "Blossom" },
+			Tints = { Color3.fromRGB(255, 150, 210), Color3.fromRGB(255, 205, 232) },
+			Size = 11,
+			Seconds = 5.5,
+			Travel = 20,
+			Fall = 5,
+			Turn = 30,
+			Transparency = 0.1,
+		},
+		-- GOLD: a sprig at each end of the words, swaying a few degrees, and the
+		-- odd gold leaf drifting beyond them. Never over the name.
+		gold = {
+			Motion = "laurel",
+			Art = { "SprigLeft", "SprigRight", "LeafSerrate" },
+			Tints = { Color3.fromRGB(255, 214, 95), Color3.fromRGB(240, 185, 70) },
+			Size = 22,
+			-- The loose leaves beyond the sprigs.
+			LeafArt = "LeafSerrate",
+			LeafSize = 9,
+			Seconds = 6,
+			Sway = 5,
+			Travel = 12,
+			Fall = 5,
+			Turn = 30,
+			Transparency = 0.15,
+		},
+		-- MYSTIC: faint lilac mist behind the left and right of the lettering,
+		-- breathing slowly; the middle stays clear.
+		mystic = {
+			Motion = "mist",
+			Art = { "MistA", "MistB" },
+			Tints = { Color3.fromRGB(205, 175, 255), Color3.fromRGB(175, 145, 245) },
+			Size = 32,
+			Seconds = 9,
+			Drift = 6,
+			Turn = 12,
+			Transparency = 0.8,
+			Breathe = 0.05,
+		},
+	},
+	-- The ladder's steps by their words (GameConfig.Rebirth.Title.Ladder), each
+	-- to a profile and how many sprites. GAIA is left out: its rainbow is its own.
+	Steps = {
+		["SPROUT"] = { Profile = "nature", Count = 2 },
+		["SEEDLING"] = { Profile = "nature", Count = 3 },
+		["GARDENER"] = { Profile = "nature", Count = 3 },
+		["GREEN THUMB"] = { Profile = "nature", Count = 4 },
+		["BOTANIST"] = { Profile = "nature", Count = 4 },
+		["HERBALIST"] = { Profile = "nature", Count = 4 },
+		["GROVE KEEPER"] = { Profile = "mystic", Count = 4 },
+		["BLOOM WARDEN"] = { Profile = "bloom", Count = 4 },
+		["THORN KNIGHT"] = { Profile = "nature", Count = 5 },
+		["ELDER ROOT"] = { Profile = "nature", Count = 5 },
+		["CANOPY LORD"] = { Profile = "nature", Count = 6 },
+		["ANCIENT OAK"] = { Profile = "gold", Count = 4 },
+		["WORLD TREE"] = { Profile = "gold", Count = 6 },
+		["EVERBLOOM"] = { Profile = "bloom", Count = 6 },
+	},
+}
+
 local function deepFreeze(target: { [any]: any }): { [any]: any }
 	for _, value in pairs(target) do
 		if type(value) == "table" then

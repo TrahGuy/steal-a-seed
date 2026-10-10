@@ -1,5 +1,69 @@
 # Steal a Seed — Session Handoff
 
+## REBIRTH TITLE FX: KENNEY LEAVES, FLOWERS AND MIST ROUND THE TITLES — BUILT 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; EVERY EFFECT OFF UNTIL THE OWNER UPLOADS 8 PNGs)
+
+The owner's brief: cosmetic FX round the existing rebirth titles, from the Kenney packs on the Desktop. Title decoration only:
+- the current 15-step ladder; the 100-title draft is not applied;
+- no change to requirements, multipliers, saves, unlocks or numerals;
+- the celebration and the body aura are unchanged.
+
+**What it is.**
+- **TitleFX** (Shared, client-side) puts a transparent frame of ImageLabels under each rebirth title's words and REBIRTH N: no panel, no light, no fog.
+- **Shared motions**: drift (nature leaves), outward (bloom petals and blossoms), laurel (gold sprigs at the ends and loose gold leaves), mist (faint lilac puffs behind the left and right of the lettering, the middle clear). Every sprite stays inside the title's band, so ADMIN over it and the name under it stay clear.
+- **Config**: `GameConfig.TitleFX` holds the art ids, the profiles and `Steps` (step words to profile and count).
+  - nature: SPROUT 2, SEEDLING 3, GARDENER 3, GREEN THUMB 4, BOTANIST 4, HERBALIST 4, THORN KNIGHT 5, ELDER ROOT 5, CANOPY LORD 6;
+  - mystic: GROVE KEEPER 4;
+  - bloom: BLOOM WARDEN 4, EVERBLOOM 6;
+  - gold: ANCIENT OAK 4, WORLD TREE 6;
+  - GAIA keeps its rainbow alone.
+- **OwnerTitleUI**:
+  - resolves the profile from the PLAYER'S Rebirths attribute through Rebirth.title, never the words or numeral;
+  - moves the layers from its one existing loop, on the 4 nearest titles within MaxDistance;
+  - hides them under Reduced FX (StatusText.reducedMotion) and while a trap hides the title;
+  - drops a layer with its title (a respawn, a rebirth, a player leaving).
+- **Sprites**: at most 6 a title. Each shows only once its picture has loaded (SettleSeconds 0.3), so a failed picture leaves the words alone. Each sprite is one flat tint; a title's pairs alternate 2-3 shades.
+
+**Assets** (`art/title-fx-2026-10-10/`):
+- The licences are copied: both packs are CC0.
+- Seven originals copied unchanged to `source/`: sprites 0030, 0031, 0038, 0040, 0041, whitePuff00, whitePuff04.
+- 8 prepared uploads in `upload/`: tight-cropped, square, 256 px, transparent corners; sprig_left is the mirrored copy.
+- `MANIFEST.md` names each source, its size, its key and its use. `preview_day_night.png` is a tinted mock-up.
+- Avoided: grass clumps and bushes; sprite_0036 (reads as cannabis); a flipbook of the numbered puffs; black smoke.
+
+**WAITING ON THE OWNER: upload the 8 PNGs in `art/title-fx-2026-10-10/upload/`**:
+- leaf_round, leaf_point, leaf_serrate, blossom, sprig_left, sprig_right, mist_a, mist_b;
+- put each id under its key in `GameConfig.TitleFX.Art`;
+- every Art id is "" until then, so no layer is ever made, and no other upload stands in.
+
+**Verified.**
+- TitleFXSpec 24/0 (new). It checks:
+  - the config: every step mapped, GAIA none, every effect off with no ids;
+  - every title of rebirths 1-120 at desktop and phone size: every sprite inside the band and beside the words; the mist faint (never under 0.7) and off the words' middle; nothing changing faster than 0.2 a tenth of a second;
+  - the four nearest move;
+  - the layer: under the words, no panel or light, hidden until stepped, an unloaded picture fully clear, gone with its title;
+  - the source pins.
+- RebirthSpec 74/0 and AdminSpec 127/0 also green.
+- Guarded Play (test store SeedTest_20261010, desktop 1251 x 716; captures in output/title-fx-2026-10-10/):
+  - EditableImage is switched off for this experience, so the owner's own PNGs could not be drawn in Play. The Security tab was left as it is. The layers ran with plain tinted squares standing in, test-only;
+  - CANOPY LORD, GROVE KEEPER, BLOOM WARDEN and WORLD TREE drew their layers beside their words, under ADMIN, above REBIRTH N; GAIA drew none;
+  - a trap hid the layer with the title, and both came back;
+  - Reduced FX hid it within 0.15 s, and it came back when turned off;
+  - a respawn left exactly one layer;
+  - a picture that cannot load stayed fully clear;
+  - by night the leaves read clearly and the mist stays faint;
+  - no script errors.
+- Cleared: test store off, ZZ hosts removed, probe 339 / 0 differ / 0 ZZ / marker absent.
+
+**Not seen**:
+- the real art (no ids yet);
+- a phone, since the emulator is never switched (TitleFXSpec checks the phone sizes).
+
+Once the ids are in, one short Play with the real pictures, by day and night and with ADMIN.
+
+**Open for the owner**:
+- does TitleFX replace item 3's own effects (the family palettes on the aura, the unlock effects), or do both stay? The terminal session holds item 3's effects until the owner says;
+- should the same effects decorate the Rebirth panel's "?" titles list (RebirthUI, item 3's file)?
+
 ## THE QUEUE AFTER v1048, FOR THE TERMINAL CLAUDE — 2026-10-10 (CLAUDE, RELAYING THE OWNER)
 
 The owner: "add the progress bar back again for the mill, progress bars must not be transparent, put this on queue, you can ask terminal now to start". This replaces "TOMORROW (2026-10-10)" below; the minigame button item there is done another way (PLAY MINIGAME stands in the hotbar's place, the context slot, live in v1048).
