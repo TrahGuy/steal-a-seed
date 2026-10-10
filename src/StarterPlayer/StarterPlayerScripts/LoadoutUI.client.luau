@@ -194,14 +194,17 @@ local function holdTool(tool: Tool?): boolean
 		return true
 	end
 	--==========================================================================
-	-- NOT A PLANT WHILE A POD IS IN BOTH ARMS
+	-- NOTHING WHILE A POD IS IN BOTH ARMS
 	--
 	-- A plant rides in the same two-handed grip as a raid pod, so equipping one
-	-- over a carry drew the plant through the shell. Said, not just buzzed: the
-	-- toast names the rule (ActionToastUI), off the server's own replicated
+	-- over a carry drew the plant through the shell; and since 2026-10-10 (the
+	-- owner, on Michael's v1047 report) the bat and the traps wait too: a
+	-- carrier's hands are full, and the server puts back anything equipped onto
+	-- a carry (CarryService.PutToolsAway). Said, not just buzzed: the toast
+	-- names the rule (ActionToastUI), off the server's own replicated
 	-- CarryingSpecies. Required here rather than at the top: names are rationed.
 	--==========================================================================
-	if tool:GetAttribute("SpeciesId") ~= nil and player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+	if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
 		require(Shared:WaitForChild("ActionRefusal")).raise("CARRYING_POD")
 		return false
 	end

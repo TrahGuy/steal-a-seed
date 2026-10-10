@@ -172,12 +172,12 @@ local ok, err = pcall(function()
 	check(second.Parent == pack1, "a plant equipped onto a carry is put back a frame later")
 	check(carriedModelIn(b1) ~= nil and CarryService.IsCarrying(p1), "and the pod is still carried")
 
-	--== 3. A BAT IS NOT A PLANT ===============================================
+	--== 3. A BAT GOES BACK TOO (2026-10-10, the owner: a carrier's hands are full)
 	local bat = tool("Rootwood Bat", nil)
 	bat.Parent = b1
 	task.wait(0.15)
-	check(bat.Parent == b1, "a bat in hand is left alone while carrying")
-	bat.Parent = pack1
+	check(bat.Parent == pack1, "a bat equipped onto a carry is put back a frame later, as a plant is")
+	check(carriedModelIn(b1) ~= nil and CarryService.IsCarrying(p1), "and the pod is still carried")
 
 	--== 4. ONCE THE CARRY ENDS, PLANTS MAY BE HELD AGAIN ======================
 	check(CarryService.Drop(p1, ORIGIN), "the pod is dropped")
@@ -197,7 +197,7 @@ local ok, err = pcall(function()
 	bat2.Parent = b2
 	check(CarryService.TryTake(p2, loosePod()), "a player with full hands can still take a pod")
 	check(a.Parent == pack2 and c.Parent == pack2, "every plant was put away")
-	check(bat2.Parent == b2, "the bat was not")
+	check(bat2.Parent == pack2, "and the bat with them (2026-10-10): nothing but the pod is in the hands")
 
 	--== 6. NOTHING TO PUT AWAY, OR NOWHERE TO PUT IT ==========================
 	local b3 = body("NoBackpack")
@@ -207,9 +207,9 @@ local ok, err = pcall(function()
 	end
 	local lonely = tool("Nubkin", "nubkin")
 	lonely.Parent = b3
-	local okMove, moved = pcall(CarryService.PutPlantsAway, p3)
+	local okMove, moved = pcall(CarryService.PutToolsAway, p3)
 	check(okMove and moved == 0 and lonely.Parent == b3, "no Backpack: nothing moves and nothing throws")
-	check(CarryService.PutPlantsAway(p2) == 0, "empty hands: nothing to move")
+	check(CarryService.PutToolsAway(p2) == 0, "empty hands: nothing to move")
 end)
 
 fixture:Destroy()

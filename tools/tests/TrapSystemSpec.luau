@@ -1348,9 +1348,22 @@ do
 			and not combat:find("Instance.new(\"RopeConstraint", 1, true)
 			and not combat:find("Instance.new(\"LinearVelocity", 1, true),
 		"and the pull builds no constraint that could outlive the body")
-	check(combat ~= nil and not combat:find("CarryService.IsCarrying", 1, true)
+	-- IsCarrying only refuses a carrier's swing and trap (2026-10-10, the owner:
+	-- a carrier's hands are full); no DROP asks it -- every drop still goes
+	-- through DropHeldPod, which takes a banked pod in the hands too.
+	local asks = 0
+	if combat then
+		local _, n = combat:gsub("CarryService%.IsCarrying%(", "")
+		asks = n
+	end
+	check(combat ~= nil and asks == 3
+			and combat:find("if rooted(player) or flying[player] or CarryService.IsCarrying(player) then", 1, true)
+			and combat:find("or onCourse(player) or swing.tool.Parent ~= live.character or CarryService.IsCarrying(player) then",
+				1, true)
+			and combat:find("if CarryService.IsCarrying(player) then\n\t\tdeny(player, \"CARRYING_POD\")", 1, true)
 			and combat:find("CarryService.DropHeldPod", 1, true),
-		"nothing in combat asks IsCarrying any more: every drop goes through DropHeldPod")
+		"combat asks IsCarrying only to refuse a carrier's swing and trap: every drop goes through DropHeldPod",
+		tostring(asks))
 	check(combat ~= nil and not combat:find("BuildTrapWorld(item, cf", 1, true)
 			and select(2, combat:gsub("WeaponModel.BuildTrapWorld", "")) == 1,
 		"the server builds a trap model only once: the sprung picture")

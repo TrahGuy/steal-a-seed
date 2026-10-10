@@ -622,6 +622,34 @@ local function run()
 	frames(1, FRAME)
 
 	--==========================================================================
+	say("\n-- a carrier's hands are full (2026-10-10) --")
+	--==========================================================================
+	-- The owner, on Michael's v1047 report ("If you have the bat equipped when
+	-- you pick up an egg you still hold the bat and you can still swing"): a
+	-- swing from a carrier starts nothing, and a take mid-swing voids it.
+	fresh()
+	settle()
+	step(10)
+	swinger.MoveTo(origin, Vector3.new(0, 0, -1))
+	victim.MoveTo(origin + Vector3.new(0, 0, -6))
+	holding[swinger] = "carry"
+	local carryBefore = tool:GetAttribute("SwingAt")
+	swing(swinger, tool, item)
+	frames(item.Windup + C.HitWindowTrail + 0.05, FRAME)
+	check(tool:GetAttribute("SwingAt") == carryBefore and count("Throw") == 0,
+		"a player carrying a pod cannot swing: nothing starts and nobody is struck")
+	holding[swinger] = nil
+	fresh()
+	settle()
+	step(10)
+	swing(swinger, tool, item)
+	frames(0.05, FRAME)
+	holding[swinger] = "carry"
+	frames(item.Windup + C.HitWindowTrail, FRAME)
+	check(count("Throw") == 0, "a pod taken during the wind-up voids the swing: nobody is struck")
+	holding[swinger] = nil
+
+	--==========================================================================
 	say("\n-- a swinger who goes away --")
 	--==========================================================================
 	fresh()

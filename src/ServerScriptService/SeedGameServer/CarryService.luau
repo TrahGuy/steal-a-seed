@@ -757,27 +757,32 @@ local function tellStorageFull(player: Player, code: string, quiet: number): boo
 end
 
 --==============================================================================
--- A POD IN BOTH ARMS PUTS THE PLANT AWAY
+-- A POD IN BOTH ARMS PUTS EVERYTHING ELSE AWAY
 --
 -- A held plant rides in front of the torso in the same two-handed grip a raid
 -- pod uses, so taking a pod while holding one drew both: the shell, and a plant
 -- through it. The hatch already knew this -- "two channels, one pair of hands"
 -- -- and refuses to equip a creature onto a carry. Taking a pod did not.
 --
--- So a take moves every PLANT Tool out of the hands and into the Backpack. The
--- plant is not dropped, sold or lost; it is put away, exactly where the hotbar
--- would have put it. And while the pod is carried, a plant arriving in the hands
--- from anywhere -- the hotbar, the number row, a modified client -- is put back
--- a frame later.
+-- So a take moves every Tool out of the hands and into the Backpack. Nothing is
+-- dropped, sold or lost; it is put away, exactly where the hotbar would have
+-- put it. And while the pod is carried, a Tool arriving in the hands from
+-- anywhere -- the hotbar, the number row, a modified client -- is put back a
+-- frame later.
 --
--- PLANTS ONLY. A bat is a one-hand grip beside the body, and whether a carrier
--- may swing one is a combat rule this does not get to change.
+-- EVERY TOOL, THE BAT TOO, since 2026-10-10 (the owner, approving Michael's
+-- v1047 report: "If you have the bat equipped when you pick up an egg you still
+-- hold the bat and you can still swing"). Plants only until then: "a bat is a
+-- one-hand grip beside the body, and whether a carrier may swing one is a
+-- combat rule this does not get to change". The owner changed it: a carrier's
+-- hands are full -- the thief runs, the chaser hunts. CombatService refuses a
+-- carrier's swing and trap on its own side too.
 --==============================================================================
-local function isPlantTool(child: Instance): boolean
-	return child:IsA("Tool") and type(child:GetAttribute("SpeciesId")) == "string"
+local function isHandTool(child: Instance): boolean
+	return child:IsA("Tool")
 end
 
-local function putPlantsAway(player: Player): number
+local function putToolsAway(player: Player): number
 	local character = player.Character
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not (character and backpack) then
@@ -785,7 +790,7 @@ local function putPlantsAway(player: Player): number
 	end
 	local moved = 0
 	for _, child in ipairs(character:GetChildren()) do
-		if isPlantTool(child) then
+		if isHandTool(child) then
 			-- Reparenting IS the unequip: the engine drops the grip, and the
 			-- Tool's own Unequipped handler cuts the CarryWeld (see giveTool).
 			child.Parent = backpack
@@ -795,7 +800,7 @@ local function putPlantsAway(player: Player): number
 	return moved
 end
 
-CarryService.PutPlantsAway = putPlantsAway
+CarryService.PutToolsAway = putToolsAway
 
 function CarryService.TryTake(player: Player, pod: Model): boolean
 	if player.Parent ~= Players then
@@ -1094,8 +1099,9 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- took it. No slack if they were carrying moments ago. See CarryGuard.
 	guards[player] = CarryGuard.new(root.Position,
 		os.clock() - (guardEnded[player] or -math.huge) < CarryGuard.SlackCooldownSeconds)
-	-- Only the pod in both arms: a plant that was being held goes to the Backpack.
-	putPlantsAway(player)
+	-- Only the pod in both arms: whatever was being held -- a plant, the bat --
+	-- goes to the Backpack.
+	putToolsAway(player)
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
 	--==========================================================================
@@ -2359,14 +2365,14 @@ local function onCharacterAdded(player: Player, character: Model)
 		end
 	end))
 
-	-- WHILE A POD IS CARRIED, A PLANT THAT ARRIVES IN THE HANDS GOES BACK. After a
+	-- WHILE A POD IS CARRIED, A TOOL THAT ARRIVES IN THE HANDS GOES BACK. After a
 	-- frame, so the equip that brought it has finished moving it first -- the
-	-- Backpack it came from is still the right place for it. See putPlantsAway.
+	-- Backpack it came from is still the right place for it. See putToolsAway.
 	table.insert(conns, character.ChildAdded:Connect(function(child)
-		if carried[player] and isPlantTool(child) then
+		if carried[player] and isHandTool(child) then
 			task.defer(function()
 				if carried[player] and child.Parent == character then
-					putPlantsAway(player)
+					putToolsAway(player)
 				end
 			end)
 		end

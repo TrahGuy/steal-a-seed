@@ -1259,8 +1259,10 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 		return
 	end
 	-- A player who is ROOTED, or mid-flight themselves, does not get to swing.
-	-- A slowed one does: see `rooted`.
-	if rooted(player) or flying[player] then
+	-- A slowed one does: see `rooted`. Nor does one carrying a pod (2026-10-10,
+	-- the owner: a carrier's hands are full; CarryService puts the bat away on
+	-- a take, and this is the server's own word on it).
+	if rooted(player) or flying[player] or CarryService.IsCarrying(player) then
 		return
 	end
 	swingReadyAt[player] = clock + item.Cooldown
@@ -1497,8 +1499,9 @@ local function stepSwings(clock: number)
 			continue
 		end
 		local live = if player.Parent == Players then bodyOf(player) else nil
+		-- Taking a pod mid-swing voids it too (2026-10-10): the hands are full.
 		if not live or live.humanoid.PlatformStand or rooted(player) or flying[player]
-			or onCourse(player) or swing.tool.Parent ~= live.character then
+			or onCourse(player) or swing.tool.Parent ~= live.character or CarryService.IsCarrying(player) then
 			if live and swing.tool.Parent ~= live.character then
 				-- Unequipped mid-swing: no hit, and the arm stops swinging a bat
 				-- it is no longer holding.
@@ -1860,6 +1863,11 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 	local body = bodyOf(player)
 	if not body or body.humanoid.PlatformStand or holds[player] or flying[player] then
 		deny(player)
+		return
+	end
+	-- No trap from full hands (2026-10-10, the owner: a carrier's hands are full).
+	if CarryService.IsCarrying(player) then
+		deny(player, "CARRYING_POD")
 		return
 	end
 	if MapService.IsInSafeZone(body.root.Position) then
