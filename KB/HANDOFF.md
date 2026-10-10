@@ -1,5 +1,27 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST, STAGE 2: THE DEWBERRIES — 2026-10-11 (CLAUDE)  (IN PROGRESS: CHECKPOINT COMMIT ON wip; NOT PUBLISHED; OFF; SYNTAX-CHECKED ONLY, NO SPEC OR PLAY RUN YET)
+
+Paused on the owner's word ("proceed tomorrow"). Everything stays off: EnchantedMistConfig.Enabled = false, and EnchantedMistService.Built.Berries stays false until this stage is finished.
+- **Written**:
+  - `Shared/DewberryModel`: Codex's Dewberry builder (output/models/dewberry/Dewberry.command.luau) ported to code with the same look. Anchored, no collision, touch or query; pivot at the floor; Root + PickupAnchor at mid-height; the parent is optional so the caller finishes the model before it replicates.
+  - ProfileSchema: `DewberriesCarried` (0..CarryCap) and `DewberryProgress` (0..BerriesPerPod-1). Defaults 0, sanitised whole and clamped. An admin progress reset clears them; rebirth never touches them.
+  - PlayerDataService: `UpdateDewberries(player, change)` and `PublishDewberries` (player attributes DewberriesCarried / DewberryProgress, nil at 0), published on join and after a reset.
+  - EnchantedMistData.Spawn, new DRAFT fields: HoldTolerance 0.25, SafeZones {Field 3, Front 2}, BiomeX {16, 50}, BiomeNearMargin 14, BiomeFarMargin 10, Spacing 14, PodClear 10, Tries 12, QuietEndSeconds 10. EnchantedMistConfig gains PlayerAttributes and Berries (folder SeedDewberries, prompt CollectDewberry "Collect Dewberry", the words, the notice keys).
+  - `EnchantedMistBerryService` (Priority 76):
+    - Spawning starts on EnchantedMistService.OnStart. There is one opportunity every 5 s, measured from now so a stall never bursts. At most 6 berries live at once, each for 60 s, and none appears in the last 10 s.
+    - 60% go near the plots through MiniEventService.PickIn (Field/Front). 40% go on biome floors at |X| 16-50, off the running line, weighted 1/Order. Every spot passes SpotClear + FloorAt and keeps Spacing from berries and PodClear from SeedPod-tagged pods.
+    - A pick is server-checked: the event id, the berry, its expiry, a hold the server saw last at least 0.5 s, a living body within 16 studs, no pod in hand and room under the cap. The berry is reserved, credited and removed in one resumption.
+    - Notices: "A Dewberry appeared!" with its place, all under one key so the next one folds in place; skipped for full or loading players. The picker sees "Dewberry picked! n/5", or "Dewberries full! 5/5" with "Bring them to the Mosskeeper".
+    - Everything is removed on OnEnd, or when the running id changes.
+- **Next (tomorrow)**:
+  - EnchantedMistBerries.client: put berry prompts out of reach for a full player or one carrying a pod, only on that client.
+  - Spec coverage: placement, every claim refusal, the cap, two triggers racing, expiry, end cleanup and the profile sanitiser.
+  - Flip Built.Berries; commit and push.
+- **For the owner** (to ask at the stage report):
+  - A pick is refused while a pod is in hand, because PromptUI hides every prompt then.
+  - Supply ceiling: one berry per 5 s gives at most 58 per Mist. That is under the 60 needed for six players to each earn a pod in one Mist. Carried berries and progress persist, so pods accumulate across Mists.
+
 ## ENCHANTED MIST, STAGE 1: THE SCHEDULE AND THE SHARED SIGN — 2026-10-11 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; OFF: EnchantedMistConfig.Enabled = false, ShowSign = false; EnchantedMistSpec 37/0, CycleSpec PASS, PodRushSpec 98/0)
 
 The owner's Enchanted Mist brief (pasted; KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md is Codex's copy). The owner's answers 2026-10-11:

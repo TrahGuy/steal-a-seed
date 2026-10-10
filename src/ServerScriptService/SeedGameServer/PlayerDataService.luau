@@ -46,6 +46,8 @@ local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("Tutor
 local FirstMinute = require(SeedGame:WaitForChild("Shared"):WaitForChild("FirstMinute"))
 -- The hotbar's grammar: what a shortcut or a heart may name (2026-10-03).
 local HotbarSlots = require(SeedGame:WaitForChild("Shared"):WaitForChild("HotbarSlots"))
+-- Enchanted Mist's player attribute names (2026-10-11).
+local EnchantedMistConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("EnchantedMistConfig"))
 -- Launch analytics: told what already happened, never asked anything.
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 -- The external new-player traffic feed (off by default): loaded and called
@@ -561,6 +563,42 @@ function PlayerDataService.UpdatePodRush(player: Player, change: (Profile) -> bo
 		return true
 	end
 	return false
+end
+
+--==============================================================================
+-- ENCHANTED MIST'S DEWBERRIES (2026-10-11; ProfileSchema DewberriesCarried,
+-- DewberryProgress)
+--
+-- `change` edits the counts in one resumption and answers whether it changed
+-- anything; only then is the profile marked for saving and the counts
+-- published. EnchantedMistBerryService (a pick) and the Mosskeeper (a
+-- delivery) are the only callers; each decides, this keeps.
+--==============================================================================
+function PlayerDataService.UpdateDewberries(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		PlayerDataService.PublishDewberries(player)
+		return true
+	end
+	return false
+end
+
+-- The counts as player attributes, nil at 0.
+function PlayerDataService.PublishDewberries(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local profile = entry.profile :: any
+	local names = EnchantedMistConfig.PlayerAttributes
+	local carried = tonumber(profile.DewberriesCarried) or 0
+	local progress = tonumber(profile.DewberryProgress) or 0
+	player:SetAttribute(names.Carried, if carried > 0 then carried else nil)
+	player:SetAttribute(names.Progress, if progress > 0 then progress else nil)
 end
 
 --==============================================================================
@@ -1389,6 +1427,7 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 	PlayerDataService.PublishInvites(player)
 	PlayerDataService.PublishSprout(player)
 	PlayerDataService.PublishRebirth(player)
+	PlayerDataService.PublishDewberries(player)
 	log(string.format("%s's progress was reset in memory (%d receipt(s) kept).", player.Name,
 		#keep.Receipts))
 	return true
@@ -1580,6 +1619,8 @@ local function onPlayerAdded(player: Player)
 		-- And the rebirth count (2026-10-08): the title, the fence and the
 		-- displays' income read it.
 		PlayerDataService.PublishRebirth(player)
+		-- And Enchanted Mist's saved Dewberries (2026-10-11).
+		PlayerDataService.PublishDewberries(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)

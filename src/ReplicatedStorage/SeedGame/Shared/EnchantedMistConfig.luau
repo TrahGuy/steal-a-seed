@@ -28,6 +28,42 @@ EnchantedMistConfig.Attributes = {
 	EndsAt = "MistEndsAt",
 }
 
+-- Player attributes (PlayerDataService.PublishDewberries): the saved counts,
+-- nil at 0. The client hides the berry prompt for a full player by them, and
+-- Mosskeeper's bar reads the progress.
+EnchantedMistConfig.PlayerAttributes = {
+	Carried = "DewberriesCarried",
+	Progress = "DewberryProgress",
+}
+
+--==============================================================================
+-- THE DEWBERRIES (EnchantedMistBerryService, EnchantedMistBerries.client)
+--
+-- The server's folder in Workspace, the prompt's verb, and the notices: one
+-- per spawned berry, all under one key, so a new berry says its place in the
+-- notice already up instead of stacking another (ActionToastUI folds a key);
+-- and the picker's own count, under a key of its own.
+--==============================================================================
+EnchantedMistConfig.Berries = {
+	FolderName = "SeedDewberries",
+	PromptName = "CollectDewberry",
+	ActionText = "Collect Dewberry",
+	-- The client reads these to tell a berry prompt from any other.
+	BerryAttribute = "DewberryId",
+	Words = {
+		Appeared = "A Dewberry appeared!",
+		NearPlots = "Near the plots",
+		InBiome = "In %s",
+		Picked = "Dewberry picked! %d/%d",
+		PickedFull = "Dewberries full! %d/%d",
+		FullDetail = "Bring them to the Mosskeeper",
+	},
+	NoticeKeys = {
+		Appeared = "mist:berry",
+		Picked = "mist:picked",
+	},
+}
+
 -- What MistState says.
 EnchantedMistConfig.States = {
 	Disabled = "disabled", -- switched off, or a binding missing: COMING SOON

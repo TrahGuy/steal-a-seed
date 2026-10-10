@@ -4,8 +4,8 @@
 --
 -- The Enchanted Mist event's NUMBERS -- its schedule, the confirmed collection
 -- rules, the spawn tuning, the Mysterious Pod's creature and size odds. Balance
--- lives here, not in GameConfig (AGENTS.md, rule 7); GameConfig.EnchantedMist
--- holds the switch, the names and the words.
+-- lives here, not in GameConfig (AGENTS.md, rule 7); EnchantedMistConfig holds
+-- the switch, the names and the words.
 --
 -- What the owner has CONFIRMED is marked so. Everything marked DRAFT is a
 -- proposal awaiting the owner's approval (KB/ENCHANTED-MIST-RESET-ALIGNED-
@@ -53,7 +53,20 @@ EnchantedMistData.HatchSeconds = 30
 -- lives LifetimeSeconds (staggered by when it appeared). SafeShare of the
 -- spawns go to the safe field near the plots, the rest to reachable biome
 -- ground off the racing line. A berry is collected with a HoldSeconds hold of
--- E within Reach studs; the server re-checks Reach + ReachSlack.
+-- E within Reach studs; the server re-checks Reach + ReachSlack, and that the
+-- hold it saw begin lasted HoldSeconds - HoldTolerance (the two signals cross
+-- the network with different delays).
+--
+-- WHERE (EnchantedMistBerryService): the safe share in MiniEventService's
+-- ticket zones SafeZones names, by weight; the biome share on a biome's
+-- floor between the running line and the walls (|X| in BiomeX), its Near/Far
+-- margins clear of the gates, an early biome likelier (weight 1 / Order) so a
+-- beginner meets berries too. Every spot passes the tickets' checks (the hub
+-- and its NPCs, the plots, the nests and their guardians, the props, a real
+-- floor), stays Spacing studs from every other berry and PodClear studs from
+-- every pod, so no two prompts share ground. Tries spots per opportunity; an
+-- opportunity with no spot is skipped, never made up later. No berry appears
+-- in the last QuietEndSeconds: nobody could reach it before the Mist ends.
 --==============================================================================
 EnchantedMistData.Spawn = {
 	MaxActive = 6,
@@ -61,8 +74,17 @@ EnchantedMistData.Spawn = {
 	LifetimeSeconds = 60,
 	SafeShare = 0.6,
 	HoldSeconds = 0.75,
+	HoldTolerance = 0.25,
 	Reach = 10,
 	ReachSlack = 6,
+	SafeZones = { Field = 3, Front = 2 },
+	BiomeX = { 16, 50 },
+	BiomeNearMargin = 14,
+	BiomeFarMargin = 10,
+	Spacing = 14,
+	PodClear = 10,
+	Tries = 12,
+	QuietEndSeconds = 10,
 }
 
 --==============================================================================

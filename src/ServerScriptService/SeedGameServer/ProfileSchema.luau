@@ -47,6 +47,8 @@ local WheelData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WheelDat
 -- The hotbar's shortcuts and the Bag's hearts are cleaned against what the
 -- profile owns, by the same grammar the server and the client edit with.
 local HotbarSlots = require(SeedGame:WaitForChild("Shared"):WaitForChild("HotbarSlots"))
+-- Enchanted Mist's carry cap and berries per pod bound the saved counts.
+local EnchantedMistData = require(SeedGame:WaitForChild("Shared"):WaitForChild("EnchantedMistData"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
@@ -200,6 +202,17 @@ export type Profile = {
 	-- level. Old saves: an empty row.
 	--==========================================================================
 	PodRush: { Id: string, Count: number, Paid: number, Top: number, PodOwed: string },
+	--==========================================================================
+	-- ENCHANTED MIST (2026-10-11; EnchantedMistBerryService, EnchantedMistData)
+	--
+	-- Dewberries picked up and not yet given to the Mosskeeper (0..CarryCap),
+	-- and the berries already given toward the next Mysterious Pod
+	-- (0..BerriesPerPod-1; the tenth makes the pod and starts again). Both
+	-- outlive the event: a carried berry waits for the next Mist. Progress, so
+	-- an admin progress reset clears them. Old saves: 0, 0.
+	--==========================================================================
+	DewberriesCarried: number,
+	DewberryProgress: number,
 	-- DISCO DANCING (2026-10-03): the third stored setting -- dance at the hub
 	-- while a disco runs. ON unless the player switched it off; an old save
 	-- with no key reads ON. Kept by a progress reset, like Walk Mode.
@@ -477,6 +490,8 @@ function ProfileSchema.Default(): Profile
 		RebirthAt = 0,
 		EventClaims = {},
 		PodRush = { Id = "", Count = 0, Paid = 0, Top = 0, PodOwed = "" },
+		DewberriesCarried = 0,
+		DewberryProgress = 0,
 		DiscoDance = true,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
@@ -1246,6 +1261,10 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			PodOwed = table.concat(owed, ","),
 		}
 	end
+	-- Enchanted Mist (2026-10-11): whole, never below 0, never past the carry
+	-- cap or a full pod's worth less one.
+	p.DewberriesCarried = math.floor(number(raw.DewberriesCarried, 0, 0, EnchantedMistData.CarryCap))
+	p.DewberryProgress = math.floor(number(raw.DewberryProgress, 0, 0, EnchantedMistData.BerriesPerPod - 1))
 	-- ON unless saved false: an old save with no key dances.
 	p.DiscoDance = raw.DiscoDance ~= false
 

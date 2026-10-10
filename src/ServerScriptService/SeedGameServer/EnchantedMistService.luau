@@ -79,9 +79,9 @@ EnchantedMistService.Hooks = {
 -- The event can be switched on only when this is empty. Each line names the
 -- exact thing to supply or approve.
 --==============================================================================
--- Pieces of the event not built yet in code (stage 1 of the staged build).
+-- Pieces of the event built in code so far (the staged build).
 EnchantedMistService.Built = {
-	Berries = false,
+	Berries = false, -- stage 2 (EnchantedMistBerryService) in progress: client + spec to come
 	Mosskeeper = false,
 	MysteriousPod = false,
 	Look = false,
