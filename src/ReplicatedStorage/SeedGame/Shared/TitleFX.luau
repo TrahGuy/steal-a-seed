@@ -16,7 +16,9 @@
 --                mist), shared by every title that wears it
 --   nearest      the titles that move: the MaxAnimated nearest this camera
 --   attach       a transparent frame of ImageLabels under the words -- under
---                REBIRTH N too -- each hidden until its picture has loaded
+--                REBIRTH N too -- each hidden until its picture has loaded; over
+--                a head (a BillboardGui) or, given a Place, beside a word in a
+--                list (the Rebirth panel's "?" TITLES, RebirthUI)
 --
 -- Everything stays inside the title's band (its own height): ADMIN stands over
 -- it and the player's name under it. The words and REBIRTH N stay on top, and
@@ -87,12 +89,14 @@ end
 -- WHERE A SPRITE STANDS
 --
 -- `box` is the title's size now (a phone's is smaller: everything scales by its
--- height), `words` the drawn width of its words. Sprites go to the words' left
--- and right in turn (odd left, even right), each its own phase.
+-- height), `words` the drawn width of its words and `centre` their middle
+-- (the box's, where none is given: a head's words are centred). Sprites go to
+-- the words' left and right in turn (odd left, even right), each its own phase.
 --==============================================================================
-function TitleFX.pose(profile: any, i: number, n: number, t: number, box: Vector2, words: number): Pose
+function TitleFX.pose(profile: any, i: number, n: number, t: number, box: Vector2, words: number,
+	centre: number?): Pose
 	local k = box.Y / TITLE.Size.Y
-	local mid = box.X / 2
+	local mid = centre or box.X / 2
 	local half = words / 2
 	local side = if i % 2 == 1 then -1 else 1
 	-- Left and right go in pairs (1-2, 3-4, 5-6), each pair one picture and
@@ -178,15 +182,29 @@ end
 -- THE LAYER ON A TITLE
 --==============================================================================
 export type Layer = {
-	-- Poses every sprite at time t (os.clock) and shows the layer.
-	step: (t: number) -> (),
+	-- Poses every sprite at time t (os.clock) and shows the layer; `fade`
+	-- (0..1) takes that much more of each sprite away (a LOCKED row's).
+	step: (t: number, fade: number?) -> (),
 	-- Hides it: Reduced FX, too far, not among the nearest, the title hidden.
 	hide: () -> (),
 	destroy: () -> (),
 	frame: Frame,
 }
 
-function TitleFX.attach(gui: BillboardGui, profile: any, count: number): Layer
+-- Beside a word in a list rather than over a head: the frame's place and size
+-- in its parent's units (`box`, the word's line), its ZIndex (under the
+-- word's), the word's drawn width and middle, measured when stepped, and the
+-- furthest left a sprite's middle may go in the frame (the row's own edge).
+export type Place = {
+	at: UDim2,
+	box: Vector2,
+	z: number,
+	words: () -> number,
+	centre: () -> number,
+	left: number,
+}
+
+function TitleFX.attach(gui: GuiObject | BillboardGui, profile: any, count: number, place: Place?): Layer
 	-- A sprite out past the words' ends must not be cut at the box.
 	pcall(function()
 		(gui :: any).ClipsDescendants = false
@@ -195,10 +213,16 @@ function TitleFX.attach(gui: BillboardGui, profile: any, count: number): Layer
 	frame.Name = "TitleFX"
 	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
-	frame.Size = UDim2.fromScale(1, 1)
 	frame.Active = false
-	-- Under the words and REBIRTH N (theirs is the default 1).
-	frame.ZIndex = 0
+	if place then
+		frame.Position = place.at
+		frame.Size = UDim2.fromOffset(place.box.X, place.box.Y)
+		frame.ZIndex = place.z
+	else
+		frame.Size = UDim2.fromScale(1, 1)
+		-- Under the words and REBIRTH N (theirs is the default 1).
+		frame.ZIndex = 0
+	end
 	frame.Visible = false
 	frame.Parent = gui
 	local made = os.clock()
@@ -210,7 +234,7 @@ function TitleFX.attach(gui: BillboardGui, profile: any, count: number): Layer
 		label.BorderSizePixel = 0
 		label.AnchorPoint = Vector2.new(0.5, 0.5)
 		label.ScaleType = Enum.ScaleType.Fit
-		label.ZIndex = 0
+		label.ZIndex = frame.ZIndex
 		label.Active = false
 		-- A sprite's picture never changes (its art is its index's), so it is
 		-- set once, here, and fetched from now; clear until it has loaded.
@@ -224,29 +248,42 @@ function TitleFX.attach(gui: BillboardGui, profile: any, count: number): Layer
 	local layer: Layer
 	layer = {
 		frame = frame,
-		step = function(t: number)
+		step = function(t: number, fade: number?)
 			if not frame.Parent then
 				return
 			end
-			local box = gui.AbsoluteSize
-			if box.X <= 0 or box.Y <= 0 then
-				local size = gui.Size
-				box = Vector2.new(size.X.Offset, size.Y.Offset)
+			local box: Vector2
+			local width: number
+			local centre: number? = nil
+			if place then
+				box = place.box
+				width = place.words()
+				centre = place.centre()
+			else
+				box = (gui :: GuiObject).AbsoluteSize
+				if box.X <= 0 or box.Y <= 0 then
+					local size = (gui :: GuiObject).Size
+					box = Vector2.new(size.X.Offset, size.Y.Offset)
+				end
+				width = if words and words:IsA("TextLabel") and words.TextBounds.X > 0
+					then words.TextBounds.X
+					else box.X * 0.6
 			end
-			local width = if words and words:IsA("TextLabel") and words.TextBounds.X > 0
-				then words.TextBounds.X
-				else box.X * 0.6
+			local away = math.clamp(fade or 0, 0, 1)
 			local settled = os.clock() - made >= FX.SettleSeconds
 			for i, label in ipairs(sprites) do
-				local pose = TitleFX.pose(profile, i, count, t, box, width)
+				local pose = TitleFX.pose(profile, i, count, t, box, width, centre)
 				if label.ImageColor3 ~= pose.tint then
 					label.ImageColor3 = pose.tint
 				end
-				label.Position = UDim2.fromOffset(pose.x, pose.y)
+				local x = if place then math.max(pose.x, place.left + pose.size / 2) else pose.x
+				label.Position = UDim2.fromOffset(x, pose.y)
 				label.Size = UDim2.fromOffset(pose.size, pose.size)
 				label.Rotation = pose.rotation
 				-- A picture that never loads stays clear: the words alone.
-				label.ImageTransparency = if settled and label.IsLoaded then pose.transparency else 1
+				label.ImageTransparency = if settled and label.IsLoaded
+					then pose.transparency + (1 - pose.transparency) * away
+					else 1
 			end
 			if not shown then
 				shown = true

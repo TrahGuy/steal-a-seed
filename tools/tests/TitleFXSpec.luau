@@ -20,6 +20,11 @@
 --      Rebirth.title, never the words; one loop; hidden under Reduced FX and
 --      a trap; forgotten with its title. The celebration and the aura are not
 --      touched.
+--   6. the Rebirth panel's "?" TITLES list (the owner: "add them to the ?
+--      list too"): every step's row wears its title's effects round its
+--      words, inside the row, between its plate and its texts; moved from the
+--      panel's own loop on the rows in view, faded on LOCKED rows, none under
+--      Reduced FX
 --
 -- Not here, seen in Play once the ids are uploaded: the art itself by day and
 -- night, on a phone, with ADMIN.
@@ -296,13 +301,83 @@ local ok, err = pcall(function()
 	check(has(ui, "forget(instance :: any)") and has(ui, "if not gui.Parent then\n\t\t\t\tforget(gui)"),
 		"a title gone takes its layer out of the loop")
 	local untouched = true
-	for _, name in ipairs({ "RebirthFX", "RebirthCelebration", "RebirthService", "RebirthUI" }) do
+	for _, name in ipairs({ "RebirthFX", "RebirthCelebration", "RebirthService" }) do
 		local src = sourceOf(Shared, name) .. sourceOf(Scripts, name)
 			.. sourceOf(game:GetService("ServerScriptService"), name)
 		untouched = untouched and not has(src, "TitleFX")
 	end
 	check(untouched and not has(tf, "PointLight") and not has(tf, "Atmosphere") and not has(tf, "Lighting"),
-		"the celebration, the aura and the panel are not touched; no light or fog anywhere")
+		"the celebration and the aura are not touched; no light or fog anywhere")
+
+	--==========================================================================
+	say("-- 6. the \"?\" TITLES list --")
+	--==========================================================================
+	local LIST = FX.List
+	local left = 12 + LIST.Room
+	local band = Vector2.new(TITLE.Size.X, 30)
+	local outRow, outLine = {}, {}
+	for index, step in ipairs(TITLE.Ladder) do
+		local wants = FX.Steps[step.Text]
+		if wants then
+			local profile = FX.Profiles[wants.Profile]
+			local text = Rebirth.stepWords(index)
+			local w = TextService:GetTextSize(text, 22, Enum.Font.FredokaOne, Vector2.new(2000, 200)).X
+			for i = 1, wants.Count do
+				for f = 0, 59 do
+					local p = TitleFX.pose(profile, i, wants.Count, f * 0.15, band, w, w / 2)
+					local x = math.max(p.x, -left + p.size / 2)
+					if x - p.size / 2 < -left - 0.01 then
+						table.insert(outRow, step.Text .. " #" .. i)
+					end
+					if p.y - p.size / 2 < -0.5 or p.y + p.size / 2 > band.Y + 0.5 then
+						table.insert(outLine, step.Text .. " #" .. i)
+					end
+				end
+			end
+		end
+	end
+	check(#outRow == 0 and #outLine == 0 and LIST.Room >= 10 and LIST.LockedFade > 0 and LIST.LockedFade < 1,
+		"in a row every sprite stays inside the row's left edge and the words' own line",
+		table.concat(outRow, ", ") .. " / " .. table.concat(outLine, ", "))
+	local row = Instance.new("Frame")
+	row.Parent = fixture
+	local rowWord = Instance.new("TextLabel")
+	rowWord.ZIndex = 8
+	rowWord.Parent = row
+	local listLayer = TitleFX.attach(row, FX.Profiles.bloom, 4, {
+		at = UDim2.fromOffset(left, 4),
+		box = band,
+		z = 7,
+		words = function()
+			return 120
+		end,
+		centre = function()
+			return 60
+		end,
+		left = -left,
+	})
+	local fxFrame = row:FindFirstChild("TitleFX")
+	listLayer.step(os.clock(), LIST.LockedFade)
+	check(fxFrame and fxFrame.Position == UDim2.fromOffset(left, 4) and fxFrame.Size == UDim2.fromOffset(band.X, band.Y)
+			and fxFrame.ZIndex == 7 and fxFrame.ZIndex < rowWord.ZIndex and fxFrame.Visible,
+		"a row's layer stands on the words' line, between the row's plate (6) and its texts (8)")
+	listLayer.destroy()
+	local rb = sourceOf(Scripts, "RebirthUI")
+	check(has(rb, "local _, fxProfile, fxCount = TitleFX.profileFor(step)")
+			and has(rb, 'local word = words(row, "Word", 22, step.Colour, 8)')
+			and has(rb, 'local rebirthWords = words(row, "Rebirth", 13, Color3.fromRGB(255, 236, 244), 8)')
+			and has(rb, 'local bonusWords = words(row, "Bonus", 14, WHITE, 8)')
+			and has(rb, 'local chip = words(row, "State", 14, WHITE, 9)')
+			and has(rb, "\t\t\tz = 7,") and has(rb, "\t\t\tleft = -FX_LEFT,")
+			and has(rb, "local FX_LEFT = 12 + (if fxAny then FX_LIST.Room else 0)"),
+		"every row: the step's own profile (the ladder's step), its texts one ZIndex over the effects; the words "
+			.. "move in for them only once any title's art is uploaded")
+	check(has(rb, "\t\tif showingTitles then\n\t\t\tstepTitleFX(still)")
+			and has(rb, "if still or y + r.frame.AbsoluteSize.Y < top or y > bottom then")
+			and has(rb, "fx.step(now, if r.locked then FX_LIST.LockedFade else 0)") and has(rb, "r.locked = locked")
+			and select(2, rb:gsub("RunService%.RenderStepped:Connect", "")) == 1,
+		"moved from the panel's one loop while the list shows, only the rows in view, faded when LOCKED, none under "
+			.. "Reduced FX")
 end)
 
 fixture:Destroy()

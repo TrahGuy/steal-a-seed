@@ -1,5 +1,17 @@
 # Steal a Seed — Session Handoff
 
+## THE TITLE FX IN THE REBIRTH PANEL'S "?" LIST TOO — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; OFF UNTIL THE 8 PNGs ARE UPLOADED)
+
+The owner, on the title FX: "both stay, and add them to the ? list too".
+- **Both stay**: item 3's own effects (the family palettes on the rebirth-50 aura, the unlock effects, the accent, the rank pulse) are still the terminal's to build, alongside TitleFX.
+- **The "?" list**: every step's row in the Rebirth panel's TITLES list (RebirthUI) wears its title's TitleFX round its words, as over a head:
+  - **Position**: the row's texts moved one ZIndex up (the panel is ZIndexBehavior.Global), so the effects sit between the row's plate (6) and its texts (8).
+  - **Indent**: once any title's art is uploaded, every row's words stand `GameConfig.TitleFX.List.Room` (14) further in for the left sprites. Until then nothing moves and nothing is drawn.
+  - **Updater**: they move from the panel's own loop (setTurning's RenderStepped, open only), on the rows in view only. LOCKED rows keep half of themselves (LockedFade 0.5), like their words. None under Reduced FX.
+- **TitleFX**: `attach` takes an optional Place (a frame on a word's line in a list, its ZIndex, the word's width and middle, and the left edge no sprite may pass). `pose` takes the words' middle.
+- **RebirthSpec**: the row-fit formula takes the room off, and the pin follows. The narrowest list's longest row still draws at 20 of its 22.
+- **Specs**: TitleFXSpec 28/0 (four new: every sprite inside its row and line, the layer between plate and texts, the step's own profile, the panel's one loop). RebirthSpec 74/0, AdminSpec 127/0. Not seen in Play: no art is uploaded yet.
+
 ## RARITY EDGES: COMMON TO LEGENDARY, STILL — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; RarityFXSpec 71/0 AND 16 NEIGHBOURING SPECS GREEN; SEEN IN A GUARDED PLAY ON `SeedTest_items12_20261010`, DESKTOP 1251 x 716 AND A FORCED PHONE LOOK, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
 
 Queue item 2 (item 10 before it). The owner: "yes, add rarity edges, let terminal do it", after the other session's proposal: "coloured edges for every rarity, from Common grey up to Legendary gold, not just the top three".

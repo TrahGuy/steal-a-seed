@@ -47,6 +47,7 @@ local MillModel = require(Shared:WaitForChild("MillModel"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local TitleFX = require(Shared:WaitForChild("TitleFX"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
 
@@ -521,8 +522,20 @@ listPad.PaddingBottom = UDim.new(0, 4)
 listPad.Parent = list
 
 type TitleRow = { frame: Frame, ring: UIStroke, word: TextLabel, rebirth: TextLabel, bonus: TextLabel,
-	chip: TextLabel, rainbow: UIGradient?, step: any }
+	chip: TextLabel, rainbow: UIGradient?, step: any, fx: TitleFX.Layer?, locked: boolean }
 local titleRows: { TitleRow } = {}
+-- THE TITLES' LEAVES, FLOWERS AND MIST HERE TOO (2026-10-10, the owner: "add
+-- them to the ? list too"; TitleFX, GameConfig.TitleFX.List): each step wears
+-- what its title wears over a head, round its words, under them -- the row's
+-- texts stand one ZIndex up for it (this gui is ZIndexBehavior.Global) and,
+-- once any title's art is uploaded, every row's words stand Room further in,
+-- for the left ones. Until then nothing moves and nothing is drawn.
+local FX_LIST = GameConfig.TitleFX.List
+local fxAny = false
+for _, step in ipairs(CFG.Title.Ladder) do
+	fxAny = fxAny or TitleFX.profileFor(step) ~= nil
+end
+local FX_LEFT = 12 + (if fxAny then FX_LIST.Room else 0)
 local GREY = Color3.fromRGB(150, 146, 156)
 local LIT = Color3.fromRGB(255, 220, 90)
 for i, step in ipairs(CFG.Title.Ladder) do
@@ -539,9 +552,9 @@ for i, step in ipairs(CFG.Title.Ladder) do
 	ring.Parent = row
 	-- The step's words with its numerals' range, and its rebirths.
 	local stepText, stepRebirths = Rebirth.stepWords(i)
-	local word = words(row, "Word", 22, step.Colour, 7)
-	word.Position = UDim2.fromOffset(12, 4)
-	word.Size = UDim2.new(0.42, -12, 0, 30)
+	local word = words(row, "Word", 22, step.Colour, 8)
+	word.Position = UDim2.fromOffset(FX_LEFT, 4)
+	word.Size = UDim2.new(0.42, -FX_LEFT, 0, 30)
 	word.TextXAlignment = Enum.TextXAlignment.Left
 	word.Text = stepText
 	fitOne(word, 22)
@@ -553,24 +566,62 @@ for i, step in ipairs(CFG.Title.Ladder) do
 		g.Parent = word
 		rainbow = g
 	end
-	local rebirthWords = words(row, "Rebirth", 13, Color3.fromRGB(255, 236, 244), 7)
-	rebirthWords.Position = UDim2.fromOffset(12, 33)
-	rebirthWords.Size = UDim2.new(0.42, -12, 0, 18)
+	local rebirthWords = words(row, "Rebirth", 13, Color3.fromRGB(255, 236, 244), 8)
+	rebirthWords.Position = UDim2.fromOffset(FX_LEFT, 33)
+	rebirthWords.Size = UDim2.new(0.42, -FX_LEFT, 0, 18)
 	rebirthWords.TextXAlignment = Enum.TextXAlignment.Left
 	rebirthWords.Text = stepRebirths
-	local bonusWords = words(row, "Bonus", 14, WHITE, 7)
+	local bonusWords = words(row, "Bonus", 14, WHITE, 8)
 	bonusWords.Position = UDim2.fromScale(0.42, 0)
 	bonusWords.Size = UDim2.new(0.36, 0, 1, 0)
 	bonusWords.TextWrapped = true
 	bonusWords.Text = string.format(WORDS.RowBonus, Rebirth.times(Rebirth.training(step.At)),
 		Rebirth.times(Rebirth.income(step.At)))
-	local chip = words(row, "State", 14, WHITE, 8)
+	local chip = words(row, "State", 14, WHITE, 9)
 	chip.AnchorPoint = Vector2.new(1, 0.5)
 	chip.Position = UDim2.new(1, -10, 0.5, 0)
 	chip.Size = UDim2.new(0.2, 0, 0, 26)
 	chip.TextXAlignment = Enum.TextXAlignment.Right
+	-- Its title's sprites, on the words' line: between the row's plate (6) and
+	-- its texts (8), measured off the words as drawn.
+	local _, fxProfile, fxCount = TitleFX.profileFor(step)
+	local fx: TitleFX.Layer? = nil
+	if fxProfile then
+		local function width(): number
+			return MenuKit.textWidth(word.Text, word.TextSize, word.Font)
+		end
+		fx = TitleFX.attach(row, fxProfile, fxCount, {
+			at = UDim2.fromOffset(FX_LEFT, 4),
+			box = Vector2.new(GameConfig.Rebirth.Title.Size.X, 30),
+			z = 7,
+			words = width,
+			centre = function(): number
+				return width() / 2
+			end,
+			left = -FX_LEFT,
+		})
+	end
 	table.insert(titleRows, { frame = row, ring = ring, word = word, rebirth = rebirthWords, bonus = bonusWords,
-		chip = chip, rainbow = rainbow, step = step })
+		chip = chip, rainbow = rainbow, step = step, fx = fx, locked = true })
+end
+
+-- The rows in view move, from the panel's own loop (setTurning's); none at all
+-- under Reduced FX. A LOCKED row's keep only part of themselves, like its words.
+local function stepTitleFX(still: boolean)
+	local top = list.AbsolutePosition.Y
+	local bottom = top + list.AbsoluteSize.Y
+	local now = os.clock()
+	for _, r in ipairs(titleRows) do
+		local fx = r.fx
+		if fx then
+			local y = r.frame.AbsolutePosition.Y
+			if still or y + r.frame.AbsoluteSize.Y < top or y > bottom then
+				fx.hide()
+			else
+				fx.step(now, if r.locked then FX_LIST.LockedFade else 0)
+			end
+		end
+	end
 end
 
 -- Marks every row for a count: the highest REACHED ringed in gold, the NEXT
@@ -580,6 +631,7 @@ local function paintTitles(rebirths: number): number
 	for i, r in ipairs(titleRows) do
 		local state = rows[i].state
 		local locked = state == "locked"
+		r.locked = locked
 		r.word.TextColor3 = if locked and not r.step.Rainbow then r.step.Colour:Lerp(GREY, 0.55) else r.step.Colour
 		r.word.TextTransparency = if locked then 0.15 else 0
 		r.bonus.TextColor3 = if locked then GREY else WHITE
@@ -692,6 +744,9 @@ local function setTurning(on: boolean)
 		end
 		aim(millCamera, millFraming, angle)
 		aim(fenceCamera, fenceFraming, math.rad(-70))
+		if showingTitles then
+			stepTitleFX(still)
+		end
 		-- The rainbow title's colours turn like ADMIN's (OwnerTitleUI), still
 		-- for reduced motion.
 		local colours = WheelDraw.rainbow(if still then 0 else ((os.clock() - started) / GameConfig.OwnerTitle.DriftSeconds) % 1)

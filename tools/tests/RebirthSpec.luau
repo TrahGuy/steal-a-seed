@@ -979,7 +979,7 @@ local ok, err = pcall(function()
 	-- every menu size (a phone's 85% included), by RebirthUI's own measures
 	-- (pinned below): the scroll bar 6, 4 more, the gap 10; the strip and the
 	-- title line span a column, the title line after its 34 px badge; a row's
-	-- words 42% of the row less 12.
+	-- words 42% of the row less 12 and the title effects' room (TitleFX.List).
 	local column, listW = math.huge, math.huge
 	for _, s in ipairs(SCREENS) do
 		for _, option in ipairs(GameConfig.MenuSize.Options) do
@@ -1011,7 +1011,8 @@ local ok, err = pcall(function()
 	end
 	for i in ipairs(TITLE.Ladder) do
 		local text = Rebirth.stepWords(i)
-		note("row", Rebirth.fitSize(22, wide(text, 22), (listW - 10) * 0.42 - 12 - FIT), text)
+		note("row", Rebirth.fitSize(22, wide(text, 22), (listW - 10) * 0.42 - 12 - GameConfig.TitleFX.List.Room - FIT),
+			text)
 	end
 	-- Measured 2026-10-08: column 310, list 541; the strip 20 at worst (REBIRTH
 	-- 987 · GAIA DCCCLXXXVIII), the other three never shrink.
@@ -1037,7 +1038,8 @@ local ok, err = pcall(function()
 			and has(reworked, "local inner = w - scroll.ScrollBarThickness - 4")
 			and has(reworked, "local half = (inner - GAP) * 0.5")
 			and has(reworked, "titleLine.Position = UDim2.fromOffset(34, 0)")
-			and has(reworked, "word.Size = UDim2.new(0.42, -12, 0, 30)"),
+			and has(reworked, "word.Size = UDim2.new(0.42, -FX_LEFT, 0, 30)")
+			and has(reworked, "local FX_LEFT = 12 + (if fxAny then FX_LIST.Room else 0)"),
 		"the title over the head, the strip, NEXT UNLOCKS and the TITLES rows all wear Rebirth.titleFor / stepWords, "
 			.. "and each of those lines shrinks to fit its box")
 	-- Seen in Play 2026-10-08: on the old filled pink row (the highest reached)

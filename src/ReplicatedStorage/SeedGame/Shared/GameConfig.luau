@@ -11574,6 +11574,12 @@ GameConfig.TitleFX = {
 	MaxSprites = 6,
 	MaxAnimated = 4,
 	SettleSeconds = 0.3,
+	-- THE "?" TITLES LIST (2026-10-10, the owner: "add them to the ? list too"):
+	-- each row's words stand Room further in for the left sprites (no more: the
+	-- narrowest list's longest row must still draw at 20 of its 22, RebirthSpec);
+	-- a LOCKED row's sprites keep only (1 - LockedFade) of themselves, like its
+	-- words.
+	List = { Room = 14, LockedFade = 0.5 },
 	Profiles = {
 		-- NATURE: small leaves drifting out from beside the words and a little
 		-- down, turning as they go, fading in and out.
