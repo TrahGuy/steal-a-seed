@@ -878,7 +878,7 @@ local function onResult(payload: { [string]: any })
 			kind = "success",
 			title = if payload.challenge == true then "CHALLENGE COMPLETE" else "COURSE COMPLETE",
 			detail = if spin > 0
-				then string.format("+1 wheel spin in %s (%d/%d today). Spin it at the wheel by Marigold.",
+				then string.format("+1 wheel spin in %s (%d/%d today). Spin it at the wheel in the square.",
 					seconds, spin, limit)
 				else string.format("+%s Speed in %s.", GameConfig.compact(tonumber(payload.reward) or 0), seconds),
 			key = "obby:finish",

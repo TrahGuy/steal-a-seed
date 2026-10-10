@@ -76,9 +76,11 @@ local SELL_ONE = GameConfig.SellOne
 -- Studs. A board stands off either end of the 24-wide stall floor, clear of
 -- the counter so a player reading it is not standing where Marigold serves:
 -- SELL ALL off the left end, SELL ONE off the right, mirrored through the
--- stall's own frame so they move together if the stall ever does.
-local SIDE_OFFSET = 15.5
-local FRONT_OFFSET = -3.0
+-- stall's own frame so they move together when the stall does (it did on
+-- 2026-10-10: GameConfig.Map.Stall, which holds these numbers now).
+local STALL = GameConfig.Map.Stall
+local SIDE_OFFSET = STALL.BoardSide
+local FRONT_OFFSET = STALL.BoardFront
 
 local POST_HEIGHT = 5.2
 local BOARD_SIZE = Vector3.new(7.2, 3.0, 0.4)
@@ -216,10 +218,11 @@ local function build(stall: BasePart, name: string, side: number, titleText: str
 	--==========================================================================
 	-- FACING THE PEOPLE, NOT THE STALL
 	--
-	-- Derived from where the hub actually is rather than from the stall's own
-	-- rotation: the stall is built with a pi turn baked into its CFrame, so
-	-- "forward" there is not the direction a player arrives from. Pointing the
-	-- board at the deck centre is true whichever way the stall is later turned.
+	-- Toward the point BoardFocus studs in front of the stall's middle (Map
+	-- .Stall), so each board looks at the customers from its end, turned in a
+	-- little. Until 2026-10-10 that point was the deck's centre, which stood
+	-- exactly there while the stall stood mid-deck; the stall moved beside the
+	-- road's approach, and the point moved with it.
 	--==========================================================================
 	local base = stall.CFrame * CFrame.new(side * SIDE_OFFSET, 0, FRONT_OFFSET)
 
@@ -241,11 +244,12 @@ local function build(stall: BasePart, name: string, side: number, titleText: str
 		then hit.Position.Y
 		else (stall.Position.Y + stall.Size.Y * 0.5)
 	local ground = Vector3.new(base.Position.X, floorY, base.Position.Z)
-	local towardDeck = Vector3.new(0, ground.Y, 0) - ground
-	if towardDeck.Magnitude < 0.05 then
-		towardDeck = stall.CFrame.LookVector
+	local focus = GameConfig.hubStallCFrame():PointToWorldSpace(Vector3.new(0, 0, STALL.BoardFocus))
+	local towardCustomers = Vector3.new(focus.X, ground.Y, focus.Z) - ground
+	if towardCustomers.Magnitude < 0.05 then
+		towardCustomers = stall.CFrame.LookVector
 	end
-	local stand = CFrame.lookAt(ground, ground + towardDeck.Unit)
+	local stand = CFrame.lookAt(ground, ground + towardCustomers.Unit)
 
 	part("Post", Vector3.new(0.6, POST_HEIGHT, 0.6),
 		stand * CFrame.new(0, POST_HEIGHT * 0.5, 0), WOOD, model)
@@ -703,7 +707,7 @@ function SellService.Start()
 		end
 	end))
 
-	log(string.format("Ready. Sell-all and sell-one boards standing at the stall, %.0f studs from the deck.",
+	log(string.format("Ready. Sell-all and sell-one boards standing at the stall, %.0f studs from the deck's centre.",
 		(allSign.PrimaryPart :: BasePart).Position.Magnitude))
 end
 

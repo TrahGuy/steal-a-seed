@@ -450,6 +450,12 @@ WheelData.FolderName = "SeedWheel"
 -- plot-to-stall and plot-to-road walk (about 21), and 8 inside the deck's edge.
 -- The sign stands on the arch above the wheel, high enough to show over the
 -- stall's awning from the spawn.
+--
+-- (2026-10-10, the Event Hub: the stall, its boards and the overflow spawn left
+-- the deck's middle -- GameConfig.Map.Stall, Map.OverflowSpawn -- so the wheel
+-- now stands alone at the back edge, behind the event plaza, its prompt's
+-- reach ending 15 studs past the plaza's edge. The numbers above are as
+-- surveyed then.)
 --==============================================================================
 WheelData.Place = {
 	Position = Vector3.new(0, 0.9, 38),

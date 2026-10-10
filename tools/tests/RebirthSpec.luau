@@ -703,16 +703,22 @@ local ok, err = pcall(function()
 	local function apart(x, z)
 		return Vector2.new(at.X - x, at.Z - z).Magnitude
 	end
-	-- The hub's prompts and their reaches (configs; Marigold, the boards and
-	-- the plot and mill signs measured in Play, 2026-10-08).
+	-- The hub's prompts and their reaches (configs; the plot and mill signs
+	-- measured in Play, 2026-10-08). The stall's three from Map.Stall since it
+	-- moved beside the road's approach (2026-10-10): Marigold's anywhere in her
+	-- wander, so her reach grows by its half-diagonal.
+	local S = GameConfig.Map.Stall
+	local sellAll = GameConfig.hubStallPoint(-S.BoardSide, S.BoardFront - 2)
+	local sellOne = GameConfig.hubStallPoint(S.BoardSide, S.BoardFront - 2)
+	local marigold = GameConfig.hubStallPoint(0, -5.5)
 	local prompts = {
 		{ "the sacrifice pedestal", GameConfig.Sacrifice.Position.X, GameConfig.Sacrifice.Position.Z, 10 },
 		{ "the invite pedestal", GameConfig.InviteRewards.Position.X, GameConfig.InviteRewards.Position.Z, 10 },
 		{ "the bonus chest", GameConfig.BonusChest.Position.X, GameConfig.BonusChest.Position.Z, 10 },
 		{ "the wheel", 0, 44.3, WheelData.Place.PromptDistance },
-		{ "Marigold", -1.8, 21.3, GameConfig.Weapon.PromptDistance },
-		{ "SELL ALL", 15.5, 20, 12 },
-		{ "SELL ONE", -15.5, 20, 12 },
+		{ "Marigold", marigold.X, marigold.Z, GameConfig.Weapon.PromptDistance + math.sqrt(6.5 ^ 2 + 2.2 ^ 2) },
+		{ "SELL ALL", sellAll.X, sellAll.Z, 12 },
+		{ "SELL ONE", sellOne.X, sellOne.Z, 12 },
 		{ "plot 04's sign", 31.2, 94, 18 },
 		{ "plot 05's sign", 91.8, 37, 18 },
 		{ "mill 04's sign", 67.7, 67.8, 18 },

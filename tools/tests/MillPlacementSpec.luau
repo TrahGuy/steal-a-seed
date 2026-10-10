@@ -536,8 +536,36 @@ local ok, err = pcall(function()
 		* CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
 	zone("DiscoMillCircle", Vector3.new(LOW, disco.Radius * 2, disco.Radius * 2),
 		CFrame.new(disco.At.X, MAP.GroundY + LOW * 0.5, disco.At.Z) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	-- Marigold's stall beside the road's approach (Map.Stall, 2026-10-10), plot
+	-- 6's mill its nearest: the stall's ground and its customers' in its own
+	-- frame (EventHubSpec's rectangle: out past both boards, from the riser's
+	-- back to 7 studs in front of the floor).
+	local stallCF = GameConfig.hubStallCFrame()
+	local stallHalf = MAP.Stall.BoardSide + 7.2 / 2 + 0.4
+	local stallCorners = {}
+	for _, c in ipairs({ { -stallHalf, -9 }, { stallHalf, -9 }, { stallHalf, 12 }, { -stallHalf, 12 } }) do
+		table.insert(stallCorners, stallCF:PointToWorldSpace(Vector3.new(c[1], 0, c[2])))
+	end
+	local function toStall(w)
+		local q = stallCF:PointToObjectSpace(Vector3.new(w.X, stallCF.Position.Y, w.Z))
+		local dx = math.max(-stallHalf - q.X, 0, q.X - stallHalf)
+		local dz = math.max(-9 - q.Z, 0, q.Z - 12)
+		return math.sqrt(dx * dx + dz * dz)
+	end
+	local function fromStall(part)
+		local best = math.huge
+		local h = part.Size * 0.5
+		for _, c in ipairs(stallCorners) do
+			local q = part.CFrame:PointToObjectSpace(Vector3.new(c.X, part.Position.Y, c.Z))
+			local w = part.CFrame:PointToWorldSpace(Vector3.new(math.clamp(q.X, -h.X, h.X), math.clamp(q.Y, -h.Y, h.Y),
+				math.clamp(q.Z, -h.Z, h.Z)))
+			best = math.min(best, Vector2.new(w.X - c.X, w.Z - c.Z).Magnitude)
+		end
+		return best
+	end
 	local inWalk = {}
 	local clearance = {}
+	local stallLeast, stallAt = math.huge, ""
 	for id = 1, n do
 		local m = { walk = math.huge, rim = math.huge, disco = math.huge }
 		for _, mill in ipairs(holders[id]:GetChildren()) do
@@ -547,8 +575,10 @@ local ok, err = pcall(function()
 			end
 			for _, part in ipairs(partsOf(mill)) do
 				if part.Transparency < 1 or part.CanCollide then
+					local low = false
 					for _, w in ipairs(cornersOf(part)) do
 						if w.Y - MAP.GroundY < LOW then
+							low = true
 							local flat = Vector3.new(w.X, 0, w.Z)
 							for _, c in ipairs(walks) do
 								local a, b = Vector3.new(c.From.X, 0, c.From.Z), Vector3.new(c.To.X, 0, c.To.Z)
@@ -558,6 +588,16 @@ local ok, err = pcall(function()
 							end
 							m.rim = math.min(m.rim, flat.Magnitude - rim)
 							m.disco = math.min(m.disco, (flat - Vector3.new(disco.At.X, 0, disco.At.Z)).Magnitude - disco.Radius)
+							local d = toStall(w)
+							if d < stallLeast then
+								stallLeast, stallAt = d, string.format("plot %d's %s %s", id, mill.Name, part.Name)
+							end
+						end
+					end
+					if low then
+						local d = fromStall(part)
+						if d < stallLeast then
+							stallLeast, stallAt = d, string.format("plot %d's %s %s", id, mill.Name, part.Name)
 						end
 					end
 				end
@@ -573,6 +613,8 @@ local ok, err = pcall(function()
 		say(string.format("  (plot %d, every tier and its sign: %.2f from the nearest walk's edge, %.2f outside the rim, "
 			.. "%.2f outside the Disco Mill's circle)", id, m.walk, m.rim, m.disco))
 	end
+	check(stallLeast >= 7, string.format("and every tier of every mill, its sign too, stands %.1f studs clear of "
+		.. "Marigold's stall and its customers' ground at the closest (%s)", stallLeast, stallAt))
 
 	--==========================================================================
 	-- THE GATE LINE AND THE ROAD'S EMPTY ARC
@@ -672,7 +714,8 @@ local ok, err = pcall(function()
 			local sign = mill:FindFirstChild("SpecSign")
 			local prompt = sign and sign:FindFirstChildWhichIsA("ProximityPrompt", true)
 			if prompt then
-				table.insert(signPrompts, { id = id, at = prompt.Parent.Position, reach = prompt.MaxActivationDistance })
+				table.insert(signPrompts, { id = id, at = prompt.Parent.Position, reach = prompt.MaxActivationDistance,
+					tier = tonumber(string.match(mill.Name, "_T(%d+)$")) })
 			end
 		end
 	end
@@ -704,12 +747,62 @@ local ok, err = pcall(function()
 	for _, s in ipairs(signPrompts) do
 		hubNear = math.min(hubNear, Vector3.new(s.at.X, 0, s.at.Z).Magnitude - rim)
 	end
+	-- Marigold's stall stands off the deck, beside the road's approach, since
+	-- 2026-10-10 (Map.Stall): its three prompts are measured on their own --
+	-- the boards' over their feet, Marigold's anywhere in her wander (6.5
+	-- either side of her spot, 2.2 to and fro: FairyService), in the stall's
+	-- own frame.
+	local S = MAP.Stall
+	local stallFrame = GameConfig.hubStallCFrame()
+	local function inWander(at)
+		local q = stallFrame:PointToObjectSpace(Vector3.new(at.X, stallFrame.Position.Y, at.Z))
+		local dx = math.max(-6.5 - q.X, 0, q.X - 6.5)
+		local dz = math.max(-5.5 - 2.2 - q.Z, 0, q.Z - (-5.5 + 2.2))
+		return math.sqrt(dx * dx + dz * dz)
+	end
+	local function from(point)
+		return function(at)
+			return (Vector3.new(at.X, 0, at.Z) - Vector3.new(point.X, 0, point.Z)).Magnitude
+		end
+	end
+	local stallPrompts = {
+		{ "SELL ALL", from(GameConfig.hubStallPoint(-S.BoardSide, S.BoardFront - 2)), GameConfig.SellOne.PromptDistance },
+		{ "SELL ONE", from(GameConfig.hubStallPoint(S.BoardSide, S.BoardFront - 2)), GameConfig.SellOne.PromptDistance },
+		{ "Marigold", inWander, GameConfig.Weapon.PromptDistance },
+	}
+	local stallNear, stallAt = math.huge, ""
+	local tall = {}
+	for _, s in ipairs(signPrompts) do
+		for _, p in ipairs(stallPrompts) do
+			local spare = p[2](s.at) - REACH - p[3]
+			if s.id == 6 and s.tier and s.tier >= 12 then
+				tall[p[1]] = math.min(tall[p[1]] or math.huge, spare)
+			elseif spare < stallNear then
+				stallNear, stallAt = spare, string.format("plot %d's T%s sign and %s", s.id, tostring(s.tier), p[1])
+			end
+		end
+	end
+	-- PLOT 6'S TALL-TIER SIGN AND THE STALL (2026-10-10, measured and pinned):
+	-- its sign for tiers 12-14 stands SIGN_PAST past the gate line, behind the
+	-- stall's back corner, and shares a sliver of ground there with SELL ALL
+	-- and with Marigold's wander -- at the one spot that keeps every other rule
+	-- (GameConfig.Map.Stall). Equal to within TOLERANCE, so it can neither grow
+	-- nor quietly change; SELL ONE stays clear of it.
+	local TALL_SHARE = { ["SELL ALL"] = -2.450, Marigold = -2.207 }
+	check(tall["SELL ALL"] ~= nil and math.abs(tall["SELL ALL"] - TALL_SHARE["SELL ALL"]) <= TOLERANCE
+			and tall.Marigold ~= nil and math.abs(tall.Marigold - TALL_SHARE.Marigold) <= TOLERANCE
+			and (tall["SELL ONE"] or -1) > 1,
+		string.format("plot 6's tiers 12-14 sign shares with the stall exactly the sliver measured on 2026-10-10 -- "
+			.. "%.2f with SELL ALL, %.2f with Marigold's wander -- and SELL ONE %.1f clear", tall["SELL ALL"] or -99,
+			tall.Marigold or -99, tall["SELL ONE"] or -99))
 	check(#signPrompts == n * TIERS and closest > REACH * 2, string.format("every mill sign's prompt is %.1f from "
 		.. "another plot's at the closest (%s), more than twice its %d reach", closest, closestAt, REACH))
 	check(boardNear > REACH, string.format("and %.1f clear of the nearest plot board's reach (%s) -- more than its own %d",
 		boardNear, boardAt, REACH))
-	check(hubNear > REACH, string.format("and %.1f outside the deck's rim, where every hub prompt stands -- more than "
-		.. "its %d reach", hubNear, REACH))
+	check(hubNear > REACH, string.format("and %.1f outside the deck's rim, where every hub prompt but the stall's "
+		.. "stands -- more than its %d reach", hubNear, REACH))
+	check(stallNear > 0, string.format("and every other sign %.1f to spare from the stall's three by the road's approach "
+		.. "(%s): further than the two reaches added", stallNear, stallAt))
 
 	destroyAll(holders)
 	boards:Destroy()

@@ -327,7 +327,7 @@ local function body()
 	-- Where the stall's numbers come from: MapService builds it, so its source
 	-- is pinned and the awning's top and front edge worked out from it.
 	local mapSrc = sourceOf(Server, "MapService") or ""
-	check(has(mapSrc, "local stallCF = CFrame.new(0, Y, 15) * CFrame.Angles(0, math.pi, 0)")
+	check(has(mapSrc, "local stallCF = GameConfig.hubStallCFrame()")
 			and has(mapSrc, "local counter = build({ name = MAP.SellStandName, size = Vector3.new(20, 3.6, 6),")
 			and has(mapSrc, "cframe = stallCF * CFrame.new(0, 2.4, 0), color = WOOD,")
 			and has(mapSrc, 'build({ name = "Awning", size = Vector3.new(3.4, 0.6, 12),')
@@ -356,33 +356,121 @@ local function body()
 	check(foot >= herTop + 1 and foot >= promptTop + 0.3,
 		"over Marigold's head and over her Open Shop prompt, even on a phone",
 		string.format("foot %.2f; her head %.2f, the prompt to %.2f", foot, herTop, promptTop))
-	-- THE WHEEL STANDS STRAIGHT BEHIND THE STALL, so from the square and the
-	-- road -- all of it on that line -- words over the roof sat right on top of
-	-- "SPIN THE WHEEL!" (Play, 2026-10-08). Its words, measured in that Play:
-	-- middle (0, 24.3, 36.4), 2.8 studs tall. Every eye on the line from the
-	-- road to ten studs short of the counter, 6 to 16 studs up, must see these
-	-- words wholly under those.
-	check(has(wheel, "at(0, archTop + 3.4, -1.6)") and WheelData.Place.Position == Vector3.new(0, 0.9, 38),
-		"(the wheel's words still stand 3.4 over its arch, 1.6 behind its middle, at (0, 0.9, 38))")
-	local spinY, spinZ, spinHalf = 24.3, 36.4, 1.4
-	local shopY, shopZ = GameConfig.Map.GroundY + 2.4 + M.Above, 15 - M.Front
+	-- THE WHEEL STOOD STRAIGHT BEHIND THE STALL until 2026-10-10, so from the
+	-- square and the road -- all of it on that line -- words over the roof sat
+	-- right on top of "SPIN THE WHEEL!" (Play, 2026-10-08). The stall stands
+	-- beside the road's approach now (Map.Stall), off that line, and the rule
+	-- stays. Both are billboards, square to every eye: each covers atan(half /
+	-- distance) either side of the line to its middle, across and up, and two
+	-- overlap on screen when both spans do. The wheel's words, measured in that
+	-- Play: middle (0, 24.3, 36.4).
+	check(has(wheel, "at(0, archTop + 3.4, -1.6)") and has(wheel, "board.Size = UDim2.fromScale(15, 2.8)")
+			and WheelData.Place.Position == Vector3.new(0, 0.9, 38),
+		"(the wheel's words still stand 3.4 over its arch, 1.6 behind its middle, at (0, 0.9, 38), 15 by 2.8)")
+	local shopAt = GameConfig.hubStallCFrame():PointToWorldSpace(Vector3.new(0, 2.4 + M.Above, M.Front))
+	local shopY = GameConfig.Map.GroundY + 2.4 + M.Above
 	local shopHalf = (M.Height + M.SubHeight) / 2
-	local overlaps, firstOverlap = 0, nil
-	for z = -170, -10, 2 do
-		for y = 6, 16, 1 do
-			local function elev(h, at)
-				return math.deg(math.atan2(h - y, at - z))
-			end
-			if elev(shopY + shopHalf, shopZ) > elev(spinY - spinHalf, spinZ)
-				and elev(shopY - shopHalf, shopZ) < elev(spinY + spinHalf, spinZ) then
-				overlaps += 1
-				firstOverlap = firstOverlap or string.format("eye at z %d, %d up", z, y)
+	-- How much of b's box a's covers on screen, 0 to 1. A billboard past its
+	-- draw distance is not drawn at all: every one here stops at
+	-- FloatingSign.Distance, the wheel's at its SignDistance, the same.
+	local function overlap(eye, a, b)
+		local da, db = (a.at - eye).Magnitude, (b.at - eye).Magnitude
+		if da > FloatingSign.Distance or db > FloatingSign.Distance then
+			return 0
+		end
+		local function view(s, d)
+			local flat = Vector2.new(s.at.X - eye.X, s.at.Z - eye.Z)
+			return math.atan2(flat.X, flat.Y), math.atan2(s.at.Y - eye.Y, flat.Magnitude),
+				math.atan2(s.halfW, d), math.atan2(s.halfH, d)
+		end
+		local azA, elA, wA, hA = view(a, da)
+		local azB, elB, wB, hB = view(b, db)
+		local across = (azA - azB + math.pi) % (2 * math.pi) - math.pi
+		local up = elA - elB
+		local ox = math.max(0, math.min(across + wA, wB) - math.max(across - wA, -wB))
+		local oy = math.max(0, math.min(up + hA, hB) - math.max(up - hA, -hB))
+		return ox * oy / (4 * wB * hB)
+	end
+	local function nearer(eye, a, b)
+		return (a.at - eye).Magnitude < (b.at - eye).Magnitude
+	end
+	local shopSign = { at = shopAt, halfW = M.Width / 2, halfH = shopHalf }
+	local spinSign = { name = "SPIN THE WHEEL!", at = Vector3.new(0, 24.3, 36.4), halfW = 15 / 2, halfH = 2.8 / 2 }
+	-- The other words in the square, from their own configs (the chest's
+	-- behind its pivot, the pedestal's over its bowl, 3.1 up).
+	local chestCF = CFrame.new(GameConfig.BonusChest.Position)
+		* CFrame.Angles(0, math.rad(GameConfig.BonusChest.FacingDegrees), 0)
+	local R = GameConfig.Rebirth.FloatingWords
+	local signs = {
+		spinSign,
+		{ name = "FREE CHEST", at = chestCF:PointToWorldSpace(Vector3.new(0, C.Above, C.Behind)), halfW = C.Width / 2,
+			halfH = (C.Height + C.SubHeight) / 2 },
+		{ name = "SACRIFICE A POD!", at = GameConfig.Sacrifice.Position + Vector3.new(0, 3.1 + P.Above, 0),
+			halfW = P.Width / 2, halfH = (P.Height + P.SubHeight + P.NoteHeight) / 2 },
+		{ name = "REBIRTH", at = GameConfig.Rebirth.Position + Vector3.new(0, R.Above, 0), halfW = R.Width / 2,
+			halfH = (R.Height + R.SubHeight) / 2 },
+	}
+	-- Eyes 6 to 16 studs up, two studs apart: on the deck, and on the road's
+	-- approach, its running line and either side (24 wide), from the mouth to
+	-- the deck's rim -- the way everybody arrives.
+	local deckEyes, roadEyes = {}, {}
+	for x = -46, 46, 2 do
+		for z = -170, 46, 2 do
+			local onDeck = Vector2.new(x, z).Magnitude <= GameConfig.Map.HubRadius
+			local onRoad = not onDeck and math.abs(x) <= 12 and z <= -GameConfig.Map.HubRadius + 2
+			for y = 6, 16, 2 do
+				if onDeck then
+					table.insert(deckEyes, Vector3.new(x, y, z))
+				elseif onRoad then
+					table.insert(roadEyes, Vector3.new(x, y, z))
+				end
 			end
 		end
 	end
-	check(overlaps == 0, "below SPIN THE WHEEL! for every eye from the road to the counter: never over it",
-		firstOverlap or "")
-	local shopXZ = Vector2.new(0, 15 - M.Front)
+	local spinCovered, firstSpin = 0, nil
+	for _, list in ipairs({ deckEyes, roadEyes }) do
+		for _, eye in ipairs(list) do
+			if overlap(eye, shopSign, spinSign) > 0 or overlap(eye, spinSign, shopSign) > 0 then
+				spinCovered += 1
+				firstSpin = firstSpin or string.format("from (%d, %d, %d)", eye.X, eye.Y, eye.Z)
+			end
+		end
+	end
+	check(spinCovered == 0 and #deckEyes > 9000 and #roadEyes > 3000,
+		"SPIN THE WHEEL! and these never cover each other, from any eye on the deck or the road's approach",
+		firstSpin or string.format("%d + %d eyes", #deckEyes, #roadEyes))
+	local roadHidden, firstRoad = 0, nil
+	for _, eye in ipairs(roadEyes) do
+		for _, o in ipairs(signs) do
+			if nearer(eye, o, shopSign) and overlap(eye, o, shopSign) > 0 then
+				roadHidden += 1
+				firstRoad = firstRoad or string.format("%s from (%d, %d, %d)", o.name, eye.X, eye.Y, eye.Z)
+			end
+		end
+	end
+	check(roadHidden == 0, "walking in up the road, no nearer sign's words stand in front of BAT SHOP!", firstRoad)
+	-- MEASURED, NOT RULED (2026-10-10): from the deck SACRIFICE A POD!, nearer
+	-- and bigger, stands in front of it from many spots -- the pedestal lies
+	-- between the plaza and the stall's one feasible spot. Reported every run,
+	-- for the owner's call (KB/HANDOFF.md).
+	local plazaEyes, plazaHid, deckHid = 0, 0, 0
+	for _, eye in ipairs(deckEyes) do
+		local worst = 0
+		for _, o in ipairs(signs) do
+			if nearer(eye, o, shopSign) then
+				worst = math.max(worst, overlap(eye, o, shopSign))
+			end
+		end
+		local inPlaza = Vector2.new(eye.X, eye.Z).Magnitude <= GameConfig.Map.EventHub.Radius
+		plazaEyes += if inPlaza then 1 else 0
+		if worst > 0.25 then
+			deckHid += 1
+			plazaHid += if inPlaza then 1 else 0
+		end
+	end
+	say(string.format("  NOTE  a nearer sign's words cover over a quarter of BAT SHOP! from %.0f%% of the deck's eyes, "
+		.. "%.0f%% of the plaza's", 100 * deckHid / math.max(1, #deckEyes), 100 * plazaHid / math.max(1, plazaEyes)))
+	local shopXZ = Vector2.new(shopAt.X, shopAt.Z)
 	local worst, worstName = math.huge, ""
 	for _, o in ipairs({
 		{ "the wheel", WheelData.Place.Position, 15 / 2 },
@@ -404,11 +492,12 @@ local function body()
 	hubModel = hubModel and hubModel:FindFirstChild("Hub")
 	local stand = hubModel and hubModel:FindFirstChild(GameConfig.Map.SellStandName)
 	if stand and stand:IsA("BasePart") then
-		-- The words' box in the world, and every part of the real stall's box:
-		-- none may reach into it.
+		-- The words' box, and every part of the real stall's box, in the
+		-- counter's own frame (the stall stands turned): none may reach into it.
 		local at = stand.Position + Vector3.yAxis * M.Above - stand.CFrame.LookVector * M.Front
-		local lo = at - Vector3.new(M.Width / 2, shopHalf, 0.1)
-		local hi = at + Vector3.new(M.Width / 2, shopHalf, 0.1)
+		local mid = stand.CFrame:PointToObjectSpace(at)
+		local lo = mid - Vector3.new(M.Width / 2, shopHalf, 0.1)
+		local hi = mid + Vector3.new(M.Width / 2, shopHalf, 0.1)
 		local inside = {}
 		for _, d in ipairs(hubModel:GetDescendants()) do
 			if d:IsA("BasePart") then
@@ -417,7 +506,8 @@ local function body()
 				for _, sx in ipairs({ -0.5, 0.5 }) do
 					for _, sy in ipairs({ -0.5, 0.5 }) do
 						for _, sz in ipairs({ -0.5, 0.5 }) do
-							local p = cf:PointToWorldSpace(Vector3.new(sx * size.X, sy * size.Y, sz * size.Z))
+							local p = stand.CFrame:PointToObjectSpace(
+								cf:PointToWorldSpace(Vector3.new(sx * size.X, sy * size.Y, sz * size.Z)))
 							pLo, pHi = pLo:Min(p), pHi:Max(p)
 						end
 					end
@@ -427,7 +517,7 @@ local function body()
 				end
 			end
 		end
-		check(#inside == 0 and math.abs(at.Z - shopZ) < 0.01 and math.abs(at.Y - shopY) < 0.01,
+		check(#inside == 0 and (at - shopAt).Magnitude < 0.01 and math.abs(at.Y - shopY) < 0.01,
 			"(the Edit preview's real stall agrees: no part of it inside the words' box)",
 			string.format("words at %s; in the way: %s", tostring(at), table.concat(inside, ", ")))
 	end

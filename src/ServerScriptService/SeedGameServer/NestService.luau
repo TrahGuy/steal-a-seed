@@ -2226,7 +2226,9 @@ local function throwPlayer(nest: Nest, player: Player, onLaunched: (() -> ())?)
 	local dprof: any = prof or GameConfig.confiscateProfile(nest.biome.Id)
 	local roadOut = Vector3.new(0, 0, 1)
 	if dprof then
-		local hub = MapService.GetOverflowCFrame().Position - nest.origin
+		-- The hub's centre (Map.EventHub). It was the overflow spawn's marker,
+		-- which stood there until it moved off the event plaza (2026-10-10).
+		local hub = GameConfig.Map.EventHub.Centre - nest.origin
 		local flatHub = Vector3.new(hub.X, 0, hub.Z)
 		if flatHub.Magnitude > 1 then
 			roadOut = flatHub.Unit

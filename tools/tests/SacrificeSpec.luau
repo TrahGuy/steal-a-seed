@@ -573,23 +573,35 @@ local ok, err = pcall(function()
 			"its whole foot is on the deck, clear of the rim", at.Magnitude + halfDiagonal)
 		local WheelData = require(Shared.WheelData)
 		local wheelAt = WheelData.Place.Position
+		-- The stall's three since it moved beside the road's approach (2026-10-10,
+		-- Map.Stall): each board's prompt over its foot, 2 studs behind BoardFront
+		-- on the floor's frame; Marigold's on her, anywhere in her 13 x 4.4 wander
+		-- about her spot on the riser, so her reach grows by its half-diagonal.
+		local S = GameConfig.Map.Stall
 		local others = {
 			{ "the Bonus Chest", GameConfig.BonusChest.Position, GameConfig.BonusChest.PromptDistance },
 			{ "the wheel", Vector3.new(wheelAt.X, 0, wheelAt.Z + 6.3), WheelData.Place.PromptDistance },
-			{ "SELL ONE", Vector3.new(-15.5, 0, 20), GameConfig.SellOne.PromptDistance },
-			{ "SELL ALL", Vector3.new(15.5, 0, 20), GameConfig.SellOne.PromptDistance },
-			{ "Marigold", Vector3.new(-0.95, 0, 20.12), 11 },
+			{ "SELL ONE", GameConfig.hubStallPoint(S.BoardSide, S.BoardFront - 2), GameConfig.SellOne.PromptDistance },
+			{ "SELL ALL", GameConfig.hubStallPoint(-S.BoardSide, S.BoardFront - 2), GameConfig.SellOne.PromptDistance },
+			{ "Marigold", GameConfig.hubStallPoint(0, -5.5),
+				GameConfig.Weapon.PromptDistance + math.sqrt(6.5 ^ 2 + 2.2 ^ 2) },
 		}
 		local shared = {}
 		for _, other in ipairs(others) do
 			local apart = (Vector3.new(other[2].X, 0, other[2].Z) - at).Magnitude
 			if apart <= other[3] + CONFIG.PromptDistance then
-				table.insert(shared, string.format("%s (%.1f apart, reaches %d + %d)", other[1], apart, other[3],
+				table.insert(shared, string.format("%s (%.1f apart, reaches %.1f + %d)", other[1], apart, other[3],
 					CONFIG.PromptDistance))
 			end
 		end
 		check(#shared == 0, "no other prompt can be in range together with the pedestal's", table.concat(shared, ", "))
-		check((at - Vector3.new(0, 0, 0)).Magnitude > 12, "and it is clear of the spawn in the deck's middle")
+		-- The overflow spawn left the deck's middle on 2026-10-10 (Map.OverflowSpawn),
+		-- the middle being the event plaza now (Map.EventHub).
+		local spawnAt = GameConfig.Map.OverflowSpawn
+		local plaza = GameConfig.Map.EventHub
+		check((at - Vector3.new(spawnAt.X, 0, spawnAt.Z)).Magnitude > 12
+				and (at - Vector3.new(plaza.Centre.X, 0, plaza.Centre.Z)).Magnitude - halfDiagonal > plaza.Radius,
+			"and it is clear of the overflow spawn, and wholly outside the event plaza")
 		local prompts = 0
 		for _, d in ipairs(model:GetDescendants()) do
 			if d:IsA("ProximityPrompt") then

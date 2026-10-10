@@ -1499,10 +1499,12 @@ function MapService.Init()
 	-- Where a player goes when every plot is taken. Named and findable rather
 	-- than a hardcoded coordinate in a service, because the day the map moves a
 	-- hardcoded fallback is the one thing left behind.
+	-- Out of the event plaza since 2026-10-10 (Map.OverflowSpawn): it stood at
+	-- the deck's centre, where an event's NPC stands now.
 	local overflow = build({
 		name = MAP.OverflowSpawnName,
 		size = Vector3.new(10, 1, 10),
-		cframe = CFrame.new(0, Y + 0.5, 0),
+		cframe = CFrame.new(MAP.OverflowSpawn.X, Y + MAP.OverflowSpawn.Y, MAP.OverflowSpawn.Z),
 		color = Color3.fromRGB(255, 255, 255),
 		collide = false,
 		transparency = 1,
@@ -1548,8 +1550,38 @@ function MapService.Init()
 		rim.Color = Color3.fromRGB(150, 120, 84)
 		rim.Parent = hub
 
+		--== THE EVENT PLAZA (2026-10-10, the Event Hub: Map.EventHub) ==--
+		-- The deck's middle, open between events: a studded disc a hair over the
+		-- deck with a darker edge at Radius, and nothing standing on it. Neither
+		-- collides, is queried or is touched -- the deck carries everybody, as
+		-- before -- so an event's NPC and its dressing stand on the deck's own
+		-- floor. No machine, no monument: the owner's "restrained" floor.
+		local E = MAP.EventHub
+		local plazaTop = Y + E.FloorY + E.Floor.Rise
+		for _, disc in ipairs({
+			{ name = "EventPlazaEdge", diameter = E.Radius * 2, top = plazaTop, colour = E.Floor.EdgeColour },
+			{ name = "EventPlaza", diameter = (E.Radius - E.Floor.EdgeWidth) * 2, top = plazaTop + 0.02,
+				colour = E.Floor.Colour },
+		}) do
+			local p = build({ name = disc.name, size = Vector3.new(0.1, disc.diameter, disc.diameter),
+				cframe = CFrame.new(E.Centre.X, disc.top - 0.05, E.Centre.Z) * CFrame.Angles(0, 0, math.rad(90)),
+				color = disc.colour, collide = false, parent = hub })
+			p.Shape = Enum.PartType.Cylinder
+			-- The cylinder's flat face is its local +X, turned to face up.
+			p.TopSurface = Enum.SurfaceType.Smooth
+			p.RightSurface = Enum.SurfaceType.Studs
+			p.CanQuery = false
+			p.CanTouch = false
+			p.CastShadow = false
+		end
+
 		--== THE STALL ==--
-		local stallCF = CFrame.new(0, Y, 15) * CFrame.Angles(0, math.pi, 0)
+		-- Beside the road's approach since 2026-10-10 (Map.Stall, the Event Hub):
+		-- it stood mid-deck at (0, 15), facing the road. Everything below hangs off
+		-- this one frame -- Marigold, her wander, the SHOP words, the BAT SHOP!
+		-- sign (MarigoldSign) and SellService's two boards -- so they all moved
+		-- with it.
+		local stallCF = GameConfig.hubStallCFrame()
 
 		build({ name = "StallFloor", size = Vector3.new(24, 0.6, 14),
 			cframe = stallCF * CFrame.new(0, 0.3, -2), color = WOOD_DARK,
@@ -1940,7 +1972,7 @@ function MapService.GetOverflowCFrame(): CFrame
 	if marker and marker:IsA("BasePart") then
 		return marker.CFrame * CFrame.new(0, 5, 0)
 	end
-	return CFrame.new(0, Y + 6, 0)
+	return CFrame.new(MAP.OverflowSpawn.X, Y + MAP.OverflowSpawn.Y + 5, MAP.OverflowSpawn.Z)
 end
 
 -- Is this position inside the safe field? One definition, so the HUD, the steal

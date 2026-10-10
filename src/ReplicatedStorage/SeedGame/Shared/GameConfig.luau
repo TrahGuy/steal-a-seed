@@ -114,6 +114,90 @@ GameConfig.Map = {
 	-- is built inside it.
 	RoadGapDegrees = 62,
 
+	--==========================================================================
+	-- THE EVENT HUB (2026-10-10, the owner: the central hub becomes a permanent
+	-- Event Hub; KB/EVENT-HUB-CLAUDE-PROMPT.md)
+	--
+	-- The deck's middle is an open event plaza. Nothing permanent stands within
+	-- EventHub.Radius of its Centre: Marigold's stall and its two boards moved
+	-- out to Stall below, the overflow spawn to OverflowSpawn. A restrained
+	-- studded floor marks it (MapService) and nothing else, so between events it
+	-- is open ground. An event's NPC stands on NpcAnchor, feet on the deck's
+	-- top, looking down the road (-Z) over the open front half, ApproachWidth
+	-- wide; whatever an event builds stays inside Radius and under MaxHeight,
+	-- and each event clears only its own objects. Enchanted Mist's Mosskeeper
+	-- is the first to stand here, and the owner lets him stay between events:
+	-- the one resident (KB/ENCHANTED-MIST-HOURLY-CLAUDE-PROMPT.md). Polar
+	-- about Centre, like the mini events' Area.
+	--==========================================================================
+	EventHub = {
+		Centre = Vector3.new(0, 0, 0),
+		Radius = 20,
+		MaxHeight = 14,
+		-- The deck's top over GroundY (MapService's Deck: 0.9 thick).
+		FloorY = 0.9,
+		NpcAnchor = CFrame.new(0, 0.9, 0),
+		ApproachWidth = 12,
+		-- The floor: a studded disc a hair over the deck, and a darker edge
+		-- ring at Radius. Decoration only: the deck still carries everybody.
+		Floor = {
+			Colour = Color3.fromRGB(224, 200, 156),
+			EdgeColour = Color3.fromRGB(168, 136, 96),
+			EdgeWidth = 1.2,
+			Rise = 0.05,
+		},
+	},
+
+	--==========================================================================
+	-- MARIGOLD'S STALL, BESIDE THE ROAD'S APPROACH (2026-10-10, the Event Hub)
+	--
+	-- Out of the deck's middle onto the grass south-east of the deck, beside
+	-- the way in from the road (the owner's first choice) and off its running
+	-- line. Position is the stall's origin, its counter's centre, on GroundY
+	-- (its floor's centre is 2 studs back); FacingDegrees the
+	-- way its counter's front -- the side customers walk up to -- faces, about
+	-- +Y from +Z (180 faces -Z: where it stood, mid-deck, until now). 290 looks
+	-- west-north-west: across the running line and up into the square.
+	--
+	-- THE ONE SPOT. A search over every spot and facing round the ring
+	-- (2026-10-10), with the whole stall, Marigold's wander and both boards, 39
+	-- studs end to end, found no other place that keeps:
+	--   * the event plaza clear: 26 studs between the stall and its edge;
+	--   * every straight walk -- the hub to each plot gate, each gate to the
+	--     road's mouth -- 7 studs clear or more, the sacrifice pedestal's own
+	--     rule (0.2 to spare: plot 4's walk to the road); the running line 22
+	--     from the stall and 16 from its customers;
+	--   * every fixture in the square 10 studs clear, every plot at every
+	--     level 29, every mill at every tier 22, the Disco Mill's ground 25;
+	--     wholly off the deck, 3.8 past its rim, on the grass;
+	--   * its three prompts (Marigold 11, the boards 12) sharing ground with no
+	--     other -- each further than the two reaches added -- but one: plot 6's
+	--     mill sign for tiers 12-14, which stands past its gate line, shares a
+	--     sliver behind the stall's back corner with SELL ALL (2.45 studs) and
+	--     Marigold's wander (2.21). Pinned by MillPlacementSpec so it can
+	--     neither grow nor spread; the engine shows one prompt per key at once.
+	-- The back edge, the brief's fallback, fits nowhere. From the plaza
+	-- SACRIFICE A POD!, nearer, stands in front of BAT SHOP! from most spots
+	-- (FloatingSignSpec measures it); walking in up the road nothing does.
+	-- EventHubSpec measures the rest again.
+	--
+	-- BoardSide and BoardFront are SellService's: each board stands that far
+	-- off the stall floor's ends and that far toward its front (in the floor's
+	-- own frame), turned toward the point BoardFocus studs in front of the
+	-- stall's middle -- where the deck's centre stood from the stall before.
+	--==========================================================================
+	Stall = {
+		Position = Vector3.new(34, 0, -58),
+		FacingDegrees = 290,
+		BoardSide = 15.5,
+		BoardFront = -3.0,
+		BoardFocus = 15,
+	},
+
+	-- The plotless player's spawn (every plot taken), out of the plaza to the
+	-- deck's south side, on the walk in from the road; it was the deck's centre.
+	OverflowSpawn = Vector3.new(0, 0.5, -26),
+
 	-- THE RED LINE. A stripe painted flat on the grass at the field's far edge
 	-- with SAFE ZONE written on it. Not a dome, not a forcefield, not a
 	-- billboard -- the reference game uses a floor decal and it is readable at
@@ -137,6 +221,21 @@ GameConfig.Map = {
 	OverflowSpawnName = "OverflowSpawn",
 	SellStandName = "SellStand",
 }
+
+-- Marigold's stall's own frame (Map.Stall): its counter's centre on GroundY,
+-- local +Z its counter's front. MapService builds the stall by it; SellService's
+-- boards, the mini events' keep-clear lists and EventHubSpec read it too.
+function GameConfig.hubStallCFrame(): CFrame
+	local S = GameConfig.Map.Stall
+	return CFrame.new(S.Position) * CFrame.Angles(0, math.rad(S.FacingDegrees), 0)
+end
+
+-- A point in the stall's frame, on GroundY: `side` across it, `front` toward
+-- its customers (negative behind the counter).
+function GameConfig.hubStallPoint(side: number, front: number): Vector3
+	local p = GameConfig.hubStallCFrame():PointToWorldSpace(Vector3.new(side, 0, front))
+	return Vector3.new(p.X, GameConfig.Map.GroundY, p.Z)
+end
 
 --==============================================================================
 -- A PLOT
@@ -792,7 +891,9 @@ GameConfig.Weapon = {
 	-- The wheel stands straight behind the stall, so from the square and the
 	-- road (all of it on that line) words over the roof sat right on top of
 	-- "SPIN THE WHEEL!" (Play, 2026-10-08); down here they read below it from
-	-- anywhere on the square's south half. Above is the middle of both lines
+	-- anywhere on the square's south half. (Since 2026-10-10 the stall stands
+	-- beside the road's approach, Map.Stall, away from the wheel; the words kept
+	-- their place under the lip.) Above is the middle of both lines
 	-- over the counter's middle; Front is how far toward the customers (the
 	-- lip is 4.3 out, its underside 14.9 up). Width, Height and SubHeight are
 	-- the lines' boxes in studs: the headline's letters come out 2.17 studs
@@ -901,11 +1002,18 @@ GameConfig.Sacrifice = {
 	-- spot on the deck's north or west clears SELL ONE, Marigold, the wheel and
 	-- the chest together. Here:
 	--
-	--   * the nearest prompt is SELL ALL's, 58 studs away, and no prompt's
-	--     reach added to this one's comes within 35 studs of meeting;
+	--   * the nearest prompt was SELL ALL's, 58 studs away, and no prompt's
+	--     reach added to this one's came within 35 studs of meeting. Since the
+	--     stall moved beside the road's approach (2026-10-10, Map.Stall) its
+	--     prompts are the nearest, and still meet none of this one's: 8.4
+	--     studs to spare from Marigold's wander, 8.8 from SELL ONE's
+	--     (EventHubSpec);
 	--   * nothing but the deck stands within 40 studs;
-	--   * every straight walk between a plot's spawn pad, the stall, the
-	--     wheel, the chest and the road passes 7 studs clear or more;
+	--   * every straight walk between a plot's spawn pad, the stall (then
+	--     mid-deck), the wheel, the chest and the road passed 7 studs clear or
+	--     more. The straight line from the overflow spawn to the stall's new
+	--     spot crosses its foot: a walker steps round it (PathfindingService
+	--     in Play, 2026-10-10: 1.03 times the straight line);
 	--   * its foot is 5 studs inside the deck's edge (the deck is a disc 92
 	--     across). Y is the deck's surface.
 	--==========================================================================
@@ -5450,7 +5558,8 @@ GameConfig.MiniEvent = {
 	--==========================================================================
 	Area = {
 		Centre = Vector3.new(0, 0, 0),
-		MinRadius = 16,
+		-- Outside the event plaza (Map.EventHub, 2026-10-10): 16 until then.
+		MinRadius = GameConfig.Map.EventHub.Radius + 4,
 		MaxRadius = 41,
 		Sectors = { { From = -50, To = 32 } },
 		-- Studs past each keep-clear thing's own radius.
@@ -5458,13 +5567,21 @@ GameConfig.MiniEvent = {
 		-- The floor's walking surface lies within this of GroundY.
 		FloorTolerance = 2,
 	},
-	-- Things on the deck that are not in another config: Marigold's stall and
-	-- its two sell boards, and the overflow spawn at the hub's centre.
+	-- Things that are not in another config: Marigold's stall and its two sell
+	-- boards, the overflow spawn and the event plaza, from Map's own numbers
+	-- since 2026-10-10 (the Event Hub moved the first three); and the invite
+	-- pedestal, which no list kept a drop off until then.
 	KeepClear = {
-		{ Name = "Stall", At = Vector3.new(0, 0, 16), Radius = 15 },
-		{ Name = "SellBoardEast", At = Vector3.new(15.5, 0, 18), Radius = 4 },
-		{ Name = "SellBoardWest", At = Vector3.new(-15.5, 0, 18), Radius = 4 },
-		{ Name = "Spawn", At = Vector3.new(0, 0, 0), Radius = 9 },
+		{ Name = "Stall", At = GameConfig.hubStallPoint(0, -2), Radius = 16 },
+		{ Name = "SellAll", At = GameConfig.hubStallPoint(-GameConfig.Map.Stall.BoardSide,
+			GameConfig.Map.Stall.BoardFront - 2), Radius = 4 },
+		{ Name = "SellOne", At = GameConfig.hubStallPoint(GameConfig.Map.Stall.BoardSide,
+			GameConfig.Map.Stall.BoardFront - 2), Radius = 4 },
+		{ Name = "Spawn", At = Vector3.new(GameConfig.Map.OverflowSpawn.X, 0, GameConfig.Map.OverflowSpawn.Z),
+			Radius = 9 },
+		{ Name = "EventHub", At = GameConfig.Map.EventHub.Centre, Radius = GameConfig.Map.EventHub.Radius },
+		{ Name = "InvitePedestal", At = Vector3.new(GameConfig.InviteRewards.Position.X, 0,
+			GameConfig.InviteRewards.Position.Z), Radius = 8 },
 	},
 	--==========================================================================
 	-- ALL OVER THE MAP (2026-10-04, the owner's ask). Each drop first picks a
@@ -5772,8 +5889,15 @@ GameConfig.MiniEvent = {
 			},
 		},
 		KeepClear = {
-			{ Name = "Spawn", At = Vector3.new(0, 0, 0), Radius = 14 },
-			{ Name = "Stall", At = Vector3.new(0, 0, 17), Radius = 21 },
+			-- The overflow spawn, the event plaza and Marigold's stall with its
+			-- boards, from Map's own numbers (the Event Hub, 2026-10-10); the
+			-- invite pedestal, kept clear since the same day.
+			{ Name = "Spawn", At = Vector3.new(GameConfig.Map.OverflowSpawn.X, 0, GameConfig.Map.OverflowSpawn.Z),
+				Radius = 14 },
+			{ Name = "EventHub", At = GameConfig.Map.EventHub.Centre, Radius = GameConfig.Map.EventHub.Radius },
+			{ Name = "Stall", At = GameConfig.hubStallPoint(0, -2), Radius = 22 },
+			{ Name = "InvitePedestal", At = Vector3.new(GameConfig.InviteRewards.Position.X, 0,
+				GameConfig.InviteRewards.Position.Z), Radius = 8 },
 			{ Name = "Wheel", At = Vector3.new(0, 0, 38), Radius = 9 },
 			{ Name = "BonusChest", At = Vector3.new(-40, 0, -6), Radius = 8 },
 			{ Name = "CommunityChest", At = Vector3.new(-31, 0, -22), Radius = 8 },
@@ -7780,6 +7904,8 @@ GameConfig.BonusChest = {
 	-- about 15 studs clear of both the Plot 2 -> stall and the Plot 1 -> stall
 	-- walks, and over 20 from the stall's own prompts (Marigold, Sell All,
 	-- Sell One), so no two prompts share the ground. Y is the deck's surface.
+	-- (The stall left the deck's middle on 2026-10-10, Map.Stall: its prompts
+	-- are over 80 studs from here now.)
 	Position = Vector3.new(-40, 0.5, -6),
 	FacingDegrees = -90,
 	PromptDistance = 10,
