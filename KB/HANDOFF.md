@@ -1,5 +1,23 @@
 # Steal a Seed — Session Handoff
 
+## THE SHOP ROW WEST OF THE ROAD'S MOUTH AND A SOLID FRONT FENCE — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; THE TOUCHED SPECS GREEN; FULL SUITE NOT RUN, LEFT FOR TOMORROW; ONE GUARDED PLAY ON SeedTest_shoprow_20261011)
+
+The owner, via the peer (screenshot 39.png): "transfer them here, shop, rebirth, everything, add a fence on the edges of the map too". The answers: the row "West of road mouth" (the east strip loses ground to plot 6 at levels 3-7) and the fence "Front edge only, solid". Then "lift BAT SHOP! over the roof", "lean tests to save token" and "proceed tomorrow" (stop for today).
+- **Moved** onto the ground in `GameConfig.Map.ShopRow` (x -258..-118, z -167..-113: west of the road's mouth, inside the safe zone):
+  - Front row at z -157, facing north: Marigold's stall (-140), the wheel (-178.5), invite rewards (-207), the rebirth shrine (-230), the sacrifice pedestal (-252).
+  - Back row at z -127: the bonus chest (-193), the community chest (-240).
+  - RebirthService builds at the new `Rebirth.Position`/`FacingDegrees`. CommunityService's step pad sits on `Community.Position.Y` (it was the deck's top, 0.9). `Dancers.KeepClear` follows the configs.
+  - MapDecor leaves out any prop on the row or against the fence (10 gone: Oak x3, Daisies, CoralBells, Shrub x3, Fern x2). ObbyUI now says "Spin it at the wheel by Marigold's shop."
+- **BAT SHOP!** floats over the awning (`Weapon.FloatingWords` Above 16.9, Front -1.5): its foot is 2 studs over the roof's high front edge.
+- **Front fence** (MapService, `SeedMap/Props/FrontFence`): from x ±80 (the corridor walls) to ±270 (the field's sides), along z -169.2. Plot-fence boards, a flush filler in the gap (no climbing) and an invisible blocker up to `Map.WallHeight`. The safe zone is unchanged.
+- **Tests** (all after the last code edit):
+  - EventHubSpec 47/0, rewritten for the row and the fence. Row inside ShopRow, facing north, 7.0 studs off every plot at every level (needs 6), walkways 9.6 (needs 7). Nine prompts with 2.0 to spare, the weather TV 5+ off. BAT SHOP! and SPIN in reach and sight from 16 field eyes (from the mouth 35/35). No ticket or dancer zone on the row; the fence runs, is solid and is climb-proof by geometry.
+  - FloatingSignSpec 49/0 (the over-the-roof rule), SacrificeSpec 289/0, InviteRewardsSpec 172/0 (read from 60 studs before the plate), MillPlacementSpec 22/0 (the plot-6 sliver is gone: every tier's sign clears the row).
+  - Unchanged and green after the move: RebirthSpec 78/0, WheelSpec 163/0, CommunitySpec 25/0, MiniEventSpec 90/0, DiscoDancersSpec 56/0, MapDecorSpec 93/0, BatHintSpec 19/0.
+  - Guarded Play: every fixture built at its spot, no errors. Pushing south while jumping stops at z -167.9 against the fence (face -168.4) on both sides; top y 11.9. Store off after; probe 345 scripts, 0 differ, 0 ZZ. Captures: output/shop-row-2026-10-11/01-05.
+- **Not run (tomorrow)**: the full suite (started once, stopped in its first group on the owner's word); WheelArtSpec and WeatherTeaserSpec since the move; mutants for the new row and fence checks.
+- **Unverified**: phones (the emulator was not switched); a live server.
+
 ## ENCHANTED MIST, STAGE 2: THE DEWBERRIES — 2026-10-11 (CLAUDE)  (IN PROGRESS: CHECKPOINT COMMIT ON wip; NOT PUBLISHED; OFF; SYNTAX-CHECKED ONLY, NO SPEC OR PLAY RUN YET)
 
 Paused on the owner's word ("proceed tomorrow"). Everything stays off: EnchantedMistConfig.Enabled = false, and EnchantedMistService.Built.Berries stays false until this stage is finished.

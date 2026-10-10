@@ -534,7 +534,7 @@ local ok, err = pcall(function()
 		check(math.abs((foot.Position.Y - foot.Size.Y / 2) - CONFIG.Position.Y) < 1e-3
 				and math.abs(foot.Position.X - CONFIG.Position.X) < 1e-3
 				and math.abs(foot.Position.Z - CONFIG.Position.Z) < 1e-3,
-			"its foot stands on the deck at GameConfig's position", tostring(foot.Position))
+			"its foot stands on the ground at GameConfig's position", tostring(foot.Position))
 		local lettered = true
 		local why = nil
 		for _, name in ipairs({ "Sign", "SignBack" }) do
@@ -559,18 +559,20 @@ local ok, err = pcall(function()
 			.. "player's own line empty", why)
 		local front, back = model.Sign.CFrame.LookVector, model.SignBack.CFrame.LookVector
 		check(front:Dot(back) < -0.999, "the two signs face opposite ways", front:Dot(back))
-		local toCentre = (Vector3.new(0, model.Sign.Position.Y, 0) - model.Sign.Position).Unit
-		check(math.deg(math.acos(math.clamp(front:Dot(toCentre), -1, 1))) < 12,
-			"the front one looks at the deck's centre, so the back one looks at the road",
-			math.deg(math.acos(math.clamp(front:Dot(toCentre), -1, 1))))
+		-- In the shop row since 2026-10-10 (GameConfig.Map.Stall's comment): north.
+		local north = Vector3.new(0, 0, 1)
+		check(math.deg(math.acos(math.clamp(front:Dot(north), -1, 1))) < 1,
+			"the front one looks north into the field, so the back one looks at the red line",
+			math.deg(math.acos(math.clamp(front:Dot(north), -1, 1))))
 
-		-- WHERE IT STANDS. The deck is a disc of GameConfig.Map.HubRadius about the
-		-- origin; the prompts are where a Play survey found them on 2026-09-28
-		-- (the chest's and the wheel's from their own config).
+		-- WHERE IT STANDS: in the shop row (GameConfig.Map.ShopRow, 2026-10-10);
+		-- the other prompts from their own configs.
 		local at = Vector3.new(CONFIG.Position.X, 0, CONFIG.Position.Z)
 		local halfDiagonal = math.sqrt(2) * foot.Size.X / 2
-		check(at.Magnitude + halfDiagonal <= GameConfig.Map.HubRadius - 1,
-			"its whole foot is on the deck, clear of the rim", at.Magnitude + halfDiagonal)
+		local row = GameConfig.Map.ShopRow
+		check(at.X - halfDiagonal >= row.From.X and at.X + halfDiagonal <= row.To.X and at.Z - halfDiagonal >= row.From.Y
+				and at.Z + halfDiagonal <= row.To.Y,
+			"its whole foot stands in the shop row", tostring(at))
 		local WheelData = require(Shared.WheelData)
 		local wheelAt = WheelData.Place.Position
 		-- The stall's three since it moved beside the road's approach (2026-10-10,
@@ -622,8 +624,9 @@ local ok, err = pcall(function()
 			- Vector3.new(CONFIG.Position.X, 0, CONFIG.Position.Z)).Magnitude
 		check(apart > CONFIG.PromptDistance + GameConfig.BonusChest.PromptDistance,
 			"the Bonus Chest's prompt and the pedestal's are never both in range", string.format("%.1f studs", apart))
-		NEAR = CFrame.new(top.Position + Vector3.new(0, 0, -5))
-		FAR = CFrame.new(top.Position + Vector3.new(0, 0, -(CONFIG.ReachStuds + 4)))
+		-- In front of it, into the field (behind it is the red line).
+		NEAR = CFrame.new(top.Position + Vector3.new(0, 0, 5))
+		FAR = CFrame.new(top.Position + Vector3.new(0, 0, CONFIG.ReachStuds + 4))
 	end)
 	assert(top, "no pedestal was built; nothing below can run")
 

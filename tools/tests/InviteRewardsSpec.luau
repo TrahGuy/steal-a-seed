@@ -508,13 +508,14 @@ section("3. The sign, the panel's cards and the badge", function()
 end)
 
 --==============================================================================
--- 3b. THE SIGN FROM THE NEAREST SPAWN PAD (the owner, 2026-10-06: a bigger
--- plate and a far view). Measured, not judged: the nearest spawn pad in the
--- map, its follow camera (12.5 studs behind the player toward the sign, 7 up),
--- a 705 x 338 phone at the camera's 70-degree field of view, and how far off
--- the plate's face that camera sees it.
+-- 3b. THE SIGN FROM THE FIELD BEFORE IT (the owner, 2026-10-06: a bigger
+-- plate and a far view, read from the nearest spawn pad -- since the shop row,
+-- 2026-10-10, from 60 studs before it). Measured, not judged: that spot's
+-- follow camera (12.5 studs behind the player toward the sign, 7 up), a 705 x
+-- 338 phone at the camera's 70-degree field of view, and how far off the
+-- plate's face that camera sees it.
 --==============================================================================
-section("3b. The sign, read from the nearest spawn pad", function()
+section("3b. The sign, read from the field before it", function()
 	local S = CONFIG.Sign
 	local W = CONFIG.Words
 	local TextService = game:GetService("TextService")
@@ -543,36 +544,25 @@ section("3b. The sign, read from the nearest spawn pad", function()
 	local em = font / S.PixelsPerStud
 	check(table.concat(W.SignFar, " ") == W.Title and font >= 99.5 and em >= 4.9,
 		string.format("the far view is the title on two lines at the 100-px top: %.1f-stud letters", em))
-	-- The nearest pad and its camera.
+	-- Where it is read from: since the shop row (2026-10-10, GameConfig.Map
+	-- .Stall's comment) the spawn pads are all too far, so 60 studs out in
+	-- front of it on the field, where the plots' players walk up to the row.
 	local origin = CFrame.new(CONFIG.Position) * CFrame.Angles(0, math.rad(CONFIG.FacingDegrees), 0)
 	local centre = (origin * CFrame.new(0, S.Bottom + S.Height / 2, 0)).Position
-	local map = Workspace:FindFirstChild(GameConfig.Map.FolderName)
-	local pad, best = nil, math.huge
-	for _, d in ipairs(if map then map:GetDescendants() else {}) do
-		if d:IsA("BasePart") and d.Name == GameConfig.Plot.SpawnPadName then
-			local flat = Vector3.new(centre.X - d.Position.X, 0, centre.Z - d.Position.Z).Magnitude
-			if flat < best then
-				pad, best = d, flat
-			end
-		end
-	end
-	check(pad ~= nil, "the map's spawn pads (the Edit preview) are here to measure from")
-	if not pad then
-		return
-	end
-	local toward = Vector3.new(centre.X - pad.Position.X, 0, centre.Z - pad.Position.Z).Unit
-	local camera = pad.Position - toward * 12.5 + Vector3.new(0, 7, 0)
+	local standAt = origin.Position + origin.LookVector * 60 + Vector3.new(0, 3, 0)
+	local toward = Vector3.new(centre.X - standAt.X, 0, centre.Z - standAt.Z).Unit
+	local camera = standAt - toward * 12.5 + Vector3.new(0, 7, 0)
 	local view = camera - centre
 	local dist = view.Magnitude
 	local perStud = 338 / (2 * dist * math.tan(math.rad(70) / 2))
 	local across = math.abs(Vector3.new(view.X, 0, view.Z).Unit:Dot(origin.LookVector))
 	local tall, wide = em * perStud, em * letter * perStud * across
 	say(string.format("  %s: its camera %.0f studs off, the plate seen %.0f deg from the side; the far words %.1f px "
-		.. "tall, %.1f px a letter (the old plate's title: 2.9 px, 0.8 px a letter)", pad:GetFullName(), dist,
+		.. "tall, %.1f px a letter (the old plate's title: 2.9 px, 0.8 px a letter)", "60 studs before it", dist,
 		math.deg(math.acos(across)), tall, wide))
-	check(dist > S.FarFrom, "from the nearest pad the far view is the one showing")
+	check(dist > S.FarFrom, "from 60 studs before it the far view is the one showing")
 	check(tall >= 12 and wide >= 3.5,
-		string.format("read from the nearest pad on a 705 x 338 phone: %.1f px tall, %.1f px a letter", tall, wide))
+		string.format("read from 60 studs before it on a 705 x 338 phone: %.1f px tall, %.1f px a letter", tall, wide))
 	-- Near, the whole sign, every line Height / 7.4 what it was.
 	local grow = S.Height / 7.4
 	local nearTitle = 54 * (S.Height * S.PixelsPerStud / 370) / S.PixelsPerStud

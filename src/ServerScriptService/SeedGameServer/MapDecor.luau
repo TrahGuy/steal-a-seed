@@ -1435,9 +1435,45 @@ function MapDecor.dressField(parent: Instance)
 		end
 		return false
 	end
+	--== NOR ON THE SHOP ROW, NOR AGAINST THE FRONT FENCE (2026-10-10) ==--
+	--
+	-- The shops' ground (GameConfig.Map.ShopRow) and the front fence along the
+	-- red line beside the road's mouth (MapService), CLEAR_OF_ROW and more off
+	-- either, by the same rule: built as rolled, then taken out, so nothing
+	-- else moves. Tested by each part's box, so a long piece over the ground
+	-- counts as well as one with a corner on it.
+	local CLEAR_OF_ROW = 3
+	local row = MAP.ShopRow
+	local fenceFrom = MAP.CorridorWidth * 0.5 + MAP.WallThickness
+	-- The fence's field-side face: its boards are 1.6 thick on the field's edge.
+	local fenceFace = -MAP.FieldFront + 1.6
+	local function inTheWay(prop: Instance): boolean
+		for _, part in ipairs(prop:GetDescendants()) do
+			if part:IsA("BasePart") then
+				local h = part.Size * 0.5
+				local lo, hi = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
+				for _, sx in ipairs({ -1, 1 }) do
+					for _, sy in ipairs({ -1, 1 }) do
+						for _, sz in ipairs({ -1, 1 }) do
+							local w = part.CFrame:PointToWorldSpace(Vector3.new(h.X * sx, h.Y * sy, h.Z * sz))
+							lo, hi = lo:Min(w), hi:Max(w)
+						end
+					end
+				end
+				if hi.X >= row.From.X - CLEAR_OF_ROW and lo.X <= row.To.X + CLEAR_OF_ROW
+					and hi.Z >= row.From.Y - CLEAR_OF_ROW and lo.Z <= row.To.Y + CLEAR_OF_ROW then
+					return true
+				end
+				if lo.Z <= fenceFace + CLEAR_OF_ROW and (hi.X >= fenceFrom - CLEAR_OF_ROW or lo.X <= -fenceFrom + CLEAR_OF_ROW) then
+					return true
+				end
+			end
+		end
+		return false
+	end
 	local removed: { string } = {}
 	local function keepClear(prop: Instance?)
-		if prop and onAPlot(prop) then
+		if prop and (onAPlot(prop) or inTheWay(prop)) then
 			table.insert(removed, prop.Name)
 			prop:Destroy()
 		end
@@ -1503,7 +1539,8 @@ function MapDecor.dressField(parent: Instance)
 		return oak(folder, cf, s2 * 1.9, rng)
 	end)
 	if #removed > 0 then
-		print(string.format("[Seed/MapDecor] field: %d prop(s) left out where a plot will stand: %s.", #removed,
+		print(string.format("[Seed/MapDecor] field: %d prop(s) left out where a plot will stand, on the shop row or "
+			.. "against the front fence: %s.", #removed,
 			table.concat(removed, ", ")))
 	end
 end

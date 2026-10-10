@@ -247,17 +247,19 @@ local function build(): Model
 	lock.CanCollide = false
 	model.PrimaryPart = plinth
 
-	-- The circle, on the deck's surface (y 0.9) in front of the chest.
-	local deckTop = 0.9
+	-- The circle, in front of the chest on the ground the plinth stands on
+	-- (COMMUNITY.Position.Y: the grass since the chest left the deck,
+	-- 2026-10-10; the deck's 0.9 was written here until then).
+	local groundTop = COMMUNITY.Position.Y
 	local at = origin * CFrame.new(0, 0, -COMMUNITY.PadAhead)
 	local flat = CFrame.Angles(0, 0, math.rad(90))
 	local pad = part(model, "StepPad", Vector3.new(0.14, COMMUNITY.PadRadius * 2, COMMUNITY.PadRadius * 2),
-		CFrame.new(at.Position.X, deckTop + 0.07, at.Position.Z) * flat, COMMUNITY.PadColour, Enum.Material.Neon)
+		CFrame.new(at.Position.X, groundTop + 0.07, at.Position.Z) * flat, COMMUNITY.PadColour, Enum.Material.Neon)
 	pad.Shape = Enum.PartType.Cylinder
 	pad.CanCollide = false
 	pad.CanQuery = false
 	local rim = part(model, "StepRim", Vector3.new(0.1, COMMUNITY.PadRadius * 2 + 0.8, COMMUNITY.PadRadius * 2 + 0.8),
-		CFrame.new(at.Position.X, deckTop + 0.04, at.Position.Z) * flat, Color3.fromRGB(255, 255, 255),
+		CFrame.new(at.Position.X, groundTop + 0.04, at.Position.Z) * flat, Color3.fromRGB(255, 255, 255),
 		Enum.Material.Neon)
 	rim.Shape = Enum.PartType.Cylinder
 	rim.Transparency = 0.45

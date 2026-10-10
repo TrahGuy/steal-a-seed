@@ -105,8 +105,10 @@ GameConfig.Map = {
 	-- did: in a row the end plots were 145 studs from the centre and the middle
 	-- ones were 29.
 	--
-	-- HubRadius is the shop circle in the middle. PlotRingInner is where every
-	-- plot's GATE sits -- identical for all of them, at every tier.
+	-- HubRadius is the deck in the middle (its centre the event plaza, the shops
+	-- in their row by the road's mouth since 2026-10-10: EventHub, Stall
+	-- below). PlotRingInner is where every plot's GATE sits -- identical for
+	-- all of them, at every tier.
 	--==========================================================================
 	HubRadius = 46,
 	PlotRingInner = 100,
@@ -149,50 +151,46 @@ GameConfig.Map = {
 	},
 
 	--==========================================================================
-	-- MARIGOLD'S STALL, BESIDE THE ROAD'S APPROACH (2026-10-10, the Event Hub)
+	-- THE SHOP ROW, WEST OF THE ROAD'S MOUTH (2026-10-10, the owner: "transfer
+	-- them here, shop, rebirth, everything")
 	--
-	-- Out of the deck's middle onto the grass south-east of the deck, beside
-	-- the way in from the road (the owner's first choice) and off its running
-	-- line. Position is the stall's origin, its counter's centre, on GroundY
-	-- (its floor's centre is 2 studs back); FacingDegrees the
-	-- way its counter's front -- the side customers walk up to -- faces, about
-	-- +Y from +Z (180 faces -Z: where it stood, mid-deck, until now). 290 looks
-	-- west-north-west: across the running line and up into the square.
+	-- Every fixture of the old square -- Marigold's stall with its two sell
+	-- boards, the wheel, both chests, both pedestals, the shrine -- stands on
+	-- the grass inside the red line, west of the road's mouth, all facing
+	-- north into the field. The owner pointed at the strip EAST of the mouth;
+	-- plot 6 grows over most of it from Level 3 (its wing reaches the red
+	-- line), so the owner chose this mirror strip, which plot 1's wing grows
+	-- away from. Two rows:
+	--   * along the red line, east to west: the stall (nearest the mouth and
+	--     the plots), the wheel, the invite pedestal, the shrine, the
+	--     sacrifice pedestal -- as tight as the prompts allow, each further
+	--     from the next than their two reaches added;
+	--   * behind them, 30 studs into the field, the two chests, low, each in a
+	--     gap of the first row, so no sign stands in front of another from the
+	--     field.
+	-- Each fixture's own config holds its spot (Stall here, WheelData.Place,
+	-- BonusChest, Community, Sacrifice, InviteRewards, Rebirth); ShopRow is the
+	-- ground they and their customers stand on, kept clear of field decor
+	-- (MapDecor) and 6 studs or more off every plot at every level
+	-- (EventHubSpec measures it all).
 	--
-	-- THE ONE SPOT. A search over every spot and facing round the ring
-	-- (2026-10-10), with the whole stall, Marigold's wander and both boards, 39
-	-- studs end to end, found no other place that keeps:
-	--   * the event plaza clear: 26 studs between the stall and its edge;
-	--   * every straight walk -- the hub to each plot gate, each gate to the
-	--     road's mouth -- 7 studs clear or more, the sacrifice pedestal's own
-	--     rule (0.2 to spare: plot 4's walk to the road); the running line 22
-	--     from the stall and 16 from its customers;
-	--   * every fixture in the square 10 studs clear, every plot at every
-	--     level 29, every mill at every tier 22, the Disco Mill's ground 25;
-	--     wholly off the deck, 3.8 past its rim, on the grass;
-	--   * its three prompts (Marigold 11, the boards 12) sharing ground with no
-	--     other -- each further than the two reaches added -- but one: plot 6's
-	--     mill sign for tiers 12-14, which stands past its gate line, shares a
-	--     sliver behind the stall's back corner with SELL ALL (2.45 studs) and
-	--     Marigold's wander (2.21). Pinned by MillPlacementSpec so it can
-	--     neither grow nor spread; the engine shows one prompt per key at once.
-	-- The back edge, the brief's fallback, fits nowhere. From the plaza
-	-- SACRIFICE A POD!, nearer, stands in front of BAT SHOP! from most spots
-	-- (FloatingSignSpec measures it); walking in up the road nothing does.
-	-- EventHubSpec measures the rest again.
-	--
-	-- BoardSide and BoardFront are SellService's: each board stands that far
-	-- off the stall floor's ends and that far toward its front (in the floor's
-	-- own frame), turned toward the point BoardFocus studs in front of the
-	-- stall's middle -- where the deck's centre stood from the stall before.
+	-- Position is the stall's origin, its counter's centre, on GroundY (its
+	-- floor's centre is 2 studs back); FacingDegrees the way its counter's
+	-- front -- the side customers walk up to -- faces, about +Y from +Z: 0
+	-- looks north, into the field. BoardSide and BoardFront are SellService's:
+	-- each board stands that far off the stall floor's ends and that far toward
+	-- its front (in the floor's own frame), turned toward the point BoardFocus
+	-- studs in front of the stall's middle.
 	--==========================================================================
 	Stall = {
-		Position = Vector3.new(34, 0, -58),
-		FacingDegrees = 290,
+		Position = Vector3.new(-140, 0, -157),
+		FacingDegrees = 0,
 		BoardSide = 15.5,
 		BoardFront = -3.0,
 		BoardFocus = 15,
 	},
+	-- The shop row's ground (X, Z), every fixture and its customers inside.
+	ShopRow = { From = Vector2.new(-258, -167), To = Vector2.new(-118, -113) },
 
 	-- The plotless player's spawn (every plot taken), out of the plaza to the
 	-- deck's south side, on the walk in from the road; it was the deck's centre.
@@ -886,32 +884,30 @@ GameConfig.Weapon = {
 	-- (MarigoldSign).
 	--
 	-- On the STALL, not on Marigold: she wanders 6.5 studs either side of her
-	-- spot, and the words never move. They hang UNDER the awning's front lip,
-	-- over her head and her prompt, like a shop's board -- not over the roof.
-	-- The wheel stands straight behind the stall, so from the square and the
-	-- road (all of it on that line) words over the roof sat right on top of
-	-- "SPIN THE WHEEL!" (Play, 2026-10-08); down here they read below it from
-	-- anywhere on the square's south half. (Since 2026-10-10 the stall stands
-	-- beside the road's approach, Map.Stall, away from the wheel; the words kept
-	-- their place under the lip.) Above is the middle of both lines
-	-- over the counter's middle; Front is how far toward the customers (the
-	-- lip is 4.3 out, its underside 14.9 up). Width, Height and SubHeight are
-	-- the lines' boxes in studs: the headline's letters come out 2.17 studs
-	-- tall (TextService), a touch over the wheel's 2.01 for the square's one
-	-- shop, and the second line's 1.3.
+	-- spot, and the words never move. OVER THE ROOF since 2026-10-10 (the
+	-- owner: "lift BAT SHOP! over the roof"), like SPIN THE WHEEL! over its
+	-- arch: their foot 2 studs over the awning's high front edge (15.4 up),
+	-- over the roof's middle. From 2026-10-08 they hung under the awning's
+	-- front lip, because the wheel stood straight behind the stall and words
+	-- over the roof sat on top of SPIN THE WHEEL! from the square and the road;
+	-- the stall has left that line (Map.Stall, the shop row). Above is the
+	-- middle of both lines over the counter's middle; Front is how far toward
+	-- the customers (back over the roof's middle: -1.5). Width, Height and
+	-- SubHeight are the lines' boxes in studs: the headline's letters come out
+	-- 2.17 studs tall (TextService), a touch over the wheel's 2.01, and the
+	-- second line's 1.3.
 	--==========================================================================
 	FloatingWords = {
 		Text = "BAT SHOP!",
 		SubText = "BATS & TRAPS",
 		Colour = Color3.fromRGB(255, 105, 40), -- red orange #FF6928
 		-- 11 since 2026-10-10 (Michael on v1047: bigger signs): the headline is
-		-- width-bound, so it grows a tenth -- the most it can where it hangs,
-		-- between the prompt's panel under it and SPIN THE WHEEL! over it.
+		-- width-bound, so it grew a tenth.
 		Width = 11,
 		Height = 2.4,
 		SubHeight = 1.3,
-		Above = 9.1,
-		Front = 4.5,
+		Above = 16.9,
+		Front = -1.5,
 	},
 }
 
@@ -991,34 +987,16 @@ GameConfig.Sacrifice = {
 	Enabled = true,
 	FolderName = "SeedSacrificePedestal",
 	--==========================================================================
-	-- WHERE IT STANDS (surveyed in Play, 2026-09-28)
+	-- WHERE IT STANDS (the shop row, 2026-10-10: Map.Stall's comment)
 	--
-	-- On the hub deck's south-south-east rim, between the stall and the road.
-	-- 160 turns its front from -Z to face the deck's centre; its back, which
-	-- carries the same sign, faces the road a raider walks home along.
-	--
-	-- The draft stood it at (-29, 29), 16 studs from the SELL ONE board, whose
-	-- prompt reaches 12 -- so the two prompts could both be in range, and no
-	-- spot on the deck's north or west clears SELL ONE, Marigold, the wheel and
-	-- the chest together. Here:
-	--
-	--   * the nearest prompt was SELL ALL's, 58 studs away, and no prompt's
-	--     reach added to this one's came within 35 studs of meeting. Since the
-	--     stall moved beside the road's approach (2026-10-10, Map.Stall) its
-	--     prompts are the nearest, and still meet none of this one's: 8.4
-	--     studs to spare from Marigold's wander, 8.8 from SELL ONE's
-	--     (EventHubSpec);
-	--   * nothing but the deck stands within 40 studs;
-	--   * every straight walk between a plot's spawn pad, the stall (then
-	--     mid-deck), the wheel, the chest and the road passed 7 studs clear or
-	--     more. The straight line from the overflow spawn to the stall's new
-	--     spot crosses its foot: a walker steps round it (PathfindingService
-	--     in Play, 2026-10-10: 1.03 times the straight line);
-	--   * its foot is 5 studs inside the deck's edge (the deck is a disc 92
-	--     across). Y is the deck's surface.
+	-- At the west end of the row along the red line, facing north into the
+	-- field: 180 turns its front from -Z to +Z; its back, which carries the
+	-- same sign, faces the red line. Its prompt is further from every other
+	-- than their two reaches added (EventHubSpec). It stood on the hub deck's
+	-- south rim from 2026-09-28. Y is the grass.
 	--==========================================================================
-	Position = Vector3.new(14, 0.9, -38),
-	FacingDegrees = 160,
+	Position = Vector3.new(-252, 0, -157),
+	FacingDegrees = 180,
 	PromptDistance = 10,
 	-- Held a moment, like the chest's.
 	PromptHoldSeconds = 0.35,
@@ -1163,19 +1141,18 @@ GameConfig.InviteRewards = {
 	-- The most a server holds for one player before READY.
 	HeldMax = 20,
 	--==========================================================================
-	-- WHERE THE PEDESTAL STANDS (2026-10-06; scored offline against every
-	-- prompt, plot path, the obby's path and the straight walks from all six
-	-- spawn pads to the stall, both sell boards, the wheel and the road mouth;
-	-- re-surveyed in Play -- KB/HANDOFF.md has the numbers)
+	-- WHERE THE PEDESTAL STANDS (the shop row, 2026-10-10: Map.Stall's comment)
 	--
-	-- On the deck's south-south-west rim, by the road mouth: the Sacrifice
-	-- pedestal's mirror across the road. The brief's first idea, the east rim
-	-- at (40, -6), stands ON the obby's path (2 studs off its line) and on the
-	-- straight walk from the south-east pad to the wheel, and inside the mini
-	-- events' drop sector. Its front (-Z) is turned to face the deck's centre.
+	-- In the row along the red line, between the wheel and the shrine, facing
+	-- north into the field: 180 turns its front (-Z) to +Z, the plate's face
+	-- with it. From 2026-10-06 it stood on the deck's south-south-west rim by
+	-- the road mouth, scored against every spawn pad's walk; the plate was
+	-- made big to read from the nearest spawn pad, which the row is too far
+	-- from now: it reads from the stall's counter instead (InviteRewardsSpec).
+	-- Y is the grass.
 	--==========================================================================
-	Position = Vector3.new(-11, 0.9, -35),
-	FacingDegrees = -162.5,
+	Position = Vector3.new(-207, 0, -157),
+	FacingDegrees = 180,
 	FolderName = "SeedInvitePedestal",
 	PromptDistance = 10,
 	PromptAction = "INVITE A FRIEND",
@@ -2013,21 +1990,20 @@ GameConfig.HatchBonus = {
 -- "Spin Ticket" with its count, built from WheelEarned and never a balance of
 -- its own (WheelService, SPIN TICKETS). Each funds one normal spin at the wheel.
 --
--- PLACED from a survey of the deck's walks (2026-10-01): every straight walk
--- from a plot's spawn pad to the stall, the sell boards, the wheel, both chests,
--- the pedestal, the road and the obby passes at least 5 studs from the chest
--- and 7.6 from the circle, and the circle stands clear of every prompt's reach.
--- Closer to the Bonus Chest, a walk crosses the circle and a passer-by would be
--- shown the prompt. It faces south, toward the rim, with the circle in front.
+-- PLACED in the shop row (2026-10-10, Map.Stall's comment): the back row, in
+-- the gap between the shrine and the sacrifice pedestal, facing north with the
+-- circle in front, clear of every prompt's reach (EventHubSpec). It stood on
+-- the deck's west side from 2026-10-01, placed off every spawn pad's walk.
 --==============================================================================
 GameConfig.Community = {
 	-- CrazyCozy Games, the community that owns Podnappers (the owner, 2026-10-01).
 	GroupId = 744756221,
 	Spins = 5,
 	FolderName = "SeedCommunityChest",
-	Position = Vector3.new(-30.7, 0.5, -22.3),
-	-- The chest's front is its -Z (as the Bonus Chest's): 0 faces it south.
-	FacingDegrees = 0,
+	-- Y is the grass the plinth stands on; the circle lies on it too.
+	Position = Vector3.new(-240, 0, -127),
+	-- The chest's front is its -Z (as the Bonus Chest's): 180 faces it north.
+	FacingDegrees = 180,
 	-- The circle: this far in front of the chest, this wide, lit.
 	PadAhead = 6.5,
 	PadRadius = 3,
@@ -5898,12 +5874,18 @@ GameConfig.MiniEvent = {
 			{ Name = "Stall", At = GameConfig.hubStallPoint(0, -2), Radius = 22 },
 			{ Name = "InvitePedestal", At = Vector3.new(GameConfig.InviteRewards.Position.X, 0,
 				GameConfig.InviteRewards.Position.Z), Radius = 8 },
-			{ Name = "Wheel", At = Vector3.new(0, 0, 38), Radius = 9 },
-			{ Name = "BonusChest", At = Vector3.new(-40, 0, -6), Radius = 8 },
-			{ Name = "CommunityChest", At = Vector3.new(-31, 0, -22), Radius = 8 },
-			{ Name = "Pedestal", At = Vector3.new(14, 0, -38), Radius = 8 },
-			-- The rebirth shrine (GameConfig.Rebirth.Position), just off the rim.
-			{ Name = "RebirthShrine", At = Vector3.new(45, 0, 36), Radius = 8 },
+			-- The shop row's fixtures (2026-10-10, Map.Stall's comment), out of
+			-- every dancer's zone now but kept here all the same: the wheel's,
+			-- the bonus chest's and the shrine's spots are written out (their
+			-- configs come later in this file; EventHubSpec and RebirthSpec hold
+			-- them equal).
+			{ Name = "Wheel", At = Vector3.new(-178.5, 0, -157), Radius = 9 },
+			{ Name = "BonusChest", At = Vector3.new(-193, 0, -127), Radius = 8 },
+			{ Name = "CommunityChest", At = Vector3.new(GameConfig.Community.Position.X, 0, GameConfig.Community.Position.Z),
+				Radius = 8 },
+			{ Name = "Pedestal", At = Vector3.new(GameConfig.Sacrifice.Position.X, 0, GameConfig.Sacrifice.Position.Z),
+				Radius = 8 },
+			{ Name = "RebirthShrine", At = Vector3.new(-230, 0, -157), Radius = 8 },
 			-- The Disco Mill (DiscoMill above), while it stands and while not.
 			{ Name = "DiscoMill", At = Vector3.new(-40, 0, -95), Radius = 35 },
 			-- The deck's rim step: nobody stands half on it.
@@ -6238,14 +6220,16 @@ GameConfig.Rebirth = {
 	-- Published on the player for every client: the panel, the displays' income.
 	Attributes = { Rebirths = "Rebirths" },
 	--==========================================================================
-	-- THE SHRINE, just off the deck's north-east rim: the one ground left where
-	-- its prompt shares nothing -- every other prompt is more than its reach
-	-- plus this one's away (hub deck prompt map, measured in Play 2026-10-08) --
-	-- and no walk crosses it (the mini event's corridors to every plot, the
-	-- obby and the road). It faces the square.
+	-- THE SHRINE, in the shop row along the red line between the invite and
+	-- sacrifice pedestals (2026-10-10, Map.Stall's comment), facing north into
+	-- the field: FacingDegrees turns its front (the CFrame's -Z, its look)
+	-- about +Y as every fixture's, 180 to +Z. Its prompt shares ground with no
+	-- other (EventHubSpec). It stood just off the deck's north-east rim from
+	-- 2026-10-08, facing the square.
 	--==========================================================================
 	FolderName = "SeedRebirthShrine",
-	Position = Vector3.new(45, 0, 36),
+	Position = Vector3.new(-230, 0, -157),
+	FacingDegrees = 180,
 	PromptDistance = 10,
 	PromptHoldSeconds = 0.5,
 	-- The panel shuts when the player walks further than this from the shrine.
@@ -7899,15 +7883,13 @@ GameConfig.BonusChest = {
 		EndsAt = "ChestBoostEndsAt",
 	},
 	FolderName = "SeedBonusChest",
-	-- On the hub deck's west side, facing its centre (-90 turns the chest's
-	-- front from -Z to +X). Chosen from a top-down survey in Play, 2026-09-27:
-	-- about 15 studs clear of both the Plot 2 -> stall and the Plot 1 -> stall
-	-- walks, and over 20 from the stall's own prompts (Marigold, Sell All,
-	-- Sell One), so no two prompts share the ground. Y is the deck's surface.
-	-- (The stall left the deck's middle on 2026-10-10, Map.Stall: its prompts
-	-- are over 80 studs from here now.)
-	Position = Vector3.new(-40, 0.5, -6),
-	FacingDegrees = -90,
+	-- In the shop row (2026-10-10, Map.Stall's comment): the back row, in the
+	-- gap between the wheel and the invite pedestal, facing north (180 turns
+	-- the chest's front from -Z to +Z), its prompt sharing ground with no
+	-- other (EventHubSpec). It stood on the hub deck's west side from
+	-- 2026-09-27. Y is the grass the plinth stands on.
+	Position = Vector3.new(-193, 0, -127),
+	FacingDegrees = 180,
 	PromptDistance = 10,
 	PromptHoldSeconds = 0.35,
 	--==========================================================================

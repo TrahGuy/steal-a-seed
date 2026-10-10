@@ -1495,6 +1495,49 @@ function MapService.Init()
 	-- it stands is unchanged; SafeZoneMarking says why the plate is turned.
 	SafeZoneMarking.build(props, CFrame.new(0, Y + 0.15, -MAP.FieldFront + 16))
 
+	--== THE FRONT FENCE (2026-10-10, the owner: "add a fence on the edges of the
+	-- map too" -- the front edge, solid) ==--
+	-- Along the red line either side of the road's mouth, from the corridor's
+	-- walls out to the field's corners, where the field just ended in a drop.
+	-- The plot fences' look -- two boards, the slot between them shut flush with
+	-- an invisible filler so a Humanoid cannot climb it (dressPlot says why),
+	-- posts about every 11 studs -- and over it an invisible wall up to the
+	-- corridor's walls' height, so nobody jumps it either. It stands on the
+	-- field's own edge, so the safe zone (IsInSafeZone) is what it was.
+	do
+		local fence = Instance.new("Model")
+		fence.Name = "FrontFence"
+		fence.Parent = props
+		local z = -MAP.FieldFront + FENCE_THICK * 0.5
+		local inner = MAP.CorridorWidth * 0.5 + MAP.WallThickness
+		local outer = MAP.FieldWidth * 0.5
+		local gapLow = BOARDS[1][1] + BOARDS[1][2] * 0.5
+		local gapHigh = BOARDS[2][1] - BOARDS[2][2] * 0.5
+		for _, side in ipairs({ -1, 1 }) do
+			local from, to = side * inner, side * outer
+			local length = outer - inner
+			local mid = (from + to) * 0.5
+			for _, board in ipairs(BOARDS) do
+				build({ name = "Rail", size = Vector3.new(length, board[2], FENCE_THICK),
+					cframe = CFrame.new(mid, Y + board[1], z), color = FENCE, material = Enum.Material.Wood,
+					parent = fence })
+			end
+			build({ name = "RailGap", size = Vector3.new(length, gapHigh - gapLow, FENCE_THICK),
+				cframe = CFrame.new(mid, Y + (gapLow + gapHigh) * 0.5, z), color = FENCE, transparency = 1,
+				studs = false, parent = fence })
+			local blocker = build({ name = "Blocker", size = Vector3.new(length, MAP.WallHeight - FENCE_TOP, FENCE_THICK),
+				cframe = CFrame.new(mid, Y + (FENCE_TOP + MAP.WallHeight) * 0.5, z), color = FENCE, transparency = 1,
+				studs = false, parent = fence })
+			blocker.CastShadow = false
+			local posts = math.max(2, math.floor(length / 11) + 1)
+			for i = 1, posts do
+				build({ name = "Post", size = Vector3.new(1.6, FENCE_TOP + 0.8, 1.6),
+					cframe = CFrame.new(from + (to - from) * ((i - 1) / (posts - 1)), Y + (FENCE_TOP + 0.8) * 0.5, z),
+					color = FENCE, material = Enum.Material.Wood, parent = fence })
+			end
+		end
+	end
+
 	--== OVERFLOW SPAWN ==--
 	-- Where a player goes when every plot is taken. Named and findable rather
 	-- than a hardcoded coordinate in a service, because the day the map moves a
@@ -1515,11 +1558,13 @@ function MapService.Init()
 
 	--== THE HUB ==--
 	--
-	-- The market square: a low deck, one dressed stall, and the fairy who runs
-	-- it. NO FENCE. It had a ring of posts and rails around it, and a fence
-	-- around a shop says "keep out" -- the opposite of what a shop is for. The
-	-- deck marks the square instead, which is a floor you walk onto rather than
-	-- a barrier you walk through.
+	-- The square: a low deck, the event plaza at its middle. Marigold's stall
+	-- and the fairy who runs it are built in this model still (MarigoldSign
+	-- finds the counter here), but stand in the shop row by the road's mouth
+	-- since 2026-10-10 (Map.Stall). NO FENCE. It had a ring of posts and rails
+	-- around it, and a fence around a shop says "keep out" -- the opposite of
+	-- what a shop is for. The deck marks the square instead, which is a floor
+	-- you walk onto rather than a barrier you walk through.
 	do
 		local hub = Instance.new("Model")
 		hub.Name = "Hub"
@@ -1576,11 +1621,11 @@ function MapService.Init()
 		end
 
 		--== THE STALL ==--
-		-- Beside the road's approach since 2026-10-10 (Map.Stall, the Event Hub):
-		-- it stood mid-deck at (0, 15), facing the road. Everything below hangs off
-		-- this one frame -- Marigold, her wander, the SHOP words, the BAT SHOP!
-		-- sign (MarigoldSign) and SellService's two boards -- so they all moved
-		-- with it.
+		-- In the shop row by the road's mouth since 2026-10-10 (Map.Stall); it
+		-- stood mid-deck at (0, 15), facing the road, until then. Everything
+		-- below hangs off this one frame -- Marigold, her wander, the SHOP words,
+		-- the BAT SHOP! sign (MarigoldSign) and SellService's two boards -- so
+		-- they all move with it.
 		local stallCF = GameConfig.hubStallCFrame()
 
 		build({ name = "StallFloor", size = Vector3.new(24, 0.6, 14),

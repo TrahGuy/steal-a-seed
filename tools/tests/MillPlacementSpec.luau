@@ -536,10 +536,9 @@ local ok, err = pcall(function()
 		* CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
 	zone("DiscoMillCircle", Vector3.new(LOW, disco.Radius * 2, disco.Radius * 2),
 		CFrame.new(disco.At.X, MAP.GroundY + LOW * 0.5, disco.At.Z) * CFrame.Angles(0, 0, math.rad(90)), Enum.PartType.Cylinder)
-	-- Marigold's stall beside the road's approach (Map.Stall, 2026-10-10), plot
-	-- 6's mill its nearest: the stall's ground and its customers' in its own
-	-- frame (EventHubSpec's rectangle: out past both boards, from the riser's
-	-- back to 7 studs in front of the floor).
+	-- Marigold's stall in the shop row (Map.Stall, 2026-10-10): the stall's
+	-- ground and its customers' in its own frame (EventHubSpec's rectangle: out
+	-- past both boards, from the riser's back to 7 studs in front of the floor).
 	local stallCF = GameConfig.hubStallCFrame()
 	local stallHalf = MAP.Stall.BoardSide + 7.2 / 2 + 0.4
 	local stallCorners = {}
@@ -747,8 +746,8 @@ local ok, err = pcall(function()
 	for _, s in ipairs(signPrompts) do
 		hubNear = math.min(hubNear, Vector3.new(s.at.X, 0, s.at.Z).Magnitude - rim)
 	end
-	-- Marigold's stall stands off the deck, beside the road's approach, since
-	-- 2026-10-10 (Map.Stall): its three prompts are measured on their own --
+	-- Marigold's stall stands off the deck, in the shop row by the road's mouth,
+	-- since 2026-10-10 (Map.Stall): its three prompts are measured on their own --
 	-- the boards' over their feet, Marigold's anywhere in her wander (6.5
 	-- either side of her spot, 2.2 to and fro: FairyService), in the stall's
 	-- own frame.
@@ -771,37 +770,21 @@ local ok, err = pcall(function()
 		{ "Marigold", inWander, GameConfig.Weapon.PromptDistance },
 	}
 	local stallNear, stallAt = math.huge, ""
-	local tall = {}
 	for _, s in ipairs(signPrompts) do
 		for _, p in ipairs(stallPrompts) do
 			local spare = p[2](s.at) - REACH - p[3]
-			if s.id == 6 and s.tier and s.tier >= 12 then
-				tall[p[1]] = math.min(tall[p[1]] or math.huge, spare)
-			elseif spare < stallNear then
+			if spare < stallNear then
 				stallNear, stallAt = spare, string.format("plot %d's T%s sign and %s", s.id, tostring(s.tier), p[1])
 			end
 		end
 	end
-	-- PLOT 6'S TALL-TIER SIGN AND THE STALL (2026-10-10, measured and pinned):
-	-- its sign for tiers 12-14 stands SIGN_PAST past the gate line, behind the
-	-- stall's back corner, and shares a sliver of ground there with SELL ALL
-	-- and with Marigold's wander -- at the one spot that keeps every other rule
-	-- (GameConfig.Map.Stall). Equal to within TOLERANCE, so it can neither grow
-	-- nor quietly change; SELL ONE stays clear of it.
-	local TALL_SHARE = { ["SELL ALL"] = -2.450, Marigold = -2.207 }
-	check(tall["SELL ALL"] ~= nil and math.abs(tall["SELL ALL"] - TALL_SHARE["SELL ALL"]) <= TOLERANCE
-			and tall.Marigold ~= nil and math.abs(tall.Marigold - TALL_SHARE.Marigold) <= TOLERANCE
-			and (tall["SELL ONE"] or -1) > 1,
-		string.format("plot 6's tiers 12-14 sign shares with the stall exactly the sliver measured on 2026-10-10 -- "
-			.. "%.2f with SELL ALL, %.2f with Marigold's wander -- and SELL ONE %.1f clear", tall["SELL ALL"] or -99,
-			tall.Marigold or -99, tall["SELL ONE"] or -99))
 	check(#signPrompts == n * TIERS and closest > REACH * 2, string.format("every mill sign's prompt is %.1f from "
 		.. "another plot's at the closest (%s), more than twice its %d reach", closest, closestAt, REACH))
 	check(boardNear > REACH, string.format("and %.1f clear of the nearest plot board's reach (%s) -- more than its own %d",
 		boardNear, boardAt, REACH))
 	check(hubNear > REACH, string.format("and %.1f outside the deck's rim, where every hub prompt but the stall's "
 		.. "stands -- more than its %d reach", hubNear, REACH))
-	check(stallNear > 0, string.format("and every other sign %.1f to spare from the stall's three by the road's approach "
+	check(stallNear > 1, string.format("and every tier's sign %.1f to spare from the stall's three in the shop row "
 		.. "(%s): further than the two reaches added", stallNear, stallAt))
 
 	destroyAll(holders)

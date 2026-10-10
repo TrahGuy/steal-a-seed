@@ -441,24 +441,17 @@ WheelData.Actions = {
 WheelData.FolderName = "SeedWheel"
 
 --==============================================================================
--- WHERE THE WHEEL STANDS (surveyed from the map's own numbers, 2026-09-27)
+-- WHERE THE WHEEL STANDS (the shop row, 2026-10-10: GameConfig.Map.Stall's
+-- comment)
 --
--- On the hub deck's centre line, 14 studs behind Marigold's stall, facing north
--- (+Z) toward plots 3 and 4: clear of the overflow spawn at the deck's centre
--- (38 studs), of Marigold's wander box and her prompt's reach (it ends at
--- z 33.7; this prompt's starts at 35), of both sell boards (24), of every
--- plot-to-stall and plot-to-road walk (about 21), and 8 inside the deck's edge.
--- The sign stands on the arch above the wheel, high enough to show over the
--- stall's awning from the spawn.
---
--- (2026-10-10, the Event Hub: the stall, its boards and the overflow spawn left
--- the deck's middle -- GameConfig.Map.Stall, Map.OverflowSpawn -- so the wheel
--- now stands alone at the back edge, behind the event plaza, its prompt's
--- reach ending 15 studs past the plaza's edge. The numbers above are as
--- surveyed then.)
+-- In the row along the red line west of the road's mouth, next to Marigold's
+-- stall, facing north (+Z) into the field: its prompt, 6.3 in front, shares
+-- ground with no other (EventHubSpec). The sign stands on the arch above the
+-- wheel. It stood on the hub deck's centre line, behind the stall, from
+-- 2026-09-27. Y is the grass.
 --==============================================================================
 WheelData.Place = {
-	Position = Vector3.new(0, 0.9, 38),
+	Position = Vector3.new(-178.5, 0, -157),
 	FacingDegrees = 0,
 	PromptDistance = 9,
 	-- The sign's own draw distance: readable across the hub, gone beyond it.

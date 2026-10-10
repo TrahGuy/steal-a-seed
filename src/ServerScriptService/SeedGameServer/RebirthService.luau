@@ -441,9 +441,11 @@ local function buildShrine(): BasePart?
 	model.Name = "RebirthShrine"
 	model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	model.Parent = folder
-	-- Facing the square: -Z, its front, looks at the hub's middle.
+	-- -Z, its front, turned by FacingDegrees about +Y like every fixture's:
+	-- north into the field, from the shop row (2026-10-10). It looked at the
+	-- hub's middle until then.
 	local at = CFG.Position
-	local origin = CFrame.lookAt(at, Vector3.new(0, at.Y, 0))
+	local origin = CFrame.new(at) * CFrame.Angles(0, math.rad(CFG.FacingDegrees), 0)
 	local stone = Color3.fromRGB(96, 92, 104)
 	local rose = CFG.Look.Band
 	local deep = CFG.Look.Edge

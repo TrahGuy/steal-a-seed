@@ -336,17 +336,19 @@ local function body()
 			and has(mapSrc, "HubFairy.build(stallCF * CFrame.new(0, 2, -5.5) * CFrame.Angles(0, math.pi, 0), hub)"),
 		"(the stall is still: the counter's middle 2.4 up, the awning 13.4 up and tilted 17 degrees, Marigold on the "
 			.. "riser 2 up)")
-	-- Over the counter's middle. The awning's HIGH edge is its front one, the
-	-- customers' side (its slats tilt up toward them): the words hang under it.
+	-- OVER THE ROOF since 2026-10-10 (the owner: "lift BAT SHOP! over the
+	-- roof"), like SPIN THE WHEEL! over its arch. The awning's HIGH edge is its
+	-- front one, the customers' side (its slats tilt up toward them): the
+	-- words' foot clears it by 1.5 and more, over the roof's span.
 	local tilt = math.rad(17)
-	local lipUnder = 13.4 + 6 * math.sin(tilt) - 0.3 * math.cos(tilt) - 2.4
-	local awningFront = -1.5 + 6 * math.cos(tilt) + 0.3 * math.sin(tilt)
+	local roofTop = 13.4 + 6 * math.sin(tilt) + 0.3 * math.cos(tilt) - 2.4
+	local awningFront = -1.5 + 6 * math.cos(tilt) - 0.3 * math.sin(tilt)
+	local awningBack = -1.5 - 6 * math.cos(tilt) - 0.3 * math.sin(tilt)
 	local foot = M.Above - (M.Height + M.SubHeight) / 2
-	local head = M.Above + (M.Height + M.SubHeight) / 2
-	check(head <= lipUnder - 1 and math.abs(M.Front - awningFront) <= 1,
-		"under the awning's front lip, a stud and more clear of it, at the lip's own reach toward the customers",
-		string.format("top %.2f over the counter's middle, the lip's underside %.2f; %.2f out, the lip %.2f", head,
-			lipUnder, M.Front, awningFront))
+	check(foot >= roofTop + 1.5 and M.Front > awningBack and M.Front < awningFront,
+		"over the roof, 1.5 studs and more clear of its high front edge, over the roof's span",
+		string.format("foot %.2f over the counter's middle, the roof's top %.2f; %.2f out, the roof %.2f to %.2f", foot,
+			roofTop, M.Front, awningBack, awningFront))
 	-- Marigold is 5.5 studs tall (measured, Edit, 2026-10-08), standing on the
 	-- riser 2 up; her prompt hangs off her Torso and PromptUI lifts its panel
 	-- 2.4 over that, reaching `reach` either side on a phone up close (and a
@@ -364,9 +366,8 @@ local function body()
 	-- distance) either side of the line to its middle, across and up, and two
 	-- overlap on screen when both spans do. The wheel's words, measured in that
 	-- Play: middle (0, 24.3, 36.4).
-	check(has(wheel, "at(0, archTop + 3.4, -1.6)") and has(wheel, "board.Size = UDim2.fromScale(15, 2.8)")
-			and WheelData.Place.Position == Vector3.new(0, 0.9, 38),
-		"(the wheel's words still stand 3.4 over its arch, 1.6 behind its middle, at (0, 0.9, 38), 15 by 2.8)")
+	check(has(wheel, "at(0, archTop + 3.4, -1.6)") and has(wheel, "board.Size = UDim2.fromScale(15, 2.8)"),
+		"(the wheel's words still stand 3.4 over its arch, 1.6 behind its middle, 15 by 2.8)")
 	local shopAt = GameConfig.hubStallCFrame():PointToWorldSpace(Vector3.new(0, 2.4 + M.Above, M.Front))
 	local shopY = GameConfig.Map.GroundY + 2.4 + M.Above
 	local shopHalf = (M.Height + M.SubHeight) / 2
@@ -395,7 +396,10 @@ local function body()
 		return (a.at - eye).Magnitude < (b.at - eye).Magnitude
 	end
 	local shopSign = { at = shopAt, halfW = M.Width / 2, halfH = shopHalf }
-	local spinSign = { name = "SPIN THE WHEEL!", at = Vector3.new(0, 24.3, 36.4), halfW = 15 / 2, halfH = 2.8 / 2 }
+	local WP = WheelData.Place
+	local spinSign = { name = "SPIN THE WHEEL!", halfW = 15 / 2, halfH = 2.8 / 2,
+		at = (CFrame.new(WP.Position) * CFrame.Angles(0, math.rad(WP.FacingDegrees), 0)):PointToWorldSpace(
+			Vector3.new(0, 23.4, -1.6)) }
 	-- The other words in the square, from their own configs (the chest's
 	-- behind its pivot, the pedestal's over its bowl, 3.1 up).
 	local chestCF = CFrame.new(GameConfig.BonusChest.Position)
@@ -410,66 +414,74 @@ local function body()
 		{ name = "REBIRTH", at = GameConfig.Rebirth.Position + Vector3.new(0, R.Above, 0), halfW = R.Width / 2,
 			halfH = (R.Height + R.SubHeight) / 2 },
 	}
-	-- Eyes 6 to 16 studs up, two studs apart: on the deck, and on the road's
-	-- approach, its running line and either side (24 wide), from the mouth to
-	-- the deck's rim -- the way everybody arrives.
-	local deckEyes, roadEyes = {}, {}
-	for x = -46, 46, 2 do
-		for z = -170, 46, 2 do
-			local onDeck = Vector2.new(x, z).Magnitude <= GameConfig.Map.HubRadius
-			local onRoad = not onDeck and math.abs(x) <= 12 and z <= -GameConfig.Map.HubRadius + 2
-			for y = 6, 16, 2 do
-				if onDeck then
-					table.insert(deckEyes, Vector3.new(x, y, z))
-				elseif onRoad then
-					table.insert(roadEyes, Vector3.new(x, y, z))
-				end
+	-- Eyes 6 to 16 studs up, two studs apart, since the shop row (2026-10-10,
+	-- Map.Stall): in the field before the row, on ground no plot ever takes
+	-- (west of plot 1's growth, and the pocket before the stall), where the
+	-- plots' players come from; and in the road's mouth.
+	local fieldEyes, mouthEyes = {}, {}
+	for y = 6, 16, 2 do
+		for x = -260, -190, 2 do
+			for z = -112, -60, 2 do
+				table.insert(fieldEyes, Vector3.new(x, y, z))
+			end
+		end
+		for x = -136, -120, 2 do
+			for z = -140, -128, 2 do
+				table.insert(fieldEyes, Vector3.new(x, y, z))
+			end
+		end
+		for x = -60, 0, 2 do
+			for z = -164, -124, 2 do
+				table.insert(mouthEyes, Vector3.new(x, y, z))
 			end
 		end
 	end
 	local spinCovered, firstSpin = 0, nil
-	for _, list in ipairs({ deckEyes, roadEyes }) do
-		for _, eye in ipairs(list) do
-			if overlap(eye, shopSign, spinSign) > 0 or overlap(eye, spinSign, shopSign) > 0 then
-				spinCovered += 1
-				firstSpin = firstSpin or string.format("from (%d, %d, %d)", eye.X, eye.Y, eye.Z)
-			end
+	for _, eye in ipairs(fieldEyes) do
+		if overlap(eye, shopSign, spinSign) > 0 or overlap(eye, spinSign, shopSign) > 0 then
+			spinCovered += 1
+			firstSpin = firstSpin or string.format("from (%d, %d, %d)", eye.X, eye.Y, eye.Z)
 		end
 	end
-	check(spinCovered == 0 and #deckEyes > 9000 and #roadEyes > 3000,
-		"SPIN THE WHEEL! and these never cover each other, from any eye on the deck or the road's approach",
-		firstSpin or string.format("%d + %d eyes", #deckEyes, #roadEyes))
-	local roadHidden, firstRoad = 0, nil
-	for _, eye in ipairs(roadEyes) do
+	check(spinCovered == 0 and #fieldEyes > 5000 and #mouthEyes > 3000,
+		"SPIN THE WHEEL! and these never cover each other from the field before the row",
+		firstSpin or string.format("%d + %d eyes", #fieldEyes, #mouthEyes))
+	-- From the road's mouth the row is seen end-on, its words in a line:
+	-- measured, not ruled.
+	local mouthSpin = 0
+	for _, eye in ipairs(mouthEyes) do
+		if overlap(eye, shopSign, spinSign) > 0 or overlap(eye, spinSign, shopSign) > 0 then
+			mouthSpin += 1
+		end
+	end
+	say(string.format("  NOTE  from the road's mouth SPIN THE WHEEL! and BAT SHOP! share screen from %.0f%% of eyes",
+		100 * mouthSpin / #mouthEyes))
+	local mouthHidden, firstMouth = 0, nil
+	for _, eye in ipairs(mouthEyes) do
 		for _, o in ipairs(signs) do
 			if nearer(eye, o, shopSign) and overlap(eye, o, shopSign) > 0 then
-				roadHidden += 1
-				firstRoad = firstRoad or string.format("%s from (%d, %d, %d)", o.name, eye.X, eye.Y, eye.Z)
+				mouthHidden += 1
+				firstMouth = firstMouth or string.format("%s from (%d, %d, %d)", o.name, eye.X, eye.Y, eye.Z)
 			end
 		end
 	end
-	check(roadHidden == 0, "walking in up the road, no nearer sign's words stand in front of BAT SHOP!", firstRoad)
-	-- MEASURED, NOT RULED (2026-10-10): from the deck SACRIFICE A POD!, nearer
-	-- and bigger, stands in front of it from many spots -- the pedestal lies
-	-- between the plaza and the stall's one feasible spot. Reported every run,
-	-- for the owner's call (KB/HANDOFF.md).
-	local plazaEyes, plazaHid, deckHid = 0, 0, 0
-	for _, eye in ipairs(deckEyes) do
+	check(mouthHidden == 0, "from the road's mouth, no nearer sign's words stand in front of BAT SHOP!", firstMouth)
+	-- Measured, not ruled: from the field a nearer sign can stand in front of
+	-- it from some spots, as anything nearer does. Reported every run.
+	local fieldHid = 0
+	for _, eye in ipairs(fieldEyes) do
 		local worst = 0
 		for _, o in ipairs(signs) do
 			if nearer(eye, o, shopSign) then
 				worst = math.max(worst, overlap(eye, o, shopSign))
 			end
 		end
-		local inPlaza = Vector2.new(eye.X, eye.Z).Magnitude <= GameConfig.Map.EventHub.Radius
-		plazaEyes += if inPlaza then 1 else 0
 		if worst > 0.25 then
-			deckHid += 1
-			plazaHid += if inPlaza then 1 else 0
+			fieldHid += 1
 		end
 	end
-	say(string.format("  NOTE  a nearer sign's words cover over a quarter of BAT SHOP! from %.0f%% of the deck's eyes, "
-		.. "%.0f%% of the plaza's", 100 * deckHid / math.max(1, #deckEyes), 100 * plazaHid / math.max(1, plazaEyes)))
+	say(string.format("  NOTE  a nearer sign's words cover over a quarter of BAT SHOP! from %.0f%% of the field's eyes",
+		100 * fieldHid / math.max(1, #fieldEyes)))
 	local shopXZ = Vector2.new(shopAt.X, shopAt.Z)
 	local worst, worstName = math.huge, ""
 	for _, o in ipairs({
