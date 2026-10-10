@@ -120,9 +120,10 @@ local ok, err = pcall(function()
 		table.insert(listed, code)
 	end
 	table.sort(listed)
-	-- POD since 2026-10-09: pods hatch in the Bag, and are never placed.
+	-- POD from 2026-10-09 to 10-10 (pods hatched in the Bag only); pods go in beds
+	-- again since, so it is gone.
 	local want = { "BED_FULL", "NO_CHARACTER", "NO_PLOT", "NO_PROFILE", "NO_SOIL", "NO_TOOL", "OUT_OF_RANGE",
-		"POD", "UNKNOWN_SPECIES" }
+		"UNKNOWN_SPECIES" }
 	check(table.concat(listed, ",") == table.concat(want, ","),
 		"PlaceAt refuses for the plot, the profile, the soil, the character, the item, reach and room -- nothing else",
 		table.concat(listed, ","))

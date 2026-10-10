@@ -22,7 +22,8 @@
 -- and with them: Instant Hatch moves to a growing Bag pod (the same product and
 -- the same saved credits); an old save's planted pods keep growing and hatch
 -- where they stand; Bag pods with no deadline get now + their grow time at
--- load; placing a pod is refused with "Pods hatch in your Bag now".
+-- load; and since 2026-10-10 a pod may go in a bed again, with the time it has
+-- left (refused 10-09 to 10-10 with "Pods hatch in your Bag now").
 --
 -- THE REAL PlantService AND THE REAL CarryService, each loaded from its source,
 -- the hatch roll switched OFF (HatchRollSpec and HatchDeliverySpec have it on)
@@ -599,9 +600,11 @@ local function body()
 			end
 		end
 		check(kept, "the hatch ladder is kept: 30 s, 1 m, 2 m 30, 6 m, 15 m, 35 m, 1 h 15")
+		-- PlaceAt no longer refuses a pod (2026-10-10, pods go in beds again); the
+		-- words stay for a server that still sends POD.
 		check(ActionRefusal.Text.POD_IN_BAG == "Pods hatch in your Bag now"
 				and ActionRefusal.fromPlacement("POD") == "POD_IN_BAG",
-			"placing a pod says \"Pods hatch in your Bag now\"")
+			"the old POD refusal still has its words, for a server that still sends it")
 	end
 
 	--==========================================================================
@@ -678,20 +681,45 @@ local function body()
 	end
 
 	--==========================================================================
-	say("\n-- 4. a pod is never put in a bed --")
+	say("\n-- 4. a pod goes in a bed again, with the time it has left --")
 	--==========================================================================
+	-- 2026-10-10 (the owner: "make the pods placeable on plots again"): placed
+	-- as before 10-09, but with its Bag row's HatchAt -- the wait that started
+	-- when it was banked -- never a fresh one. The Tool and its row go.
 	do
-		local p, plot, profile = arrive("Placer", 90000000103, {}, { podRow("nubkin", 1, "r1", -10) })
-		local tool = toolOfItem(p, "r1")
+		local p, plot, profile = arrive("Placer", 90000000103, {}, {
+			podRow("nubkin", 1, "r1", -10),
+			podRow("petalpip", 2, "r2", 600),
+		})
 		local soil = plot:FindFirstChild(GameConfig.Plot.PlanterName, true)
 		local click = if soil then soil.Position else plot:GetPivot().Position
-		if tool then
-			tool.Parent = p.Character
+		local function plantItem(item)
+			local tool = toolOfItem(p, item)
+			local due = rowOfItem(profile, item) and rowOfItem(profile, item).HatchAt
+			if tool then
+				tool.Parent = p.Character
+			end
+			local placed, code = PlantService.PlaceAt(p, click)
+			task.wait()
+			-- The garden held nothing else: its rows are the pods put in it.
+			local entry = nil
+			for _, row in ipairs(profile.Plants) do
+				if row.SpeciesId == (if item == "r1" then "nubkin" else "petalpip") then
+					entry = row
+				end
+			end
+			return tool, due, placed, code, entry
 		end
-		local placed, code = PlantService.PlaceAt(p, click)
-		check(tool ~= nil and placed == false and code == "POD" and tool.Parent == p.Character
-				and rowOfItem(profile, "r1") ~= nil and #profile.Plants == 0,
-			"PlaceAt refuses a pod (POD): it stays in the hands and on the record, and no bed is used", code)
+		local tool1, due1, placed1, code1, row1 = plantItem("r1")
+		check(tool1 ~= nil and placed1 == true and code1 == nil and tool1.Parent == nil and rowOfItem(profile, "r1") == nil
+				and row1 ~= nil and row1.HatchAt == due1,
+			"a READY pod goes in the bed: its Tool and row are gone, and it keeps its deadline (ready now)",
+			tostring(code1) .. " " .. tostring(row1 and row1.HatchAt) .. " vs " .. tostring(due1))
+		local tool2, due2, placed2, code2, row2 = plantItem("r2")
+		check(tool2 ~= nil and placed2 == true and code2 == nil and row2 ~= nil and row2.HatchAt == due2
+				and due2 ~= nil and due2 > os.time() + 500,
+			"a growing pod goes in too, with the time it had left in the Bag -- never a fresh wait",
+			tostring(code2) .. " " .. tostring(row2 and row2.HatchAt) .. " vs " .. tostring(due2))
 	end
 
 	--==========================================================================

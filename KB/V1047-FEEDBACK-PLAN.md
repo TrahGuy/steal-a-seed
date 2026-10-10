@@ -15,10 +15,23 @@ still work"). Every recommendation was taken:
    - it takes a bed like a plant, and thieves can't take it.
    The nursery shelf stays a later idea.
 6. Carriers have full hands: the bat is put away, and there are no swings and no traps while carrying.
-7. No ground drop.
+7. ~~No ground drop.~~ **Replaced the same day**: the owner explained Michael's drop.
+   - His words: "Once you steal an egg from a nest, a red 'Drop' button appears at the bottom of the screen. Pressing it leaves the egg on the ground, allowing any other player in the server to pick it up."
+   - The owner's button picture is 77040710214310. Checked: an Image of CrazyCozy Games, 1024 x 384, opaque box 985 x 312, transparent corners; Studio Edit fetched it (EditableImage).
+   - Defaults:
+     - the button shows only while carrying a pod taken from a nest or off the ground (a raid carry), never for a Bag pod held as a Tool, which Q / B put away;
+     - it stands bottom centre just over the hotbar, placed by HudLayout, clear of both thumbs on a phone;
+     - B on a controller (the hands are full while carrying, so B has nothing else to do), Backspace on a keyboard;
+     - a press is the knock-down's own drop (CarryService.Drop): the pod lies at the player's feet, anyone may take it until dusk, and whoever takes it angers that nest's guardian again.
 8. Signs: REBIRTH x1.5, BAT SHOP! x1.1 where it hangs, Pod Guide boards x1.5 with the stands 3.5 studs further in.
 
 Batch 1 is being built first.
+
+**Approved later the same day: the context slot** (the owner: "we can remove the hotbar while the drop button appears, so the button will replace hotbar position, we could also apply it while riding the mill for the minigame button too"; then "approve, go").
+- While a raid pod is carried, the hotbar hides and the DROP button stands in its place. The hands are full then, so the hotbar has nothing to offer.
+- While the player rides their own mill, PLAY MINIGAME stands there instead. This replaces the queued "minigame button LEFT of the column" item.
+- The hotbar's rect stays reserved, so nothing else on the HUD moves; only what is drawn in it changes.
+- Batch 1 was not published alone: "go" started Batch 2 on top of it. Nothing is published until Batch 2 is ready.
 
 ## Why
 

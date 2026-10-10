@@ -2174,16 +2174,30 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		1, SeedData.TierCount)
 	local hatched = tool:GetAttribute("Hatched") == true
 	--==========================================================================
-	-- PODS HATCH IN THE BAG (2026-10-09, the owner's Phase 1)
+	-- PODS GO IN BEDS AGAIN (2026-10-10, the owner: "i think we also need to
+	-- make the pods placeable on plots again too" -- Michael: "Players are
+	-- confused by not being able to place the pods in their pen")
 	--
-	-- A pod's wait runs in the Bag from the moment it is banked, and beds hold
-	-- plants only, so a pod is never put in the ground: "Pods hatch in your Bag
-	-- now" (ActionRefusal POD_IN_BAG, said from the click's handler). One path,
-	-- so nobody is confused. Pods planted before this keep their beds and hatch
-	-- where they stand.
+	-- From 10-09 a pod was refused here ("Pods hatch in your Bag now"). Now it
+	-- is the player's choice: left in the Bag it hatches there (HATCH, HATCH
+	-- ALL), or put in a bed it waits there as it did before 10-09 -- safe from
+	-- thieves, hatching where it stands (hold E; INSTANT HATCH while it grows).
+	-- It brings the time it has LEFT: its Bag row's HatchAt, the wait that
+	-- started when it was banked, never a fresh one. A Tool with no row (none
+	-- is expected) waits its whole time, as before.
 	--==========================================================================
+	local podDue: number? = nil
 	if not hatched then
-		return refuse(player, "POD")
+		local profile = PlayerDataService.Get(player)
+		local item = tool:GetAttribute(GameConfig.Attributes.ItemId)
+		if profile and type(profile.Held) == "table" and type(item) == "string" then
+			for _, row in ipairs(profile.Held) do
+				if type(row) == "table" and row.Item == item and row.Hatched ~= true then
+					podDue = tonumber(row.HatchAt)
+					break
+				end
+			end
+		end
 	end
 
 	--==========================================================================
@@ -2244,9 +2258,12 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		tier = tier,
 		offset = offset,
 		plantedAt = now,
-		-- The whole wait, once, off the approved ladder. A grown plant gets the
-		-- same field with the time already past, because nothing reads it.
-		hatchAt = now + (if hatched then 0 else SeedData.GrowSecondsFor(species, tier)),
+		-- A pod's wait: what it has left from the Bag (PODS GO IN BEDS AGAIN),
+		-- else the whole wait off the approved ladder. A grown plant gets the same
+		-- field with the time already past, because nothing reads it.
+		hatchAt = if hatched then now
+			elseif podDue then podDue
+			else now + SeedData.GrowSecondsFor(species, tier),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
 		-- Off the placement id, so consecutive plantings come out scattered.
 		-- Re-placing a plant you picked up gives it a NEW bearing, which is the
@@ -2275,8 +2292,11 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 	-- and only it, off the saved bag.
 	tool:Destroy()
 	CarryService.SyncHeldNow(player, { tool })
-	-- The guide's `place` (2026-10-09): a PLANT in the garden, after the hatch.
-	PlayerDataService.RecordTutorial(player, "place")
+	-- The guide's `place` (2026-10-09): a PLANT in the garden, after the hatch --
+	-- never a pod put in a bed (2026-10-10), which would skip the step early.
+	if hatched then
+		PlayerDataService.RecordTutorial(player, "place")
+	end
 	log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))
 	return true, nil
 end

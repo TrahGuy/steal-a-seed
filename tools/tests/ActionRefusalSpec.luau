@@ -779,14 +779,16 @@ local function planting()
 		tostring(code))
 
 	held:Destroy()
-	-- A POD IN THE HANDS (2026-10-09): never placed, wherever it is clicked, and
-	-- the player is told where pods hatch now.
+	-- A POD IN THE HANDS goes in a bed again (2026-10-10, the owner; refused
+	-- 10-09 to 10-10 with "Pods hatch in your Bag now"): it is placed exactly as
+	-- a plant is -- here into a plot that holds one already, so the same full
+	-- plot's refusal, and it stays in your hands.
 	local unhatched = pod()
 	unhatched:SetAttribute("Hatched", false)
 	placed, code, line = plant(near)
-	check(not placed and code == "POD" and line == "POD_IN_BAG" and unhatched.Parent == body
-			and ActionRefusal.Text.POD_IN_BAG == "Pods hatch in your Bag now",
-		"a pod is never placed: \"Pods hatch in your Bag now\", and it stays in your hands", tostring(code))
+	check(not placed and code == "BED_FULL" and line == "PLOT_FULL" and unhatched.Parent == body,
+		"a pod is placed as a plant is: into a full plot, \"Your plot is full.\", and it stays in your hands",
+		tostring(code))
 	unhatched:Destroy()
 	placed, code, line = plant(near)
 	check(not placed and code == "NO_TOOL" and line == nil, "empty hands: refused, and silent",

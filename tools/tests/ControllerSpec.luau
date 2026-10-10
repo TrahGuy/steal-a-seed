@@ -165,21 +165,19 @@ local ok, err = pcall(function()
 		"with a panel up or a selection being steered, RT and B belong to the UI, not the world")
 	check(has(placeSrc, "if pad and uiHasTheButtons() then\n\t\tsetPadBound(false)\n\t\tshowPad(false)"),
 		"and then the reticle, its hints and RT/B are all put away -- no 'RT PLANT' while RT is the UI's")
-	-- PUT AWAY FOR A HELD POD TOO (2026-10-10, Michael on v1047): Q, the touch
-	-- button and B follow whatever is held; only the disc, the reticle and RT
-	-- follow the plant-only filter, which comes after them.
+	-- A POD THE SAME WAY AS A PLANT (2026-10-10): pods go in beds again (the
+	-- owner), and the plant-only filter that took Q, the touch Put away button
+	-- and B from a held pod (Michael on v1047) is gone -- the disc, the reticle,
+	-- RT and the put-away all follow anything in the hands.
 	do
 		local frame = string.match(placeSrc, "RunService%.RenderStepped:Connect%(function%(%)(.-)\nend%)") or ""
 		local plantPass = string.match(placeSrc, "local function padPlant(.-)\nend") or ""
-		check(has(frame, "local held = heldTool()\n\tsetBound(held ~= nil)")
-				and has(frame, "local pad = held ~= nil and PadInput.active()")
-				and has(frame, "setPadBound(pad, tool ~= nil)")
-				and before(frame, "setBound(held ~= nil)", "tool:GetAttribute(\"Hatched\") ~= true")
-				and not has(frame, "setBound(tool ~= nil)"),
-			"Q, the touch Put away button and B follow anything in the hands, a pod included")
-		check(has(placeSrc, "local wantPlant = want and plant == true")
-				and has(plantPass, "held:GetAttribute(\"Hatched\") ~= true then\n\t\treturn Enum.ContextActionResult.Pass"),
-			"RT is bound for a plant only, and passes for a pod")
+		check(has(frame, "local tool = heldTool()\n\tsetBound(tool ~= nil)")
+				and has(frame, "local pad = tool ~= nil and PadInput.active()")
+				and has(frame, "setPadBound(pad)")
+				and not has(frame, "GetAttribute(\"Hatched\")")
+				and not has(plantPass, "Hatched"),
+			"a pod in the hands gets what a plant gets: Q, the touch Put away button, B, the disc and RT")
 	end
 	check(has(placeSrc, "PLANT_OUT_OF_RANGE = ActionRefusal.Text.PLANT_OUT_OF_RANGE")
 			and has(placeSrc, "PLOT_FULL = ActionRefusal.Text.PLOT_FULL")
