@@ -65,6 +65,7 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
+local RarityFX = require(Shared:WaitForChild("RarityFX"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -354,6 +355,12 @@ type Card = {
 	actionLabel: TextLabel,
 	actionFace: MenuKit.Button,
 	textLeft: number,
+	-- Its rarity (2026-10-10): the word under the picture, and RarityFX's
+	-- light on the word, round the edge and across the studs.
+	rarity: TextLabel,
+	fxText: RarityFX.Handle,
+	fxEdge: RarityFX.Handle,
+	fxShine: RarityFX.Handle,
 }
 
 local cards: { Card } = {}
@@ -437,6 +444,23 @@ local function buildCard(item: WeaponData.Item): Card
 	fill.Parent = holder
 	UIKit.corner(fill, 10)
 	UIKit.gradient(fill, pal.Card:Lerp(WHITE, 0.10), pal.Card:Lerp(BLACK, 0.22))
+
+	--==========================================================================
+	-- ITS RARITY'S CARD (2026-10-10, the owner: "yes do the marigold shop cards
+	-- too"): the studded card the same bat wears in the Bag (BagLook.
+	-- StudsByRarity; a Common keeps its own palette), the rarity's colour in
+	-- the ring, and on the three rarest a shine across the studs and a light
+	-- round the edge. Made first in the fill, so under everything else in it;
+	-- the stage keeps the item's own colours.
+	--==========================================================================
+	local stillEdge = (GameConfig.RarityEdge.Colours :: any)[item.Rarity]
+	local studs = UIKit.studCard(fill, 10, 5)
+	local spec = studs.set((LOOK.StudsByRarity :: any)[item.Rarity])
+	local fxShine = RarityFX.shine(fill, 10, 5)
+	RarityFX.setShine(fxShine, if spec then item.Rarity else nil)
+	holder.BackgroundColor3 = RarityFX.edgeColour(item.Rarity) or stillEdge or pal.CardEdge
+	local fxEdge = RarityFX.edge(holder, 12, 9)
+	RarityFX.setEdge(fxEdge, item.Rarity, true)
 
 	local topLight = Instance.new("Frame")
 	topLight.Name = "Bevel"
@@ -576,6 +600,43 @@ local function buildCard(item: WeaponData.Item): Card
 	blurb.Text = item.Blurb
 	blurb.ZIndex = 7
 	blurb.Parent = fill
+	-- On a studded card the sentence stands on the Bag's quiet ink backing (a
+	-- white card's denser), which follows it wherever relayout puts it.
+	if spec then
+		local backing = Instance.new("Frame")
+		backing.Name = "Words"
+		backing.Position = UDim2.fromOffset(-4, -2)
+		backing.Size = UDim2.new(1, 8, 1, 4)
+		backing.BackgroundColor3 = LOOK.StudWords
+		backing.BackgroundTransparency = spec.words or LOOK.StudWordsTransparency
+		backing.BorderSizePixel = 0
+		backing.Active = false
+		backing.ZIndex = 6
+		backing.Parent = blurb
+		UIKit.corner(backing, 6)
+	end
+
+	-- THE RARITY, under the picture: its vivid colour on an ink keyline, the
+	-- three rarest's moving light (RarityFX.text) as on a Bag tile.
+	local rarityLabel = Instance.new("TextLabel")
+	rarityLabel.Name = "Rarity"
+	rarityLabel.Position = UDim2.fromOffset(10, 92)
+	rarityLabel.Size = UDim2.fromOffset(78, 16)
+	rarityLabel.BackgroundTransparency = 1
+	rarityLabel.Font = Enum.Font.FredokaOne
+	rarityLabel.TextScaled = true
+	rarityLabel.Text = string.upper(item.Rarity)
+	rarityLabel.ZIndex = 7
+	rarityLabel.Parent = fill
+	local rarityFit = Instance.new("UITextSizeConstraint")
+	rarityFit.MaxTextSize = 13
+	rarityFit.Parent = rarityLabel
+	local rarityLine = Instance.new("UIStroke")
+	rarityLine.Color = BLACK
+	rarityLine.Thickness = 1.5
+	rarityLine.Parent = rarityLabel
+	local fxText = RarityFX.text(rarityLabel, rarityLine)
+	RarityFX.setText(fxText, item.Rarity, stillEdge or GameConfig.RarityColor[item.Rarity] or CREAM)
 
 	--== THE THREE STATS ==--
 	local stats = Instance.new("Frame")
@@ -639,6 +700,10 @@ local function buildCard(item: WeaponData.Item): Card
 		actionLabel = actionLabel,
 		actionFace = actionFace,
 		textLeft = 98,
+		rarity = rarityLabel,
+		fxText = fxText,
+		fxEdge = fxEdge,
+		fxShine = fxShine,
 	}
 end
 
@@ -687,6 +752,9 @@ local function relayout()
 		local textW = if narrow then (width - left - 16) else (width - left - rightW - 26)
 
 		card.stage.Size = UDim2.fromOffset(art, art)
+		-- The rarity word under the picture, as wide as it.
+		card.rarity.Position = UDim2.fromOffset(10, 10 + art + (if narrow then 2 else 4))
+		card.rarity.Size = UDim2.fromOffset(art, if narrow then 14 else 16)
 		card.name.TextSize = if narrow then 16 else 18
 		card.name.Position = UDim2.fromOffset(left, 8)
 		card.blurb.Position = UDim2.fromOffset(left, if narrow then 30 else 32)
@@ -1034,6 +1102,12 @@ setOpen = function(want: boolean)
 			player:SetAttribute(ATTR.OpenPanel, nil)
 		end
 		unbindClosers()
+	end
+	-- The rarities' lights move only while the shop is open (2026-10-10).
+	for _, card in ipairs(cards) do
+		RarityFX.setActive(card.fxText, want)
+		RarityFX.setActive(card.fxEdge, want)
+		RarityFX.setActive(card.fxShine, want)
 	end
 	modal.setOpen(want)
 end

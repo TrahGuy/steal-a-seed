@@ -342,6 +342,57 @@ local ok, err = pcall(function()
 				"accent = if group.category == \"plants\" or group.category == \"equipment\" then face.accent else nil",
 				1, true),
 		"the strip and the Bag hand a bat's or trap's accent on, as a grown plant's")
+
+	--==========================================================================
+	-- 6. MARIGOLD'S SHOP (2026-10-10, the owner: "yes do the marigold shop
+	--    cards too")
+	--==========================================================================
+	say("-- Marigold's shop --")
+	local shop = src(Client, "MarigoldShopUI")
+	check(order(shop, "UIKit.gradient(fill, pal.Card:Lerp(WHITE, 0.10), pal.Card:Lerp(BLACK, 0.22))",
+			"local studs = UIKit.studCard(fill, 10, 5)", "local spec = studs.set((LOOK.StudsByRarity :: any)[item.Rarity])",
+			"local fxShine = RarityFX.shine(fill, 10, 5)", "local topLight = Instance.new(\"Frame\")",
+			"local stage = Instance.new(\"Frame\")"),
+		"each card: its rarity's studs first in the fill, the shine right after, both under the bevel and the stage")
+	check(string.find(shop, "RarityFX.setShine(fxShine, if spec then item.Rarity else nil)", 1, true)
+			and string.find(shop, "holder.BackgroundColor3 = RarityFX.edgeColour(item.Rarity) or stillEdge or pal.CardEdge",
+				1, true)
+			and string.find(shop, "local fxEdge = RarityFX.edge(holder, 12, 9)", 1, true)
+			and string.find(shop, "RarityFX.setEdge(fxEdge, item.Rarity, true)", 1, true),
+		"the ring in the rarity's colour (Mythic's own), the shine and the edge light on the three rarest")
+	check(string.find(shop, "rarityLabel.Text = string.upper(item.Rarity)", 1, true)
+			and string.find(shop, "local fxText = RarityFX.text(rarityLabel, rarityLine)", 1, true)
+			and string.find(shop, "card.rarity.Position = UDim2.fromOffset(10, 10 + art + (if narrow then 2 else 4))",
+				1, true),
+		"the rarity's word under the picture, moving on the three rarest, laid out on a phone too")
+	check(string.find(shop, "backing.BackgroundTransparency = spec.words or LOOK.StudWordsTransparency", 1, true)
+			and string.find(shop, "backing.Parent = blurb", 1, true),
+		"on a studded card the sentence stands on the Bag's ink backing (the white card's denser)")
+	check(string.find(shop, "RarityFX.setActive(card.fxText, want)", 1, true)
+			and string.find(shop, "RarityFX.setActive(card.fxEdge, want)", 1, true)
+			and string.find(shop, "RarityFX.setActive(card.fxShine, want)", 1, true),
+		"the lights move only while the shop is open")
+
+	--==========================================================================
+	-- 7. THE INDEX (2026-10-10, the owner: "also apply them on index, and
+	--    their background too")
+	--==========================================================================
+	say("-- the Index --")
+	local index = src(Client, "IndexUI")
+	check(order(index, "local tint = MenuKit.cardFace(face)", "local studs = UIKit.studCard(face, 8, Z + 1)",
+			"local fxShine = RarityFX.shine(face, 8, Z + 1)",
+			"local well = MenuKit.frame(face, \"Preview\", Z + 2, LOOK.Window, 0, 6)"),
+		"each Index card: its rarity's studs over the plain face, the shine right after, both under the window")
+	check(string.find(index, "local spec = c.studs.set((STUD_LOOK.StudsByRarity :: any)[face.rarity])", 1, true)
+			and string.find(index, "c.well.BackgroundTransparency = if studded and known then 1 else 0", 1, true)
+			and string.find(index, "RarityFX.setShine(c.fxShine, if studded then face.rarity else nil)", 1, true),
+		"found or not (the rarity is on every card); a found plant stands on its studs, an undiscovered one in the dark")
+	check(string.find(index, "c.words.Visible = studded", 1, true)
+			and string.find(index, "c.name.TextColor3 = if studded then (if known then WHITE else UNKNOWN_ON_STUDS)", 1, true)
+			and string.find(index, "c.edge.Color = rare or (if studded then LOOK.Ink else LOOK.CardEdge)", 1, true),
+		"its words light on the Bag's ink backing; the ink keyline round a studded card")
+	local _, actives = string.gsub(index, "RarityFX%.setActive%(c%.fxShine, ", "")
+	check(actives == 3, "the shine moves only in view and stops with the panel (every place the edge does)", actives)
 end)
 
 RarityFX.still = realStill

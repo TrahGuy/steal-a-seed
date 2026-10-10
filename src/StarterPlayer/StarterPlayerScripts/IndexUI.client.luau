@@ -100,6 +100,10 @@ local RAIL = GameConfig.Rail
 local CARD = GameConfig.Card
 local ATTR = GameConfig.Attributes
 local LOOK = MenuKit.Look
+-- The studded rarity cards' own numbers (GameConfig.BagLook: Studs, StudWords).
+local STUD_LOOK = GameConfig.BagLook
+-- An undiscovered plant's name on a studded card's ink backing.
+local UNKNOWN_ON_STUDS = Color3.fromRGB(200, 208, 200)
 local GUIDE = GameConfig.PodGuide
 local PANEL_NAME = "Index"
 
@@ -475,6 +479,11 @@ type Card = {
 	fxEdge: RarityFX.Handle,
 	-- A GROWN card's still rarity band, Common to Legendary (2026-10-10).
 	ring: Frame,
+	-- Its rarity's studded card, the words' ink backing on it, and the three
+	-- rarest's shine (2026-10-10).
+	studs: UIKit.StudCard,
+	words: Frame,
+	fxShine: RarityFX.Handle,
 	species: any,
 	built: boolean,
 }
@@ -495,6 +504,9 @@ local function shapeCard(c: Card)
 	c.name.Size = UDim2.fromOffset(cardW - 10, 30)
 	c.rarity.Position = UDim2.fromOffset(5, cardH - 19)
 	c.rarity.Size = UDim2.fromOffset(cardW - 10, 15)
+	-- The ink backing under the name and the rarity, below the window.
+	c.words.Position = UDim2.fromOffset(3, 4 + previewH + 1)
+	c.words.Size = UDim2.fromOffset(cardW - 6, math.max(0, cardH - previewH - 8))
 end
 
 local function cardFor(species: any): Card
@@ -517,6 +529,19 @@ local function cardFor(species: any): Card
 	UIKit.corner(face, 8)
 	local tint = MenuKit.cardFace(face)
 	local edge = MenuKit.keyline(face, LOOK.CardEdge, 1, LOOK.CardEdgeTransparency)
+	--==========================================================================
+	-- ITS RARITY'S STUDDED CARD (2026-10-10, the owner: "also apply them on
+	-- index, and their background too"): the card the same creature wears in
+	-- the Bag (BagLook.StudsByRarity; a Common keeps the plain card), found or
+	-- not -- the rarity is written on every card already. Under the window; a
+	-- found plant's window is clear on it, so the plant stands on its studs as
+	-- a Bag tile's does. The name and the rarity stand on the Bag's quiet ink
+	-- backing, and the three rarest shine.
+	--==========================================================================
+	local studs = UIKit.studCard(face, 8, Z + 1)
+	local fxShine = RarityFX.shine(face, 8, Z + 1)
+	local words = MenuKit.frame(face, "Words", Z + 4, STUD_LOOK.StudWords, STUD_LOOK.StudWordsTransparency, 6)
+	words.Visible = false
 	-- The plant stands in a DARK display window on the light card, as dark as
 	-- the old preview, so an undiscovered plant's silhouette shows no more than
 	-- it did.
@@ -594,6 +619,9 @@ local function cardFor(species: any): Card
 		fxText = fxText,
 		fxEdge = fxEdge,
 		ring = ring,
+		studs = studs,
+		words = words,
+		fxShine = fxShine,
 		species = species,
 		built = false,
 	}
@@ -613,12 +641,22 @@ local function paintCard(c: Card, entry: AlmanacView.Entry, order: number)
 	c.holder.Visible = true
 	c.holder.LayoutOrder = order
 	c.name.Text = face.name
-	c.name.TextColor3 = if known then LOOK.Text else LOOK.Muted
+	-- Its rarity's studded card (2026-10-10): the words light on their ink
+	-- backing; a found plant's window clear, an undiscovered one's dark still.
+	local spec = c.studs.set((STUD_LOOK.StudsByRarity :: any)[face.rarity])
+	local studded = spec ~= nil
+	c.words.Visible = studded
+	c.words.BackgroundTransparency = if spec and spec.words then spec.words else STUD_LOOK.StudWordsTransparency
+	c.well.BackgroundTransparency = if studded and known then 1 else 0
+	RarityFX.setShine(c.fxShine, if studded then face.rarity else nil)
+	c.name.TextColor3 = if studded then (if known then WHITE else UNKNOWN_ON_STUDS)
+		elseif known then LOOK.Text
+		else LOOK.Muted
 	c.rarity.Text = face.rarity
 	RarityFX.setText(c.fxText, face.rarity, colours[1])
 	RarityFX.setEdge(c.fxEdge, face.rarity, true)
 	local rare = RarityFX.edgeColour(face.rarity)
-	c.edge.Color = rare or LOOK.CardEdge
+	c.edge.Color = rare or (if studded then LOOK.Ink else LOOK.CardEdge)
 	c.edge.Transparency = if rare then 0.05 else LOOK.CardEdgeTransparency
 	-- Common to Legendary (2026-10-10, the owner: "yes, add rarity edges"): a
 	-- GROWN card wears its form rarity's still band inside the keyline. A card
@@ -658,6 +696,7 @@ local function buildVisible()
 		local inView = shown and p.Y + s.Y > at.Y and p.Y < at.Y + size.Y
 		RarityFX.setActive(c.fxText, inView)
 		RarityFX.setActive(c.fxEdge, inView)
+		RarityFX.setActive(c.fxShine, inView)
 	end
 end
 grid:GetPropertyChangedSignal("CanvasPosition"):Connect(buildVisible)
@@ -1012,6 +1051,7 @@ local function paintGrid()
 			c.holder.Visible = false
 			RarityFX.setActive(c.fxText, false)
 			RarityFX.setActive(c.fxEdge, false)
+			RarityFX.setActive(c.fxShine, false)
 		end
 	end
 	-- Every biome's heading stands, whatever the filter; a search keeps only the
@@ -1455,6 +1495,7 @@ local function setOpen(want: boolean)
 		for _, c in pairs(cards) do
 			RarityFX.setActive(c.fxText, false)
 			RarityFX.setActive(c.fxEdge, false)
+			RarityFX.setActive(c.fxShine, false)
 		end
 		RarityFX.setActive(showRarityFX, false)
 	end
