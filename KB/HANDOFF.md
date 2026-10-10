@@ -1,5 +1,22 @@
 # Steal a Seed — Session Handoff
 
+## THE QUEUE AFTER v1048, FOR THE TERMINAL CLAUDE — 2026-10-10 (CLAUDE, RELAYING THE OWNER)
+
+The owner: "add the progress bar back again for the mill, progress bars must not be transparent, put this on queue, you can ask terminal now to start". This replaces "TOMORROW (2026-10-10)" below; the minigame button item there is done another way (PLAY MINIGAME stands in the hotbar's place, the context slot, live in v1048).
+
+In this order. Each its own commit on wip, pushed once green; never published by an agent. "Testing for items 7-11" below still holds: per item only the specs that touch its files (plus HudLayoutSpec for a HUD move), mutants only for game logic, the full suite once at the end, few guarded Plays.
+
+1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1.
+2. **Rarity edges** (item 10).
+3. **The 100 rebirth titles and the two prototype effects** (item 11).
+4. **The mill's progress bar back, and no progress bar transparent.**
+   - TreadmillFunUI's MilestoneBar (A2, "NEXT: 5K SPEED · CASH" over the player's own belt). Its track has drawn nothing since 2026-10-09, under the owner's rule of that day, "everything must be transparent" (the comment at TreadmillFunUI.client.luau:223). Give it a solid track again, a dark well with an edge, with the gold fill on it.
+   - It did not show at all in the v1048 batch's Play: output/v1047-batch2/05_minigame_in_hotbar_place.png, riding the own mill at 20 speed, desktop 1148 x 716. The A1 pop ("+2 WALK SPEED · NOW 18") showed; the bar did not. `bar.Visible = barRect ~= nil` (line 604): find which condition failed there (the 45-stud check, the projected point off the screen, or SpeedMilestones.clearOf finding no clear place), and make the bar show while the player is on or by their own mill.
+   - The same rule for every progress bar: Pod Rush's tracker bar (PodRushUI.client.luau:212-221, "Only the fill shows") gets a solid track too; look for any other bar whose track is drawn at BackgroundTransparency 1. Buffs and effects stay transparent; only progress bars change.
+   - Specs: TreadmillFunSpec and PodRushSpec (their transparency pins flip). See both in one Play.
+
+Studio: Claude Code's own Studio MCP fails since the Studio update ("Server's protocol version is not supported: 2026-07-28"). The Batch 2 session drove Studio through a stdio client and spec runners in its scratchpad (studio_mcp.py, store6/spec_direct.py, store6/run_suite.py, prepublish.py, safe_play.sh).
+
 ## PUBLISHED AS v1048 — 2026-10-10 02:02 UTC (10:02 the owner's time) (CLAUDE)
 
 - The owner published the tree themselves: Michael's v1047 feedback, Batch 1 (4c1f1ef) and Batch 2 (da4e811 to 528a22a; the handoff a7f5442). No agent published.
