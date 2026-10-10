@@ -41,7 +41,6 @@ local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local ContextActionService = game:GetService("ContextActionService")
-local TweenService = game:GetService("TweenService")
 
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -53,7 +52,6 @@ local PressGesture = require(Shared:WaitForChild("PressGesture"))
 local ItemArt = require(Shared:WaitForChild("ItemArt"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
-local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local InventoryPanel = {}
 
@@ -103,101 +101,15 @@ local MENU_FACE: { [string]: string } = {
 -- A HOLD, NOT A PRESS (2026-10-09, pods hatch in the Bag)
 --
 -- HATCH and HATCH ALL are the bed prompt's own hold (`seconds`,
--- GameConfig.Plant.HatchHoldSeconds): a finger or the mouse holds the button
--- down while its face fills and the shell's rattle plays, and letting go early
--- -- anywhere on the screen -- does nothing at all. A controller's A or Enter
--- (Activated with no press under way) starts the same fill, which closing the
--- menu stops. Answers a function that stops a hold under way.
+-- GameConfig.Plant.HatchHoldSeconds), with the shell's rattle: MenuKit.hold,
+-- shared since 2026-10-10 with HATCH over a pod in the hands (PodHatch).
+-- Closing the menu stops a hold a controller started. Answers a function that
+-- stops a hold under way.
 --==============================================================================
 local RATTLE: string = GameConfig.Plant.Hatch.Sounds.Rattle
--- Tweened, so nothing here runs per frame: the face fills over the hold, and
--- the plate rocks a few degrees while it does.
-local ROCK = TweenInfo.new(0.07, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
 
 local function holdButton(mb: MenuKit.Button, seconds: number, done: () -> ()): () -> ()
-	local fill = Instance.new("Frame")
-	fill.Name = "HoldFill"
-	fill.BackgroundColor3 = WHITE
-	fill.BackgroundTransparency = 0.55
-	fill.BorderSizePixel = 0
-	fill.Size = UDim2.fromScale(0, 1)
-	fill.ZIndex = mb.label.ZIndex - 1
-	fill.Active = false
-	fill.Parent = mb.plate
-	UIKit.corner(fill, 10)
-	local hold = 0
-	local filling: Tween? = nil
-	local rocking: Tween? = nil
-	local letGo: RBXScriptConnection? = nil
-	local pressing = false
-	local lastEnded = 0
-	local function stop()
-		hold += 1
-		pressing = false
-		if filling then
-			filling:Cancel()
-			filling = nil
-		end
-		if rocking then
-			rocking:Cancel()
-			rocking = nil
-		end
-		if letGo then
-			letGo:Disconnect()
-			letGo = nil
-		end
-		fill.Size = UDim2.fromScale(0, 1)
-		mb.plate.Rotation = 0
-	end
-	local function begin()
-		if filling then
-			return
-		end
-		hold += 1
-		local this = hold
-		if RATTLE ~= "" and SoundKit.has(RATTLE) then
-			SoundKit.play(RATTLE)
-		end
-		mb.plate.Rotation = -3
-		local rock = TweenService:Create(mb.plate, ROCK, { Rotation = 3 })
-		rocking = rock
-		rock:Play()
-		local tween = TweenService:Create(fill, TweenInfo.new(seconds, Enum.EasingStyle.Linear),
-			{ Size = UDim2.fromScale(1, 1) })
-		filling = tween
-		tween.Completed:Connect(function(state: Enum.PlaybackState)
-			-- Only this hold, run to its end, on a button still in the game.
-			if state ~= Enum.PlaybackState.Completed or hold ~= this or not mb.hit:IsDescendantOf(game) then
-				return
-			end
-			stop()
-			done()
-		end)
-		tween:Play()
-	end
-	mb.hit.InputBegan:Connect(function(input: InputObject)
-		local kind = input.UserInputType
-		if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
-			pressing = true
-			begin()
-			-- Let go anywhere and the hold is off, not only over the button.
-			if letGo then
-				letGo:Disconnect()
-			end
-			letGo = UserInputService.InputEnded:Connect(function(ended: InputObject)
-				if ended.UserInputType == kind then
-					lastEnded = os.clock()
-					stop()
-				end
-			end)
-		end
-	end)
-	mb.hit.Activated:Connect(function()
-		if pressing or filling or os.clock() - lastEnded < 0.4 then
-			return
-		end
-		begin()
-	end)
+	local stop = MenuKit.hold(mb, seconds, RATTLE, done)
 	return stop
 end
 

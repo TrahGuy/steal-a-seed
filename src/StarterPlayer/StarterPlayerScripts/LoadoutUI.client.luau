@@ -79,6 +79,7 @@ local RarityFX = require(Shared:WaitForChild("RarityFX"))
 -- A trap's placements ("3x") and the REMOVE button over its slot (2026-10-04):
 -- the server's count off the owner's trap records, and the press.
 local TrapRemove = require(Shared:WaitForChild("TrapRemove"))
+local PodHatch = require(Shared:WaitForChild("PodHatch"))
 -- What the Instant Hatch product costs THIS player (2026-10-09, the Bag's button).
 local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 
@@ -326,6 +327,7 @@ local dragMoved = false
 local channel: RemoteEvent? = nil
 -- Made once `redraw` exists, below THE STRIP, PAINTED.
 local trapRemove: TrapRemove.Handle? = nil
+local podHatch: PodHatch.Handle? = nil
 
 local panel = InventoryPanel.build(gui, modal, GameConfig.Hotbar, {
 	activate = function(key: string, by: string)
@@ -674,6 +676,10 @@ do
 		if remove then
 			remove.strip(hotbar.Visible and not lifted)
 		end
+		local hatch = podHatch
+		if hatch then
+			hatch.strip(hotbar.Visible and not lifted)
+		end
 	end
 
 	--==========================================================================
@@ -981,6 +987,8 @@ local function refreshHotbar()
 	--==========================================================================
 	local traps = if trapRemove then trapRemove.state() else nil
 	local trapSlot, anyTrapSlot = nil :: number?, nil :: number?
+	-- The pod in the hands and its slot, for HATCH over it (PodHatch).
+	local podSlot, podHeld = nil :: number?, nil :: PodHatch.Pod?
 	for i = 1, math.max(activeSlots, #hotSlots) do
 		local slot = hotSlots[i]
 		if i > activeSlots then
@@ -1016,6 +1024,11 @@ local function refreshHotbar()
 			local ghost = if kind == "placeholder" and category and HOT.Tags[category]
 				then HOT.Tags[category].text else nil
 			local isTrap = slot.item ~= nil and (slot.item :: WeaponData.Item).Category == "trap"
+			local podId = if isHeld and item and item.kind == "pod" and not item.hatched and item.hatchAt and item.ref
+				then string.match(item.ref, "^i:(.+)$") else nil
+			if podId and item then
+				podSlot, podHeld = i, { item = podId, hatchAt = item.hatchAt :: number }
+			end
 			if isTrap then
 				anyTrapSlot = anyTrapSlot or i
 				if item and item.tool and item.tool.Parent then
@@ -1068,6 +1081,10 @@ local function refreshHotbar()
 		local at = trapSlot or anyTrapSlot
 		local slotButton = if at and hotSlots[at] then hotSlots[at].button else nil
 		remove.slot(at, slotButton)
+	end
+	local hatch = podHatch
+	if hatch then
+		hatch.slot(podSlot, if podSlot and hotSlots[podSlot] then hotSlots[podSlot].button else nil, podHeld)
 	end
 
 	--==========================================================================
@@ -1279,6 +1296,20 @@ trapRemove = TrapRemove.new(gui, {
 	end,
 	changed = function()
 		redraw()
+	end,
+})
+
+--==============================================================================
+-- HATCH OVER A READY POD IN THE HANDS (2026-10-10, Michael on v1047)
+--
+-- PodHatch owns the button and LT, in REMOVE's row; this file tells it what it
+-- tells REMOVE: the layout, the pod in the hands and its slot, and whether the
+-- strip is showing.
+--==============================================================================
+podHatch = PodHatch.new(gui, {
+	player = player,
+	channel = function(): RemoteEvent?
+		return channel
 	end,
 })
 
@@ -2046,6 +2077,10 @@ local function layoutHud()
 	local remove = trapRemove
 	if remove then
 		remove.layout(layout)
+	end
+	local hatch = podHatch
+	if hatch then
+		hatch.layout(layout)
 	end
 	local count = activeSlots
 	applySlotCount()

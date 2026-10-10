@@ -10933,6 +10933,18 @@ GameConfig.HatchInBag = {
 	FrontStuds = 9,
 	FanDegrees = 50,
 	FanSlots = 5,
+	--==========================================================================
+	-- HATCH FROM THE HANDS (2026-10-10, Michael on v1047: "no way to hatch the
+	-- egg in your hotbar without navigating to bag and hatch all")
+	--
+	-- PodHatch's HATCH over a READY pod's own hotbar slot, in the REMOVE row,
+	-- held like the Bag's (Plant.HatchHoldSeconds) and sent as Hatch. A
+	-- controller holds HandKey: RT plants the pod (PlantPlace), so LT hatches
+	-- it. HandAttribute is client-local on the player while HATCH is offered,
+	-- so PlantPlace's reticle names LT beside RT and B.
+	--==========================================================================
+	HandKey = Enum.KeyCode.ButtonL2,
+	HandAttribute = "SeedHandHatch",
 	Words = {
 		Ready = "READY",
 		Hatch = "HATCH",

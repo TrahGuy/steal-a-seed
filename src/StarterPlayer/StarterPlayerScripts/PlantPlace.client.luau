@@ -486,7 +486,7 @@ hintsLayout.Padding = UDim.new(0, 22)
 hintsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 hintsLayout.Parent = hints
 
-type Hint = { key: Enum.KeyCode, glyph: ImageLabel, short: TextLabel, word: TextLabel }
+type Hint = { key: Enum.KeyCode, chip: Frame, glyph: ImageLabel, short: TextLabel, word: TextLabel }
 local hintList: { Hint } = {}
 
 local function hint(order: number, key: Enum.KeyCode, text: string): Hint
@@ -528,13 +528,22 @@ local function hint(order: number, key: Enum.KeyCode, text: string): Hint
 	word.Size = UDim2.fromOffset(0, 28)
 	word.Text = text
 	word.LayoutOrder = 2
-	local entry: Hint = { key = key, glyph = glyph, short = short, word = word }
+	local entry: Hint = { key = key, chip = chip, glyph = glyph, short = short, word = word }
 	table.insert(hintList, entry)
 	return entry
 end
 
 local placeHint = hint(1, Enum.KeyCode.ButtonR2, "PLANT")
 hint(2, Enum.KeyCode.ButtonB, "PUT AWAY")
+-- LT HATCH beside them while a READY pod in the hands offers HATCH (2026-10-10:
+-- PodHatch raises HandAttribute while its button stands, and owns LT).
+local HAND = GameConfig.HatchInBag
+local hatchHint = hint(3, HAND.HandKey, HAND.Words.Hatch)
+local function paintHatchHint()
+	hatchHint.chip.Visible = player:GetAttribute(HAND.HandAttribute) == true
+end
+paintHatchHint()
+player:GetAttributeChangedSignal(HAND.HandAttribute):Connect(paintHatchHint)
 
 local function paintGlyphs()
 	for _, h in ipairs(hintList) do

@@ -93,6 +93,26 @@ export type Handle = {
 	button: TextButton,
 }
 
+--==============================================================================
+-- THE ROW IS SHARED (2026-10-10)
+--
+-- REMOVE over a trap's slot and HATCH over a READY pod's (PodHatch) stand in
+-- the same row over the strip. Each claims it by name; the row is published --
+-- the one RemoveRowAttribute every HUD owner re-reads -- while either does.
+-- Keyed by player, so a spec's stand-in never meets the real one.
+--==============================================================================
+local rowClaims: { [any]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+
+function TrapRemove.claimRow(player: any, who: string, want: boolean)
+	local claims = rowClaims[player]
+	if not claims then
+		claims = {}
+		rowClaims[player] = claims
+	end
+	claims[who] = if want then true else nil
+	player:SetAttribute(HOT.RemoveRowAttribute, if next(claims) ~= nil then true else nil)
+end
+
 -- The state off the records gui, or "unknown" without one.
 function TrapRemove.read(marks: Instance?): State
 	if not marks then
@@ -202,7 +222,7 @@ function TrapRemove.new(gui: ScreenGui, opts: Options): Handle
 		local want = current.known and current.placed >= 1 and slotIndex ~= nil
 		if rowWanted ~= want then
 			rowWanted = want
-			player:SetAttribute(HOT.RemoveRowAttribute, if want then true else nil)
+			TrapRemove.claimRow(player, "trap", want)
 		end
 		local L = layout
 		local press, drawn = nil, nil
