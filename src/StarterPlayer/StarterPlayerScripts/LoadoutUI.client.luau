@@ -26,8 +26,8 @@
 --
 -- Any eligible item can sit in any slot: ten on a desktop (keys 1-9 and 0),
 -- five on a phone. A slot is a SHORTCUT to something owned (HotbarSlots), never
--- a copy: an item on the bar is not shown in the grid, and taking its shortcut
--- away puts it back there. The bar is saved on the server by item id, so it
+-- a copy: an item on the bar stands in the grid too, wearing its slot's number
+-- (2026-10-10; left out of it before). The bar is saved on the server by item id, so it
 -- survives a respawn and a rejoin; arrivals -- a hatch, a pickup, a banked pod,
 -- a prize, a new bat -- go to the first empty shown slot (or the faint slot
 -- waiting for their kind), else into the grid. The Bag is a compact grid of
@@ -1055,13 +1055,18 @@ end
 --==============================================================================
 -- THE BAG, PAINTED (only while it is open)
 --
--- InventoryModel groups what is owned -- the shown slots' items left out, a
--- phone's hidden slots (6-0) in the grid with a badge -- and filters it by the
--- panel's category, search words and heart; InventoryPanel draws the tiles.
+-- InventoryModel groups what is owned -- EVERY bar item in the grid too, its
+-- slot's number on a badge (2026-10-10, Michael on v1047: "Maybe they should
+-- appear in the bag as well but with a frame and icon for the hotbar number";
+-- until then the shown slots' items were left out and only a phone's hidden
+-- 6-0 were there). So a controller reaches every bar item from the Bag (its
+-- menu's Remove from hotbar), a pod's size shows on its tile, and a bar pod
+-- hatches from it. Filtered by the panel's category, search words and heart;
+-- InventoryPanel draws the tiles.
 --==============================================================================
 local function refreshBag()
 	local held = heldTool()
-	local groups = InventoryModel.groups(view.items, shownBar(), activeSlots, HotbarSlots.refOfTool(held), held)
+	local groups = InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held)
 	table.clear(view.byKey)
 	for _, group in ipairs(groups) do
 		view.byKey[group.key] = group

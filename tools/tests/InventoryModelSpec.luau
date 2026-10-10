@@ -254,6 +254,28 @@ local ok, err = pcall(function()
 		end
 	end
 	check(badged ~= nil and badged.badge == 7 and badged.count == 1, "phone: slot 7's item is in the grid with its badge")
+	-- EVERY BAR ITEM IN THE GRID TOO (2026-10-10, Michael on v1047: "Maybe they
+	-- should appear in the bag as well but with a frame and icon for the hotbar
+	-- number"; the owner approved): LoadoutUI asks with shown = 0, so each slotted
+	-- item is its own tile wearing its slot's number.
+	local all = InventoryModel.groups(set, barTen, 0, nil, nil)
+	local badges = {}
+	for _, g in ipairs(all) do
+		if g.badge then
+			table.insert(badges, g.badge)
+		end
+	end
+	table.sort(badges)
+	check(table.concat(badges, ",") == "1,4,7", "shown 0: the bat (slot 1), slot 4's and slot 7's items are tiles with their badges",
+		table.concat(badges, ","))
+	local loadout = ""
+	for _, s in ipairs(game:GetService("StarterPlayer"):GetDescendants()) do
+		if s.Name == "LoadoutUI" and s:IsA("LocalScript") then
+			loadout = s.Source
+		end
+	end
+	check(string.find(loadout, "InventoryModel.groups(view.items, shownBar(), 0, HotbarSlots.refOfTool(held), held)", 1, true)
+			~= nil, "LoadoutUI asks for every bar item in the grid (shown 0)")
 	local counts = InventoryModel.counts(set)
 	check(counts.all == 7 and counts.plants == 5 and counts.equipment == 1 and counts.tickets == 12,
 		"counts include the bar; Spin Tickets is the balance", counts.all)
