@@ -117,6 +117,8 @@ export type Card = {
 	rarity: TextLabel,
 	rarityFX: RarityFX.Handle,
 	edgeFX: RarityFX.Handle,
+	-- A Mythic, Divine or Secret card's shine over its studs (2026-10-10).
+	shineFX: RarityFX.Handle,
 	name: TextLabel,
 	size: TextLabel,
 	income: TextLabel,
@@ -232,6 +234,9 @@ local function buildCard(gui: SurfaceGui, index: number): Card
 	local tint = MenuKit.cardFace(face)
 	local edge = MenuKit.keyline(face, LOOK.CardEdge, 2)
 	local studs = UIKit.studCard(face, 10, Z + 1)
+	-- The three rarest's shine (2026-10-10): right after the studs, so over
+	-- them and under the picture and words made after it.
+	local shineFX = RarityFX.shine(face, 10, Z + 1)
 	local words = MenuKit.frame(face, "Words", Z + 4, BAG.StudWords, BAG.StudWordsTransparency, 8)
 	words.Position = UDim2.fromOffset(6, WORDS_TOP)
 	words.Size = UDim2.new(1, -12, 0, CARD_H - WORDS_TOP - 6)
@@ -279,6 +284,7 @@ local function buildCard(gui: SurfaceGui, index: number): Card
 		rarity = rarity,
 		rarityFX = RarityFX.text(rarity, rarityInk),
 		edgeFX = RarityFX.edge(face, 10, Z + 4),
+		shineFX = shineFX,
 		name = name,
 		size = size,
 		income = income,
@@ -409,6 +415,7 @@ local function paintQuiet(card: Card)
 	card.edge.Color = LOOK.CardEdge
 	MenuKit.cardTint(card.tint, nil)
 	card.studs.set(nil)
+	RarityFX.setShine(card.shineFX, nil)
 	card.words.Visible = false
 	setWords(card, false)
 	card.empty.Visible = true
@@ -427,9 +434,13 @@ local function paintCreature(card: Card, content: PlantLabel.Content, slot: Plot
 
 	-- The rarity's studded colour; a Common keeps the plain card.
 	local studKey = (BAG.StudsByRarity :: any)[content.rarity]
-	local studded = card.studs.set(studKey) ~= nil
+	local spec = card.studs.set(studKey)
+	local studded = spec ~= nil
 	card.studded = studded
 	card.words.Visible = studded
+	-- The white card's words stand on a denser band (its `words`, 2026-10-10).
+	card.words.BackgroundTransparency = if spec and spec.words then spec.words else BAG.StudWordsTransparency
+	RarityFX.setShine(card.shineFX, if studded then content.rarity else nil)
 	MenuKit.cardTint(card.tint, GameConfig.RarityColor[content.rarity])
 	local rare = RarityFX.edgeColour(content.rarity)
 	card.edge.Color = rare or (if studded then BAG.Ink else LOOK.CardEdge)
@@ -549,6 +560,7 @@ function PlotShowcaseView.setActive(view: View, on: boolean)
 		local live = on and card.filled
 		RarityFX.setActive(card.rarityFX, live)
 		RarityFX.setActive(card.edgeFX, live)
+		RarityFX.setActive(card.shineFX, live)
 	end
 end
 
@@ -587,6 +599,7 @@ function PlotShowcaseView.destroy(view: View)
 	for _, card in ipairs(view.cards) do
 		RarityFX.forget(card.rarityFX)
 		RarityFX.forget(card.edgeFX)
+		RarityFX.forget(card.shineFX)
 		table.clear(card.glints)
 		card.preview = nil
 	end

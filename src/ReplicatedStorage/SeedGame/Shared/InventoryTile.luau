@@ -135,6 +135,8 @@ export type Tile = {
 	marker: Frame,
 	fxEdge: RarityFX.Handle,
 	fxText: RarityFX.Handle,
+	-- A Mythic, Divine or Secret card's shine over its studs (2026-10-10).
+	fxShine: RarityFX.Handle,
 	-- A grown plant's still rarity band, Common to Legendary (2026-10-10).
 	ring: Frame,
 	pop: UIKit.CardPop,
@@ -237,6 +239,9 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 	-- the solid colour until the picture has loaded), its words on a quiet ink
 	-- backing. A Common and an ordinary pod keep the slate.
 	local studs = UIKit.studCard(back, 8, zIndex + 1)
+	-- The three rarest's shine (2026-10-10): right after the studs, so over
+	-- them and under the preview made after it.
+	local fxShine = RarityFX.shine(back, 8, zIndex + 1)
 	local words = Instance.new("Frame")
 	words.Name = "Words"
 	words.BackgroundColor3 = LOOK.StudWords
@@ -430,6 +435,7 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 		marker = marker,
 		fxEdge = fxEdge,
 		fxText = fxText,
+		fxShine = fxShine,
 		ring = ring,
 		pop = pop,
 		compact = false,
@@ -471,6 +477,7 @@ end
 function InventoryTile.animate(tile: Tile, on: boolean)
 	RarityFX.setActive(tile.fxEdge, on)
 	RarityFX.setActive(tile.fxText, on)
+	RarityFX.setActive(tile.fxShine, on)
 end
 
 function InventoryTile.paint(tile: Tile, T: any, p: Paint)
@@ -502,8 +509,12 @@ function InventoryTile.paint(tile: Tile, T: any, p: Paint)
 	local rare = RarityFX.edgeColour(p.rarity)
 	-- Held: the lit emerald; otherwise the opaque emerald slate.
 	tile.backTint.Color = ColorSequence.new(if p.held then LOOK.TileHeld else LOOK.TileTop, LOOK.TileBottom)
-	local studded = tile.studs.set(p.studs) ~= nil
+	local spec = tile.studs.set(p.studs)
+	local studded = spec ~= nil
 	tile.words.Visible = studded
+	-- A white card's words stand on a denser band (its `words`, 2026-10-10).
+	tile.words.BackgroundTransparency = if spec and spec.words then spec.words else LOOK.StudWordsTransparency
+	RarityFX.setShine(tile.fxShine, if studded and not p.restoring then p.rarity else nil)
 	tile.ringTint.Enabled = p.held
 	-- A studded tile's plain edge is the ink keyline; held and rare keep theirs.
 	tile.plate.Color = if p.held then WHITE elseif rare then rare elseif studded then LOOK.Ink else T.Edge

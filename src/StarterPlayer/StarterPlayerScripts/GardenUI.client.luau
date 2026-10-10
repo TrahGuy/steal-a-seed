@@ -281,6 +281,8 @@ type Card = {
 	words: Frame,
 	fxText: RarityFX.Handle,
 	fxEdge: RarityFX.Handle,
+	-- A Mythic, Divine or Secret card's shine over its studs (2026-10-10).
+	fxShine: RarityFX.Handle,
 	shownKey: string,
 	art: any,
 	artKey: string,
@@ -350,6 +352,9 @@ local function cardFor(key: string): Card
 	-- on a quiet ink backing so the name, the rarity's own word and the income
 	-- read on any colour. A Common and a pod keep the plain card.
 	local studs = UIKit.studCard(face, 8, Z + 1)
+	-- The three rarest's shine (2026-10-10): right after the studs, so over
+	-- them and under the picture and words made after it.
+	local fxShine = RarityFX.shine(face, 8, Z + 1)
 	local words = MenuKit.frame(face, "Words", Z + 4, STUD_LOOK.StudWords, STUD_LOOK.StudWordsTransparency, 6)
 	words.Visible = false
 	-- The selection: a lit ring standing just outside the card.
@@ -422,6 +427,7 @@ local function cardFor(key: string): Card
 		words = words,
 		fxText = RarityFX.text(variant, variant:FindFirstChildOfClass("UIStroke")),
 		fxEdge = RarityFX.edge(face, 8, Z + 4),
+		fxShine = fxShine,
 		shownKey = "",
 		art = nil,
 		artKey = "",
@@ -450,6 +456,7 @@ local function buildVisible()
 		local inView = shown and p.Y + s.Y > at.Y and p.Y < at.Y + size.Y
 		RarityFX.setActive(c.fxText, inView)
 		RarityFX.setActive(c.fxEdge, inView)
+		RarityFX.setActive(c.fxShine, inView)
 	end
 end
 grid:GetPropertyChangedSignal("CanvasPosition"):Connect(buildVisible)
@@ -676,14 +683,21 @@ local function paintCard(c: Card, e: Entry, order: number)
 		-- A pod's card stays plain: it says nothing a pod does not.
 		MenuKit.cardTint(c.tint, nil)
 		c.studs.set(nil)
+		RarityFX.setShine(c.fxShine, nil)
 		c.words.Visible = false
 		MenuKit.ink(c.name, LOOK.Text)
 	else
 		c.variant.Text = face.variant
 		RarityFX.setText(c.fxText, if face.variantIsRarity then face.rarity else nil, face.variantColour or LOOK.Muted)
 		c.rate.Text = if e.restoring then "Restoring…" else money(e.rate)
-		local studded = c.studs.set(face.studs) ~= nil
+		local spec = c.studs.set(face.studs)
+		local studded = spec ~= nil
 		c.words.Visible = studded
+		-- The white card (2026-10-10): its words on a denser band, and the
+		-- selection's line on its edge dark, where a white one would vanish.
+		c.words.BackgroundTransparency = if spec and spec.words then spec.words else STUD_LOOK.StudWordsTransparency
+		c.innerRing.Color = if spec and spec.light then LOOK.Ink else WHITE
+		RarityFX.setShine(c.fxShine, if studded and not e.restoring then face.rarity else nil)
 		MenuKit.ink(c.name, if studded then WHITE else LOOK.Text)
 		c.rate.TextColor3 = if e.restoring then (if studded then LOOK.Cream else LOOK.Muted)
 			elseif studded then STUD_LOOK.StudMoney
@@ -783,6 +797,7 @@ refresh = function()
 			c.holder.Visible = false
 			RarityFX.setActive(c.fxText, false)
 			RarityFX.setActive(c.fxEdge, false)
+			RarityFX.setActive(c.fxShine, false)
 		end
 	end
 	local first = entries[1]
@@ -1047,6 +1062,7 @@ local function setOpen(want: boolean)
 		for _, c in pairs(cards) do
 			RarityFX.setActive(c.fxText, false)
 			RarityFX.setActive(c.fxEdge, false)
+			RarityFX.setActive(c.fxShine, false)
 		end
 	end
 	relayout()

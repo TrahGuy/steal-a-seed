@@ -1041,8 +1041,9 @@ local function refreshHotbar()
 				number = slotWord(i),
 				-- The stack's count: the wheel's earned balance.
 				stack = if item and item.kind == "ticket" then "x" .. tostring(item.count) else nil,
-				-- A grown plant's rarity colour; a pod's is the hatch's to show.
-				accent = if item and item.kind == "plant" and face then face.accent else nil,
+				-- A grown plant's rarity colour, or a bat's or trap's (2026-10-10);
+				-- a pod's is the hatch's to show.
+				accent = if item and (item.kind == "plant" or item.kind == "weapon") and face then face.accent else nil,
 				-- The Tool's own name ("???" for a pod, and while a roll runs), for
 				-- TutorialUI's pointer.
 				name = if item and item.tool then HatchRoll.shownName(item.tool) elseif face then face.name else "",
@@ -1052,8 +1053,9 @@ local function refreshHotbar()
 				target = assign.ref ~= nil,
 				-- Only what the face may say: a pod's is its shell's or nothing.
 				rarity = if face then face.rarity else nil,
-				-- A grown plant's still rarity edge, Common to Legendary (2026-10-10).
-				edge = if item and item.kind == "plant" and face then face.edge else nil,
+				-- A grown plant's still rarity edge, Common to Legendary (2026-10-10),
+				-- or a bat's or trap's.
+				edge = if item and (item.kind == "plant" or item.kind == "weapon") and face then face.edge else nil,
 				-- A trap's placements still available, the server's own count.
 				uses = if isTrap and traps and traps.known then WeaponData.TrapsLeftText(traps.left) else nil,
 				usesEmpty = isTrap and traps ~= nil and traps.left == 0,
@@ -1164,8 +1166,9 @@ local function refreshBag()
 				favourite = group.favourite,
 				held = group.held,
 				restoring = group.restoring,
-				accent = if group.category == "plants" then face.accent else nil,
-				edge = if group.category == "plants" then face.edge else nil,
+				-- Plants', and since 2026-10-10 bats' and traps' (the trail has none).
+				accent = if group.category == "plants" or group.category == "equipment" then face.accent else nil,
+				edge = if group.category == "plants" or group.category == "equipment" then face.edge else nil,
 				rarity = face.rarity,
 				variantIsRarity = face.variantIsRarity,
 				studs = face.studs,

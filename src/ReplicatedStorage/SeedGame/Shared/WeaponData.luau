@@ -105,6 +105,12 @@ export type Item = {
 	Blurb: string,
 	-- What the badge on the right of the card says.
 	Badge: string,
+	-- Its card's rarity (2026-10-10, the owner: the rarity colours "also
+	-- applies on equipments and traps too"): a GameConfig.Rarities id, by price
+	-- along its own shelf -- bats Common to Mythic, traps Uncommon to Mythic.
+	-- Looks only: the Bag card's studs, edge and word, the strip's edge. Never a
+	-- price, a power, a drop or a save.
+	Rarity: string,
 
 	--== BAT NUMBERS. Zero on the trap, which never swings. ==--
 	-- How far in front of the swinger a hit can land, in studs.
@@ -191,6 +197,7 @@ WeaponData.Items = {
 		Price = 5000,
 		Blurb = "Crooked timber wrapped in living root. Knocks straight back, and nothing more.",
 		Badge = "STARTER",
+		Rarity = "Common",
 		Reach = 12,
 		Power = 10,
 		Lift = 0.50,
@@ -216,6 +223,7 @@ WeaponData.Items = {
 		Price = 40000,
 		Blurb = "Ribbed cactus on a short handle. Swings twice as often and shoves sideways.",
 		Badge = "FAST",
+		Rarity = "Uncommon",
 		Reach = 8.5,
 		Power = 14,
 		Lift = 0.35,
@@ -241,6 +249,7 @@ WeaponData.Items = {
 		Price = 300000,
 		Blurb = "A seed-heavy flower head. Punts upward first and away second, in a burst of petals.",
 		Badge = "LAUNCHER",
+		Rarity = "Rare",
 		Reach = 11,
 		Power = 19,
 		--======================================================================
@@ -296,6 +305,7 @@ WeaponData.Items = {
 		Price = 1200000,
 		Blurb = "A broad swamp branch, flattened by water. Longest reach, and it sweeps across.",
 		Badge = "REACH",
+		Rarity = "Epic",
 		Reach = 17,
 		Power = 25,
 		Lift = 0.40,
@@ -322,6 +332,7 @@ WeaponData.Items = {
 		Price = 9000000,
 		Blurb = "Scorched wood split by glowing cracks. Hits hardest, and leaves you wide open.",
 		Badge = "HEAVY",
+		Rarity = "Legendary",
 		Reach = 13,
 		Power = 32,
 		Lift = 0.45,
@@ -348,6 +359,7 @@ WeaponData.Items = {
 		Price = 60000000,
 		Blurb = "A tapered cosmic club. Launches on a rising diagonal and drags a star trail.",
 		Badge = "COSMIC",
+		Rarity = "Mythic",
 		Reach = 14,
 		Power = 40,
 		--======================================================================
@@ -388,6 +400,7 @@ WeaponData.Items = {
 		Price = 150000,
 		Blurb = "Hidden thorn jaws that spring once, then return to you. Knocks loose any pod and holds the thief still.",
 		Badge = "TRAP",
+		Rarity = "Uncommon",
 		-- A trap never swings, and CombatService never reads these off it. They
 		-- are zero rather than absent so every card can print the same three
 		-- rows without asking whether the row exists -- and so a bat that ever
@@ -429,6 +442,7 @@ WeaponData.Items = {
 		Price = 750000,
 		Blurb = "A hidden sandstone plate that springs once, then returns to you. Knocks loose any pod, trips the thief, then slows them.",
 		Badge = "TRAP",
+		Rarity = "Rare",
 		Reach = 0,
 		Power = 0,
 		Lift = 0,
@@ -453,6 +467,7 @@ WeaponData.Items = {
 		Price = 3500000,
 		Blurb = "A hidden mud pool that springs once, then returns to you. Knocks loose any pod and turns the road to wading.",
 		Badge = "TRAP",
+		Rarity = "Epic",
 		Reach = 0,
 		Power = 0,
 		Lift = 0,
@@ -477,6 +492,7 @@ WeaponData.Items = {
 		Price = 15000000,
 		Blurb = "A hidden volcanic mine that springs once, then returns to you. Blasts the pod loose and the thief down, then slows them.",
 		Badge = "TRAP",
+		Rarity = "Legendary",
 		Reach = 0,
 		Power = 0,
 		Lift = 0,
@@ -501,6 +517,7 @@ WeaponData.Items = {
 		Price = 60000000,
 		Blurb = "A hidden cosmic anchor that springs once, then returns to you. Knocks loose any pod, pulls the thief back, then slows them.",
 		Badge = "TRAP",
+		Rarity = "Mythic",
 		Reach = 0,
 		Power = 0,
 		Lift = 0,

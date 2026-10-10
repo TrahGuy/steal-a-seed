@@ -9,8 +9,9 @@
 -- swapped for the reduced-motion half and put back.
 --
 --   1. what may be said: a face's rarity is the form's for a grown plant, the
---      shell's for a Secret or Rain pod, nothing for any ordinary pod (every
---      species), a plant still in its roll, or equipment; the Rarity line
+--      shell's for a Secret or Rain pod, a bat's or trap's own (2026-10-10,
+--      WeaponData's Rarity), nothing for any ordinary pod (every species) or a
+--      plant still in its roll; the Rarity line
 --   2. the styles: three ids and no others ("Mythical" is not one)
 --   3. the word: styled, plain again, Secret's italic and light keyline
 --   4. the edge: shown, put out, running only when switched on, a step turns
@@ -21,7 +22,8 @@
 --   7. the other five, still (2026-10-10, the owner: "yes, add rarity edges"):
 --      a GROWN plant from Common to Legendary wears its rarity's colour -- a
 --      band inside a Bag tile's keyline and an Almanac card's, the strip slot's
---      own edge -- and nothing else does; held, target, pending and a flash
+--      own edge -- and so, since 2026-10-10, does a bat or trap of those
+--      rarities; no pod does; held, target, pending and a flash
 --      outrank it, restoring keeps it; legible at a phone's 85%
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -125,9 +127,11 @@ local ok, err = pcall(function()
 		"Rain pod 2 shows its size; its rarity is the shell's own")
 	f = InventoryModel.face(item("pod", "gloomlotus", 4, { hatched = true, sealed = true }))
 	check(f.rarity == nil, "a plant still in its roll is its pod: no rarity")
-	local weaponId = require(Shared:WaitForChild("WeaponData")).Items[1].Id
+	local firstWeapon = require(Shared:WaitForChild("WeaponData")).Items[1]
+	local weaponId = firstWeapon.Id
 	f = InventoryModel.face(item("weapon", nil, 1, { weaponId = weaponId }))
-	check(f.rarity == nil and not f.variantIsRarity, "equipment has no rarity")
+	check(f.rarity == firstWeapon.Rarity and f.variantIsRarity and f.variant == firstWeapon.Rarity,
+		"a bat or trap says its own rarity (2026-10-10, WeaponData's Rarity; looks only)", f.rarity)
 	local lines = InventoryModel.details(item("pod", "gloomlotus", 4, { hatched = false }),
 		InventoryModel.face(item("pod", "gloomlotus", 4, { hatched = false })), nil, nil, false)
 	local rarityLine = nil
@@ -397,9 +401,9 @@ local ok, err = pcall(function()
 		end
 	end
 	local weaponFace = InventoryModel.face(item("weapon", nil, 1, { weaponId = weaponId }))
-	check(#wrong == 0 and faces.Common and faces.Legendary and weaponFace.edge == nil,
-		"every species: grown, its form rarity's still edge (none for the three rarest); never a pod, a plant in its "
-			.. "roll or equipment", table.concat(wrong, ", "))
+	check(#wrong == 0 and faces.Common and faces.Legendary and weaponFace.edge == EDGE.Colours[firstWeapon.Rarity],
+		"every species: grown, its form rarity's still edge (none for the three rarest); never a pod or a plant in "
+			.. "its roll; a bat or trap its own rarity's (2026-10-10)", table.concat(wrong, ", "))
 
 	-- A Bag tile: the band inside the keyline, which stays.
 	local tile2 = InventoryTile.build(layer, HOT, 5)
@@ -475,17 +479,22 @@ local ok, err = pcall(function()
 	check(slot2.stroke.Color == FX.Divine.Edge and slot2.stroke.Thickness == HOT.CardStroke,
 		"a Divine: RarityFX's own edge, as before")
 
-	-- The wiring: only a grown plant's face is handed its edge, on the strip and
-	-- in the Bag; the Almanac's card wears it only once grown.
+	-- The wiring: a grown plant's face is handed its edge, and since 2026-10-10
+	-- a bat's or trap's, on the strip and in the Bag; never a pod's. The
+	-- Almanac's card wears it only once grown.
 	local Client = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
 	local function src(name)
 		local s = Client:FindFirstChild(name)
 		return if s then s.Source else ""
 	end
 	local loadout, index = src("LoadoutUI"), src("IndexUI")
-	check(string.find(loadout, "edge = if item and item.kind == \"plant\" and face then face.edge else nil", 1, true)
-			and string.find(loadout, "edge = if group.category == \"plants\" then face.edge else nil", 1, true),
-		"LoadoutUI hands the edge on for a grown plant only, on the strip and in the Bag")
+	check(string.find(loadout,
+			"edge = if item and (item.kind == \"plant\" or item.kind == \"weapon\") and face then face.edge else nil",
+			1, true)
+			and string.find(loadout,
+				"edge = if group.category == \"plants\" or group.category == \"equipment\" then face.edge else nil",
+				1, true),
+		"LoadoutUI hands the edge on for a grown plant and a bat or trap, on the strip and in the Bag; never a pod")
 	check(string.find(index, "local ring = RarityFX.ring(face, 8, Z + 4, (GameConfig.RarityEdge :: any).Ring)", 1, true)
 			and string.find(index,
 				"RarityFX.setRing(c.ring, if known and not rare then RarityFX.stillEdge(face.rarity) else nil)", 1, true),

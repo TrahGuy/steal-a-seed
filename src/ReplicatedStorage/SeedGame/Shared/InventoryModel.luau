@@ -78,15 +78,17 @@ export type Face = {
 	variant: string,
 	variantColour: Color3,
 	-- The rarity the player may already see (2026-10-03): a grown plant's form,
-	-- a Secret or Rain pod's shell; nil for an ordinary pod (its hatch is the
-	-- reveal), a plant still in its roll, and equipment. `variantIsRarity`
-	-- when the variant line IS that word (no size to show instead).
+	-- a Secret or Rain pod's shell, a bat's or trap's own (2026-10-10); nil for
+	-- an ordinary pod (its hatch is the reveal), a plant still in its roll,
+	-- tickets and the trail. `variantIsRarity` when the variant line IS that
+	-- word (no size to show instead).
 	rarity: string?,
 	variantIsRarity: boolean,
 	accent: Color3?,
-	-- A GROWN plant's still rarity edge, Common to Legendary (2026-10-10,
-	-- GameConfig.RarityEdge); nil for the three rarest (RarityFX's own), every
-	-- pod, a plant still in its roll and anything that is not a plant.
+	-- A GROWN plant's or a bat's or trap's still rarity edge, Common to
+	-- Legendary (2026-10-10, GameConfig.RarityEdge); nil for the three rarest
+	-- (RarityFX's own), every pod, a plant still in its roll, tickets and the
+	-- trail.
 	edge: Color3?,
 	visual: string,
 	art: Art,
@@ -375,18 +377,25 @@ function InventoryModel.face(item: Item): Face
 	if item.kind == "weapon" then
 		local weapon = WeaponData.Get(item.weaponId) :: WeaponData.Item
 		local word = if weapon.Category == "trap" then "Trap" else "Bat"
+		-- Its rarity (2026-10-10, WeaponData's `Rarity`; looks only): its card,
+		-- edge and word as a grown plant of that rarity wears them. The word is
+		-- the vivid edge colour, which reads on every card's ink backing.
+		local rarity = weapon.Rarity
+		local fx = (GameConfig.RarityFX :: any)[rarity]
+		local still = (GameConfig.RarityEdge.Colours :: any)[rarity]
 		return {
 			name = weapon.Name,
-			variant = word,
-			variantColour = QUIET,
-			rarity = nil,
-			variantIsRarity = false,
-			accent = nil,
+			variant = rarity,
+			variantColour = still or GameConfig.RarityColor[rarity] or QUIET,
+			rarity = rarity,
+			variantIsRarity = true,
+			accent = if fx then fx.Edge else GameConfig.RarityColor[rarity],
+			edge = still,
 			visual = "w|" .. weapon.Id,
 			art = { kind = "weapon", speciesId = nil, tier = 1, weaponId = weapon.Id },
-			search = string.lower(weapon.Name .. " " .. word),
+			search = string.lower(weapon.Name .. " " .. word .. " " .. rarity),
 			category = "equipment",
-			studs = STUDS_BY_KIND.equipment,
+			studs = STUDS_BY_RARITY[rarity],
 		}
 	elseif item.kind == "ticket" then
 		return {
@@ -726,6 +735,9 @@ function InventoryModel.details(item: Item, face: Face, multiplier: number?, slo
 		end
 	elseif item.kind == "weapon" then
 		local weapon = WeaponData.Get(item.weaponId) :: WeaponData.Item
+		-- Its rarity (2026-10-10), and what it is: the tile's line says the rarity now.
+		add("Rarity", weapon.Rarity, GameConfig.RarityColor[weapon.Rarity], weapon.Rarity)
+		add("Type", if weapon.Category == "trap" then "Trap" else "Bat")
 		for _, stat in ipairs(WeaponData.StatLines(weapon)) do
 			add(stat.label, stat.value)
 		end

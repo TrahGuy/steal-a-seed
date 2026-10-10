@@ -15,6 +15,11 @@
 --          small light that travels round the card (the stroke's UIGradient
 --          turns, its transparency lit only near one end). The card's own
 --          stroke carries the rarity's colour at rest -- that is the caller's.
+--   shine  (2026-10-10, the owner: "add shine effect") a band of light that
+--          crosses a STUDDED card once a cycle, over its studs and under its
+--          picture and words (the caller makes it right after the card's
+--          UIKit.studCard, at the same ZIndex): a frame whose UIGradient is
+--          clear but for the band, slid across by its Offset.
 --
 -- ONE CLOCK, AND IT IS NOT THIS FILE'S. Nothing here connects to anything or
 -- loops: `step` is called by the strip's existing cooldown tick (LoadoutUI),
@@ -48,10 +53,14 @@ export type Style = {
 	edge: Color3,
 	glint: ColorSequence,
 	glintFade: NumberSequence,
+	-- The card's shine (2026-10-10): the band's colours and its transparency,
+	-- clear but for the band; nil for a style with no `Shine`.
+	shine: ColorSequence?,
+	shineFade: NumberSequence?,
 }
 
 export type Handle = {
-	kind: string, -- "text" | "edge"
+	kind: string, -- "text" | "edge" | "shine"
 	gradient: UIGradient,
 	rarity: string?,
 	on: boolean,
@@ -64,7 +73,7 @@ export type Handle = {
 	plainFont: Font?,
 	plainKeyline: Color3?,
 	plainKeylineTransparency: number?,
-	-- edge
+	-- edge, and the shine's frame
 	frame: Frame?,
 	stroke: UIStroke?,
 	corner: UICorner?,
@@ -104,6 +113,24 @@ for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
 			NumberSequenceKeypoint.new(span, 1),
 			NumberSequenceKeypoint.new(1, 1),
 		})
+		-- The shine: three colours across a band 2 x Width wide at the middle
+		-- of the gradient, strongest (ShinePeak) at its centre, clear outside.
+		local shine, shineFade = nil, nil
+		local across = s.Shine
+		if across then
+			local w = FX.Shine.Width
+			shine = ColorSequence.new({
+				key(0, across[1]), key(0.5 - w, across[1]), key(0.5, across[2]), key(0.5 + w, across[3]),
+				key(1, across[3]),
+			})
+			shineFade = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.5 - w, 1),
+				NumberSequenceKeypoint.new(0.5, s.ShinePeak or 0.4),
+				NumberSequenceKeypoint.new(0.5 + w, 1),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+		end
 		styles[id] = {
 			id = id,
 			text = text,
@@ -115,6 +142,8 @@ for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
 			edge = s.Edge,
 			glint = glint,
 			glintFade = glintFade,
+			shine = shine,
+			shineFade = shineFade,
 		}
 	end
 end
@@ -354,6 +383,83 @@ function RarityFX.setEdge(h: Handle, rarity: string?, glint: boolean)
 end
 
 --==============================================================================
+-- THE SHINE (2026-10-10, the owner: "add shine effect")
+--
+-- A band of light across a Mythic, Divine or Secret studded card, once every
+-- CycleSeconds (GameConfig.RarityFX.Shine). Made by the caller RIGHT AFTER the
+-- card's UIKit.studCard, on the same face at the same ZIndex, so it lies over
+-- the studs and under everything made after it (the picture, the words).
+--==============================================================================
+local SHINE: any = FX.Shine
+-- Where the band rests between sweeps: past the right edge, so nothing shows.
+local SHINE_REST = Vector2.new(1, 0)
+
+function RarityFX.shine(face: GuiObject, radius: number, zIndex: number): Handle
+	local frame = Instance.new("Frame")
+	frame.Name = "RarityShine"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = WHITE
+	frame.BackgroundTransparency = 0
+	frame.BorderSizePixel = 0
+	frame.Active = false
+	frame.Visible = false
+	frame.ZIndex = zIndex
+	frame.Parent = face
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = frame
+	local gradient = Instance.new("UIGradient")
+	gradient.Name = "Shine"
+	gradient.Rotation = SHINE.Rotation
+	gradient.Offset = SHINE_REST
+	gradient.Transparency = NumberSequence.new(1)
+	gradient.Parent = frame
+	local h: Handle = {
+		kind = "shine",
+		gradient = gradient,
+		rarity = nil,
+		on = false,
+		animated = false,
+		gate = nil,
+		frame = frame,
+		corner = corner,
+	}
+	all[h] = true
+	return h
+end
+
+-- `rarity` with a shine (and the card studded -- the caller's to say: pass nil
+-- for a plain card) shows it; anything else, or reduced motion, hides it.
+function RarityFX.setShine(h: Handle, rarity: string?)
+	local frame = h.frame :: Frame
+	local s = RarityFX.style(rarity)
+	h.rarity = if s then rarity else nil
+	local show = s ~= nil and (s :: Style).shine ~= nil and not RarityFX.still()
+	if show then
+		local style = s :: Style
+		h.gradient.Color = style.shine :: ColorSequence
+		h.gradient.Transparency = style.shineFade :: NumberSequence
+	end
+	h.gradient.Offset = SHINE_REST
+	frame.Visible = show
+	h.animated = show
+	reconsider(h)
+end
+
+-- Where the band is at `now` on a card whose left edge is `x` px across the
+-- screen: crossing (-1 to 1) for Sweep seconds at the start of each cycle, a
+-- card further right starting up to Wave seconds later; resting past the right
+-- edge otherwise.
+function RarityFX.shineOffset(now: number, x: number): number
+	local delay = math.clamp(x / 1000, 0, 2) * SHINE.Wave
+	local t = (now - delay) % FX.CycleSeconds
+	if t < SHINE.Sweep then
+		return -1 + 2 * (t / SHINE.Sweep)
+	end
+	return SHINE_REST.X
+end
+
+--==============================================================================
 -- THE OTHER FIVE: A STILL EDGE (2026-10-10, the owner: "yes, add rarity edges")
 --
 -- Common to Legendary, on a GROWN plant's card only (GameConfig.RarityEdge):
@@ -419,6 +525,8 @@ local function redrawAll()
 			RarityFX.setText(h, h.rarity, label.TextColor3)
 		elseif h.kind == "edge" then
 			RarityFX.setEdge(h, h.rarity, h.animated)
+		elseif h.kind == "shine" then
+			RarityFX.setShine(h, h.rarity)
 		end
 	end
 end
@@ -446,6 +554,11 @@ function RarityFX.step(now: number)
 			if gate == nil or gate.Visible then
 				if h.kind == "edge" then
 					h.gradient.Rotation = turn
+				elseif h.kind == "shine" then
+					local x = RarityFX.shineOffset(now, (h.frame :: Frame).AbsolutePosition.X)
+					if h.gradient.Offset.X ~= x then
+						h.gradient.Offset = Vector2.new(x, 0)
+					end
 				else
 					h.gradient.Offset = sweep
 				end

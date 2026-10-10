@@ -2314,6 +2314,16 @@ GameConfig.RarityFX = {
 	-- How thick the travelling light is, and how much of the card it lights.
 	GlintThickness = 1.5,
 	GlintSpan = 0.22,
+	-- THE CARD'S SHINE (2026-10-10, the owner: "add shine effect"): a band of
+	-- light crossing a Mythic, Divine or Secret STUDDED card once a cycle, over
+	-- its studs and under its picture and words; Sweep seconds to cross, then
+	-- rest. Wave: a card further right starts later, up to this many seconds,
+	-- so a row of them shines left to right. Width: half the band, as a share of
+	-- the card; Rotation its slant. Each rarity's colours below (`Shine`, three
+	-- across the band) and how strong at its middle (`ShinePeak`, a
+	-- transparency) -- a white shine would vanish on the pearl card, so
+	-- Mythic's is a pastel prism and Divine's gold. Reduced motion: no shine.
+	Shine = { Sweep = 0.8, Wave = 0.6, Width = 0.13, Rotation = 22 },
 	Mythic = {
 		Text = Color3.fromRGB(238, 54, 70), -- crimson, lit enough for dark slate
 		Glow = Color3.fromRGB(255, 150, 132),
@@ -2323,6 +2333,9 @@ GameConfig.RarityFX = {
 		Edge = Color3.fromRGB(204, 34, 54),
 		Glint = Color3.fromRGB(255, 150, 104), -- an ember
 		Tail = Color3.fromRGB(255, 70, 64),
+		-- on the pearl card: a pastel prism, rose to cream to ice
+		Shine = { Color3.fromRGB(255, 160, 196), Color3.fromRGB(255, 236, 176), Color3.fromRGB(160, 226, 255) },
+		ShinePeak = 0.3,
 	},
 	Divine = {
 		Text = Color3.fromRGB(255, 247, 224), -- ivory
@@ -2333,6 +2346,9 @@ GameConfig.RarityFX = {
 		Edge = Color3.fromRGB(230, 182, 70), -- gold
 		Glint = Color3.fromRGB(255, 252, 236), -- an ivory glint
 		Tail = Color3.fromRGB(255, 224, 140),
+		-- on the pearl card: gold, its middle near white
+		Shine = { Color3.fromRGB(255, 196, 84), Color3.fromRGB(255, 236, 170), Color3.fromRGB(255, 196, 84) },
+		ShinePeak = 0.25,
 	},
 	-- The SECRET POD SPAWNED toast's italic heavy word and its palette, turned
 	-- for the dark Bag: BLACK letters inside a crisp light-silver keyline, a
@@ -2354,6 +2370,9 @@ GameConfig.RarityFX = {
 		Edge = Color3.fromRGB(196, 198, 212), -- silver
 		Glint = Color3.fromRGB(255, 255, 255),
 		Tail = Color3.fromRGB(26, 26, 34),
+		-- on the dark holo card: ice, white, lilac
+		Shine = { Color3.fromRGB(150, 236, 255), Color3.fromRGB(255, 255, 255), Color3.fromRGB(222, 178, 255) },
+		ShinePeak = 0.45,
 	},
 }
 
@@ -8527,15 +8546,33 @@ GameConfig.BagLook = {
 		rainbow = { image = "rbxassetid://118707369966787", pitch = 71.7, wide = true,
 			stops = { Color3.fromRGB(247, 61, 66), Color3.fromRGB(248, 180, 29), Color3.fromRGB(62, 238, 76),
 				Color3.fromRGB(81, 128, 248), Color3.fromRGB(225, 39, 244) } },
+		-- THE TOP THREE'S OWN (2026-10-10, Codex's art/textures/rarity-studs-
+		-- 2026-10-10, the owner's uploads): pearl WHITE (the owner: Mythic's
+		-- "background must be white"; Divine's too, "best pick for divine is
+		-- white") and the colourful midnight holo for Secret. Same stud spacing
+		-- as coral (measured 85.6 stored px, both). `words`: the words' ink
+		-- backing on this card, denser than StudWordsTransparency -- cream
+		-- words on a white card need a darker band than on a coloured one.
+		-- `light`: a selection line ON the card is drawn dark, not white.
+		pearl = { image = "rbxassetid://72726318027556", pitch = 86.1, words = 0.25, light = true,
+			top = Color3.fromRGB(241, 240, 241), bottom = Color3.fromRGB(216, 219, 224) },
+		holo = { image = "rbxassetid://78921871175240", pitch = 86.1,
+			top = Color3.fromRGB(52, 40, 150), bottom = Color3.fromRGB(44, 20, 120) },
+		-- Uploaded with them, worn by nothing yet: Secret's option A.
+		obsidian = { image = "rbxassetid://94572104024955", pitch = 86.1,
+			top = Color3.fromRGB(58, 64, 68), bottom = Color3.fromRGB(23, 26, 28) },
 	},
-	-- A creature's card wears the upload NEAREST ITS RARITY'S OWN COLOUR
-	-- (GameConfig.RarityColor) -- the colour it already had, not a new meaning.
-	-- Common's own colour is the cream card itself, so a Common keeps it.
-	StudsByRarity = { Uncommon = "lime", Rare = "sky", Epic = "purple", Legendary = "gold", Mythic = "coral",
-		Secret = "sky", Divine = "gold" },
+	-- A card wears its RARITY's upload: Uncommon to Legendary the one nearest
+	-- the rarity's own colour (GameConfig.RarityColor); since 2026-10-10 the
+	-- three rarest their own (the owner: Mythic white, Secret "the colorful
+	-- one", Divine white). Common's own colour is the plain card itself, so a
+	-- Common keeps it. Bats and traps too (WeaponData's `Rarity`).
+	StudsByRarity = { Uncommon = "lime", Rare = "sky", Epic = "purple", Legendary = "gold", Mythic = "pearl",
+		Secret = "holo", Divine = "pearl" },
 	-- The Bag's things that have no rarity: tickets the Shop's ticket violet,
-	-- bats and traps coral, the jackpot trail the rainbow.
-	StudsByKind = { tickets = "purple", equipment = "coral", trail = "rainbow" },
+	-- the jackpot trail the rainbow. (Bats and traps were coral until
+	-- 2026-10-10; they wear their rarity's card now.)
+	StudsByKind = { tickets = "purple", trail = "rainbow" },
 	-- The Shop's featured pack: the only rainbow card in it.
 	StudsFeatured = { spin10 = true },
 	-- On a studded card the words stand on a quiet ink backing (StudWords,
