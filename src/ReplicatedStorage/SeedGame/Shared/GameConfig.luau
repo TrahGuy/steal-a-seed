@@ -4772,13 +4772,15 @@ GameConfig.Carry = {
 -- THE SECRET POD AND PLANT -- 2026-10-01
 --
 -- The switch and the structure; the numbers are BiomeData's (per biome) and
--- SeedData's (the species). ON SINCE 2026-10-09 (the owner: "turn secret pods
--- back on"): each nest stocking rolls its biome's SpawnChance. With it off,
--- NestService's roll never runs and the only secret pod in a server is one the
--- Studio-only DebugService `SpawnSecret` action asked for.
+-- SeedData's (the species). On 2026-10-09 (the owner: "turn secret pods back
+-- on"), OFF AGAIN SINCE 2026-10-10 (the owner: "turn off secrets for now").
+-- On, each nest stocking rolls its biome's SpawnChance. Off, NestService's
+-- roll never runs and the Pod Guide shows no secret row; the only secret pod in
+-- a server is one the Studio-only DebugService `SpawnSecret` action asked for
+-- or an admin's console grant. Secrets players already own are untouched.
 --==============================================================================
 GameConfig.Secret = {
-	Enabled = true,
+	Enabled = false,
 	-- The spawn toast: everyone in the server, once per actual spawn, never on a
 	-- return, a respawn or across servers.
 	Toast = {

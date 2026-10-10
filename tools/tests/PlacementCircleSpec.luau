@@ -207,7 +207,7 @@ local ok, err = pcall(function()
 			and string.find(plantSrc, "then GameConfig.Secret.PodFacing\n\t\telse entry.facing", 1, true) ~= nil
 			and string.find(plantSrc, "not hatched then GameConfig.Secret.PodFacing else facingFor(id)", 1, true) ~= nil,
 		"a planted Secret pod still stands with its narrow side to the gate (kept; it decides no placement)")
-	check(GameConfig.Secret.Enabled == true, "natural Secret spawning is on (the owner, 2026-10-09)")
+	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is off (the owner, 2026-10-10: \"turn off secrets for now\")")
 end)
 
 scratch:Destroy()

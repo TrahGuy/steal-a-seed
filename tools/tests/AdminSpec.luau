@@ -984,8 +984,8 @@ local ok, err = pcall(function()
 	admin.Config.Spawning = true
 	check(not off.ok and string.find(off.message, "switched off", 1, true) and same(s0, snapshot()),
 		"with the console's own switch off, nothing is spawned", off.message)
-	check(admin.Config.Spawning == true and kept.spawning == true and GameConfig.Secret.Enabled == true,
-		"the switch is on by default, on the server; natural Secret spawning is its own switch, on since 2026-10-09")
+	check(admin.Config.Spawning == true and kept.spawning == true and GameConfig.Secret.Enabled == false,
+		"the switch is on by default, on the server; natural Secret spawning is its own switch, off since 2026-10-10")
 
 	local targetsRefused = true
 	for _, id in ipairs({ "5551", 0, -5551, 5551.5, nil, {} }) do

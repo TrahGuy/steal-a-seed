@@ -1,5 +1,12 @@
 # Steal a Seed — Session Handoff
 
+## SECRETS OFF AGAIN — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; 11 SPECS THAT READ THE SWITCH OR ROLL A SECRET GREEN)
+
+The owner: "turn off secrets for now" (after asking whether Snarlbloom spawns: it did, 5% per Greenhollow / Starbloom nest roll since v1047).
+- `GameConfig.Secret.Enabled = false`: NestService's natural roll never runs (no Snarlbloom or Petalfawn egg spawns, no SECRET EGG toast for one), and the Pod Guide shows no secret row. Unchanged: secrets players already own, the admin console's SECRET ITEMS grants (`Config.SecretGrants`), Studio's DebugService `SpawnSecret`, and the Thunderstorm's Pod 3 toast (`Secret.Toast.WeatherEggs`, its own path).
+- The six specs that pinned it ON now pin it OFF: AdminSpec, PlacementCircleSpec, RainEventSpec, RainPodsSpec, SecretToastSpec, SecretWalkSpec. Green with them: PodGuideSpec, RainFamilySpec, GuardianRecoverySpec, GuardianConfiscateSpec, SecretFormsSpec.
+- Back on: `Enabled = true` and the six pins back.
+
 ## CREATURE PICTURES ZOOMED TO THE FACE AND UPPER BODY — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; CardZoomSpec 11/0 (NEW); FULL SUITE 139 OF 139 GREEN; SEEN IN A GUARDED PLAY ON `SeedTest_zoom_20261010`, DESKTOP 1148 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
 
 The owner: "can we zoom their appearance than using a whole body? is that doable? on plants?"; asked where and how, picked the Bag tiles, the hotbar, MY PLANTS and the Index + plot board, and "Eyes, else top half (Recommended)".

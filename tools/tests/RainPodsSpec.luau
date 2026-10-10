@@ -915,7 +915,7 @@ local ok, err = pcall(function()
 		and string.find(consoleSrc, 'askWeather("thunder")', 1, true) ~= nil
 		and string.find(consoleSrc, 'setAsking("weather", verb)', 1, true) ~= nil,
 		"the console's WEATHER section has THUNDERSTORM, asked in place like the rest (every admin's since 2026-10-07)")
-	check(GameConfig.Secret.Enabled == true, "natural Secret spawning is on (the owner, 2026-10-09)")
+	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is off (the owner, 2026-10-10: \"turn off secrets for now\")")
 end)
 
 WeatherService.useClock(nil)
