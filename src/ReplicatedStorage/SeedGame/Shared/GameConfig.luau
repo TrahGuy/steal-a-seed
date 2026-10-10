@@ -11158,9 +11158,12 @@ GameConfig.PodGuide = {
 		-- The Bag: a pod's tile and its menu's way to the Almanac.
 		BagTitle = "%s pod",
 		WhatsInside = "WHAT'S INSIDE?",
+		-- A chance, "1 in N" (2026-10-10, the owner: "can we make it 1 in 1000";
+		-- PodGuide.odds). The boards write it in capitals like their other lines.
+		Odds = "1 in %s",
 		-- The Almanac: a card's chance, its detail page's lines.
-		CardChance = "%s of pods",
-		HatchesFrom = "Hatches from its own pod: %s of %s nest pods",
+		CardChance = "%s pods",
+		HatchesFrom = "Hatches from its own pod: %s %s nest pods",
 		IncomeTitle = "Income by size",
 		SizesTitle = "POD SIZES",
 	},

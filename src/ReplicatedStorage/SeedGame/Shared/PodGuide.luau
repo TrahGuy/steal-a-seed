@@ -117,6 +117,19 @@ function PodGuide.percent(p: number): string
 	return s .. "%"
 end
 
+-- A chance as players read it (the owner, 2026-10-10: "can we make it 1 in
+-- 1000"): 1 in N, N the nearest whole number to 1/p, in thousands -- 1 in 2,
+-- 1 in 9, 1 in 258, 1 in 1,000. A certainty is 1 in 1; no chance at all "-".
+function PodGuide.odds(p: number): string
+	if p ~= p or p <= 0 then
+		return "-"
+	end
+	local n = math.max(1, math.floor(1 / p + 0.5))
+	local digits = string.format("%d", n)
+	local grouped = string.reverse((string.gsub(string.reverse(digits), "(%d%d%d)", "%1,")))
+	return string.format(GameConfig.PodGuide.Words.Odds, (string.gsub(grouped, "^,", "")))
+end
+
 -- What a size is worth against Tiny, as the guide writes it: x1, x7, x35,
 -- x132, x412, x1,300, x2,375 (whole times, rounded down).
 function PodGuide.times(worth: number): string

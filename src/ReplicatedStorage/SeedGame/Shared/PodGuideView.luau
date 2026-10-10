@@ -195,7 +195,7 @@ local function buildCard(gui: SurfaceGui, index: number, row: PodGuide.PlantOdds
 	local name = line(face, "Name", NAME_SIZE, LOOK.Text, 4, PICTURE + 12 + RARITY_SIZE + 6, CARD_W - 8, NAME_SIZE + 6)
 	local chance = line(face, "Chance", CHANCE_SIZE, LOOK.Money, 4, CARD_H - CHANCE_SIZE - 12, CARD_W - 8,
 		CHANCE_SIZE + 6)
-	chance.Text = PodGuide.percent(row.chance)
+	chance.Text = string.upper(PodGuide.odds(row.chance))
 	return {
 		species = sp,
 		podHost = podHost,
@@ -228,13 +228,13 @@ local function buildSizes(gui: SurfaceGui, biomeId: string): TextLabel
 		name.Text = string.upper(s.name)
 		MenuKit.keepInk(name)
 		local chance = line(well, "SizeChance" .. i, SIZE_NUMBER, WHITE, x, 8 + rowH, CELL_W, rowH)
-		chance.Text = PodGuide.percent(s.chance)
+		chance.Text = string.upper(PodGuide.odds(s.chance))
 		local worth = line(well, "SizeWorth" .. i, SIZE_NUMBER, LOOK.Gold, x, 8 + rowH * 2, CELL_W, rowH)
 		worth.Text = PodGuide.times(s.worth)
 	end
 	local secret = line(well, "Secret", SECRET_SIZE, BAG.Cream, 8, SIZES_H - SECRET_SIZE - 10, W - MARGIN * 2 - 16,
 		SECRET_SIZE + 4, true)
-	secret.Text = if odds then string.format(WORDS.Secret, PodGuide.percent(odds.chance)) else ""
+	secret.Text = if odds then string.format(WORDS.Secret, string.upper(PodGuide.odds(odds.chance))) else ""
 	secret.Visible = odds ~= nil
 	return secret
 end

@@ -1,5 +1,18 @@
 # Steal a Seed — Session Handoff
 
+## PLANT ODDS READ "1 IN N" — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+The owner: "also on the plants 45% of pods instead of that, can we make it 1 in 1000, or whatsoever?". Taken as the way the odds are written, not the odds themselves; the owner was told and can say otherwise.
+- **Formatter**: `PodGuide.odds(p)` gives "1 in N", N the nearest whole number to 1/p, grouped in thousands: 1 in 2, 1 in 9, 1 in 42, 1 in 258, 1 in 1,000. A certainty is 1 in 1; no chance is "-". The wording is in `GameConfig.PodGuide.Words.Odds`.
+- **Almanac (IndexUI)**:
+  - each card: "1 in 2 pods" (CardChance "%s pods");
+  - the detail line: "Hatches from its own pod: 1 in 2 Greenhollow nest pods";
+  - POD SIZES: "1 in 4→1 in 3".
+- **Pod Guide boards (PodGuideView)**: the same odds in capitals, like their other lines ("1 IN 2"), for each plant card, each size and the secret pod line.
+- **Unchanged**: the wheel's REWARDS & ODDS keep their percentages (WheelData.percent, not asked). `PodGuide.percent` stays for its spec.
+- **Specs**: PodGuideSpec 29/0 (a new check of the 1 in N forms; the boards' texts and the Almanac's pins follow). Also green: CompactMenus, HatchRoll, PhoneMenu, RarityFX, StuddedLook, UsabilityAudio, GuardianConfiscate, HatchDelivery, InstantHatch, OfflineEarnings, InviteHud 438/0, HudLayout 1458/0.
+- **Not seen in Play.**
+
 ## THE TITLE FX IN THE REBIRTH PANEL'S "?" LIST TOO — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; OFF UNTIL THE 8 PNGs ARE UPLOADED)
 
 The owner, on the title FX: "both stay, and add them to the ? list too".

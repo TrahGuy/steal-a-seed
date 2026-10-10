@@ -207,6 +207,16 @@ local words = {
 }
 check(table.concat(words, " ") == "43% 11.2% 2.37% 0.387% 0.52% 1.76% 100% 0%",
 	"a chance is written to three figures: 43% 11.2% 2.37% 0.387% 0.52% 1.76%", table.concat(words, " "))
+-- The way players read it (the owner, 2026-10-10: "can we make it 1 in 1000"):
+-- every chance the guide, the Almanac and the boards show is "1 in N".
+local odds = {
+	PodGuide.odds(PodGuide.chanceOf("nubkin")), PodGuide.odds(PodGuide.chanceOf("spiretip")),
+	PodGuide.odds(PodGuide.chanceOf("toadcap")), PodGuide.odds(PodGuide.chanceOf("bellchime")),
+	PodGuide.odds(0.001), PodGuide.odds(0.000123), PodGuide.odds(1), PodGuide.odds(0),
+}
+check(table.concat(odds, " / ") == "1 in 2 / 1 in 9 / 1 in 42 / 1 in 258 / 1 in 1,000 / 1 in 8,130 / 1 in 1 / -",
+	"a chance reads 1 in N, N the nearest whole number, in thousands: 1 in 2, 1 in 9, 1 in 42, 1 in 258, 1 in 1,000",
+	table.concat(odds, " / "))
 local nub = table.concat(PodGuide.incomes("nubkin"), "/")
 local bell = table.concat(PodGuide.incomes("bellchime"), "/")
 local cos = table.concat(PodGuide.incomes("cosmospire"), "/")
@@ -333,7 +343,7 @@ local ok5, err5 = pcall(function()
 	local rows = PodGuide.plants("greenhollow")
 	local cardsOk, hiddenOk = #view.cards == #rows, true
 	for i, card in ipairs(view.cards) do
-		if card.species ~= rows[i].species or card.chance.Text ~= PodGuide.percent(rows[i].chance)
+		if card.species ~= rows[i].species or card.chance.Text ~= string.upper(PodGuide.odds(rows[i].chance))
 			or card.rarity.Text ~= string.upper(rows[i].species.Rarity) then
 			cardsOk = false
 		end
@@ -343,7 +353,7 @@ local ok5, err5 = pcall(function()
 	end
 	local sizesOk = true
 	for i, s in ipairs(PodGuide.sizes("greenhollow")) do
-		if textOf("SizeChance" .. i) ~= PodGuide.percent(s.chance) or textOf("SizeWorth" .. i) ~= PodGuide.times(s.worth)
+		if textOf("SizeChance" .. i) ~= string.upper(PodGuide.odds(s.chance)) or textOf("SizeWorth" .. i) ~= PodGuide.times(s.worth)
 			or textOf("Size" .. i) ~= string.upper(s.name) then
 			sizesOk = false
 		end
@@ -413,7 +423,9 @@ check(has(ui, "if e.carousel == nil and d <= CFG.BuildStuds then") and has(ui, "
 	"PodGuideUI: pods built near and freed far, pictures near only, checked every CheckSeconds; a first discovery waits "
 		.. "for its reveal; still for reduced motion")
 local index = source(Scripts, "IndexUI")
-check(has(index, "chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.percent(PodGuide.chanceOf(species.Id)))")
+check(has(index, "chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))")
+		and has(index, "showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)),")
+		and not has(index, "PodGuide.percent(")
 		and has(index, "podSizes.Visible = not searching") and has(index, "for i, rate in ipairs(PodGuide.incomes(id)) do")
 		and has(index, "showHatch.Text = string.format(GUIDE.Words.HatchesFrom") and has(index, "openAt.Name = \"OpenAt\"")
 		and has(index, "stagePodPreview.setModel(podKey, podBuilder, podKind)"),

@@ -327,7 +327,7 @@ do
 		oddsFit.MaxTextSize = 11
 		oddsFit.MinTextSize = 8
 		oddsFit.Parent = odds
-		odds.Text = PodGuide.percent(s.chance) .. "\u{2192}" .. PodGuide.percent(toRows[i].chance)
+		odds.Text = PodGuide.odds(s.chance) .. "\u{2192}" .. PodGuide.odds(toRows[i].chance)
 	end
 end
 
@@ -533,7 +533,7 @@ local function cardFor(species: any): Card
 	chance.Position = UDim2.new(0, 5, 1, -6)
 	chance.Size = UDim2.new(1, -10, 0, 14)
 	chance.TextXAlignment = Enum.TextXAlignment.Left
-	chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.percent(PodGuide.chanceOf(species.Id)))
+	chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))
 	local view = Instance.new("ViewportFrame")
 	view.Name = "Plant"
 	view.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -929,7 +929,7 @@ local function paintDetail()
 	else
 		yieldValue.Text = "???"
 	end
-	showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.percent(PodGuide.chanceOf(id)),
+	showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)),
 		biome and biome.DisplayName or "")
 	local podKey = "pod|p:" .. id .. "|" .. tostring(GUIDE.PodTier)
 	local podArt: ItemArt.Art = { kind = "pod", speciesId = id, tier = GUIDE.PodTier }
