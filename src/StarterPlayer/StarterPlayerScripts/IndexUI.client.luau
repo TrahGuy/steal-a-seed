@@ -473,6 +473,8 @@ type Card = {
 	place: Frame,
 	fxText: RarityFX.Handle,
 	fxEdge: RarityFX.Handle,
+	-- A GROWN card's still rarity band, Common to Legendary (2026-10-10).
+	ring: Frame,
 	species: any,
 	built: boolean,
 }
@@ -571,6 +573,8 @@ local function cardFor(species: any): Card
 	place.Visible = false
 	local fxText = RarityFX.text(rarity, rarityLine)
 	local fxEdge = RarityFX.edge(face, 8, Z + 4)
+	-- The other five's still band, inside the card's keyline (2026-10-10).
+	local ring = RarityFX.ring(face, 8, Z + 4, (GameConfig.RarityEdge :: any).Ring)
 	local scale = Instance.new("UIScale")
 	scale.Parent = face
 	UIKit.cardPop(face, scale, { hoverScale = 1.04, pressScale = 0.97, sound = false })
@@ -589,6 +593,7 @@ local function cardFor(species: any): Card
 		place = place,
 		fxText = fxText,
 		fxEdge = fxEdge,
+		ring = ring,
 		species = species,
 		built = false,
 	}
@@ -615,6 +620,10 @@ local function paintCard(c: Card, entry: AlmanacView.Entry, order: number)
 	local rare = RarityFX.edgeColour(face.rarity)
 	c.edge.Color = rare or LOOK.CardEdge
 	c.edge.Transparency = if rare then 0.05 else LOOK.CardEdgeTransparency
+	-- Common to Legendary (2026-10-10, the owner: "yes, add rarity edges"): a
+	-- GROWN card wears its form rarity's still band inside the keyline. A card
+	-- not yet grown stays plain: its rarity is already its word and its tint.
+	RarityFX.setRing(c.ring, if known and not rare then RarityFX.stillEdge(face.rarity) else nil)
 	c.accent.BackgroundColor3 = colours[1]
 	-- The rarity is already written on every card, found or not: the tint
 	-- says nothing more.

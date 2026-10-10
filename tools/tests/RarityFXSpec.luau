@@ -18,6 +18,11 @@
 --   5. reduced motion: the same colours, still; nothing runs
 --   6. a Bag tile and a strip slot: the light gives way to in hand, target,
 --      pending, restoring and a flash; the in-hand diamond; empties stay plain
+--   7. the other five, still (2026-10-10, the owner: "yes, add rarity edges"):
+--      a GROWN plant from Common to Legendary wears its rarity's colour -- a
+--      band inside a Bag tile's keyline and an Almanac card's, the strip slot's
+--      own edge -- and nothing else does; held, target, pending and a flash
+--      outrank it, restoring keeps it; legible at a phone's 85%
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
@@ -340,6 +345,151 @@ local ok, err = pcall(function()
 		"an empty slot stays faint and still, whatever was there")
 	slotPaint({ noRarity = true })
 	check(slot.stroke.Color == HOT.Edge and not slot.fxEdge.frame.Visible, "no rarity: the plain edge")
+
+	--==========================================================================
+	-- 7. THE OTHER FIVE, STILL (2026-10-10)
+	--==========================================================================
+	say("\n-- the other five, still --")
+	local EDGE = GameConfig.RarityEdge
+	local five = { "Common", "Uncommon", "Rare", "Epic", "Legendary" }
+	local named = true
+	for _, id in ipairs(five) do
+		named = named and typeof(EDGE.Colours[id]) == "Color3" and RarityFX.stillEdge(id) == EDGE.Colours[id]
+			and RarityFX.edgeColour(id) == nil
+	end
+	for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
+		named = named and EDGE.Colours[id] == nil and RarityFX.stillEdge(id) == nil
+	end
+	check(named and RarityFX.stillEdge(nil) == nil and RarityFX.stillEdge("Mythical") == nil,
+		"a still edge colour for Common to Legendary, by the canonical ids; none for the three rarest or anything else")
+	-- Legible: a Bag tile is drawn at 85% on a phone (UIKit.phoneMenuScale), the
+	-- strip never smaller; every colour clear of the dark slate it stands on.
+	local function lum(c)
+		return 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B
+	end
+	local brightEnough = true
+	for _, id in ipairs(five) do
+		brightEnough = brightEnough and lum(EDGE.Colours[id]) > 0.45
+	end
+	check(EDGE.Ring * GameConfig.MenuSize.PhoneScale >= 1.5 and EDGE.Strip >= 1.5 and brightEnough,
+		"legible: the ring 1.5 px or more drawn at a phone's 85%, the strip's edge 1.5 px, every colour light on dark slate",
+		string.format("ring %.2f drawn, strip %g", EDGE.Ring * GameConfig.MenuSize.PhoneScale, EDGE.Strip))
+
+	-- What may wear one: a GROWN plant only, by its FORM rarity.
+	local faces = {}
+	local wrong = {}
+	for _, list in ipairs({ SeedData.Species or {}, SeedData.SecretSpecies or {}, SeedData.RainSpecies or {} }) do
+		for _, s in ipairs(list) do
+			local plant = InventoryModel.face(item("plant", s.Id, 1))
+			local want = EDGE.Colours[s.Rarity]
+			if plant.edge ~= want then
+				table.insert(wrong, s.Id .. " plant " .. tostring(s.Rarity))
+			end
+			faces[s.Rarity] = true
+			local pod = InventoryModel.face(item("pod", s.Id, 3, { hatched = false }))
+			if pod.edge ~= nil then
+				table.insert(wrong, s.Id .. " pod")
+			end
+			local rolling = InventoryModel.face(item("pod", s.Id, 3, { hatched = true, sealed = true }))
+			if rolling.edge ~= nil then
+				table.insert(wrong, s.Id .. " in its roll")
+			end
+		end
+	end
+	local weaponFace = InventoryModel.face(item("weapon", nil, 1, { weaponId = weaponId }))
+	check(#wrong == 0 and faces.Common and faces.Legendary and weaponFace.edge == nil,
+		"every species: grown, its form rarity's still edge (none for the three rarest); never a pod, a plant in its "
+			.. "roll or equipment", table.concat(wrong, ", "))
+
+	-- A Bag tile: the band inside the keyline, which stays.
+	local tile2 = InventoryTile.build(layer, HOT, 5)
+	local function paint2(extra)
+		local p = { name = "Toadcap", variant = "Big", variantColour = Color3.new(1, 1, 1), favourite = false,
+			held = false, restoring = false, rarity = "Rare", variantIsRarity = false, edge = EDGE.Colours.Rare,
+			studs = GameConfig.BagLook.StudsByRarity.Rare }
+		for k, v in pairs(extra or {}) do
+			p[k] = v
+		end
+		if p.noEdge then
+			p.edge = nil
+		end
+		InventoryTile.paint(tile2, HOT, p)
+	end
+	paint2()
+	local ringStroke = tile2.ring:FindFirstChildOfClass("UIStroke")
+	check(tile2.ring.Visible and ringStroke and ringStroke.Color == EDGE.Colours.Rare
+			and ringStroke.Thickness == EDGE.Ring and tile2.ring.Size == UDim2.new(1, -EDGE.Ring * 2, 1, -EDGE.Ring * 2)
+			and ringStroke.ApplyStrokeMode == Enum.ApplyStrokeMode.Border and tile2.plate.Color ~= EDGE.Colours.Rare
+			and not tile2.fxEdge.frame.Visible,
+		"a grown Rare's tile: a sky band just inside its edge, the tile's own keyline kept round it, no light")
+	paint2({ held = true })
+	check(not tile2.ring.Visible and tile2.marker.Visible, "in hand: the selection's look outranks the band")
+	paint2({ restoring = true })
+	check(tile2.ring.Visible, "restoring: the band stays (the colour alone)")
+	paint2({ noEdge = true, rarity = "Rare", variant = "Big" })
+	check(not tile2.ring.Visible, "a pod (no edge handed on): no band")
+	paint2({ rarity = "Mythic", edge = nil, noEdge = true })
+	check(not tile2.ring.Visible and tile2.plate.Color == FX.Mythic.Edge,
+		"a Mythic: RarityFX's own edge, no band")
+
+	-- A strip slot: its own edge, the quietest state but plain.
+	local slot2 = HotbarCard.build(layer, 8, HOT, 4)
+	local function slot2Paint(extra)
+		local p = { empty = false, held = false, number = "8", name = "Bellchime", rarity = "Epic",
+			edge = EDGE.Colours.Epic }
+		for k, v in pairs(extra or {}) do
+			p[k] = v
+		end
+		if p.noEdge then
+			p.edge = nil
+		end
+		if p.noRarity then
+			p.rarity = nil
+		end
+		HotbarCard.paint(slot2, HOT, p)
+	end
+	slot2Paint()
+	check(slot2.stroke.Color == EDGE.Colours.Epic and slot2.stroke.Thickness == EDGE.Strip
+			and slot2.stroke.Transparency <= 0.05 + 1e-6 and not slot2.fxEdge.frame.Visible,
+		"a grown Epic on the strip: its violet on the slot's edge, Strip px, no light")
+	slot2Paint({ held = true })
+	check(slot2.stroke.Color == Color3.new(1, 1, 1) and slot2.stroke.Thickness == HOT.LitThickness,
+		"in hand outranks it")
+	slot2Paint({ target = true })
+	check(slot2.stroke.Color == Color3.new(1, 1, 1), "assign mode's target outranks it")
+	slot2Paint({ pending = true })
+	check(slot2.stroke.Color == HOT.LitTop and slot2.stroke.Thickness == HOT.CardStroke,
+		"a pending equip's amber outranks it")
+	slot2Paint({ restoring = true })
+	check(slot2.stroke.Color == EDGE.Colours.Epic, "restoring keeps it")
+	slot2Paint()
+	HotbarCard.flash(slot2, HOT.FlashArrived, HOT)
+	check(slot2.stroke.Color == HOT.FlashArrived, "a flash outranks it")
+	slot2.flashUntil = 0
+	slot2Paint({ empty = true })
+	check(slot2.stroke.Color == HOT.Edge and math.abs(slot2.stroke.Transparency - HOT.EmptyEdgeTransparency) < 1e-4,
+		"an empty slot stays faint, whatever was there")
+	slot2Paint({ noEdge = true, noRarity = true })
+	check(slot2.stroke.Color == HOT.Edge and slot2.stroke.Thickness == HOT.CardStroke, "no edge: the plain one")
+	slot2Paint({ rarity = "Divine", noEdge = true })
+	check(slot2.stroke.Color == FX.Divine.Edge and slot2.stroke.Thickness == HOT.CardStroke,
+		"a Divine: RarityFX's own edge, as before")
+
+	-- The wiring: only a grown plant's face is handed its edge, on the strip and
+	-- in the Bag; the Almanac's card wears it only once grown.
+	local Client = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
+	local function src(name)
+		local s = Client:FindFirstChild(name)
+		return if s then s.Source else ""
+	end
+	local loadout, index = src("LoadoutUI"), src("IndexUI")
+	check(string.find(loadout, "edge = if item and item.kind == \"plant\" and face then face.edge else nil", 1, true)
+			and string.find(loadout, "edge = if group.category == \"plants\" then face.edge else nil", 1, true),
+		"LoadoutUI hands the edge on for a grown plant only, on the strip and in the Bag")
+	check(string.find(index, "local ring = RarityFX.ring(face, 8, Z + 4, (GameConfig.RarityEdge :: any).Ring)", 1, true)
+			and string.find(index,
+				"RarityFX.setRing(c.ring, if known and not rare then RarityFX.stillEdge(face.rarity) else nil)", 1, true),
+		"the Almanac: a grown card wears its FORM rarity's band inside its keyline; a card not yet grown stays plain")
 end)
 
 RarityFX.still = realStill

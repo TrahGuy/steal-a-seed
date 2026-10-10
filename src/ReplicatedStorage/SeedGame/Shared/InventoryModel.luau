@@ -84,6 +84,10 @@ export type Face = {
 	rarity: string?,
 	variantIsRarity: boolean,
 	accent: Color3?,
+	-- A GROWN plant's still rarity edge, Common to Legendary (2026-10-10,
+	-- GameConfig.RarityEdge); nil for the three rarest (RarityFX's own), every
+	-- pod, a plant still in its roll and anything that is not a plant.
+	edge: Color3?,
 	visual: string,
 	art: Art,
 	search: string,
@@ -428,6 +432,7 @@ function InventoryModel.face(item: Item): Face
 			rarity = species.Rarity,
 			variantIsRarity = size == nil,
 			accent = if fx then fx.Edge else GameConfig.RarityColor[species.Rarity],
+			edge = (GameConfig.RarityEdge.Colours :: any)[species.Rarity],
 			visual = "plant|" .. species.Id .. "|" .. item.tier,
 			art = { kind = "plant", speciesId = species.Id, tier = item.tier, weaponId = nil },
 			search = string.lower(species.Name .. " " .. variant),

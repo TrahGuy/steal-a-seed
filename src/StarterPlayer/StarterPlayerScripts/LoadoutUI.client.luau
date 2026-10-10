@@ -1052,6 +1052,8 @@ local function refreshHotbar()
 				target = assign.ref ~= nil,
 				-- Only what the face may say: a pod's is its shell's or nothing.
 				rarity = if face then face.rarity else nil,
+				-- A grown plant's still rarity edge, Common to Legendary (2026-10-10).
+				edge = if item and item.kind == "plant" and face then face.edge else nil,
 				-- A trap's placements still available, the server's own count.
 				uses = if isTrap and traps and traps.known then WeaponData.TrapsLeftText(traps.left) else nil,
 				usesEmpty = isTrap and traps ~= nil and traps.left == 0,
@@ -1163,6 +1165,7 @@ local function refreshBag()
 				held = group.held,
 				restoring = group.restoring,
 				accent = if group.category == "plants" then face.accent else nil,
+				edge = if group.category == "plants" then face.edge else nil,
 				rarity = face.rarity,
 				variantIsRarity = face.variantIsRarity,
 				studs = face.studs,

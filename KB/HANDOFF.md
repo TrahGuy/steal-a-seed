@@ -1,6 +1,40 @@
 # Steal a Seed — Session Handoff
 
-## THE TUTORIAL'S WORLD HAND STANDS CLEAR OF THE HUD — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; TutorialSpotlightSpec 51/0, TutorialSpec 121/0, FirstMinuteSpec 117/0, TutorialPodSpec 263 checks; NOT YET SEEN IN PLAY: THAT IS ITEM 2'S PLAY, ITS ENTRY ABOVE WHEN DONE)
+## RARITY EDGES: COMMON TO LEGENDARY, STILL — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; RarityFXSpec 71/0 AND 16 NEIGHBOURING SPECS GREEN; SEEN IN A GUARDED PLAY ON `SeedTest_items12_20261010`, DESKTOP 1251 x 716 AND A FORCED PHONE LOOK, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
+
+Queue item 2 (item 10 before it). The owner: "yes, add rarity edges, let terminal do it", after the other session's proposal: "coloured edges for every rarity, from Common grey up to Legendary gold, not just the top three".
+
+**What wears one, and how**
+- **The colours** (`GameConfig.RarityEdge`): vivid versions of RarityColor, so they read on the Bag's same-hued studded tiles, the strip's dark plate and the Almanac's light cards.
+  - Common grey (176,182,188), Uncommon (168,236,92), Rare (122,196,255), Epic (204,124,255), Legendary (255,212,60).
+  - `Ring` 2 px (1.7 drawn in a phone's 85% menus); `Strip` 1.5 px.
+- **Only a GROWN plant wears one** (InventoryModel.face's new `edge`). Never a pod, not even a Rain or Secret pod's known rarity; never a plant still in its roll; never equipment.
+- **Mythic, Divine and Secret keep RarityFX**, unchanged: their own colour and the travelling light.
+- **The strip** (HotbarCard): the slot's own edge takes the colour, 1.5 px.
+  - Held, target, pending and a flash outrank it; restoring keeps it; an empty slot stays faint.
+- **The Bag** (InventoryTile): a 2-px band just inside the edge (RarityFX.ring), with the tile's own keyline kept round it.
+  - In hand outranks it; restoring keeps it.
+- **The Almanac** (IndexUI): the same band inside the card's keyline, only once grown.
+  - A "???" card stays plain: its rarity is already its word and its tint.
+
+**Seen in Play** (desktop; captures in `output/items12-2026-10-10/`):
+- **The strip** (05): slots 5-9 grey, green, blue, violet and gold at 1.5 px; the held Mythic white with its diamond.
+- **The Bag** (06): all six tiles, each with its band inside the ink keyline.
+- **The Almanac** (07):
+  - the grown cards (Nubkin, Petalpip, Spiretip, Toadcap, Bellchime, Suncrown) with their bands;
+  - the "???" cards plain;
+  - Gloomlotus with RarityFX's crimson.
+- Not seen: a phone's Bag at 85% (no emulator here). The spec holds the band at 1.7 px drawn.
+
+**Item 1, seen in the same Play:**
+- **The phone layout**, forced on the desktop window (the ZZPhoneView harness), with the camera held so the mill stood behind EVENTS: the hand pointed UP at it from 6 px under the row, in line with it (02-03).
+- **The row tucked:** the hand turned up beside the mill (04), but 16 px low. HudLayout.occupied still held INVITE's "!" as a phantom at INVITE's open place. Fixed in e7e2000: the "!" rides the handle while the row is tucked. InviteHudSpec pins it on every listed phone.
+- **The desktop at the spawn:** the hand down at the mill, as before (01).
+- **The console:** no error from TutorialUI, TutorialSpotlight or the item-2 modules.
+
+**Files**: GameConfig (the RarityEdge block only), RarityFX, InventoryModel, InventoryTile, HotbarCard, LoadoutUI, IndexUI; RarityFXSpec.
+
+## THE TUTORIAL'S WORLD HAND STANDS CLEAR OF THE HUD — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; TutorialSpotlightSpec 51/0, TutorialSpec 121/0, FirstMinuteSpec 117/0, TutorialPodSpec 263 checks; SEEN IN ITEM 2'S GUARDED PLAY, ITS ENTRY ABOVE; THE PHANTOM "!" IT FOUND FIXED IN e7e2000)
 
 Queue item 1 of the owner's queue after v1048. Found in the HUD layout's phone Play on 2026-10-09: on 705 x 338, at the spawn view, the guide's world hand pointed at the mill from UNDER the open panel row. The hand is TutorialUI's SeedGuideMarker, DisplayOrder 12, under every HUD layer by design, so a new player's first pointer started hidden.
 
@@ -102,8 +136,8 @@ The owner: "add the progress bar back again for the mill, progress bars must not
 In this order. Each its own commit on wip, pushed once green; never published by an agent. "Testing for items 7-11" below still holds: per item only the specs that touch its files (plus HudLayoutSpec for a HUD move), mutants only for game logic, the full suite once at the end, few guarded Plays.
 
 1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1. -- DONE (its entry above).
-2. **Rarity edges** (item 10).
-3. **The 100 rebirth titles and the two prototype effects** (item 11).
+2. **Rarity edges** (item 10). -- DONE (its entry above).
+3. **The 100 rebirth titles and the two prototype effects** (item 11). Built AFTER item 4: the other session first puts its TitleFX (the leaves, flowers and mist round the head titles, 4a57f6e) on the "?" TITLES list too. The owner on the overlap: "both stay, and add them to the ? list too" -- item 3 keeps its own effects (the family palettes on the rebirth-50 aura, the unlock effects, the accent, the rank pulse) and maps its new steps into GameConfig.TitleFX.Steps.
 4. **The mill's progress bar back, and no progress bar transparent.**
    - TreadmillFunUI's MilestoneBar (A2, "NEXT: 5K SPEED · CASH" over the player's own belt). Its track has drawn nothing since 2026-10-09, under the owner's rule of that day, "everything must be transparent" (the comment at TreadmillFunUI.client.luau:223). Give it a solid track again, a dark well with an edge, with the gold fill on it.
    - It did not show at all in the v1048 batch's Play: output/v1047-batch2/05_minigame_in_hotbar_place.png, riding the own mill at 20 speed, desktop 1148 x 716. The A1 pop ("+2 WALK SPEED · NOW 18") showed; the bar did not. `bar.Visible = barRect ~= nil` (line 604): find which condition failed there (the 45-stud check, the projected point off the screen, or SpeedMilestones.clearOf finding no clear place), and make the bar show while the player is on or by their own mill.

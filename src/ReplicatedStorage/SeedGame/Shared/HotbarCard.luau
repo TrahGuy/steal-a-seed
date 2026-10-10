@@ -46,6 +46,11 @@
 -- target, pending, restoring and a flash all put the light out for as long as
 -- they last. In hand also shows the Bag's small amber diamond on the top-right
 -- corner, so a coloured edge is never read as the selection.
+--
+-- AND THE OTHER FIVE (2026-10-10, the owner: "yes, add rarity edges"): a grown
+-- plant from Common to Legendary takes its rarity's still colour on the edge,
+-- RarityEdge.Strip px (GameConfig.RarityEdge) -- the quietest state but plain:
+-- held, target, pending and a flash all outrank it; restoring keeps it.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -121,6 +126,9 @@ export type Paint = {
 	target: boolean?,
 	-- The rarity the player may see (InventoryModel's face), or nil.
 	rarity: string?,
+	-- 2026-10-10: a grown plant's still rarity edge (InventoryModel's face), or
+	-- nil (a pod, anything that is not a plant, the three rarest).
+	edge: Color3?,
 	-- 2026-10-04: a trap's placements still available ("3x"; WeaponData.TrapsLeftText),
 	-- and whether that is none (drawn in TrapCountEmpty). nil for everything else.
 	uses: string?,
@@ -520,15 +528,23 @@ function HotbarCard.paint(card: Card, H: any, p: Paint)
 	local target, pending = p.target == true, p.pending == true and not held
 	local rarity = if empty then nil else p.rarity
 	local rare = RarityFX.edgeColour(rarity)
+	-- The other five's still colour, under every state but plain.
+	local still = if empty or rare then nil else p.edge
 	local flashing = os.clock() < card.flashUntil
 	if not flashing then
 		card.ringTint.Enabled = held and not target
-		card.stroke.Color = if target or held then WHITE elseif pending then H.LitTop elseif rare then rare else H.Edge
-		card.stroke.Thickness = if target or held then H.LitThickness else H.CardStroke
+		card.stroke.Color = if target or held then WHITE
+			elseif pending then H.LitTop
+			elseif rare then rare
+			elseif still then still
+			else H.Edge
+		card.stroke.Thickness = if target or held then H.LitThickness
+			elseif still and not pending then (GameConfig.RarityEdge :: any).Strip
+			else H.CardStroke
 		card.stroke.Transparency = if target or held then 0
 			elseif pending then 0.3
 			elseif empty then H.EmptyEdgeTransparency
-			elseif rare then 0.05
+			elseif rare or still then 0.05
 			else H.EdgeTransparency
 	end
 	card.marker.Visible = held

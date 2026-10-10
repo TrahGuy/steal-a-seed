@@ -27,7 +27,13 @@
 -- MYTHIC, DIVINE, SECRET (2026-10-03, the owner's inventory pass): the edge
 -- takes the rarity's colour and a small light travels round it (RarityFX), but
 -- only while nothing outranks it -- in hand, the selection's keyline;
--- restoring, the colour alone. Every other rarity keeps the plain edge.
+-- restoring, the colour alone.
+--
+-- COMMON TO LEGENDARY (2026-10-10, the owner: "yes, add rarity edges"): a
+-- grown plant's tile wears a still band of its rarity's colour just inside
+-- the edge (RarityFX.ring; GameConfig.RarityEdge), the tile's own keyline kept
+-- round it. In hand the selection's look outranks it; restoring it stays (the
+-- colour alone). A pod and anything that is not a plant keep the plain edge.
 --
 -- Like HotbarCard it listens to nothing: InventoryPanel builds, wires and
 -- paints it. The heart is drawn from frames -- two discs and a turned square --
@@ -129,6 +135,8 @@ export type Tile = {
 	marker: Frame,
 	fxEdge: RarityFX.Handle,
 	fxText: RarityFX.Handle,
+	-- A grown plant's still rarity band, Common to Legendary (2026-10-10).
+	ring: Frame,
 	pop: UIKit.CardPop,
 	compact: boolean,
 	shownKey: string,
@@ -168,6 +176,9 @@ export type Paint = {
 	held: boolean,
 	restoring: boolean,
 	accent: Color3?,
+	-- 2026-10-10: a grown plant's still rarity edge (InventoryModel's face); nil
+	-- for a pod and anything that is not a plant.
+	edge: Color3?,
 	-- 2026-10-03: the rarity the player may see, and whether `variant` is it.
 	rarity: string?,
 	variantIsRarity: boolean?,
@@ -342,6 +353,8 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 	-- words; the rarity word's own light; the in-hand diamond over everything.
 	local fxEdge = RarityFX.edge(button, 8, zIndex + 3)
 	local fxText = RarityFX.text(variant, variantLine)
+	-- The other five's still band, inside the keyline, under the words.
+	local ring = RarityFX.ring(button, 8, zIndex + 3, (GameConfig.RarityEdge :: any).Ring)
 	local marker = InventoryTile.marker(button, T.MarkerSize, T.Marker, T.Ink, zIndex + 6)
 
 	-- The pod's pill (2026-10-09): placed by `shape`, painted by `paint`.
@@ -417,6 +430,7 @@ function InventoryTile.build(parent: Instance, T: any, zIndex: number): Tile
 		marker = marker,
 		fxEdge = fxEdge,
 		fxText = fxText,
+		ring = ring,
 		pop = pop,
 		compact = false,
 		shownKey = "",
@@ -497,6 +511,9 @@ function InventoryTile.paint(tile: Tile, T: any, p: Paint)
 	tile.plate.Transparency = if p.held then 0 elseif rare then 0.05 elseif studded then 0 else T.EdgeTransparency
 	tile.marker.Visible = p.held
 	RarityFX.setEdge(tile.fxEdge, p.rarity, not p.held and not p.restoring)
+	-- Common to Legendary: the still band, unless in hand (the selection's look
+	-- outranks it) or one of the three rarest (RarityFX's edge is theirs).
+	RarityFX.setRing(tile.ring, if p.held or rare then nil else p.edge)
 	-- The pod's pill (2026-10-09): READY in green with the check, else the
 	-- hourglass and the time left.
 	local podClock = p.podClock

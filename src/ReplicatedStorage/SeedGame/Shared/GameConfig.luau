@@ -2358,6 +2358,35 @@ GameConfig.RarityFX = {
 }
 
 --==============================================================================
+-- THE OTHER FIVE, STILL (2026-10-10, the owner: "yes, add rarity edges")
+--
+-- Every grown plant's card wears its FORM rarity's colour as an edge, Common
+-- grey up to Legendary gold -- not only the three rarest, which keep RarityFX
+-- above (their own colour and its travelling light). Still: no light, no
+-- motion. Vivid versions of RarityColor, so the edge reads on the Bag's
+-- studded tiles of the same hue, the strip's dark plate and the Almanac's
+-- light cards alike.
+--
+--   Ring    a Bag tile's and an Almanac card's band just inside its edge,
+--           whose own keyline stays; px (1.7 drawn in a phone's 85% menus)
+--   Strip   a hotbar slot's edge, px (the HUD is never drawn smaller)
+--
+-- A pod never wears one -- what is inside is the hatch's to show -- nor a
+-- plant still in its roll, nor an Almanac card not yet grown.
+--==============================================================================
+GameConfig.RarityEdge = {
+	Ring = 2,
+	Strip = 1.5,
+	Colours = {
+		Common = Color3.fromRGB(176, 182, 188),
+		Uncommon = Color3.fromRGB(168, 236, 92),
+		Rare = Color3.fromRGB(122, 196, 255),
+		Epic = Color3.fromRGB(204, 124, 255),
+		Legendary = Color3.fromRGB(255, 212, 60),
+	},
+}
+
+--==============================================================================
 -- SPEED
 --
 -- SPEED IS A SCORE. WalkSpeed IS A CURVE. This is an engine constraint, not a

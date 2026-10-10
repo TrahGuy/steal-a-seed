@@ -3,9 +3,10 @@
 -- Steal a Seed :: RarityFX (2026-10-03, the owner's inventory pass)
 --
 -- HOW THE THREE RAREST READ IN THE BAG AND ON THE STRIP: Mythic, Divine and
--- Secret, by the ids GameConfig.Rarities already has. Every other rarity, and
--- anything whose rarity is not yet the player's to know (a sealed pod), gets
--- nothing from here and keeps its plain look.
+-- Secret, by the ids GameConfig.Rarities already has. Since 2026-10-10 the
+-- other five have a STILL edge from here too (THE OTHER FIVE, below), on a
+-- grown plant's card only. Anything whose rarity is not yet the player's to
+-- know (a sealed pod) gets nothing from here and keeps its plain look.
 --
 --   text   the rarity WORD: its colours through a UIGradient on the label, a
 --          slow light crossing it; Secret's is the toast's silver italic with
@@ -350,6 +351,59 @@ function RarityFX.setEdge(h: Handle, rarity: string?, glint: boolean)
 	frame.Visible = show
 	h.animated = show
 	reconsider(h)
+end
+
+--==============================================================================
+-- THE OTHER FIVE: A STILL EDGE (2026-10-10, the owner: "yes, add rarity edges")
+--
+-- Common to Legendary, on a GROWN plant's card only (GameConfig.RarityEdge):
+-- the colour alone, never a light, so nothing here runs or steps. On the strip
+-- it is the slot's own edge (HotbarCard); on a Bag tile and an Almanac card,
+-- whose keyline stays, a band just inside it -- the ring below.
+--==============================================================================
+local EDGE: any = GameConfig.RarityEdge
+
+-- A Common-to-Legendary rarity's still edge colour, or nil: the three rarest
+-- have their own (edgeColour), and anything else has none.
+function RarityFX.stillEdge(rarity: string?): Color3?
+	return if rarity then EDGE.Colours[rarity] else nil
+end
+
+-- A band `thickness` px wide just inside `button`'s border, under its own
+-- stroke (the keyline), at `zIndex`, following a `radius` corner. Hidden until
+-- setRing gives it a colour. Its own stroke draws outside it, so the frame
+-- stands `thickness` in from every side.
+function RarityFX.ring(button: GuiObject, radius: number, zIndex: number, thickness: number): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = "RarityRing"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.new(1, -thickness * 2, 1, -thickness * 2)
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Active = false
+	frame.Visible = false
+	frame.ZIndex = zIndex
+	frame.Parent = button
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, math.max(0, radius - thickness))
+	corner.Parent = frame
+	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Thickness = thickness
+	stroke.LineJoinMode = Enum.LineJoinMode.Round
+	stroke.Color = WHITE
+	stroke.Parent = frame
+	return frame
+end
+
+-- The ring in `colour`, or hidden for nil.
+function RarityFX.setRing(ring: Frame, colour: Color3?)
+	local stroke = ring:FindFirstChildOfClass("UIStroke")
+	if colour and stroke then
+		stroke.Color = colour
+	end
+	ring.Visible = colour ~= nil
 end
 
 --==============================================================================
