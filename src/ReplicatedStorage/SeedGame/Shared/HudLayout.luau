@@ -4050,7 +4050,15 @@ function HudLayout.occupied(L: Layout): { Rect }
 	for _, g in ipairs(HudLayout.groups(L, true)) do
 		add(g.rect)
 	end
-	add(HudLayout.inviteBadge(L))
+	-- INVITE's "!" where it stands: on its square, or -- the phone's row tucked
+	-- into the right edge, INVITE with it -- on the handle (2026-10-10: the "!"
+	-- of a tucked row stood here as a phantom, and the guide's world hand kept
+	-- 16 px off nothing).
+	if L.sidebar and L.dockShut then
+		add(HudLayout.handleBadge(L))
+	else
+		add(HudLayout.inviteBadge(L))
+	end
 	add(L.thumb)
 	add(L.jump)
 	add(L.namePopup)

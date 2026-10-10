@@ -280,6 +280,21 @@ local ok, err = pcall(function()
 		local hb = HudLayout.handleBadge(S)
 		check(inside(hb, S.safe, 0.01) and overlaps(hb, S.handle), tag .. ": the handle's badge on its corner, on the glass",
 			r2s(hb))
+		-- What a passing card or the guide's world hand keeps off (2026-10-10): the
+		-- "!" where it stands -- on the handle while the row is tucked, never at
+		-- INVITE's open place, where it stood as a phantom.
+		local ghost, onHandle = false, false
+		local ib = HudLayout.inviteBadge(S)
+		for _, r in ipairs(HudLayout.occupied(S)) do
+			if r.x == ib.x and r.y == ib.y and r.w == ib.w and r.h == ib.h then
+				ghost = true
+			end
+			if r.x == hb.x and r.y == hb.y and r.w == hb.w and r.h == hb.h then
+				onHandle = true
+			end
+		end
+		check(not ghost and onHandle, tag .. ": tucked, HudLayout.occupied holds the \"!\" on the handle, not at INVITE's "
+			.. "open place", r2s(ib) .. " / " .. r2s(hb))
 	end
 	say("  the panel scrolls on: " .. (if #scrolls > 0 then table.concat(scrolls, ", ") else "none"))
 	say("  all four squares at once on: " .. (if #still > 0 then table.concat(still, ", ") else "none"))
