@@ -1,5 +1,12 @@
 # Steal a Seed — Session Handoff
 
+## DRIZZLET'S AND LOTUSLING'S ZOOM FIXED — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; CardZoomSpec 12/0 AND 6 PREVIEW SPECS GREEN; REVIEWED ON A STUDIO BOARD: output/zoom-2026-10-10/board_fix2_row.png)
+
+The owner: "fix the weak zooms on drizzlet and lotusling".
+- **Why they were weak** (measured in Studio): Drizzlet is 16 studs tall with its eyes at 4.1 -- the canopy (9-10) and the floating cloud (14-16) above made "0.3 of the height under the eyes and up" the whole creature; Lotusling (13.2 tall, eyes at 6.5) has petals up to 13.2 that also spread sideways, so its picture was width-bound.
+- **Fix**: `GameConfig.Card.Zoom.Species` -- a window round the eyes per creature, `Below` / `Above` shares of its height, and `Wide` (to either side) for Lotusling; UIKit.faceCorners reads it by the model's `SpeciesId`. drizzlet / drizzlet_colossal { Below 0.19, Above 0.28 }; lotusling / lotusling_colossal { Below 0.23, Above 0.3, Wide 0.3 } (each colossal form is the same shape bigger: its eyes at the same share of its height). Drizzlet's body and face now fill the picture, the cloud cut by the edge; Lotusling's face fills it with petals behind. Every other creature unchanged (Toadcap and Gloomlotus on the same board).
+- Monsoad and Thundershell (also weak) left as they are; the owner named these two.
+
 ## PUBLISHED AS v1051 — 2026-10-10 11:04 UTC (19:04 the owner's time) (CLAUDE)
 
 - The owner published the tree themselves. No agent published.

@@ -3487,16 +3487,27 @@ local function faceCorners(model: Model, points: { Vector3 }): { Vector3 }
 		return points
 	end
 	local eyes, count = 0, 0
+	local middle = Vector3.zero
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") and d.Transparency < 1 and string.find(string.lower(d.Name), "eye", 1, true) then
 			eyes += d.Position.Y
+			middle += d.Position
 			count += 1
 		end
 	end
-	local cut = if count > 0 then eyes / count - zoom.BelowEyes * height else hi - zoom.TopShare * height
+	-- A creature with its own window (Zoom.Species, by the SpeciesId its
+	-- builder stamps): Below to Above of its height round its eyes, and with
+	-- `Wide` no further than that to either side of them.
+	local own = (zoom.Species or {})[model:GetAttribute("SpeciesId")]
+	local cut = if count > 0 then eyes / count - (if own then own.Below else zoom.BelowEyes) * height
+		else hi - zoom.TopShare * height
+	local roof = if count > 0 and own then eyes / count + own.Above * height else math.huge
+	local reach = if count > 0 and own and own.Wide then own.Wide * height else math.huge
+	local centre = if count > 0 then middle / count else Vector3.zero
 	local kept: { Vector3 } = {}
 	for _, p in ipairs(points) do
-		if p.Y >= cut then
+		local side = Vector3.new(p.X - centre.X, 0, p.Z - centre.Z).Magnitude
+		if p.Y >= cut and p.Y <= roof and side <= reach then
 			table.insert(kept, p)
 		end
 	end

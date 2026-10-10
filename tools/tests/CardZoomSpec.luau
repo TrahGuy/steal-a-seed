@@ -118,6 +118,62 @@ local ok, err = pcall(function()
 	local keptPlain = UIKit.faceCorners(plain, cornersOf(plain))
 	-- no eyes: the cut is 6 - 0.55 x 6 = 2.7: the body's bottom corners go.
 	check(math.abs(lowest(keptPlain) - 4) < 1e-3, "no eyes: the top 55%", lowest(keptPlain))
+	-- Per creature (2026-10-10, the owner: "fix the weak zooms on drizzlet and
+	-- lotusling"): a window round the eyes, capped above (and to the sides).
+	local function window(id)
+		local holder = Instance.new("Folder")
+		local m = CreatureModel.BuildCreature(SeedData.Get(id), 1, CreatureModel.STAGE_GROWN, CFrame.new(), holder)
+		local all = {}
+		local eyeY, eyes, middle = 0, 0, Vector3.zero
+		for _, d in ipairs(m:GetDescendants()) do
+			if d:IsA("BasePart") and d.Transparency < 1 then
+				local h = d.Size * 0.5
+				for sx = -1, 1, 2 do
+					for sy = -1, 1, 2 do
+						for sz = -1, 1, 2 do
+							table.insert(all, (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position)
+						end
+					end
+				end
+				if string.find(string.lower(d.Name), "eye", 1, true) then
+					eyeY += d.Position.Y
+					middle += d.Position
+					eyes += 1
+				end
+			end
+		end
+		local lo, hi = math.huge, -math.huge
+		for _, p in ipairs(all) do
+			lo, hi = math.min(lo, p.Y), math.max(hi, p.Y)
+		end
+		local kept = UIKit.faceCorners(m, all)
+		local top, side = -math.huge, 0
+		local c = middle / math.max(eyes, 1)
+		for _, p in ipairs(kept) do
+			top = math.max(top, p.Y)
+			side = math.max(side, Vector3.new(p.X - c.X, 0, p.Z - c.Z).Magnitude)
+		end
+		holder:Destroy()
+		return { eye = eyeY / math.max(eyes, 1), height = hi - lo, top = top, side = side, kept = #kept, all = #all }
+	end
+	local okWindows = true
+	local notes = {}
+	for id, own in pairs(ZOOM.Species) do
+		local w = window(id)
+		local good = w.top <= w.eye + own.Above * w.height + 1e-3 and w.kept >= 8 and w.kept < w.all
+			and (own.Wide == nil or w.side <= own.Wide * w.height + 1e-3)
+		if not good then
+			okWindows = false
+			table.insert(notes, id)
+		end
+	end
+	local toad = window("toadcap")
+	check(okWindows and ZOOM.Species.drizzlet and ZOOM.Species.lotusling and ZOOM.Species.drizzlet_colossal
+			and ZOOM.Species.lotusling_colossal and ZOOM.Species.toadcap == nil and toad.top >= toad.height - 1e-3,
+		"Drizzlet and Lotusling (and their colossal forms): framed no higher than their window above the eyes (Lotusling "
+			.. "no wider either) -- the cloud and the petal tips cut by the edge; every other creature keeps its crown",
+		table.concat(notes, ", "))
+
 	local flat = Instance.new("Model")
 	local slab = Instance.new("Part")
 	slab.Size = Vector3.new(4, 1, 4)

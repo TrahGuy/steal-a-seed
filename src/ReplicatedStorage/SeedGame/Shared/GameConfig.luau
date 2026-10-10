@@ -9392,6 +9392,21 @@ GameConfig.Card = {
 		Plants = true,
 		Board = true,
 		Index = true,
+		-- Per creature (2026-10-10, the owner: "fix the weak zooms on drizzlet
+		-- and lotusling"): a window from Below to Above of its height round its
+		-- eyes, for a creature whose crown stands far above its face --
+		-- Drizzlet's cloud and canopy, Lotusling's petals -- so the face still
+		-- fills the picture; what is above it is cut by the edge. `Wide`, if
+		-- given: also no further than that share of its height to either side
+		-- of its eyes (Lotusling's petals spread sideways too). A colossal form
+		-- is the same shape bigger (measured: its eyes at the same share of its
+		-- height), so it takes the same window.
+		Species = {
+			drizzlet = { Below = 0.19, Above = 0.28 },
+			drizzlet_colossal = { Below = 0.19, Above = 0.28 },
+			lotusling = { Below = 0.23, Above = 0.3, Wide = 0.3 },
+			lotusling_colossal = { Below = 0.23, Above = 0.3, Wide = 0.3 },
+		},
 	},
 
 	--==========================================================================
