@@ -1,5 +1,44 @@
 # Steal a Seed — Session Handoff
 
+## v1047 FEEDBACK, BATCH 2 — READY TO PUBLISH, 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+Michael's v1047 report, Batch 2 as the owner approved it (KB/V1047-FEEDBACK-PLAN.md, with that day's changes: pods in beds again, the DROP button, the context slot), and the owner's phone screenshot of the Bag's item menu running off the screen. On top of Batch 1 (4c1f1ef). Nothing was published by an agent.
+
+1. **Pods go in beds again** (da4e811). A pod planted from the hands keeps the time its Bag row has left (HatchAt); in the bed it counts down, offers INSTANT HATCH while growing and the hold-E Hatch when ready; thieves can't take it. The POD_IN_BAG refusal is gone, and PlantPlace shows the disc and RT for pods.
+2. **A carrier's hands are full** (7f04c91). Taking a pod puts every Tool away (CarryService.PutToolsAway); the server refuses swings and trap placement while carrying (CARRYING_POD); LoadoutUI refuses any equip meanwhile.
+3. **Signs** (d94d793): REBIRTH x1.5; BAT SHOP! x1.1 (the most it can grow where it hangs); the five Pod Guide boards x1.5, the stands 3.5 studs further inside each arch.
+4. **Hotbar items also show in the Bag** (df94703), each wearing its slot's number. This reverses the 2026-10-03 rule.
+5. **A pod's card says its size** (e8b3245), in its tier's colour; the hover name reads "Greenhollow pod · Big".
+6. **The context slot** (a22e238). While a raid pod is carried, the strip hides and the owner's DROP picture (77040710214310) stands in its place (B, Backspace); the pod lies at the player's feet (CarryService DropPod, counted "dropped"). While the player rides their own mill, PLAY MINIGAME stands there instead.
+7. **The Bag's item menu fits a phone** (fd7b464, replaced by cd7b2fd). The owner first said "make the menu 50% smaller", then picked **shrink to fit** over exactly 50% and side by side:
+   - one column; full size wherever it fits (every desktop from 1280 x 720), else its own UIScale, just as small as the screen needs, never under 0.5;
+   - a pod's menu draws at 0.70-0.91 on the listed phones; no menu the game opens draws under 0.62; below 0.5 (no listed screen) the buttons scroll;
+   - a pod already in hand offers "Put away", not "Hold in hands";
+   - the rarity word now sits beside "Rarity:" by a list: a UIScale changes what TextBounds reads.
+8. **HATCH over a READY pod in the hands** (528a22a). PodHatch (new, client) is REMOVE's twin over the held pod's own slot, in the same row:
+   - held 1.1 s, like the Bag's HATCH (MenuKit.hold, moved out of InventoryPanel); it sends the Bag's own Hatch verb;
+   - only while that pod is READY, and it appears by itself when the pod becomes due;
+   - LT on a controller (RT plants the pod now), named in PlantPlace's reticle hints;
+   - the row is shared: TrapRemove.claimRow keeps one claim per button.
+
+**Guarded Play** (test store SeedTest_20261010, its Ready line checked; desktop 1148 x 716, no emulator; captures in output/v1047-batch2/):
+- carrying a nest pod: the strip hid and DROP stood in its place (170 x 64); a real click dropped the pod; the strip came back;
+- taken back and banked, it landed on slot 5 with BIG on its card; made READY and held by a real click on the slot: HATCH over slot 5, LT bound, the row up;
+- the slot's menu at full size (it fits): six actions, ending "Put away" and WHAT'S INSIDE?;
+- a real 1.6 s mouse hold on HATCH: "hatched a 2 tier Petalpip in the Bag: planted in a free bed" (garden 1 to 2); HATCH and its row went;
+- on the own mill: PLAY MINIGAME in the strip's place; off it, the strip back;
+- the Bag listed the hotbar's Spin Ticket with its "3" badge;
+- all five Pod Guide stands: no visible part inside a stand's box (server-built probe);
+- no script errors. Test store off (1 key removed), hosts removed; probe: 0 differ, 0 ZZ, marker absent.
+
+**Not seen**: the menu shrunk on a phone (no emulator in this Studio, and it is never switched; BagMenuSpec covers every listed screen); controller presses (LT, B on DROP), which specs cover. Michael can check them on his Xbox.
+
+**Specs**: new BagMenuSpec 13/0, PodHatchSpec 22/0, ContextSlotSpec 8/0; mutants on the game logic caught (CarryHands 2/2, PodHatch 3/3). Full suite 135 of 135 green: 130 in one run, and the five it could not reach (BatClearance, BatSwing, Cycle, Speed, TutorialPod) after the owner's own Play cut it short.
+
+**Not mine, left uncommitted**: Codex's art entry above (a red studded Drop button in art/ui-buttons/drop-2026-10-10/, not uploaded or wired; the game uses the owner's 77040710214310) and the owner's `game thumbnails/`.
+
+**Next**: the owner publishes Batch 1 + 2; record the version. Queued after it: the tutorial's world hand clear of the HUD, rarity edges, the 100 rebirth titles and 2 prototype FX.
+
 ## v1047 FEEDBACK, BATCH 1 — THREE LIVE BUGS FIXED, 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 The owner approved KB/V1047-FEEDBACK-PLAN.md: "approve all your picks, start batch 1, terminal will still work". The other session confirmed it builds nothing and handed Batch 2 to this one.
