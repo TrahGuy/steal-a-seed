@@ -1,5 +1,22 @@
 # Steal a Seed — Session Handoff
 
+## PUBLISHED AS v1049 AND v1050 — 2026-10-10 04:50 AND 07:09 UTC (12:50 AND 15:09 the owner's time) (CLAUDE)
+
+- The owner published both themselves. No agent published.
+- From the Studio log `0.742.590.7421041_20261009T232607Z_Studio_EE02E_last.log`: line 44748, "Add publish notes to v1049" at 2026-10-10T04:50:09Z; line 50989, "Add publish notes to v1050" at 2026-10-10T07:09:08Z. Each follows "Published new changes in "[⛈️ RAIN] Steal a Sprout" to Roblox."
+- **v1049 is the tree at d0d7bee** (committed 04:42:49Z). The probe at 04:42:21Z read Studio equal to disk (339 scripts, 0 differ, 0 ZZ, test-store marker absent, test store off). No src edit followed until 04:55Z, after the publish. Live from v1049:
+  - the tutorial's world hand clear of the HUD (7760b30), and the "!" riding the handle while the phone's row is tucked (e7e2000);
+  - rarity edges, Common grey to Legendary gold (7fa9a6f);
+  - the mill's progress bar back, solid (1185168);
+  - the 100 rebirth titles, their families and the two prototype unlock effects (8c9900f);
+  - plant odds reading "1 in N" (b8c40f0);
+  - the title FX (Kenney leaves, flowers and mist) on, with the owner's 8 uploads, round the heads' titles and in the rebirth panel's "?" list (4a57f6e, 112a8b9, d0d7bee).
+- **v1050 is the tree at 5dae3b1** (committed 07:00:29Z). The probe at 06:59:36Z read 339 / 0 differ / 0 ZZ. Only the scratchpad's luau download followed, outside src. Live from v1050:
+  - the title FX livelier: GAIA's fast rainbow, a glint and twinkles on every title, twice as quick (0fe2279);
+  - GAIA's rainbow fast on the celebration card and the aura too (5dae3b1).
+- The previous publish was v1048.
+- Still open, the owner's calls: GAIA V kept after 302; the other nine families' own unlock effects; Codex's red studded Drop art (upload and swap, or keep 77040710214310).
+
 ## GAIA'S RAINBOW FAST EVERYWHERE: THE CELEBRATION CARD AND THE AURA TOO — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 The owner, on the celebration card's and the aura's GAIA rainbows: "yes make those fast too". Both lines are the terminal's (RebirthFX); it handed them over.
