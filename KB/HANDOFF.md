@@ -23,7 +23,7 @@ The owner approved KB/V1047-FEEDBACK-PLAN.md: "approve all your picks, start bat
 - RainEventSpec 94/0 (6 new: down at the end, held past the fade even thrown off it, moved and told once on standing, the cap, the source pins);
 - AutoWeatherSpec, RainPodsSpec, SecretToastSpec, PlacementCircleSpec, HatchInBagSpec green.
 - 3 of 3 rain mutants caught: moving the down, no hold, no cap. Each mutant swapped WeatherService.Source in Studio Edit for its run and restored it; the probe proved Studio equals the disk afterwards.
-- The full suite runs once at the end of Batch 2, before that push (the owner's lean rules). Run it first if Batch 1 is to be published alone.
+- **Full suite on 4c1f1ef's tree: 132 of 132 run, all green (584 s).** Batch 1 may be published alone.
 
 **Seen in Play** (desktop 1251 x 716, throwaway store `SeedTest_v1047b1_20261010`, cleared: probe 336 / 0 differ / 0 ZZ / marker absent). Captures are in `output/v1047-batch1/` 01-06.
 - **Rain:**
