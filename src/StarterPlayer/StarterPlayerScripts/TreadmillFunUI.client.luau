@@ -52,6 +52,8 @@ local ATTR = GameConfig.Attributes
 local GOLD = Color3.fromRGB(255, 216, 96)
 local GOLD_DEEP = Color3.fromRGB(240, 156, 40)
 local WHITE = Color3.fromRGB(255, 255, 255)
+-- The bar's well (2026-10-10): opaque, under the gold fill.
+local WELL = Color3.fromRGB(26, 30, 36)
 
 -- A re-run (a hot reload in Studio) starts clean.
 for _, name in ipairs({ "SeedTreadmillFun", "SeedTreadmillFunMeasure" }) do
@@ -220,18 +222,23 @@ nextWords.Size = UDim2.new(1, 0, 0, 22)
 nextWords.Position = UDim2.fromOffset(0, 0)
 nextWords.TextXAlignment = Enum.TextXAlignment.Center
 
--- TRANSPARENT (2026-10-09, the owner: "everything must be transparent,
--- applies to buffs, and effects", and yes for this bar's track): the track
--- draws nothing -- no dark well, no gold edge -- and only the gold fill shows,
--- outlined in black so it reads over any scene, as the Pod Rush bar's does.
--- The track stays as the fill's frame: the fill is a share of it.
+-- SOLID AGAIN (2026-10-10, the owner: "add the progress bar back again for
+-- the mill, progress bars must not be transparent"): a dark well with a gold
+-- edge, the gold fill on it -- the look it had until 2026-10-09, now opaque.
+-- From 2026-10-09 the track drew nothing (the owner's "everything must be
+-- transparent" for buffs and effects), and in the v1048 Play the lone fill
+-- was lost among the guide's words. The words over it and the badge stay as
+-- they are.
 local track = Instance.new("Frame")
 track.Name = "Track"
 track.Size = UDim2.new(1, 0, 0, 16)
 track.Position = UDim2.fromOffset(0, 26)
-track.BackgroundTransparency = 1
+track.BackgroundColor3 = WELL
+track.BackgroundTransparency = 0
 track.BorderSizePixel = 0
 track.Parent = bar
+UIKit.corner(track, 8)
+UIKit.stroke(track, GOLD, 2)
 local fill = Instance.new("Frame")
 fill.Name = "Fill"
 fill.Size = UDim2.fromScale(0, 1)
@@ -544,6 +551,44 @@ local BAR_W, BAR_H = 330, 74
 local BADGE_ROOM, BADGE_RISE = 90, 8
 local POP_W, POP_WORDS_H, POP_WORDS_UP = 420, SHOE_PX.Pop, 67.5
 
+-- The guide's own card draws over this gui (TutorialUI, DisplayOrder 30):
+-- while it shows, the bar and the pop keep clear of it too (2026-10-10; in the
+-- v1048 Play the bar stood among its words). So do they of the Pod Rush
+-- tracker or its strip (PodRushUI), which stands under the top row as well: in
+-- a Play on 2026-10-10 the bar at the top centre stood on it. Read five times
+-- a second, and only while one of them is being placed.
+local RUSH_PIECES = { "Tracker", "Strip" }
+local aroundRects: { SpeedMilestones.Rect } = hudRects
+local aroundBase: { SpeedMilestones.Rect }? = nil
+local aroundAt = -math.huge
+
+local function aroundNow(t: number): { SpeedMilestones.Rect }
+	if aroundBase ~= hudRects or t - aroundAt > 0.2 then
+		aroundBase = hudRects
+		aroundAt = t
+		local origin = gui.AbsolutePosition
+		local more = UIKit.guideRects(playerGui, origin)
+		local rush = playerGui:FindFirstChild("SeedPodRush")
+		if rush and rush:IsA("ScreenGui") and rush.Enabled then
+			for _, name in ipairs(RUSH_PIECES) do
+				local piece = rush:FindFirstChild(name)
+				if piece and piece:IsA("GuiObject") and piece.Visible then
+					local p, s = piece.AbsolutePosition - origin, piece.AbsoluteSize
+					table.insert(more, { x = p.X, y = p.Y, w = s.X, h = s.Y })
+				end
+			end
+		end
+		aroundRects = hudRects
+		if #more > 0 then
+			aroundRects = table.clone(hudRects)
+			for _, r in ipairs(more) do
+				table.insert(aroundRects, r)
+			end
+		end
+	end
+	return aroundRects
+end
+
 RunService.RenderStepped:Connect(function(dt: number)
 	local t = os.clock()
 	local k = scale()
@@ -565,8 +610,13 @@ RunService.RenderStepped:Connect(function(dt: number)
 	-- of view. Over the belt's middle, a little toward the front, it is over the
 	-- runner. A close camera puts that point at the top edge or past it, where
 	-- the bar sat behind the clock; so it stands at the nearest place clear of
-	-- the HUD -- on a desktop, just under the top row's boost band -- and hides
-	-- only when the belt is behind the camera or off to a side.
+	-- the HUD -- on a desktop, just under the top row's boost band.
+	--
+	-- While the belt is behind the camera or off to a side, the bar stands at
+	-- the top centre instead, under the top row (2026-10-10, the queue after
+	-- v1048: "make the bar show while the player is on or by their own mill").
+	-- It used to hide there: in Play, standing 12 studs beside the belt with the
+	-- camera behind the player put the point behind the camera.
 	--==========================================================================
 	if t - beltCheckedAt > 1 then
 		beltCheckedAt = t
@@ -576,17 +626,18 @@ RunService.RenderStepped:Connect(function(dt: number)
 	local barRect: SpeedMilestones.Rect? = nil
 	if bounds and belt and belt.Parent and root and root:IsA("BasePart") and (root.Position - belt.Position).Magnitude < 45 then
 		local half = belt.Size * 0.5
-		local at = project(belt.CFrame:PointToWorldSpace(Vector3.new(0, half.Y + 11.5, -half.Z * 0.15)))
 		local w, h = BAR_W * k, BAR_H * k
 		local room, rise = BADGE_ROOM * k, BADGE_RISE * k
-		if at and at.X >= bounds.x and at.X <= bounds.x + bounds.w then
-			barRect = SpeedMilestones.clearOf(
-				{ x = at.X - w / 2 - room, y = at.Y - h - rise, w = w + room, h = h + rise * 2 },
-				hudRects,
-				bounds,
-				GAP
-			)
-		end
+		local over = project(belt.CFrame:PointToWorldSpace(Vector3.new(0, half.Y + 11.5, -half.Z * 0.15)))
+		local at: Vector2 = if over and over.X >= bounds.x and over.X <= bounds.x + bounds.w
+			then over
+			else Vector2.new(bounds.x + bounds.w / 2, bounds.y + h + rise)
+		barRect = SpeedMilestones.clearOf(
+			{ x = at.X - w / 2 - room, y = at.Y - h - rise, w = w + room, h = h + rise * 2 },
+			aroundNow(t),
+			bounds,
+			GAP
+		)
 		if barRect then
 			bar.Position = UDim2.fromOffset(barRect.x + room + w / 2, barRect.y + rise + h)
 			barScale.Scale = k
@@ -611,9 +662,9 @@ RunService.RenderStepped:Connect(function(dt: number)
 		else
 			local foot: Vector2 = at
 			if bounds then
-				local blocked = hudRects
+				local blocked = aroundNow(t)
 				if barRect then
-					blocked = table.clone(hudRects)
+					blocked = table.clone(blocked)
 					table.insert(blocked, barRect)
 				end
 				local w, h, up = POP_W * k, POP_WORDS_H * k, POP_WORDS_UP * k

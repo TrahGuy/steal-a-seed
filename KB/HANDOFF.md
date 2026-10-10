@@ -1,5 +1,44 @@
 # Steal a Seed — Session Handoff
 
+## THE MILL'S PROGRESS BAR BACK, SOLID; NO PROGRESS BAR TRANSPARENT — DONE 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; TreadmillFunSpec 115/0, PodRushSpec 98/0, HudLayoutSpec 1458/0; SEEN IN A GUARDED PLAY ON `SeedTest_item4_20261010`, DESKTOP 1148 x 716 THEN 1251 x 716, CLEARED: probe 339 / 0 differ / 0 ZZ / marker absent)
+
+Queue item 4. The owner: "add the progress bar back again for the mill, progress bars must not be transparent".
+
+**Why the bar "did not show" in v1048** (output/v1047-batch2/05): it did draw, but nobody could read it.
+- Its track drew nothing (transparent since 2026-10-09): only a thin gold fill showed.
+- It stood at the top centre under the guide's card. TutorialUI draws over it, so the card's words hid the bar's words.
+
+**The mill's bar** (TreadmillFunUI):
+- **A solid track again**: a dark well (26,30,36), a 2-px gold edge, round corners, the gold fill on it.
+- **It shows while the player is within 45 studs of their own belt.**
+  - Over the belt while the belt is in view, as before.
+  - Otherwise at the top centre, under the top row. It used to hide there: 12 studs beside the belt put its point behind the camera.
+- **It keeps clear of the guide's card** (the new UIKit.guideRects) **and of the Pod Rush tracker or strip**, read five times a second. The walk-speed pop does the same.
+
+**Pod Rush's tracker bar** (PodRushUI):
+- The same dark well, with a 1.5-px gold edge. The tracker round it stays transparent.
+- **The tracker keeps clear of the guide's card where it stands now** (PodRush.trackerRect's new `extra`).
+  - The card stands 74 px lower than HudLayout's place while the guide's hand points at the top row.
+  - In the Play the tracker stood over the card's STEP and SKIP lines.
+
+**Other bars, checked:**
+- Already solid: the Bag's storage bar, the Almanac's biome bars, Invite's bars, the Rebirth cash bar, the menu footer bar.
+- Made solid: UIKit.plantCard's progress bar (unused in practice).
+- Unchanged: the prompt's hold fill and the HATCH hold fill. They are fills on buttons, not tracks.
+
+**Seen in Play** (captures in `output/item4-2026-10-10/`):
+- **On the mill**, guide step 2 (01, zoom 01b): the bar under the card's SKIP line, solid, "NEXT: 100 SPEED · CASH".
+- **Beside the mill**, the camera turned away (05): the bar at the top centre, under the card.
+- **A Pod Rush**:
+  - 06, before the last fix: the bar at the top centre on the tracker.
+  - 08, after it: the tracker under the card, the bar beside the tracker, nothing overlapping.
+  - The tracker bar's well and edge: 03b.
+- **120 studs away**: the bar hides.
+- **The console**: no errors.
+- Not seen: a phone (no emulator here). In a phone's guide layout (HudLayout's `guide`) the words stand in the left column and never shift down, so nothing changes there.
+
+**Files**: TreadmillFunUI, PodRushUI, PodRush (`extra` on blocked and trackerRect), UIKit (guideRects, which guideShowing now uses; plantCard's bar); TreadmillFunSpec, PodRushSpec.
+
 ## PLANT ODDS READ "1 IN N" — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 The owner: "also on the plants 45% of pods instead of that, can we make it 1 in 1000, or whatsoever?". Taken as the way the odds are written, not the odds themselves; the owner was told and can say otherwise.
@@ -163,7 +202,7 @@ In this order. Each its own commit on wip, pushed once green; never published by
 1. **The tutorial's world hand clear of the HUD**, as written in "TOMORROW (2026-10-10)" item 1. -- DONE (its entry above).
 2. **Rarity edges** (item 10). -- DONE (its entry above).
 3. **The 100 rebirth titles and the two prototype effects** (item 11). Built AFTER item 4: the other session first puts its TitleFX (the leaves, flowers and mist round the head titles, 4a57f6e) on the "?" TITLES list too. The owner on the overlap: "both stay, and add them to the ? list too" -- item 3 keeps its own effects (the family palettes on the rebirth-50 aura, the unlock effects, the accent, the rank pulse) and maps its new steps into GameConfig.TitleFX.Steps.
-4. **The mill's progress bar back, and no progress bar transparent.**
+4. **The mill's progress bar back, and no progress bar transparent.** -- DONE (its entry above).
    - TreadmillFunUI's MilestoneBar (A2, "NEXT: 5K SPEED · CASH" over the player's own belt). Its track has drawn nothing since 2026-10-09, under the owner's rule of that day, "everything must be transparent" (the comment at TreadmillFunUI.client.luau:223). Give it a solid track again, a dark well with an edge, with the gold fill on it.
    - It did not show at all in the v1048 batch's Play: output/v1047-batch2/05_minigame_in_hotbar_place.png, riding the own mill at 20 speed, desktop 1148 x 716. The A1 pop ("+2 WALK SPEED · NOW 18") showed; the bar did not. `bar.Visible = barRect ~= nil` (line 604): find which condition failed there (the 45-stud check, the projected point off the screen, or SpeedMilestones.clearOf finding no clear place), and make the bar show while the player is on or by their own mill.
    - The same rule for every progress bar: Pod Rush's tracker bar (PodRushUI.client.luau:212-221, "Only the fill shows") gets a solid track too; look for any other bar whose track is drawn at BackgroundTransparency 1. Buffs and effects stay transparent; only progress bars change.

@@ -251,11 +251,70 @@ do
 			and has(ui, "HudLayout.statusRows(L, insetTop)"),
 		"the client places both off HudLayout's own rects, in a gui that is the whole screen")
 	check(has(ui, "table.insert(blocked, barRect)"), "and the pop stands clear of the bar")
-	-- TRANSPARENT (the owner, 2026-10-09): the track draws nothing, the fill is outlined.
-	check(has(ui, "track.BackgroundTransparency = 1") and not has(ui, "track.BackgroundTransparency = 0.")
-			and not has(ui, "UIKit.corner(track") and not has(ui, "edge.Parent = track")
+	-- SOLID AGAIN (the owner, 2026-10-10: "progress bars must not be transparent"): a dark well with a gold
+	-- edge, the gold fill outlined on it.
+	check(has(ui, "track.BackgroundColor3 = WELL") and has(ui, "track.BackgroundTransparency = 0")
+			and not has(ui, "track.BackgroundTransparency = 1") and not has(ui, "track.BackgroundTransparency = 0.")
+			and has(ui, "UIKit.corner(track, 8)") and has(ui, "UIKit.stroke(track, GOLD, 2)")
 			and has(ui, "UIKit.stroke(fill, Color3.new(0, 0, 0), 1.5)"),
-		"the bar has no dark track and no gold edge: only the gold fill, outlined in black")
+		"the bar has a solid dark track with a gold edge, the gold fill outlined in black on it")
+	-- And the guide's card, which TutorialUI draws over this gui (in the v1048 Play the bar stood among its words).
+	check(has(ui, "local more = UIKit.guideRects(playerGui, origin)") and has(ui, "aroundNow(t),")
+			and has(ui, "local blocked = aroundNow(t)"),
+		"the bar and the pop keep clear of the guide's card while it shows")
+	-- And of the Pod Rush tracker or its strip, under the top row as well (a Play on 2026-10-10: the bar at the
+	-- top centre stood on the tracker). Its gui and frames by name, so a rename there fails here.
+	local rushUi = sourceOf(Scripts, "PodRushUI")
+	check(has(ui, "local RUSH_PIECES = { \"Tracker\", \"Strip\" }")
+			and has(ui, "local rush = playerGui:FindFirstChild(\"SeedPodRush\")")
+			and has(ui, "if piece and piece:IsA(\"GuiObject\") and piece.Visible then")
+			and has(rushUi, "local gui = newGui(\"SeedPodRush\", 12)") and has(rushUi, "tracker.Name = \"Tracker\"")
+			and has(rushUi, "strip.Name = \"Strip\"") and has(rushUi, "tracker.Parent = gui")
+			and has(rushUi, "strip.Parent = gui"),
+		"and of the Pod Rush tracker or its strip while either shows")
+	-- The queue after v1048: "make the bar show while the player is on or by their own mill". In Play, 12 studs
+	-- beside the belt put its point behind the camera, and the bar hid.
+	check(has(ui, "local at: Vector2 = if over and over.X >= bounds.x and over.X <= bounds.x + bounds.w")
+			and has(ui, "else Vector2.new(bounds.x + bounds.w / 2, bounds.y + h + rise)")
+			and not has(ui, "if at and at.X >= bounds.x and at.X <= bounds.x + bounds.w then"),
+		"within 45 studs of the own belt the bar always shows: over the belt, or at the top centre when the belt is "
+			.. "behind the camera or off to a side")
+	do
+		local UIKit = require(Shared:WaitForChild("UIKit"))
+		local stand = Instance.new("Folder")
+		stand.Name = "TreadmillFunSpecPlayerGui"
+		local guide = Instance.new("ScreenGui")
+		guide.Name = "SeedBeginnerGuide"
+		guide.Parent = stand
+		local card = Instance.new("Frame")
+		card.Name = "Words"
+		card.Parent = guide
+		local banner = Instance.new("Frame")
+		banner.Name = "Instruction"
+		banner.Parent = card
+		local skip = Instance.new("TextButton")
+		skip.Name = "Skip"
+		skip.Parent = card
+		local resume = Instance.new("TextButton")
+		resume.Name = "Resume"
+		resume.Visible = false
+		resume.Parent = card
+		local origin = Vector2.new(10, 20)
+		local shown = UIKit.guideRects(stand, origin)
+		local first = shown[1]
+		local p, s = banner.AbsolutePosition, banner.AbsoluteSize
+		local okShown = #shown == 2 and first ~= nil and first.x == p.X - 10 and first.y == p.Y - 20
+			and first.w == s.X and first.h == s.Y and UIKit.guideShowing(stand)
+		card.Visible = false
+		local okHidden = #UIKit.guideRects(stand, origin) == 0 and not UIKit.guideShowing(stand)
+		card.Visible = true
+		guide.Enabled = false
+		local okOff = #UIKit.guideRects(stand, origin) == 0 and not UIKit.guideShowing(stand)
+		stand:Destroy()
+		check(okShown and okHidden and okOff,
+			"UIKit.guideRects: each shown banner, SKIP or RESUME, less the origin; none while hidden or off",
+			string.format("shown %d, hidden %s, off %s", #shown, tostring(okHidden), tostring(okOff)))
+	end
 end
 
 --==============================================================================

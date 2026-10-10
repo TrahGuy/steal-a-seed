@@ -63,6 +63,7 @@ local WHITE = Color3.new(1, 1, 1)
 local MUTED = Color3.fromRGB(226, 232, 240)
 local BANK_RED = T.BankItColour
 local DIM = Color3.fromRGB(96, 96, 104)
+local WELL = Color3.fromRGB(26, 30, 36)
 
 -- The boost a level gives (SILVER's), for the words.
 local BOOST_ID: string? = nil
@@ -214,13 +215,16 @@ local bar = Instance.new("Frame")
 bar.Name = "Bar"
 bar.Position = UDim2.fromOffset(LEFT, 64)
 bar.Size = UDim2.fromOffset(BAR_W, 10)
--- Only the fill shows (the owner's transparency): no track behind it, the
--- medals marking where each level stands.
-bar.BackgroundTransparency = 1
+-- A solid track again (2026-10-10, the owner: "progress bars must not be
+-- transparent"): a dark well with a gold edge under the fill. The tracker
+-- round it stays transparent.
+bar.BackgroundColor3 = WELL
+bar.BackgroundTransparency = 0
 bar.BorderSizePixel = 0
 bar.ZIndex = 2
 bar.Parent = tracker
 UIKit.corner(bar, 5)
+UIKit.stroke(bar, GOLD, 1.5)
 local fill = Instance.new("Frame")
 fill.Name = "Fill"
 fill.Size = UDim2.fromScale(0, 1)
@@ -300,7 +304,15 @@ local function place()
 	local camera = Workspace.CurrentCamera
 	local phone = GameConfig.titlePhone(if camera then camera.ViewportSize else nil, UserInputService.TouchEnabled)
 	local k = if phone then T.PhoneScale else 1
-	local r, layout = PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing())
+	-- And the card where it stands now, in this gui's units: lower than
+	-- HudLayout's place while the guide's hand points at the top row (in a
+	-- Play on 2026-10-10 the tracker stood over its STEP and SKIP lines).
+	local unit = UIKit.scaleOf(gui)
+	local guideCard = UIKit.guideRects(playerGui, gui.AbsolutePosition)
+	for _, c in ipairs(guideCard) do
+		c.x, c.y, c.w, c.h = c.x / unit, c.y / unit, c.w / unit, c.h / unit
+	end
+	local r, layout = PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard)
 	placedAs = if r then layout else nil
 	if r and layout == "full" then
 		trackerScale.Scale = k

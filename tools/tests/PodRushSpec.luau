@@ -818,6 +818,39 @@ local ok, err = pcall(function()
 	local _, fullLayout = PodRush.trackerRect(HudLayout.solve(screen(1366, 768, false, 3)), TOPBAR, 1)
 	check(full ~= nil and fullLayout == "full" and #strips < 14 * 8,
 		"a desktop always has the whole tracker; a strip only where a phone has no room for it")
+	-- The guide's card where it stands now (UIKit.guideRects): 74 px under HudLayout's place while the guide's hand
+	-- points at the top row. Seen in a Play on 2026-10-10 (1148 x 716): the tracker over its STEP and SKIP lines.
+	local movedBad, movedCases = {}, 0
+	for _, s in ipairs({ { "desktop 1148x716", 1148, 716 }, { "desktop 1920x1080", 1920, 1080 },
+		{ "desktop 1366x768", 1366, 768 }, { "desktop 1024x600", 1024, 600 }, { "small window 800x600", 800, 600 } }) do
+		local L = HudLayout.solve(screen(s[2], s[3], false))
+		local drop = 74
+		local moved = {
+			{ x = L.banner.x, y = L.banner.y + drop, w = L.banner.w, h = L.banner.h },
+			{ x = L.skip.x, y = L.skip.y + drop, w = L.skip.w, h = L.skip.h },
+		}
+		local r, layout = PodRush.trackerRect(L, TOPBAR, 1, true, moved)
+		movedCases += 1
+		local why = if not r then "no spot" elseif layout ~= "full" then "a " .. tostring(layout) else nil
+		if r and not why then
+			for _, b in ipairs(PodRush.blocked(L, TOPBAR, true, moved)) do
+				if overlaps(r, b) then
+					why = string.format("meets (%g,%g %gx%g)", b.x, b.y, b.w, b.h)
+					break
+				end
+			end
+			for _, g in ipairs(moved) do
+				if overlaps(r, g) then
+					why = string.format("over the moved card (%g,%g %gx%g)", g.x, g.y, g.w, g.h)
+				end
+			end
+		end
+		if why then
+			table.insert(movedBad, s[1] .. ": " .. why)
+		end
+	end
+	check(#movedBad == 0 and movedCases == 5, "and clear of the guide's card where it stands now, 74 px lower under a "
+		.. "hand at the top row, on 5 desktops", table.concat(movedBad, "; "))
 	local line = PodRush.stripLine(5, 192, false)
 	local bankLine = PodRush.stripLine(5, 14, true)
 	local mini = PodRush.stripLine(5, 192, false, true)
@@ -936,7 +969,9 @@ local ok, err = pcall(function()
 	check(PRS.Priority > 70 and not has(serviceSrc, "OnServerEvent") and has(serviceSrc, "CarryService.OnBanked("),
 		"the service: after the world cycle, takes nothing from a client, hears every bank")
 	local uiSrc = sourceOf(scripts, "PodRushUI")
-	check(has(uiSrc, "PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing())")
+	check(has(uiSrc, "PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard)")
+			and has(uiSrc, "local guideCard = UIKit.guideRects(playerGui, gui.AbsolutePosition)")
+			and has(uiSrc, "c.x, c.y, c.w, c.h = c.x / unit, c.y / unit, c.w / unit, c.h / unit")
 			and has(uiSrc, "return UIKit.guideShowing(playerGui)")
 			and has(uiSrc, "StatusText.reducedMotion()")
 			and has(uiSrc, "SoundKit.play(\"PodRushStart\")") and has(uiSrc, "SoundKit.play(\"PodRushFinish\")")
@@ -944,13 +979,15 @@ local ok, err = pcall(function()
 			and has(uiSrc, "part.CanCollide = false") and has(uiSrc, "part.CanQuery = false"),
 		"the client: placed by the shared rule, no pops with REDUCED FX, the stings, the rings, and it sends nothing")
 	-- The owner (2026-10-09): "pod rush gui must be transparent, everything must be transparent, applies to buffs,
-	-- and effects".
+	-- and effects" -- but not a progress bar (2026-10-10: "progress bars must not be transparent").
 	check(has(uiSrc, "tracker.BackgroundTransparency = 1") and has(uiSrc, "strip.BackgroundTransparency = 1")
-			and has(uiSrc, "card.BackgroundTransparency = 1") and has(uiSrc, "bar.BackgroundTransparency = 1")
+			and has(uiSrc, "card.BackgroundTransparency = 1")
 			and not has(uiSrc, "UIKit.stroke(tracker,") and not has(uiSrc, "UIKit.stroke(strip,")
 			and not has(uiSrc, "UIKit.stroke(card,") and has(uiSrc, "UIKit.stroke(fill, Color3.new(0, 0, 0), 1.5)"),
-		"transparent, as the owner asked: no plate or edge behind the tracker, the strip or the end card; the bar's fill "
-			.. "alone, outlined")
+		"transparent, as the owner asked: no plate or edge behind the tracker, the strip or the end card")
+	check(has(uiSrc, "bar.BackgroundColor3 = WELL") and has(uiSrc, "bar.BackgroundTransparency = 0")
+			and not has(uiSrc, "bar.BackgroundTransparency = 1") and has(uiSrc, "UIKit.stroke(bar, GOLD, 1.5)"),
+		"but the bar is a progress bar: a solid dark well with a gold edge, its fill outlined on it")
 	local iconsUi = sourceOf(scripts, "BoostIconsUI")
 	check(iconsUi ~= "" and not has(iconsUi, "\"Plate\"") and has(iconsUi, "badge.BackgroundTransparency = 1")
 			and has(iconsUi, "popover.BackgroundTransparency = 1") and has(iconsUi, "caret.BackgroundTransparency = 1")

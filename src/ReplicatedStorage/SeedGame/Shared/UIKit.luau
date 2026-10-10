@@ -1380,12 +1380,22 @@ end
 -- the buff popover keep clear of (HudLayout's banner and skip rects).
 --==============================================================================
 function UIKit.guideShowing(playerGui: Instance): boolean
+	return #UIKit.guideRects(playerGui, Vector2.zero) > 0
+end
+
+-- Where the guide's card stands this moment (2026-10-10): the rect of each of
+-- its banner, SKIP and RESUME that shows, less `origin` (the caller's gui's
+-- AbsolutePosition) -- what the mill's bar keeps clear of, since TutorialUI
+-- draws over it. Empty while none shows.
+function UIKit.guideRects(playerGui: Instance, origin: Vector2): { { x: number, y: number, w: number, h: number } }
+	local out = {}
 	local guide = playerGui:FindFirstChild("SeedBeginnerGuide")
 	if not (guide and guide:IsA("ScreenGui") and guide.Enabled) then
-		return false
+		return out
 	end
 	for _, name in ipairs({ "Instruction", "Resume", "Skip" }) do
-		local node: Instance? = guide:FindFirstChild(name, true)
+		local found: Instance? = guide:FindFirstChild(name, true)
+		local node: Instance? = found
 		local shown = node ~= nil and node:IsA("GuiObject")
 		while shown and node and node ~= guide do
 			if node:IsA("GuiObject") and not node.Visible then
@@ -1393,11 +1403,12 @@ function UIKit.guideShowing(playerGui: Instance): boolean
 			end
 			node = node.Parent
 		end
-		if shown then
-			return true
+		if shown and found and found:IsA("GuiObject") then
+			local p, s = found.AbsolutePosition, found.AbsoluteSize
+			table.insert(out, { x = p.X - origin.X, y = p.Y - origin.Y, w = s.X, h = s.Y })
 		end
 	end
-	return false
+	return out
 end
 
 --==============================================================================
@@ -3900,7 +3911,8 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	progressBar.Position = UDim2.new(0.5, 0, 1, -40)
 	progressBar.Size = UDim2.new(1, -16, 0, 4)
 	progressBar.BackgroundColor3 = Color3.fromRGB(10, 8, 14)
-	progressBar.BackgroundTransparency = 0.45
+	-- Solid (2026-10-10, the owner: "progress bars must not be transparent").
+	progressBar.BackgroundTransparency = 0
 	progressBar.BorderSizePixel = 0
 	progressBar.Active = false
 	progressBar.Visible = false

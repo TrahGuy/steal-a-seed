@@ -251,8 +251,12 @@ end
 
 -- `guide` while the beginner's guide card stands under the top row
 -- (TutorialUI: HudLayout's banner and its SKIP), seen in Play 2026-10-09 with
--- the tracker over it.
-function PodRush.blocked(L: any, insetTop: number, guide: boolean?): { SpeedMilestones.Rect }
+-- the tracker over it. `extra`: the card where it stands now, in safe space
+-- (UIKit.guideRects) -- lower than HudLayout's place while the guide's hand
+-- points at the top row (seen in Play 2026-10-10: the tracker over its STEP
+-- and SKIP lines).
+function PodRush.blocked(L: any, insetTop: number, guide: boolean?,
+	extra: { SpeedMilestones.Rect }?): { SpeedMilestones.Rect }
 	local out: { SpeedMilestones.Rect } = {}
 	local function add(r: any, lift: number?)
 		if r and r.w > 0 and r.h > 0 then
@@ -273,13 +277,17 @@ function PodRush.blocked(L: any, insetTop: number, guide: boolean?): { SpeedMile
 		add(L.banner)
 		add(L.skip)
 	end
+	for _, r in ipairs(extra or {}) do
+		add(r)
+	end
 	return out
 end
 
-function PodRush.trackerRect(L: any, insetTop: number, scale: number, guide: boolean?): (SpeedMilestones.Rect?, string?)
+function PodRush.trackerRect(L: any, insetTop: number, scale: number, guide: boolean?,
+	extra: { SpeedMilestones.Rect }?): (SpeedMilestones.Rect?, string?)
 	local gap = CFG.Tracker.Gap
 	local _, _, boosts = HudLayout.statusRows(L, insetTop)
-	local blocked = PodRush.blocked(L, insetTop, guide)
+	local blocked = PodRush.blocked(L, insetTop, guide, extra)
 	local bounds = { x = gap, y = gap, w = L.safe.X - gap * 2, h = L.safe.Y - gap * 2 }
 	for _, layout in ipairs(PodRush.Layouts) do
 		local size = PodRush.trackerSize(scale, layout)
