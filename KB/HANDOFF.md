@@ -1,5 +1,18 @@
 # Steal a Seed — Session Handoff
 
+## PUBLISHED AS v1051 — 2026-10-10 11:04 UTC (19:04 the owner's time) (CLAUDE)
+
+- The owner published the tree themselves. No agent published.
+- From the Studio log `0.742.590.7421041_20261009T232607Z_Studio_EE02E_last.log`, line 71448: "Add publish notes to v1051" at 2026-10-10T11:04:26Z, after "Published new changes in "[⛈️ RAIN] Steal a Sprout" to Roblox." (line 71442).
+- **v1051 is the tree at 1d4fdab** (committed 11:03:42Z, 44 s before). Studio equal to disk (339 scripts, 0 differ, 0 ZZ, test-store marker absent); nothing under src or tools uncommitted. Live from v1051:
+  - the rarity cards: Mythic and Divine on Codex's pearl white, Secret on the midnight holo, Uncommon to Legendary as before; bats and traps by rarity (a looks-only WeaponData `Rarity`), their word, edge and accent; a shine on the three rarest (5cf9c95);
+  - SORT in the Bag and MY PLANTS: Rarity (the default), Income (the old order), Newest, saved per player (1ac6f47);
+  - the rarity cards in Marigold's shop and the Index (136da74);
+  - creature pictures zoomed to the face and upper body: the Bag, the hotbar, MY PLANTS, the Index's cards, the plot board (6f0b8ea);
+  - Secrets OFF: no natural Snarlbloom or Petalfawn eggs (1d4fdab).
+- The previous publish was v1050.
+- Open, the owner's: per-species crops for the weak zooms (Drizzlet, Lotusling, Monsoad, Thundershell); GAIA V after 302; the other nine families' unlock effects; Codex's red studded Drop art; secrets back on when wanted.
+
 ## SECRETS OFF AGAIN — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; 11 SPECS THAT READ THE SWITCH OR ROLL A SECRET GREEN)
 
 The owner: "turn off secrets for now" (after asking whether Snarlbloom spawns: it did, 5% per Greenhollow / Starbloom nest roll since v1047).
