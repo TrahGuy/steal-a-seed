@@ -6441,7 +6441,9 @@ GameConfig.Rebirth = {
 			-- this camera show theirs. A family's AuraAccents (World Tree Halo's
 			-- two) are small leaves going round the body once every Accent.Seconds,
 			-- Radius studs out, bobbing Bob studs about Lift.
-			RainbowSeconds = 12,
+			-- Fast since 2026-10-10 (the owner: "make those fast too"): the same
+			-- pace as GAIA's title, TitleFX.RainbowSeconds (12 before).
+			RainbowSeconds = 1.2,
 			Nearest = 4,
 			Accent = { Size = 0.9, Radius = 2.4, Seconds = 7, Lift = 1.2, Bob = 0.3 },
 		},

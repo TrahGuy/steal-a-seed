@@ -327,10 +327,15 @@ local ok, err = pcall(function()
 	for _, name in ipairs({ "RebirthFX", "RebirthCelebration", "RebirthService" }) do
 		local src = sourceOf(Shared, name) .. sourceOf(Scripts, name)
 			.. sourceOf(game:GetService("ServerScriptService"), name)
-		untouched = untouched and not has(src, "TitleFX")
+		-- They share GAIA's pace (GameConfig.TitleFX.RainbowSeconds, the owner's
+		-- "make those fast too"), never the title layer itself.
+		untouched = untouched and not has(src, 'WaitForChild("TitleFX")') and not has(src, "TitleFX.attach")
 	end
-	check(untouched and not has(tf, "PointLight") and not has(tf, "Atmosphere") and not has(tf, "Lighting"),
-		"the celebration and the aura are not touched; no light or fog anywhere")
+	local rfx = sourceOf(Shared, "RebirthFX")
+	check(untouched and has(rfx, "g.Color = WheelDraw.rainbow((t / GameConfig.TitleFX.RainbowSeconds) % 1)")
+			and GameConfig.Rebirth.Celebration.Aura.RainbowSeconds == FX.RainbowSeconds
+			and not has(tf, "PointLight") and not has(tf, "Atmosphere") and not has(tf, "Lighting"),
+		"the celebration and the aura keep their own code and only share GAIA's fast pace; no light or fog anywhere")
 
 	--==========================================================================
 	say("-- 6. the \"?\" TITLES list --")

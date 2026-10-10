@@ -390,8 +390,10 @@ function RebirthFX.followAuras(now: number?, viewer: Vector3?)
 						label.ImageRectOffset = Vector2.new((leaf % 2) * LEAF_CELL, (leaf // 2) * LEAF_CELL)
 					end
 				end
-				-- GAIA's rainbow turns with the frames (Framerate a second).
-				if stepped and #a.rainbows > 0 then
+				-- GAIA's rainbow turns every frame, not with the wisps' frames: at its
+				-- fast pace (2026-10-10) a turn every 1.2 s stepped at Framerate jumped
+				-- 30 degrees of hue a step. At most Nearest auras show.
+				if #a.rainbows > 0 then
 					local colours = WheelDraw.rainbow((t / A.RainbowSeconds) % 1)
 					for _, g in ipairs(a.rainbows) do
 						g.Color = colours
@@ -1311,7 +1313,9 @@ function RebirthFX.play(o: Options): Handle?
 			end
 			local g = rainbow
 			if g and not reduced then
-				g.Color = WheelDraw.rainbow((t / 3) % 1)
+				-- GAIA's line flows at its title's pace (2026-10-10, the owner:
+				-- "make those fast too"; 3 s a turn before).
+				g.Color = WheelDraw.rainbow((t / GameConfig.TitleFX.RainbowSeconds) % 1)
 			end
 		end
 		if f.done then

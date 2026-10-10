@@ -978,7 +978,8 @@ local ok, err = pcall(function()
 	RebirthFX.followAuras(0, auraRoot.Position)
 	local c0 = gaiaRainbow.Color.Keypoints[1].Value
 	RebirthFX.followAuras(C.Aura.RainbowSeconds / 4, auraRoot.Position)
-	check(gaiaRainbow.Color.Keypoints[1].Value ~= c0, "GAIA's rainbow turns slowly")
+	check(gaiaRainbow.Color.Keypoints[1].Value ~= c0 and C.Aura.RainbowSeconds == GameConfig.TitleFX.RainbowSeconds,
+		"GAIA's rainbow turns, at its title's fast pace (the owner: \"make those fast too\")")
 	RebirthFX.clearAura(auraRoot)
 	check(gaia.Parent == nil and RebirthFX.auraOf(auraRoot) == nil, "taking it off takes it all")
 	-- World Tree Halo's two accent leaves (its family's AuraAccents) go round the body.

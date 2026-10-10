@@ -1,5 +1,14 @@
 # Steal a Seed — Session Handoff
 
+## GAIA'S RAINBOW FAST EVERYWHERE: THE CELEBRATION CARD AND THE AURA TOO — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
+
+The owner, on the celebration card's and the aura's GAIA rainbows: "yes make those fast too". Both lines are the terminal's (RebirthFX); it handed them over.
+- **The celebration card's GAIA line**: a turn every `GameConfig.TitleFX.RainbowSeconds` (1.2 s; it was 3), still under the Reduced FX guard.
+- **The aura's GAIA wisps**: `GameConfig.Rebirth.Celebration.Aura.RainbowSeconds` 12 → 1.2, recoloured every frame rather than on the wisps' 10-a-second frame steps (`stepped and` dropped: at the fast pace each step jumped 30 degrees of hue). At most Nearest (4) auras show.
+- **Specs**: RebirthCelebrationSpec 92/0 (its aura check reworded and pinned to the shared pace); TitleFXSpec 37/0 (the celebration and the aura keep their own code and only share the pace); RebirthSpec 78/0.
+- **Not seen in Play**: a pace change and a per-frame recolour, with spec cover.
+- **Tools**: the scratchpad's top-level helpers (studio_mcp.py, prepublish.py, safe_play.sh) and the luau/ compiler folder vanished at 13:53:44, deleted by neither session and not in the Recycle Bin. The first three were rebuilt (the probe matches: 339 / 0 differ). The offline compiler needs a re-download, waiting on the owner's OK. Spec runs in Studio catch syntax errors meanwhile.
+
 ## TITLE FX, LIVELIER: GAIA'S FAST RAINBOW, A GLINT, TWINKLES, TWICE AS QUICK — 2026-10-10 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED)
 
 The owner: "title effects look lame, how can we improve it, like rapid animations, specially on gaia, a rapid rainbow color".
