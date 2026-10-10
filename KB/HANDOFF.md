@@ -1,5 +1,17 @@
 # Steal a Seed — Session Handoff
 
+## RARITY CARDS: THE PLAN, AND A BRIEF FOR CODEX — 2026-10-10 (CLAUDE)  (PLAN ONLY; NOTHING BUILT; WAITING ON THE OWNER'S "go" AND CODEX'S ART)
+
+The owner: "plan me a color by rarity, lets say mythic, their background must be white, it also applies on equipments and traps too"; then "how abt secret, i think we need codex to generate more cards textures for them and add shine effect".
+- **Today**: Uncommon lime, Rare sky, Epic purple, Legendary gold, Mythic coral, Secret sky, Divine gold (`GameConfig.BagLook.StudsByRarity`); Common the plain tile. Every bat and trap is coral (`StudsByKind.equipment`), the same card as a Mythic. Equipment has no rarity (`WeaponData`; RarityFXSpec pins "equipment has no rarity"). No white or dark studded texture exists, and `ImageColor3` only darkens.
+- **The ladder**: Common to Legendary unchanged. Mythic WHITE (Codex's pearl texture). Secret its own dark card (Codex: two options, the owner picks). Divine the existing rainbow. Bag tiles, MY PLANTS, the TOP CREATURES board.
+- **The white card reads**: dark words on a soft white band (the others keep cream words on the ink band), a darker money green, dark held/selected outlines (white ones vanish on white). Mythic keeps its crimson word, edge and ember light.
+- **Bats and traps by price** (looks only; price, power, saves and selling unchanged): Common Rootwood Bat; Uncommon Cactus Club, Bramblejaw Trap; Rare Sunflower Bonker, Dunesnap Plate; Epic Mirewood Paddle, Mirecoil Snare; Legendary Cindercrack Bat, Cinderburst Mine; Mythic Comet Bat, Starlock Anchor (both 60M, both white). Bag card + edge, the rarity word on the tile's second line, the hotbar's edge strip.
+- **Shine** (planned, Claude builds it): a light band sweeps across Mythic, Secret and Divine cards in their own colours (a pearl prism on white, silver-cyan holo on Secret, white-gold on Divine), under the art and words, only while on screen, still under Reduced FX.
+- **Open, the owner's**: the Marigold shop's bat and trap cards wear their rarity cards too (Claude's pick) or keep their own colours; which Secret option.
+- **Codex**: `art/textures/rarity-studs-2026-10-10/CODEX-BRIEF.md` (pearl white, obsidian-silver, midnight-holo; 1254 px like the six). The owner uploads; Claude wires the ids. Until then a card shows its solid fallback colours.
+- A mockup went to the owner in chat (from the real textures; the white and black studs in it are Claude's stand-ins made from the coral one). Not a game capture.
+
 ## PUBLISHED AS v1049 AND v1050 — 2026-10-10 04:50 AND 07:09 UTC (12:50 AND 15:09 the owner's time) (CLAUDE)
 
 - The owner published both themselves. No agent published.
