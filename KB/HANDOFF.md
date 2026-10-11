@@ -1,5 +1,40 @@
 # Steal a Seed — Session Handoff
 
+## THE RAIN BIOME'S BEACON: A COLUMN OF LIGHT OVER THE BRIDGE WHILE IT IS OPEN — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; RainBeaconSpec 18/0 (NEW); THE FULL SUITE 150/150 IN TWO HALVES -- a run stopped by low memory after 72 specs, then, on the owner's word, the 78 it had not reached in four batches -- with HatchInBagSpec, TutorialSpotlightSpec and HatchRollSpec's known timing flakes re-run alone (43/0, 51/0, 166/0); 19 OF 19 MUTANTS CAUGHT; captures in output/rain-beacon-2026-10-11, sheet 00_sheet.png)
+
+The owner's item 8 via the peer: "a tall soft rain-blue pillar from the rain biome's bridge ... visible from plots, the hub and the road", shown only while the biome is open. New: Shared/RainBeacon, RainBeacon.client, GameConfig.Weather.Beacon, tools/tests/RainBeaconSpec.
+- **What it is:** one camera-facing BillboardGui on an invisible anchor in the middle of the bridge's deck (281, 9, 70).
+  - 27 by 400 studs, holding five frames: a near-white core inside four ever wider, fainter blues.
+  - A UIGradient fades it in from the deck over its first 24 studs and out into the sky over its top 100.
+  - Each layer breathes its width by 8% every 4.5 s.
+- **Why a billboard:** this Studio's Play runs graphics quality Level01, where the engine draws no part or beam past ~300 studs; many phones do the same.
+  - A Beam column and then a Neon part column both vanished from plot 3's gate (~335 studs) and a far plot's back (~460).
+  - The billboard shows from both.
+  - Two fixes on the way: a Beam with one segment drew nothing (its transparency is sampled only at the ends), and the first pale blue all but vanished against the rain's grey sky, so the blues are deeper now.
+- **When:** only while the Weather State is "active" (the entrance open), never while opening or closing.
+  - It fades in and out over 2 s; a late joiner sees it at once.
+  - END RAIN took it away as the state went to "closing".
+- **Rules kept:**
+  - Each client builds its own (the server holds no part of it). The anchor collides with nothing, is found by no ray, touches nothing and casts no shadow.
+  - It is self-lit (LightInfluence 0) and never drawn over the world (AlwaysOnTop false). No HUD, arrow, sign, words or pictures. It touches no Lighting (the rain's, the night's and the Mist's look are WorldClock's).
+  - Its light clears every cloud bank by 206 studs, and the sight lines from every plot's gate and back, the hub's four sides and down the road are clear past the map, the open biome and the hub's set (RainBeaconSpec).
+  - It stands 56 studs clear of the obby's course and is blue, never the Mist sign's mint.
+  - Reduced FX (Performance Mode, or the engine's reduced motion: the game's one setting) keeps it still and drops only the widest layer; it stays plainly visible (captured).
+- **Live (two guarded Plays, SeedTest_mistlook_20261011, 1251 x 716, quality Level01; a Rain from the admin console):**
+  - Captures by day in the rain from plot 3's gate, the hub, the road's mouth, down the road (z -250), near the bridge and a far plot's back.
+  - Performance Mode on (test-only, switched back off), and night (the console's START NIGHT).
+  - END RAIN: gone. That last capture is white: the closing's thickened cloud bank round that camera; a probe confirmed the beacon gone.
+  - No errors.
+- **Mutants (19 OF 19):** ShownWhileOpening, TooShort, AnchorCollides, AnchorQueryable, LitByTheWorld, OverTheWorld, ShortSight, NoFade, CoreUnder, PulseUnderReduced, HazeUnderReduced, NoLateJoin, NeverFadesOut, ServerMention, OffTheBridge, MintGlow, TouchesLighting, HudText, NoHandover.
+- **For the owner's eye:** its height (400), widths and blues are Claude's. The owner saw the captures and OK'd the push.
+- **Next (the owner's order):**
+  - The Common cards' stone-grey studs (93028419214378).
+  - (b) the Shop plate face.
+  - (c) the Robux buy buttons.
+  - 9, the new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools.
 ## THE EVENT HUB'S DETAIL: TUFTS, FLOWERS, PLANTS AND A SMALL POND — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; MosskeeperSpec 69/0 (11 new checks), EventHubSpec 53/0, THE FULL SUITE 149/149 (HatchRollSpec's known wall-clock flake in the suite, 166/0 alone); 18 OF 18 MUTANTS CAUGHT; captures in output/hub-detail-2026-10-11)
 
 The owner's request via the peer ("MORE DETAIL ON THE EVENT HUB. Grass tufts, more flowers, a small POND, decorative plants, etc."), improvised in the grove, carpet and mushroom ring's family: studded Plastic, mint accents, woodland. One new `Detail` folder in the deck's dress (Shared/MistDeckModel), laid out by `EnchantedMistConfig.Deck.Detail`.

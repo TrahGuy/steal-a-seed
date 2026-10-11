@@ -5079,6 +5079,45 @@ GameConfig.Weather = {
 		PartBudget = 800,
 	},
 	--==========================================================================
+	-- THE BEACON (2026-10-11, the owner: "a tall soft rain-blue pillar from the
+	-- rain biome's bridge ... visible from plots, the hub and the road"): while
+	-- the biome is OPEN ("active") a column of light rises from the middle of
+	-- the bridge's deck, so everyone sees where the temporary biome is. Each
+	-- client draws its own (Shared/RainBeacon, RainBeacon.client): ONE
+	-- camera-facing BillboardGui sized in studs, its layers frames inside it
+	-- (the haze behind, the core on top), on one invisible anchor that nothing
+	-- collides with, finds or touches -- never drawn over the world, no HUD, no
+	-- arrow, no sign. A BILLBOARD, NOT PARTS OR BEAMS: at the lowest graphics
+	-- quality (many phones) the engine draws no part or beam past ~300 studs,
+	-- and the far plots are 330-460 away; a billboard still draws there
+	-- (measured in Play, 2026-10-11). Self-lit (LightInfluence 0), so the rain's
+	-- overcast, the night and the Mist's look never dim it; Height puts its
+	-- light far over every cloud bank, and over the road's walls seen from down
+	-- the road. A gradient brings it in over In of its length from the deck (a
+	-- walker on the bridge stands in its faint foot) and fades it into the sky
+	-- over the last Out. A late joiner sees it at once; otherwise it fades in
+	-- and out over FadeSeconds. Each layer breathes its width by Pulse.Amount;
+	-- REDUCED FX keeps it still and drops the widest layer (Rich), and it stays
+	-- plainly visible. Its blues are deep enough to stand out against the
+	-- rain's grey sky. RainBeaconSpec holds it all.
+	--==========================================================================
+	Beacon = {
+		Height = 400,
+		In = 0.06,
+		Out = 0.25,
+		FadeSeconds = 2,
+		Pulse = { Seconds = 4.5, Amount = 0.08 },
+		-- Inside out, each wider and fainter, for a soft falloff across it.
+		Layers = {
+			{ Name = "Core", Width = 3, Transparency = 0.05, Colour = Color3.fromRGB(190, 225, 255), Phase = 0 },
+			{ Name = "Inner", Width = 6, Transparency = 0.35, Colour = Color3.fromRGB(130, 190, 255), Phase = 1.3 },
+			{ Name = "Glow", Width = 11, Transparency = 0.6, Colour = Color3.fromRGB(90, 160, 255), Phase = 2.5 },
+			{ Name = "Outer", Width = 17, Transparency = 0.78, Colour = Color3.fromRGB(85, 150, 245), Phase = 3.8 },
+			{ Name = "Haze", Width = 25, Transparency = 0.88, Colour = Color3.fromRGB(80, 145, 240), Phase = 5,
+				Rich = true },
+		},
+	},
+	--==========================================================================
 	-- THE LOOK OF THE RAIN (WorldClock, the one owner of Lighting): overcast,
 	-- not dark, laid over whatever the day/night blend already is and read off
 	-- one number, so when the rain ends the live phase simply comes back and
