@@ -577,7 +577,7 @@ local ok, err = pcall(function()
 	end
 	local BUILDER = { AddMoney = "addMoney", AddSpeed = "addSpeed", ResetPlayerProgress = "reset",
 		StartNight = "startNight", StartDay = "startDay", Announce = "announce", Spawn = "spawn",
-		Weather = "weather", MiniEvent = "miniEvent" }
+		Weather = "weather", MiniEvent = "miniEvent", Mist = "mist" }
 	local missing = {}
 	for _, action in ipairs(actions) do
 		local builder = BUILDER[action]
@@ -587,7 +587,8 @@ local ok, err = pcall(function()
 			table.insert(missing, action)
 		end
 	end
-	check(#actions == 9 and #missing == 0, "every one of the server's nine actions is reachable from the console",
+	check(#actions == 10 and #missing == 0, "every one of the server's ten actions is reachable from the console (the "
+			.. "Enchanted Mist's since 2026-10-11)",
 		table.concat(actions, ",") .. " | missing: " .. table.concat(missing, ","))
 	-- One handler per control: no duplicate connections.
 	local doubled = {}
