@@ -1,5 +1,16 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE MYSTERIOUS POD'S ODDS CONFIRMED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false, the Look unbuilt)
+
+The owner, via the peer: "APPROVE the draft odds, both tables as they stand".
+- **`EnchantedMistData.Pool.Approved = true`**: Mossbristle 60, Briarstag 17, Hollowl 17, Elderbough 5, Gnarlmaw 0.8, Snarlbloom 0.2.
+- **`EnchantedMistData.Sizes.Approved = true`**: Tiny..Colossal 53.25 / 15.93 / 10.07 / 7.89 / 5.92 / 6.42 / 0.52.
+- Both are marked CONFIRMED (owner, 2026-10-11). Weights and versions (both 1) are unchanged, so saved Mysterious Pod records stay valid.
+- **What disappears with the flags**: the Odds page's "Draft odds, not final" line and MissingBindings' two "approval:" entries. Their guards stay in the code, so a future unapproved table would show both again.
+- **EnchantedMistSpec 37/0** pins: both tables confirmed, versions unchanged, and no approval left in the missing list. Mutants 2/2 (PoolUnapproved, SizesVersionBumped).
+- **Also, its own commit**: PlantWanderSpec now destroys its plot-6 fixture. It leaked one non-archivable "PlantWanderSpecPlot6" into Workspace per run; the two found were removed.
+- **Still open for the event**: the creature ports and incomes (in progress), the Mist Look (next), Enabled/ShowMosskeeper.
+
 ## ENCHANTED MIST, STAGE 4: THE MYSTERIOUS POD — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF: no pod is granted until every pool creature exists, Enabled = false, ShowMosskeeper = false; MysteryPodSpec 29/0, 11 OF 11 MUTANTS CAUGHT; FULL SUITE RUN ONCE, ITS 15 STAGE-4 FAILURES FIXED AND RE-RUN GREEN; REELS AND BAR LOOKS OK'd by Claude on the owner's handoff; owner to review)
 
 The brief: KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §10-13, plus the owner's five decisions relayed by the peer (no knock-loose, unsellable until hatched, the pedestal refuses it, planting allowed with the record following it, LuckhollowPod art named "Mysterious Pod" with rarity "Event" and no PointLight). The plumbing below is described as built; it was not separately approved.

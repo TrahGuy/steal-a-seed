@@ -5,7 +5,7 @@
 -- Enchanted Mist's schedule and its shared sign, in Edit:
 --
 --   1. the numbers: the confirmed rules (carry 5, 10 per pod, 30 s hatch, the
---      15-cumulative example), the schedule, the draft odds and their picks
+--      15-cumulative example), the schedule, the confirmed odds and their picks
 --   2. the sign's words: every state, truthful -- COMING SOON, "Eligible in",
 --      waiting with an ESTIMATE, resetting, active, syncing
 --   3. the coordinator on a fake clock: off while switched off or missing a
@@ -70,8 +70,10 @@ local ok, err = pcall(function()
 	for _, e in ipairs(D.Pool.Entries) do
 		total += e.Weight
 	end
-	check(math.abs(total - 100) < 1e-9 and not D.Pool.Approved and not D.Sizes.Approved,
-		"the draft creature odds add to 100%; odds and sizes still unapproved", total)
+	-- CONFIRMED by the owner 2026-10-11, weights and versions as they stood.
+	check(math.abs(total - 100) < 1e-9 and D.Pool.Approved == true and D.Sizes.Approved == true
+			and D.Pool.Version == 1 and D.Sizes.Version == 1,
+		"the creature odds add to 100%; both tables confirmed, versions unchanged", total)
 	check(D.pickCreature(0).Id == "mossbristle" and D.pickCreature(0.5999).Id == "mossbristle"
 			and D.pickCreature(0.6).Id == "briarstag" and D.pickCreature(0.999).Id == "snarlbloom"
 			and D.pickCreature(0.995).Id == "gnarlmaw",
@@ -161,8 +163,8 @@ local ok, err = pcall(function()
 	check(string.find(text, "Look", 1, true) and not string.find(text, "Mosskeeper", 1, true)
 			and not string.find(text, "MysteriousPod", 1, true) and not string.find(text, "shell", 1, true)
 			and string.find(text, "Gnarlmaw", 1, true)
-			and string.find(text, "creature odds", 1, true) and not string.find(text, "Snarlbloom", 1, true),
-		"the missing list names the unbuilt pieces, the unregistered creatures and the approvals (Snarlbloom exists)",
+			and not string.find(text, "approval", 1, true) and not string.find(text, "Snarlbloom", 1, true),
+		"the missing list names the unbuilt pieces and the unregistered creatures, no approval now (Snarlbloom exists)",
 		#missing)
 
 	configCopy.Enabled = true

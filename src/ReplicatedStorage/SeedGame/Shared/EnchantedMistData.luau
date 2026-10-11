@@ -109,7 +109,8 @@ EnchantedMistData.Spawn = {
 }
 
 --==============================================================================
--- THE MYSTERIOUS POD'S CREATURES -- DRAFT odds (awaiting approval)
+-- THE MYSTERIOUS POD'S CREATURES -- CONFIRMED (owner, 2026-10-11): these
+-- weights as they stand. Version unchanged, so saved records stay valid.
 --
 -- Weights in percent; one creature per pod, chosen by the server at grant and
 -- saved, never by a client. Grovemaw is the guardian and is never here.
@@ -117,7 +118,7 @@ EnchantedMistData.Spawn = {
 --==============================================================================
 EnchantedMistData.Pool = {
 	Version = 1,
-	Approved = false,
+	Approved = true,
 	Entries = {
 		{ Id = "mossbristle", Name = "Mossbristle", Rarity = "Legendary", Weight = 60 },
 		{ Id = "briarstag", Name = "Briarstag", Rarity = "Mythic", Weight = 17 },
@@ -129,13 +130,14 @@ EnchantedMistData.Pool = {
 }
 
 --==============================================================================
--- THE SIZE, FOR LEGENDARY TO DIVINE -- DRAFT conditional odds (awaiting
--- approval), Tiny to Colossal, in SeedData.Tiers' order. A creature of these
+-- THE SIZE, FOR LEGENDARY TO DIVINE -- CONFIRMED (owner, 2026-10-11):
+-- these conditional odds as they stand (Version unchanged), Tiny to
+-- Colossal, in SeedData.Tiers' order. A creature of these
 -- rarities rolls one size once it is chosen; the joint odds are the product.
 --==============================================================================
 EnchantedMistData.Sizes = {
 	Version = 1,
-	Approved = false,
+	Approved = true,
 	Weights = { 0.5325, 0.1593, 0.1007, 0.0789, 0.0592, 0.0642, 0.0052 },
 }
 
