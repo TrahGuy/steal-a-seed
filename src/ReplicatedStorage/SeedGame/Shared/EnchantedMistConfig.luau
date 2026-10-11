@@ -319,6 +319,62 @@ EnchantedMistConfig.Deck = {
 		Mint = Color3.fromRGB(150, 255, 200),
 		Petal = Color3.fromRGB(214, 244, 226),
 	},
+	--==========================================================================
+	-- THE DETAIL (the owner, 2026-10-11: "MORE DETAIL ON THE EVENT HUB. Grass
+	-- tufts, more flowers, a small POND, decorative plants, etc.; improvise in
+	-- the same family as the grove, carpet and mushroom ring"): grass tufts,
+	-- wildflowers, ferns, bushes, little mushrooms, mossy rocks and a fallen
+	-- log over the deck's open band, and a small pond on its west side with a
+	-- stone rim, lily pads, reeds and a few fireflies. Overlays only, like the
+	-- rest, and low (under TallMax), so the deck stays walkable everywhere and
+	-- the pond is a flush painted surface: no Terrain water, nothing to swim in
+	-- or wade through. Kept off the plaza (MinRadius), the deck's rim step
+	-- (MaxRadius) and the road's side (RoadGapDegrees: the approach, its path
+	-- and the overflow spawn), and nothing over LowMax stands where a mini
+	-- event's ticket may fall or a disco's dancer stand (MosskeeperSpec). Its
+	-- glowing bits are MistGlow, so Reduced FX stills them; nothing moves.
+	-- Spots are { degrees from the road, radius }, as the grove's angles.
+	--==========================================================================
+	Detail = {
+		MinRadius = 20.5,
+		MaxRadius = 42.5,
+		RoadGapDegrees = 45,
+		TallMax = 2.8,
+		LowMax = 1.4,
+		Tufts = { { 50, 31 }, { 58, 39.5 }, { 66, 30.5 }, { 76, 34 }, { 88, 40 }, { 96, 28.5 }, { 113, 37 }, { 121, 31 },
+			{ 150, 29.5 }, { 160, 40.5 }, { 198, 41 }, { 230, 37 }, { 262, 40 }, { 298, 31.5 }, { 301, 40 }, { 312, 37 } },
+		Flowers = { { 64, 37 }, { 104, 32 }, { 186, 28.5 }, { 240, 29 }, { 300, 35.5 } },
+		Ferns = { { 72, 22.5 }, { 146, 36 }, { 202, 25.5 }, { 236, 25.5 } },
+		Bushes = { { 156, 25.5 }, { 166, 31.5 }, { 192, 33 }, { 308, 24.5 } },
+		Shrooms = { { 185, 39.5 }, { 229.5, 26.5 } },
+		Rocks = { { 171, 40.5 }, { 293, 37.5 } },
+		Logs = { { 178, 37 } },
+		-- Clover patches: { degrees, radius, the patch's own radius }.
+		Clover = { { 55, 36, 2.2 }, { 82, 31, 2 }, { 108, 39.5, 1.8 }, { 216, 31, 2 }, { 250, 37, 2.2 }, { 309, 32, 2 } },
+		-- The pond: lobes { out, along, radius } in its own frame (out from the
+		-- hub's centre, along the turn toward +X), the water's top Rise over the
+		-- deck's (over the carpet, under a stud), a rim stone every RimStep studs
+		-- of its edge, and pads, reeds and fireflies in the same frame.
+		Pond = {
+			Angle = 284,
+			Radius = 33,
+			Lobes = { { 0, 0, 3.8 }, { -0.4, -3.6, 2.6 }, { 0.6, 3.3, 2 } },
+			Rise = 0.07,
+			Deep = 0.55,
+			RimStep = 2.6,
+			Pads = { { -1.2, 0.8, 1.4 }, { 1.3, -1.2, 1.2 }, { -0.6, -4, 1.1 } },
+			Reeds = { { 4.2, -1.8, 2.2 }, { 4.6, -0.7, 2.6 }, { 4.3, 0.5, 2.1 }, { 4.7, 1.5, 2.5 }, { 4.1, 2.4, 1.9 } },
+			Fireflies = { { 0.6, 1.8, 1.7 }, { -1.6, -2.2, 2.2 }, { 2, -0.4, 2.6 } },
+		},
+		Grass = { Color3.fromRGB(124, 186, 88), Color3.fromRGB(98, 160, 72), Color3.fromRGB(150, 206, 110) },
+		CloverColour = Color3.fromRGB(122, 178, 86),
+		Water = Color3.fromRGB(92, 168, 196),
+		WaterDeep = Color3.fromRGB(64, 132, 170),
+		StoneLight = Color3.fromRGB(152, 156, 140),
+		Lilac = Color3.fromRGB(196, 170, 232),
+		Butter = Color3.fromRGB(250, 232, 150),
+		LogEnd = Color3.fromRGB(196, 150, 104),
+	},
 }
 
 --==============================================================================

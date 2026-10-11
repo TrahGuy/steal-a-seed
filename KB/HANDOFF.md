@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## THE EVENT HUB'S DETAIL: TUFTS, FLOWERS, PLANTS AND A SMALL POND — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; MosskeeperSpec 69/0 (11 new checks), EventHubSpec 53/0, THE FULL SUITE 149/149 (HatchRollSpec's known wall-clock flake in the suite, 166/0 alone); 18 OF 18 MUTANTS CAUGHT; captures in output/hub-detail-2026-10-11)
+
+The owner's request via the peer ("MORE DETAIL ON THE EVENT HUB. Grass tufts, more flowers, a small POND, decorative plants, etc."), improvised in the grove, carpet and mushroom ring's family: studded Plastic, mint accents, woodland. One new `Detail` folder in the deck's dress (Shared/MistDeckModel), laid out by `EnchantedMistConfig.Deck.Detail`.
+- **What stands there** (186 parts; the hub's whole set, Mosskeeper and his surround included, goes from 537 to 723):
+  - 16 grass tufts (three wedge blades each), 5 wildflower clusters (white, lilac, butter; every other one with a glowing mint bloom) and 6 clover patches (a lighter blob with two low blooms).
+  - 4 ferns (low fronds), 4 bushes (two studded leafy blocks, the trees' canopies in little, with two glowing mint berries), 2 pairs of little mushrooms in the ring's colours, 2 mossy rocks, and a fallen log with cut ends, moss and a glowing shelf fungus.
+  - **The pond**, on the deck's west side between the plot 1 and plot 2 walks (33 studs out): overlapping teal discs with a deeper middle, an uneven stone rim, three lily pads (a white and a glowing mint blossom), five reeds (three with cattails) on its far side, three fireflies over it.
+- **Gameplay unchanged:**
+  - Every part is anchored, collides with nothing, is found by no ray and touches nothing, and casts no shadow.
+  - It lives in the Mosskeeper's folder like the rest of the dress, not the map, so MiniEventService.FloorAt (a ray that respects collision), the tickets' prop grid (SeedMap only), the dancers' ground ray (SeedMap only) and the berries never see it.
+  - The pond is a flush painted surface 0.07 over the deck (over the carpet, under the plaza floor's step), never Terrain water: nothing to swim in, wade through or trip on.
+- **Kept clear** (MosskeeperSpec measures every corner of every part):
+  - The plaza (from 20.5), the mushroom ring and the rim's step (to 42.5), and the road's side (45 degrees either way: the approach, the stone path and the overflow spawn, 14 studs).
+  - His Talk prompt's reach, his bubbles and bar, the grove's trees and flowers.
+  - The heights: under 2.8 studs everywhere, far under the Mist sign. EventHubSpec's sight lines from every plot to the sign now run past the detail too.
+  - Nothing over 1.4 studs, and no part of the pond, stands where a mini event's ticket may fall on the hub or a disco's dancer stands. 400 discos' real dancer picks are checked against the pond and the bushes.
+  - No berry zone reaches the deck.
+- **Phones and settings**:
+  - Parts alone: no light, particle, beam, sound or script. Nothing moves.
+  - The glowing bits (mint blooms, berries, the shelf fungus, a lily blossom, the fireflies, the mushroom spots) are MistGlow, so Reduced FX stills them like the ring's spots (MosskeeperView).
+  - Built once at start with the rest of the dress (atomic streaming), each piece from its own seed, so every server and late joiner sees the same hub.
+- **Live (guarded Play, SeedTest_mistlook_20261011, 1005 x 716)**: the client had all 186 parts (17 glowing) at once; captures from the road's mouth and farther down it, plot 1's gate, above, and up close (the pond, the east side, the back, the west); the same under the Mist look (flipped on the test client alone, then restored) and at night (the admin console's START NIGHT on the test server). No errors.
+- **Mutants (18 OF 18)**: NoPondWater, TuftsCollide, PondQueryable, GlowUntagged, TuftShadows, FireflyLights, FernInPlaza, TuftOnRim, TuftOnRoad, ReedTooTall, BushOnTickets, PondOnDancers, PondRaised, PondTerrain, TuftsUnseeded, ShroomsInTree, PartFlood, BerriesOnDeck.
+- **For the owner's eye**: all of it is Claude's improvisation: the pond's spot and size, the lilac and butter flowers next to the mint and white, the clover blobs, and the part count (186). The captures are from the road's mouth, plot 1's gate and up close. The owner saw them and OK'd the push.
+- **Next (the owner's order)**:
+  - 8, the rain biome beacon.
+  - (b) the Shop plate face.
+  - (c) the Robux buy buttons.
+  - 9, the new Robux items (their six icons checked: all load).
+  - 10, admin action announcements.
+  - 11, a compact admin console, without the log strip.
+  - 12, the Enchanted Mist admin tools.
 ## THE MOSSKEEPER'S MOODS AND MOMENTS: A MIST'S START AND END, LIVELY DURING, SLEEPY BETWEEN — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED: THE OWNER WAIVED THE GIF REVIEW; MosskeeperMoodsSpec 23/0 (NEW), MosskeeperSpec 58/0, THE FULL SUITE 149/149; 17 OF 17 MUTANTS CAUGHT; the GIFs made before the waiver are in output/mosskeeper-moods-2026-10-11)
 
 The owner's item 7b via the peer, on his existing client animator (Shared/MosskeeperIdle, MosskeeperView).

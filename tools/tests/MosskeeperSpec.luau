@@ -12,7 +12,8 @@
 --      only the pad solid
 --   3. where he stands: the hub's anchor, facing the road, inside the plaza;
 --      on the plaza's floor between Mists, on the pad during one; the surround
---      up once, and gone whole after
+--      up once, and gone whole after; the deck's dress -- carpet, ring, grove
+--      and its detail (tufts, flowers, plants, the pond) -- each on its ground
 --   4. his prompt: tap E -- Talk, clear of every berry's
 --   5. give all: every refusal, the 15-berry example, the full Bag rejecting
 --      the whole of a pod-earning delivery, a small one still taken, the stage 4
@@ -369,8 +370,8 @@ local ok, err = pcall(function()
 		end
 		if p.Name == "MossCarpet" then
 			carpetTop = p.Position.Y + p.Size.X / 2
-		elseif p.Parent and p.Parent.Name == "Grove" then
-			-- measured below, on its own rules
+		elseif p.Parent and (p.Parent.Name == "Grove" or p.Parent.Name == "Detail") then
+			-- measured below, each on its own rules
 		else
 			ringParts += 1
 			-- A round part (a cap, a spot) by its real radius, a block by its corners.
@@ -451,6 +452,212 @@ local ok, err = pcall(function()
 		"the path inside the surround's approach, its lanterns just outside it",
 		table.concat(wrongPath, ",") .. " | " .. table.concat(wrongLamp, ","))
 	check(crowd == 0 and tall == 0, "clear of the overflow spawn and of his Talk prompt, under the Mist sign", crowd + tall)
+	-- THE DETAIL (the owner, 2026-10-11: "Grass tufts, more flowers, a small
+	-- POND, decorative plants"): over the deck's open band, low, overlays only
+	-- (above), clear of everything the hub is for.
+	local T = D.Detail
+	local detail = deck and deck:FindFirstChild("Detail")
+	local detailParts = detail and parts(detail) or {}
+	local setCount = #parts(npc) + (if sur then #parts(sur) else 0) + (if deck then #parts(deck) else 0)
+	local kinds = { Tuft = 0, Wildflowers = 0, Fern = 0, Bush = 0, Shrooms = 0, Rock = 0, Log = 0, Clover = 0,
+		PondWater = 0, PondRim = 0, PondPad = 0, PondReed = 0 }
+	for _, p in ipairs(detailParts) do
+		for kind in pairs(kinds) do
+			if string.sub(p.Name, 1, #kind) == kind then
+				kinds[kind] += 1
+			end
+		end
+	end
+	local missing = {}
+	for kind, n in pairs(kinds) do
+		if n == 0 then
+			table.insert(missing, kind)
+		end
+	end
+	table.sort(missing)
+	check(detail ~= nil and detail:IsA("Folder") and #missing == 0 and #detailParts <= 200,
+		string.format("the detail: grass tufts, wildflowers, ferns, bushes, mushrooms, rocks, a log, clover and a pond -- "
+			.. "%d parts (200 at most), the hub's whole set %d", #detailParts, setCount), table.concat(missing, ","))
+	local extras, shadows, unlit = {}, 0, {}
+	for _, d in ipairs(detail and detail:GetDescendants() or {}) do
+		if not d:IsA("BasePart") then
+			table.insert(extras, d.ClassName)
+		else
+			if d.CastShadow then
+				shadows += 1
+			end
+			if (d.Material == Enum.Material.Neon) ~= (d:GetAttribute("MistGlow") == true) then
+				table.insert(unlit, d.Name)
+			end
+		end
+	end
+	check(#extras == 0 and shadows == 0, "cheap on phones and still: parts alone (no light, particle, beam, sound or "
+		.. "script), none casting a shadow", table.concat(extras, ",") .. " / " .. shadows)
+	check(#unlit == 0, "every glowing bit is MistGlow, so Reduced FX stills it on that screen, and only those glow",
+		table.concat(unlit, ","))
+	local spawnClear = 0
+	for _, list in ipairs({ GameConfig.MiniEvent.KeepClear, GameConfig.MiniEvent.Dancers.KeepClear }) do
+		for _, k in ipairs(list) do
+			if k.Name == "Spawn" then
+				spawnClear = math.max(spawnClear, k.Radius)
+			end
+		end
+	end
+	local ringInner = D.RingRadius - D.CapWidth / 2
+	local outBand, roadSide, nearPlate, tooTall, nearGrove = {}, {}, {}, {}, {}
+	for _, p in ipairs(detailParts) do
+		for _, c in ipairs(corners(p)) do
+			local f = flat(c) - flat(HUB.Centre)
+			local r = f.Magnitude
+			if r < T.MinRadius - 1e-3 or r > T.MaxRadius + 1e-3 then
+				table.insert(outBand, p.Name)
+			end
+			if math.abs(math.atan2(f.X, -f.Z)) < math.rad(T.RoadGapDegrees) - 1e-3
+				or (flat(c) - flat(MAP.OverflowSpawn)).Magnitude < spawnClear
+				or (f.Z < 0 and math.abs(f.X) < half + 1) then
+				table.insert(roadSide, p.Name)
+			end
+			if plate and (flat(c) - flat(plate)).Magnitude < CFG.TalkReach then
+				table.insert(nearPlate, p.Name)
+			end
+			if c.Y > deckTop + T.TallMax then
+				table.insert(tooTall, p.Name)
+			end
+		end
+		for _, gp in ipairs(groveParts) do
+			if (string.find(gp.Name, "Trunk$") or string.find(gp.Name, "Pad$"))
+				and (flat(p.Position) - flat(gp.Position)).Magnitude < 1.6 then
+				table.insert(nearGrove, p.Name .. "@" .. gp.Name)
+			end
+		end
+	end
+	check(T.MinRadius > HUB.Radius and T.MaxRadius < ringInner and ringInner < MAP.HubRadius and #outBand == 0
+			and #nearGrove == 0,
+		string.format("on the deck's open band, from %.1f (out of the plaza) to %.1f (inside the mushroom ring and the "
+			.. "rim's step), off the grove's trees and flowers", T.MinRadius, T.MaxRadius),
+		table.concat(outBand, ",", 1, math.min(#outBand, 6)) .. " | " .. table.concat(nearGrove, ",", 1,
+			math.min(#nearGrove, 6)))
+	check(#roadSide == 0, string.format("the road's side open: none within %d degrees of the road, on the approach or "
+		.. "its path, or within %d studs of the overflow spawn", T.RoadGapDegrees, spawnClear),
+		table.concat(roadSide, ",", 1, math.min(#roadSide, 6)))
+	check(plate ~= nil and #nearPlate == 0 and #tooTall == 0 and T.TallMax < G.TreeMaxHeight
+			and deckTop + T.TallMax < signBottom - 1.5,
+		string.format("out of his Talk prompt's reach (%d) and the plaza with his bubbles and bar; under %.1f studs, "
+			.. "well under the grove's trees and the Mist sign", CFG.TalkReach, T.TallMax),
+		table.concat(nearPlate, ",", 1, math.min(#nearPlate, 6)) .. " | " .. table.concat(tooTall, ",", 1,
+			math.min(#tooTall, 6)))
+	-- The mini events' ground on the deck: where a ticket may fall (the hub's
+	-- Area) and where a disco's dancers stand (the Dancers' Deck zone).
+	local AREA = GameConfig.MiniEvent.Area
+	local deckZone = nil
+	for _, z in ipairs(GameConfig.MiniEvent.Dancers.Zones) do
+		if z.Name == "Deck" then
+			deckZone = z
+		end
+	end
+	local function onEventGround(c)
+		local d = flat(c) - flat(AREA.Centre)
+		local angle = math.deg(math.atan2(d.Z, d.X))
+		if d.Magnitude >= AREA.MinRadius and d.Magnitude <= AREA.MaxRadius then
+			for _, s in ipairs(AREA.Sectors) do
+				if angle >= s.From and angle <= s.To then
+					return true
+				end
+			end
+		end
+		local r = flat(c).Magnitude
+		if deckZone and r >= deckZone.MinRadius and r <= deckZone.MaxRadius then
+			local a = math.deg(math.atan2(c.Z, c.X))
+			for _, s in ipairs(deckZone.Sectors) do
+				if (a - s.From) % 360 <= (s.To - s.From) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	local function topOf(p)
+		local y = -math.huge
+		for _, c in ipairs(corners(p)) do
+			y = math.max(y, c.Y)
+		end
+		return y
+	end
+	local onGround, blockers = {}, {}
+	for _, p in ipairs(detailParts) do
+		if topOf(p) > deckTop + T.LowMax or string.sub(p.Name, 1, 4) == "Pond" then
+			local reach = 0
+			for _, c in ipairs(corners(p)) do
+				reach = math.max(reach, (flat(c) - flat(p.Position)).Magnitude)
+				if onEventGround(c) and not table.find(onGround, p.Name) then
+					table.insert(onGround, p.Name)
+				end
+			end
+			table.insert(blockers, { at = flat(p.Position), reach = reach, name = p.Name })
+		end
+	end
+	check(deckZone ~= nil and #blockers > 0 and #onGround == 0,
+		string.format("nothing over %.1f studs, and no part of the pond, where a mini event's ticket may fall on the hub "
+			.. "or a disco's dancer stand on the deck", T.LowMax), table.concat(onGround, ",", 1, math.min(#onGround, 6)))
+	local DancerPlacement = require(Shared:WaitForChild("DancerPlacement"))
+	local seen, inPlants = 0, nil
+	for i = 1, 400 do
+		for _, pick in ipairs(DancerPlacement.Picks(string.format("hubdetail%04dspec", i))) do
+			seen += 1
+			for _, b in ipairs(blockers) do
+				if (flat(pick.at) - b.at).Magnitude < pick.radius + b.reach then
+					inPlants = inPlants or string.format("%s at (%.1f, %.1f)", b.name, pick.at.X, pick.at.Z)
+				end
+			end
+		end
+	end
+	check(seen > 2000 and inPlants == nil, string.format("no dancer of 400 discos (%d) stands in the pond or a bush",
+		seen), inPlants)
+	local waters, flush = 0, true
+	for _, p in ipairs(detailParts) do
+		if string.find(p.Name, "^PondWater") or p.Name == "PondDeep" then
+			waters += 1
+			local top = p.Position.Y + p.Size.X / 2
+			flush = flush and p:IsA("Part") and p.Shape == Enum.PartType.Cylinder and p.CFrame.RightVector.Y > 0.9999
+				and p.Size.X <= 0.1 and carpetTop ~= nil and top > carpetTop + 1e-3 and top <= deckTop + 0.15
+		end
+	end
+	local deckSrc = Shared:WaitForChild("MistDeckModel").Source
+	check(waters >= 2 and flush and not string.find(deckSrc, "Terrain", 1, true),
+		"the pond: a flush painted surface a hair over the carpet, under 0.15 over the deck, never Terrain water -- "
+			.. "nothing to swim in, wade through or trip on", waters)
+	-- No Dewberry falls on it: every zone the berries use near the plots
+	-- starts outside the deck (the rest are the biomes' road).
+	local berryZones, berryOff = 0, true
+	for name in pairs(EnchantedMistData.Spawn.SafeZones) do
+		for _, z in ipairs(GameConfig.MiniEvent.Zones) do
+			if z.Name == name then
+				berryZones += 1
+				if z.Kind == "ring" then
+					berryOff = berryOff and z.MinRadius > MAP.HubRadius
+				elseif z.Kind == "box" then
+					berryOff = berryOff and Vector2.new(math.clamp(0, z.X0, z.X1), math.clamp(0, z.Z0, z.Z1)).Magnitude
+						> MAP.HubRadius
+				else
+					berryOff = false
+				end
+			end
+		end
+	end
+	check(berryZones > 0 and berryOff, "no Dewberry falls among it: every zone the berries use near the plots starts "
+		.. "outside the deck")
+	local MistDeckModel = require(Shared:WaitForChild("MistDeckModel"))
+	local again = MistDeckModel.build(nil)
+	local mine, theirs = detailParts, parts(again:FindFirstChild("Detail") or again)
+	local same = #mine == #theirs
+	for i = 1, math.min(#mine, #theirs) do
+		if mine[i].Name ~= theirs[i].Name or not mine[i].CFrame:FuzzyEq(theirs[i].CFrame, 1e-6)
+			or mine[i].Size ~= theirs[i].Size then
+			same = false
+		end
+	end
+	again:Destroy()
+	check(same, "built the same every time (each piece by its own seed): one hub on every server, for every late joiner")
 	-- Mist or not: nothing takes the set down (no hook on a Mist's start or end).
 	local serviceSrc = moduleScript.Source
 	check(not string.find(serviceSrc, "EnchantedMistService.OnStart(", 1, true)
