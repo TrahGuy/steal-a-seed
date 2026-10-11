@@ -88,22 +88,29 @@ end
 local ok, err = pcall(function()
 
 --==============================================================================
--- 1. THE DESKTOP IS WHAT SHIPPED, TO THE PIXEL
+-- 1. THE DESKTOP, TO THE PIXEL
 --
 -- The UDim2s every owner used to write inline, rebuilt here from GameConfig the
--- way the old code did, against what HudLayout.place now hands them.
+-- way the old code did, against what HudLayout.place now hands them -- since
+-- the owner's re-layout (2026-10-11) the rail closed up under a bigger Shop,
+-- and WHAT'S NEW, EVENTS and Settings one over another down the top-right
+-- corner.
 --==============================================================================
 say("-- desktop --")
 local I, W, S, G6 = RAIL.Inset, RAIL.WideSize, RAIL.SquareSize, RAIL.Gap
-local OLD = {
-	index = UDim2.new(0, I, 0, I),
-	shop = UDim2.new(0, I, 0, I + W.Y + G6),
-	settings = UDim2.new(0, I, 0, I + (W.Y + G6) * 2),
-	walk = UDim2.new(0, I, 0, I + (W.Y + G6) * 3),
-	-- WHAT'S NEW in Garden's old place since Garden and the Bag moved to the
-	-- left edge (2026-10-09, the owner: "put them on center left"); the pair is
-	-- checked on its own below.
+local SHOP = CFG.ShopDesktop
+local WANT = {
+	-- The rail (the owner, 2026-10-11: "close the gap"): Shop at the top, WALK
+	-- MODE and PERFORMANCE MODE right under it, the rail's 6 px apart.
+	shop = UDim2.new(0, I, 0, I),
+	walk = UDim2.new(0, I, 0, I + SHOP.Y + G6),
+	others = UDim2.new(0, I, 0, I + SHOP.Y + G6 + CFG.WalkHeight + G6),
+	-- WHAT'S NEW in Garden's old corner since 2026-10-09, EVENTS under it and
+	-- Settings under EVENTS (2026-10-11); FRIENDS, Index, Garden and the Bag are
+	-- checked on their own below.
 	updates = UDim2.new(1, -I, 0, I),
+	events = UDim2.new(1, -I, 0, I + S.Y + G6),
+	settings = UDim2.new(1, -I, 0, I + (S.Y + G6) * 2),
 	hotbar = UDim2.new(0.5, 0, 1, -HOT.BottomGap),
 	cash = UDim2.new(0, 12, 1, -10),
 	banner = UDim2.new(0.5, 0, 0, 84),
@@ -114,51 +121,82 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 	local L = HudLayout.solve(screen(size.X, size.Y))
 	local tag = string.format("%dx%d", size.X, size.Y)
 	local same = not L.compact and L.slots == 10
-		and udimEq(HudLayout.place(L.shop, Vector2.zero, L.safe), OLD.shop)
-		and udimEq(HudLayout.place(L.settings, Vector2.zero, L.safe), OLD.settings)
-		and udimEq(HudLayout.place(L.walk, Vector2.zero, L.safe), OLD.walk)
-		and udimEq(HudLayout.place(L.updates, Vector2.new(1, 0), L.safe), OLD.updates)
-		and udimEq(HudLayout.place(L.hotbar, Vector2.new(0.5, 1), L.safe), OLD.hotbar)
-		and udimEq(HudLayout.place(L.cashRoot, Vector2.new(0, 1), L.safe), OLD.cash)
-		and udimEq(HudLayout.place(L.banner, Vector2.new(0.5, 0), L.safe), OLD.banner)
-		and udimEq(HudLayout.place(L.skip, Vector2.new(0.5, 0), L.safe), OLD.skip)
-	check(same, tag .. ": desktop, ten slots (2026-10-03), and every group at the UDim2 it always had -- WHAT'S "
-		.. "NEW in Garden's old corner, Index's corner empty (2026-10-09)")
-	-- INDEX, GARDEN AND THE BAG, ONE OVER ANOTHER AT THE RIGHT EDGE (2026-10-09,
-	-- the owner: "do not put sidebar on desktop, just on phone"): in WHAT'S NEW's
-	-- column, the rail's squares 6 px apart, on the safe area's middle -- or
-	-- stepped 8 px under WHAT'S NEW and Index's tucked badge.
+		and udimEq(HudLayout.place(L.shop, Vector2.zero, L.safe), WANT.shop)
+		and udimEq(HudLayout.place(L.walk, Vector2.zero, L.safe), WANT.walk)
+		and udimEq(HudLayout.place(L.others, Vector2.zero, L.safe), WANT.others)
+		and udimEq(HudLayout.place(L.updates, Vector2.new(1, 0), L.safe), WANT.updates)
+		and udimEq(HudLayout.place(L.events, Vector2.new(1, 0), L.safe), WANT.events)
+		and udimEq(HudLayout.place(L.settings, Vector2.new(1, 0), L.safe), WANT.settings)
+		and udimEq(HudLayout.place(L.hotbar, Vector2.new(0.5, 1), L.safe), WANT.hotbar)
+		and udimEq(HudLayout.place(L.cashRoot, Vector2.new(0, 1), L.safe), WANT.cash)
+		and udimEq(HudLayout.place(L.banner, Vector2.new(0.5, 0), L.safe), WANT.banner)
+		and udimEq(HudLayout.place(L.skip, Vector2.new(0.5, 0), L.safe), WANT.skip)
+	check(same, tag .. ": desktop, ten slots (2026-10-03), and every group at its UDim2 -- the rail closed up "
+		.. "under the bigger Shop, WHAT'S NEW, EVENTS and Settings down the top-right corner (2026-10-11)")
+	-- FRIENDS, INDEX, GARDEN AND THE BAG, ONE OVER ANOTHER AT THE RIGHT EDGE
+	-- (2026-10-09, the owner: "do not put sidebar on desktop, just on phone";
+	-- FRIENDS on top at Index's size since 2026-10-11): in WHAT'S NEW's column,
+	-- the rail's squares 6 px apart, on the safe area's middle -- or stepped 8 px
+	-- under Settings and FRIENDS' tucked "!".
 	do
-		local stackH = S.Y * 3 + G6 * 2
-		local highest = L.updates.y + L.updates.h + CFG.Gap + 4.5
+		local stackH = S.Y * 4 + G6 * 3
+		local highest = L.settings.y + L.settings.h + CFG.Gap + 4.5
 		local columnOk = L.column == true and L.pairRow ~= true and L.gardenRight ~= true
-			and L.index.x == L.updates.x and L.garden.x == L.index.x and L.bag.x == L.index.x
-			and L.index.x + L.index.w == L.safe.X - I and L.index.w == S.X and L.garden.w == S.X and L.bag.w == S.X
-			and L.garden.y == L.index.y + S.Y + G6 and L.bag.y == L.garden.y + S.Y + G6
-			and L.index.y >= highest - 1e-6
-			and (L.index.y == math.floor(L.safe.Y / 2 - stackH / 2) or math.abs(L.index.y - highest) < 1e-6)
+			and L.invite.x == L.updates.x and L.index.x == L.updates.x and L.garden.x == L.index.x
+			and L.bag.x == L.index.x and L.index.x + L.index.w == L.safe.X - I
+			and L.invite.w == S.X and L.invite.h == S.Y and L.index.w == S.X and L.index.h == S.Y
+			and L.garden.w == S.X and L.bag.w == S.X
+			and L.index.y == L.invite.y + S.Y + G6 and L.garden.y == L.index.y + S.Y + G6
+			and L.bag.y == L.garden.y + S.Y + G6
+			and L.invite.y >= highest - 1e-6
+			and (L.invite.y == math.floor(L.safe.Y / 2 - stackH / 2) or math.abs(L.invite.y - highest) < 1e-6)
 			and L.rightLeft == L.updates.x
-		check(columnOk, tag .. ": Index, Garden and the Bag one over another at the right edge, in WHAT'S NEW's "
-			.. "column, on the middle or stepped 8 px under it and Index's badge",
-			r2s(L.index) .. " " .. r2s(L.garden) .. " " .. r2s(L.bag))
+		check(columnOk, tag .. ": FRIENDS (Index's size, 2026-10-11), Index, Garden and the Bag one over another "
+			.. "at the right edge, in WHAT'S NEW's column, on the middle or stepped 8 px under Settings and "
+			.. "FRIENDS' \"!\"",
+			r2s(L.invite) .. " " .. r2s(L.index) .. " " .. r2s(L.garden) .. " " .. r2s(L.bag))
 		-- The desktop's badges keep their size (the owner shrank a phone's only):
-		-- the round 31-px box, tucked into each square's top-LEFT corner.
+		-- the round 31-px box, tucked into each square's top-LEFT corner -- FRIENDS'
+		-- "!" too since it joined the column (2026-10-11): 8 px under Settings, and
+		-- Index's hanging into the 6 px under FRIENDS, never over it.
 		local ib, gb = HudLayout.badges(L)
+		local fb = HudLayout.inviteBadge(L)
 		check(ib.w == 31 and ib.h == 31 and gb.w == 31 and gb.h == 31 and ib.x == L.index.x - 4.5
-				and ib.y == L.index.y - 4.5 and gb.x == L.garden.x - 4.5 and gb.y == L.garden.y - 4.5,
-			tag .. ": the desktop's badges are the round 31-px ones, tucked into the top-LEFT corners",
-			r2s(ib) .. " " .. r2s(gb))
+				and ib.y == L.index.y - 4.5 and gb.x == L.garden.x - 4.5 and gb.y == L.garden.y - 4.5
+				and fb.w == 31 and fb.h == 31 and fb.x == L.invite.x - 4.5 and fb.y == L.invite.y - 4.5
+				and fb.y >= L.settings.y + L.settings.h + CFG.Gap - 1e-6 and ib.y >= L.invite.y + L.invite.h,
+			tag .. ": the desktop's badges are the round 31-px ones, tucked into the top-LEFT corners -- FRIENDS' "
+				.. "\"!\" 8 px under Settings, Index's never over FRIENDS",
+			r2s(ib) .. " " .. r2s(gb) .. " " .. r2s(fb))
+		-- FRIENDS and its "!" inside the column's group, so everything placed round
+		-- the groups keeps its 8 px off them too.
+		-- (Without the badges too: problems() measures the margin on those.)
+		local function inColumn(withBadges, r)
+			for _, g in ipairs(HudLayout.groups(L, withBadges)) do
+				if g.name == "column" then
+					return g.rect.x <= r.x and g.rect.y <= r.y and g.rect.x + g.rect.w >= r.x + r.w
+						and g.rect.y + g.rect.h >= r.y + r.h
+				end
+			end
+			return false
+		end
+		local friends = HudLayout.union(L.invite, fb)
+		check(inColumn(true, friends) and inColumn(false, L.invite),
+			tag .. ": FRIENDS and its \"!\" inside the column's group, FRIENDS without the badges too", r2s(friends))
 	end
 	check(L.hot == HOT and L.cashStyle == CFG.CashStyle.Desktop
 			and L.hotbar.w == 750 and L.hotbar.h == 64
 			and L.cashRoot.w == 316 and L.cashRoot.h == 108 and L.cash.h == 110,
 		tag .. ": the shipped faces -- GameConfig.Hotbar itself, the 750 x 64 strip (ten slots, 2026-10-03), the 316 x 108 cash block",
 		r2s(L.hotbar) .. " " .. r2s(L.cashRoot))
-	check(L.index.w == S.X and L.index.h == S.Y and L.shop.w == W.X and L.shop.h == W.Y
-			and L.walk.w == W.X and L.walk.h == 46 and L.settings.w == S.X
+	check(L.index.w == S.X and L.index.h == S.Y and L.shop.w == SHOP.X and L.shop.h == SHOP.Y
+			and SHOP.X == 150 and SHOP.Y == 58
+			and L.walk.w == W.X and L.walk.h == 46 and L.others.w == W.X and L.others.h == 46
+			and L.settings.w == S.X and L.events.w == S.X and L.invite.w == S.X and L.invite.h == S.Y
 			and L.banner.w == 560 and L.equipment == nil and L.chooser == nil,
-		tag .. ": the same sizes too -- Index the owner's 50x50 square (2026-09-24), Shop the rail's 130x50 "
-			.. "for its wide picture (2026-10-06), a 130x46 switch, a 560 banner -- and no BAT/TRAP column (2026-10-03)")
+		tag .. ": the sizes too -- Index the owner's 50x50 square (2026-09-24), FRIENDS Index's size, Shop a "
+			.. "little bigger than the rail's 130x50 for its wide picture, 150x58 (2026-10-11), two 130x46 "
+			.. "switches, a 560 banner -- and no BAT/TRAP column (2026-10-03)")
 	check(L.clock and math.abs((L.clock.x + L.clock.w / 2) - size.X / 2) < 0.01
 			and math.abs(L.clock.w - math.clamp(size.X * 0.44, 190, 360)) < 0.01,
 		tag .. ": the clock is its old width, centred", L.clock and r2s(L.clock))
@@ -1036,6 +1074,11 @@ for _, case in ipairs(DESKTOP_GRIDS) do
 	check(not L.compact and not bag.horizontal and bag.tile == BAGC.Tile and bag.panel.w <= BAGC.MaxW
 			and bag.panel.h <= BAGC.MaxH and bag.panel.y + bag.panel.h + 8 <= L.namePopup.y,
 		tag .. ": downward, 96 x 100 tiles, at most 860 x 600, 8 px above the strip's name band", r2s(bag.panel))
+	-- Between the rails, the Bag's 8 px off each: the bigger Shop's edge on the
+	-- left since 2026-10-11 (railRight), the right edge's column on the right.
+	check(bag.panel.x >= L.railRight + BAGC.EdgeGap - 1 and bag.panel.x + bag.panel.w <= L.rightLeft - BAGC.EdgeGap + 1,
+		tag .. ": the Bag stands between the rails, 8 px off the bigger Shop and the right edge's column",
+		r2s(bag.panel) .. string.format(" rails %g..%g", L.railRight, L.rightLeft))
 	if case[3] then
 		check(math.floor(bag.columns) == case[3] and bag.rows == case[4],
 			tag .. string.format(": %d tiles across and %d whole rows", case[3], case[4]),
@@ -3357,31 +3400,41 @@ end
 
 say("-- the events button --")
 do
-	-- Fresh names: I, W and S are reused for other things further up.
-	local I, W, S, G6 = RAIL.Inset, RAIL.WideSize, RAIL.SquareSize, RAIL.Gap
-	local row = W.Y + G6
+	-- Fresh names: I and S are reused for other things further up.
+	local I, S, G6 = RAIL.Inset, RAIL.SquareSize, RAIL.Gap
+	local function sameRect(a, b)
+		return math.abs(a.x - b.x) < 1e-6 and math.abs(a.y - b.y) < 1e-6 and a.w == b.w and a.h == b.h
+	end
 	local deskOk, deskNotes = true, {}
 	for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.new(1600, 900),
 		Vector2.new(1920, 1080), Vector2.new(2560, 1440) }) do
 		local L = HudLayout.solve(screen(size.X, size.Y))
-		local e = L.events
-		local beside = e.x == I + S.X + G6 and e.y == I + row * 2 and e.w == S.X and e.h == S.Y
-		local inBand = e.x + e.w <= L.railRight and e.y + e.h <= L.railBottom
-			and L.railRight == I + W.X and L.railBottom == L.walk.y + L.walk.h
-		local apart = true
-		for _, other in ipairs({ L.index, L.shop, L.settings, L.walk }) do
-			if HudLayout.gap(e, other) < G6 - 1e-6 then
-				apart = false
+		local e, st, u = L.events, L.settings, L.updates
+		-- EVENTS under WHAT'S NEW and Settings under EVENTS (2026-10-11), the rail's
+		-- 6 px apart, the three one group: the top-right corner's.
+		local under = e.x == u.x and e.y == u.y + u.h + G6 and e.w == S.X and e.h == S.Y
+			and st.x == u.x and st.y == e.y + e.h + G6 and st.w == S.X and st.h == S.Y
+		local grouped = false
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == "updates" then
+				grouped = sameRect(g.rect, HudLayout.union(HudLayout.union(u, e), st))
 			end
 		end
-		if not (beside and inBand and apart) then
+		-- The rail closed up (the owner: "close the gap"): Shop at the top, WALK
+		-- MODE and PERFORMANCE MODE right under it, no empty row; railRight is
+		-- Shop's edge, railBottom WALK MODE's, as it always was.
+		local rail = L.shop.x == I and L.shop.y == I and L.walk.x == I and L.others.x == I
+			and L.walk.y == L.shop.y + L.shop.h + G6 and L.others.y == L.walk.y + L.walk.h + G6
+			and L.railRight == L.shop.x + L.shop.w and L.railBottom == L.walk.y + L.walk.h
+		if not (under and grouped and rail) then
 			deskOk = false
-			table.insert(deskNotes, string.format("%dx%d %s", size.X, size.Y, r2s(e)))
+			table.insert(deskNotes, string.format("%dx%d events %s settings %s shop %s walk %s others %s",
+				size.X, size.Y, r2s(e), r2s(st), r2s(L.shop), r2s(L.walk), r2s(L.others)))
 		end
 	end
-	check(deskOk, "desktop: EVENTS is a 50 x 50 square beside Settings, inside the rail's band, the rail's 6 px "
-		.. "from Shop, Settings and WALK MODE -- the band (railRight, railBottom) exactly as it shipped",
-		table.concat(deskNotes, "; "))
+	check(deskOk, "desktop: EVENTS a 50 x 50 square under WHAT'S NEW and Settings under EVENTS, the top-right "
+		.. "corner's one group; the rail closed up -- Shop at the top, WALK MODE and PERFORMANCE MODE right under "
+		.. "it -- the rail's 6 px apart, no empty row (2026-10-11)", table.concat(deskNotes, "; "))
 
 	local offOk, offNotes = true, {}
 	local PP = CFG.Phone.Panel
@@ -3453,13 +3506,17 @@ do
 		local ok = if L.compact
 			then (if L.gardenRight then e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
 				else e.x + e.w == (L.frame and L.frame.x + L.frame.w or L.safe.X) - CFG.Margin)
-			else e.x == L.settings.x + S.X + G6 and e.y == L.settings.y
+			else e.x == L.updates.x and e.y == L.updates.y + L.updates.h + G6
+				and L.settings.x == e.x and L.settings.y == e.y + e.h + G6
+				and L.shop.y == L.railTop and L.walk.y == L.shop.y + L.shop.h + G6
+				and L.others.y == L.walk.y + L.walk.h + G6
 		if not (ok and e.w == S.X and e.h == S.Y) then
 			tvOk = false
 			table.insert(tvNotes, case.tag .. " " .. r2s(e) .. " settings " .. r2s(L.settings))
 		end
 	end
-	check(tvOk, "a TV's title-safe canvas carries EVENTS with the rest of the rail", table.concat(tvNotes, "; "))
+	check(tvOk, "a TV's title-safe canvas carries EVENTS and Settings down WHAT'S NEW's corner, and the "
+		.. "closed-up rail, as a desktop has them", table.concat(tvNotes, "; "))
 
 	local src = sourceOf("EventsUI") or ""
 	check(count(src, "UIKit.railButton(") == 2 and src:find('name = "EventsButton"', 1, true) ~= nil
@@ -3544,8 +3601,9 @@ do
 			table.insert(deskNotes, string.format("%dx%d %s %s", size.X, size.Y, r2s(o), table.concat(problems, "; ")))
 		end
 	end
-	check(deskOk, "desktop: OTHER PLANTS is the rail's fifth row -- under WALK MODE, the rail's 6 px, 130 x 46 -- "
-		.. "inside the rail's group; the band (railBottom) as it shipped", table.concat(deskNotes, "; "))
+	check(deskOk, "desktop: PERFORMANCE MODE (OTHER PLANTS) is the closed-up rail's third row (2026-10-11) -- "
+		.. "under WALK MODE, the rail's 6 px, 130 x 46 -- inside the rail's group; the band (railBottom) ends at "
+		.. "WALK MODE as it always has", table.concat(deskNotes, "; "))
 
 	-- Off a desktop: every listed phone and window, and the compact windows the
 	-- walk check lists, each with and without a trap's REMOVE row.
@@ -3923,13 +3981,18 @@ do
 		if L.sidebar and view and u.w > 0 and u.y + u.h > view.y + view.h then
 			seen = rect(u.x, math.min(u.y, view.y + view.h), u.w, math.max(0, view.y + view.h - u.y))
 		end
-		-- Its group: on a phone the panel's under the Bag; anywhere else its own.
+		-- Its group: on a phone the panel's under the Bag; on a desktop and a TV the
+		-- top-right corner's, EVENTS and Settings under it (2026-10-11); anywhere
+		-- else its own.
 		local inPanel = L.sidebar and u.w > 0
+		local inCorner = not L.compact and u.w > 0
 		local home = if inPanel then "dock" else "updates"
 		local listed = false
 		for _, g in ipairs(HudLayout.groups(L, true)) do
 			if g.name == home then
-				listed = if inPanel then holds(g.rect, seen) else same(g.rect, u)
+				listed = if inPanel then holds(g.rect, seen)
+					elseif inCorner then same(g.rect, HudLayout.union(HudLayout.union(u, L.events), L.settings))
+					else same(g.rect, u)
 			end
 		end
 		if u.w <= 0 or u.h <= 0 then
@@ -4054,7 +4117,7 @@ do
 				then L.railRight == L.walk.x + L.walk.w and L.rightLeft == L.index.x
 				elseif L.compact then L.railRight == L.settings.x + L.settings.w
 					and L.rightLeft == (if L.gardenRight then L.garden.x else L.events.x)
-				else L.railRight == (L.frame and L.frame.x or 0) + RAIL.Inset + RAIL.WideSize.X
+				else L.railRight == (L.frame and L.frame.x or 0) + RAIL.Inset + CFG.ShopDesktop.X
 					and L.rightLeft == L.updates.x and L.railBottom == L.walk.y + L.walk.h
 			if not ends then
 				table.insert(bad, "the rows' ends moved")
@@ -4065,7 +4128,8 @@ do
 			table.insert(notes, case.tag .. " " .. r2s(u) .. ": " .. table.concat(bad, ", "))
 		end
 	end
-	check(ok, "WHAT'S NEW: 50 x 50 or 44 x 44 in one of its places -- the desktop's top-right corner; under OTHER "
+	check(ok, "WHAT'S NEW: 50 x 50 or 44 x 44 in one of its places -- the desktop's top-right corner (EVENTS and "
+		.. "Settings under it, one group, since 2026-10-11); under OTHER "
 		.. "PLANTS, under WALK MODE (EVENTS where a small window keeps Garden and the Bag top right) or under Index "
 		.. "(a group of its own); on a phone between EVENTS and Settings in the panel's row (that panel's "
 		.. "group) -- inside the margin, 8 px clear of every other group and badge, both thumbs, "

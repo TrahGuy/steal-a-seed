@@ -119,10 +119,11 @@ local button = UIKit.railButton(playerGui, {
 	-- SHOP on a plate until a picture has loaded here (UIKit.railFallback).
 	fallback = RAIL.Words.Shop,
 })
-button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
+button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
 
--- Second on the rail, from HudLayout: under Index on a desktop, beside it in
--- the compact top row; on a touch screen the top-left corner (2026-10-05).
+-- From HudLayout: the top of a desktop's rail, a little bigger, WALK MODE and
+-- PERFORMANCE MODE right under it (the owner's re-layout, 2026-10-11); beside
+-- Index in the compact top row; on a touch screen the top-left corner (2026-10-05).
 -- Wherever its slot is wide -- a desktop's and a TV's rail, a phone's corner --
 -- it is the owner's wide studded picture, its own outline in place of the rim;
 -- a small window's compact row has only a square for it, which keeps ShopArt.

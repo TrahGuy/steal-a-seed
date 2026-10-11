@@ -1,5 +1,48 @@
 # Steal a Seed — Session Handoff
 
+## THE DESKTOP HUD RE-LAYOUT: THE RAIL CLOSED UP UNDER A BIGGER SHOP, EVENTS AND SETTINGS DOWN THE TOP-RIGHT CORNER, FRIENDS OVER INDEX — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUSHED, NOT PUBLISHED; THE FULL SUITE 147/147, 12 OF 12 MUTANTS CAUGHT; ONE GUARDED PLAY; CAPTURES IN output/hud-relayout-2026-10-11 — OK'd by Claude on the owner's handoff; owner to review)
+
+The owner's brief via the peer (item 6), with the owner's answer on the rail: "CLOSE THE GAP". This applies to a desktop and a TV only; compact windows and phones are unchanged.
+- **Left rail**:
+  - Shop is at the top-left, a little bigger: 150 x 58, from the rail's 130 x 50 (HudLayout CONFIG.ShopDesktop, x1.15).
+  - WALK MODE and PERFORMANCE MODE sit right under it, the rail's 6 px apart, with no empty row.
+- **Top-right corner**: WHAT'S NEW (UPDATES), then EVENTS under it, then Settings under EVENTS, 6 px apart. The three are one group.
+- **Right column**:
+  - FRIENDS (INVITE) sits over Index at Index's 50 x 50. Its "!" is tucked into the top-left corner, as Index's and Garden's badges are there.
+  - Then Index, Garden and the Bag, 6 px apart.
+  - The column is centred vertically on the screen. On short windows it steps down to 8 px under Settings and the "!".
+- **Panels keep clear of the wider Shop**:
+  - The Bag panel's left edge now follows the rail's real right edge (railRight).
+  - UIKit.modal's title padding uses the new top band on a desktop and a TV. No spec drives this padding, and it is not seen live.
+  - The Shop panel, the Bag panel and the other menu panels place from railRight, so they shrank 20 px on the left.
+- **Notices**: unchanged. The rows band is as it was: Settings shares PERFORMANCE MODE's rows, and the right column is already bounded.
+- **Live check** (guarded Play on SeedTest_mistlook_20261011, the owner's 1005 x 716 desktop viewport): every button stands where HudLayout puts it.
+  - Shop (12,12 150x58); WALK y 76; PERFORMANCE y 128.
+  - UPDATES / EVENTS / Settings at y 12 / 68 / 124.
+  - FRIENDS 220, Index 276, Garden 332, the Bag 388.
+  - The Bag and Shop panels open 8 px clear of the bigger Shop and of the column.
+  - No errors. The test store was cleared afterwards.
+- **Captures** (output/hud-relayout-2026-10-11):
+  - 00 before: clean, 901 x 716, this morning.
+  - 01 before: 1005 x 716, the Mosskeeper dialogue open.
+  - 02 after: 1005 x 716.
+  - 03 Bag open; 04 Shop open; 05 side by side; 06 / 07 zooms of the left rail and the right column.
+  - The after shots' 3D view is blank: Studio's window was covered, and the HUD still draws (the window is never restored).
+- **For the owner's eye**:
+  - Index's count badge hangs into the 6 px under FRIENDS, 1.5 px clear of it, as Garden's always hung under Index.
+  - 150 x 58 is Claude's reading of "slightly bigger".
+- **Tests**:
+  - HudLayoutSpec 1468/0. The desktop and TV pins were rewritten, plus new checks: FRIENDS and its "!" in the column's group, and the Bag 8 px between the rails.
+  - InviteHudSpec 438/0 (FRIENDS over Index, its glyph never over Settings).
+  - The other 20 specs that call HudLayout, and EventsPanelSpec: green.
+  - Mutants, 12 of 12 caught: ShopOneRowDown, WalkEmptyRow, ShopOldSize, EventsBesideUpdates, SettingsWideGap, ColumnUnderUpdates, InviteSmaller, BangTopRight, CornerSplit, InviteNoGroup, RailRightOld, BagUnderShop.
+- **PARKED by the owner's order (2026-10-11: the Mosskeeper talk first)**: the owner's new button art rbxassetid 113135959052678.
+  - The art: a green studded plate with the white Robux hexagon baked in at its left; 2000 x 669, ~3:1.
+  - Economy check passed: an Image, CrazyCozy Games group 744756221, created 11:32 UTC. The Studio load check has not run yet.
+  - (b) The desktop Shop face: the plate with "SHOP" right of the icon. The owner OK'd 150 x 50 for that Shop (it stays 150 x 58 until then).
+  - (c) The Robux buy buttons: the store's price buttons, the Instant Hatch price, and PromptUI's capsule if it fits. The price goes right of the icon, with no separate Robux glyph.
+  - The art's local copy: the session scratchpad's images/42.webp. Measured: the icon spans 11-31% of the width, the white rim sits at 98%.
+
 ## PUSHED: THE ENCHANTED MIST'S SOUNDS (6d1fd3e) — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH; NOT PUBLISHED)
 
 The thirteen uploads, measured and wired (the entry below). The levels are Claude's design numbers from the measurements, never set by ear: the owner to review them by ear. With the hub items already on wip, the owner's next Publish takes them live.

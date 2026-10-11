@@ -196,19 +196,25 @@ local ok, err = pcall(function()
 			check(b.x + b.w == r.x + r.w + hang and b.y == r.y - hang and r.y >= L.index.y + L.index.h,
 				tag .. ": under the row, the \"!\" tucked into its top-right corner as compact badges are", r2s(b))
 		else
-			local W, S = RAIL.WideSize, RAIL.SquareSize
-			-- The rail's top row at its right end (a TV's title-safe frame moves the
-			-- whole rail; the same place in it) -- measured off the rail's corner,
-			-- which Index left for the right edge's column on 2026-10-09.
-			local ox, oy = if L.frame then L.frame.x else 0, if L.frame then L.frame.y else 0
-			local want = rect(ox + RAIL.Inset + W.X - S.X, oy + RAIL.Inset, S.X, S.Y)
-			check(r.x == want.x and r.y == want.y and r.w == want.w and b.x + b.w / 2 == r.x + r.w
-					and b.y + b.h / 2 == r.y,
-				tag .. ": the rail's top row at its right end, the \"!\" half off its top-right corner",
-				r2s(r) .. " want " .. r2s(want))
+			-- FRIENDS over Index at the right edge (the owner, 2026-10-11): Index's
+			-- size, at its x, the rail's 6 px over it, the "!" tucked into its
+			-- top-LEFT corner as the column's badges are -- 8 px under Settings,
+			-- which stands under EVENTS in WHAT'S NEW's corner, and its glyph (Scale
+			-- times the box, its ink line round it) never over Settings. A TV's
+			-- title-safe frame moves the whole column; the same place in it.
+			local S, hang = RAIL.SquareSize, CFG.BadgeHang + 2.5
+			local glyphTop = b.y + b.h / 2 - math.floor(b.h * BANG.Scale) / 2 - BANG.Stroke
+			check(r.x == L.index.x and r.w == S.X and r.h == S.Y and r.w == L.index.w and r.h == L.index.h
+					and L.index.y == r.y + r.h + RAIL.Gap and b.x == r.x - hang and b.y == r.y - hang
+					and b.y >= L.settings.y + L.settings.h + CFG.Gap - 1e-6
+					and glyphTop >= L.settings.y + L.settings.h,
+				tag .. ": FRIENDS over Index at its size, the rail's 6 px apart, the \"!\" tucked into its top-left "
+					.. "corner, 8 px under Settings, its glyph never over it",
+				r2s(r) .. " ! " .. r2s(b) .. string.format(" glyph top %g", glyphTop) .. " index " .. r2s(L.index)
+					.. " settings " .. r2s(L.settings))
 			if not case.tv then
-				check(L.shop.x == RAIL.Inset and L.shop.y == RAIL.Inset + W.Y + RAIL.Gap,
-					tag .. ": the rail itself has not moved")
+				check(L.shop.x == RAIL.Inset and L.shop.y == RAIL.Inset,
+					tag .. ": the rail closed up without it -- Shop at the top (2026-10-11)")
 			end
 		end
 		if not L.sidebar then

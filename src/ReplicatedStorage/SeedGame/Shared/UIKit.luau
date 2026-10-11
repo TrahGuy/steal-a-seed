@@ -5131,6 +5131,13 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 				railLeftEdge = layout.railRight
 				railRightEdge = layout.rightLeft
 			end
+			-- A desktop's and a TV's top corners since the owner's re-layout
+			-- (2026-10-11): the closed-up rail, the bigger Shop at its top, down to
+			-- PERFORMANCE MODE, and WHAT'S NEW, EVENTS and Settings on the right.
+			if not layout.compact then
+				railBottom = math.max(layout.others.y + layout.others.h, layout.settings.y + layout.settings.h)
+				railLeftEdge = layout.railRight
+			end
 		end
 
 		-- UIPadding insets a frame's CHILDREN, never the frame, so these read

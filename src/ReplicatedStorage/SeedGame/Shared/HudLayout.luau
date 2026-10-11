@@ -575,6 +575,10 @@ local CONFIG = {
 	-- THE WHAT'S NEW BUTTON (2026-10-05): the rail's square, and the touch floor
 	-- (the dock's MinTile) where only that fits. See Layout for where it stands.
 	Updates = { Size = RAIL.SquareSize.X, Tight = 44 },
+	-- SHOP ON A DESKTOP AND A TV (the owner, 2026-10-11: "slightly bigger"): the
+	-- rail's 130 x 50 slot times about 1.15, near the slot's own 2.6 : 1, at the
+	-- top of the closed-up rail (desktop()).
+	ShopDesktop = Vector2.new(150, 58),
 	-- The cash block's two faces (see THE CASH BLOCK'S TWO FACES), and the
 	-- desktop one's three placing numbers under the names they always had.
 	CashStyle = { Desktop = CASH_DESKTOP, Compact = CASH_COMPACT, Phone = CASH_PHONE },
@@ -1574,35 +1578,30 @@ local function desktop(input: Input): Layout
 	local sw, sh = input.safe.X, input.safe.Y
 	local I, G = RAIL.Inset, CONFIG.Gap
 	local wide, square = RAIL.WideSize, RAIL.SquareSize
-	local row = wide.Y + RAIL.Gap
 
-	-- Shop is the owner's wide studded picture since 2026-10-06, so it has the
-	-- rail's whole 130 x 50 slot again -- the rail's own width: nothing beside or
-	-- under it moves. Index stood in the rail's top-left corner, 50 x 50 (the
-	-- owner's square artwork, 2026-09-24), until it joined Garden and the Bag at
-	-- the right edge (2026-10-09, below); its corner stays empty, so nothing in
-	-- the rail moves.
-	local shop = rect(I, I + row, wide.X, wide.Y)
-	local settings = rect(I, I + row * 2, square.X, square.Y)
-	local walk = rect(I, I + row * 3, wide.X, CONFIG.WalkHeight)
-	-- OTHER PLANTS (2026-10-05): the rail's fifth row, under WALK MODE, the
-	-- rail's own 6 px under it and its own width -- one column of two switches.
-	-- The rail's band (railBottom) is what it shipped as: nothing shares this
-	-- row's height beside it.
+	-- THE OWNER'S RE-LAYOUT (2026-10-11, a desktop and a TV only; compact and a
+	-- phone are what they were). The rail closed up: Shop, a little bigger
+	-- (ShopDesktop), in the top-left corner Index left for the right edge
+	-- (2026-10-09), then WALK MODE and PERFORMANCE MODE right under it, the
+	-- rail's 6 px apart, with no empty row. FRIENDS (INVITE) stands over Index
+	-- in the right edge's column at Index's size; EVENTS under WHAT'S NEW, and
+	-- Settings under EVENTS, in that corner.
+	local shop = rect(I, I, CONFIG.ShopDesktop.X, CONFIG.ShopDesktop.Y)
+	local walk = rect(I, shop.y + shop.h + RAIL.Gap, wide.X, CONFIG.WalkHeight)
+	-- PERFORMANCE MODE (OTHER PLANTS, 2026-10-05): under WALK MODE, the rail's
+	-- own 6 px under it and its own width -- one column of two switches. The
+	-- rail's band (railBottom) ends at WALK MODE, as it always has: nothing
+	-- shares this row's height beside it.
 	local others = rect(I, walk.y + walk.h + RAIL.Gap, wide.X, CONFIG.WalkHeight)
-	-- Beside Settings, inside the band the 130-wide slabs left: the rail's
-	-- footprint, and so everything placed round it, is what it was.
-	local events = rect(I + square.X + RAIL.Gap, settings.y, square.X, square.Y)
-	-- INVITE (2026-10-06): the top row's right end, the band's own width over
-	-- Shop -- 30 px off Index, clear of its badge, until Index went to the right
-	-- edge (2026-10-09); it stays where it was.
-	local invite = rect(I + wide.X - square.X, I, square.X, square.Y)
 	-- WHAT'S NEW: the top-right corner, where Garden stood until 2026-10-09 (it
-	-- stood under the Bag before that) -- a group of its own. A desktop panel
-	-- stops 8 px short of that column (rightLeft), so none ever covers it, and
-	-- the left rail, its band and everything placed round them are what they were.
+	-- stood under the Bag before that). A desktop panel stops 8 px short of that
+	-- column (rightLeft), so none ever covers it.
 	local US = CONFIG.Updates.Size
 	local updates = rect(sw - I - US, I, US, US)
+	-- EVENTS under WHAT'S NEW, and Settings under EVENTS, the rail's 6 px apart
+	-- (2026-10-11): one corner group.
+	local events = rect(updates.x, updates.y + updates.h + RAIL.Gap, square.X, square.Y)
+	local settings = rect(updates.x, events.y + events.h + RAIL.Gap, square.X, square.Y)
 
 	-- Ten shortcuts, keyboard or not: a console reaches them with LB and RB.
 	local slots = CONFIG.DesktopSlots
@@ -1635,23 +1634,25 @@ local function desktop(input: Input): Layout
 	-- would meet them, and up to 8 px over the strip's band, a trap's REMOVE row
 	-- up, where that reaches the column. Index left the rail's top-left corner,
 	-- and Garden and the Bag the left edge's middle (that afternoon's place,
-	-- "put them on center left"); the rail, INVITE, EVENTS, WHAT'S NEW and
-	-- Settings stand where they were. A desktop with no room for the column
-	-- falls back to compact (HudLayout.problems), as any desktop that cannot
-	-- hold its groups does.
+	-- "put them on center left"). A desktop with no room for the column falls
+	-- back to compact (HudLayout.problems), as any desktop that cannot hold its
+	-- groups does.
 	--==========================================================================
-	local stackH = square.Y * 3 + RAIL.Gap * 2
+	-- FRIENDS on top since 2026-10-11, under the corner's Settings by 8 px and
+	-- its "!" (tucked into its top-left corner, as the column's badges are).
+	local stackH = square.Y * 4 + RAIL.Gap * 3
 	local stackX = sw - I - square.X
-	local highest = updates.y + updates.h + G + CONFIG.BadgeHang + 2.5
+	local highest = settings.y + settings.h + G + CONFIG.BadgeHang + 2.5
 	local lowest = sh - CONFIG.Margin
 	local worst = HudLayout.hotbarBand(hotbar, HudLayout.removeRowHeight(input.touch) + HOT.RemoveGap)
 	if worst.x + worst.w + G > stackX then
 		lowest = math.min(lowest, worst.y - G)
 	end
 	local sy = math.max(highest, math.min(lowest - stackH, math.floor(sh / 2 - stackH / 2)))
-	local index = rect(stackX, sy, square.X, square.Y)
-	local garden = rect(stackX, sy + square.Y + RAIL.Gap, square.X, square.Y)
-	local bag = rect(stackX, sy + (square.Y + RAIL.Gap) * 2, square.X, square.Y)
+	local invite = rect(stackX, sy, square.X, square.Y)
+	local index = rect(stackX, sy + square.Y + RAIL.Gap, square.X, square.Y)
+	local garden = rect(stackX, index.y + square.Y + RAIL.Gap, square.X, square.Y)
+	local bag = rect(stackX, garden.y + square.Y + RAIL.Gap, square.X, square.Y)
 
 	local banner = rect(sw / 2 - CONFIG.BannerSize.X / 2, CONFIG.BannerTop,
 		CONFIG.BannerSize.X, CONFIG.BannerSize.Y)
@@ -1679,7 +1680,7 @@ local function desktop(input: Input): Layout
 		column = true,
 		railTop = I,
 		railBottom = walk.y + walk.h,
-		railRight = I + wide.X,
+		railRight = I + math.max(wide.X, shop.w),
 		-- The right edge's column: WHAT'S NEW in the corner and Index, Garden and
 		-- the Bag on the middle (2026-10-09), all at the x Garden's always was.
 		rightLeft = updates.x,
@@ -1735,10 +1736,9 @@ local function desktop(input: Input): Layout
 	L.admin = adminBeside(input, L.clock)
 	-- Placed round the shipped geometry; nothing above moves for them.
 	L.teleport = teleportUnder(input, L.clock, {
-		HudLayout.union(HudLayout.union(shop, HudLayout.union(settings, walk)),
-			HudLayout.union(HudLayout.union(events, others), invite)),
-		HudLayout.union(index, bag),
-		updates,
+		HudLayout.union(shop, HudLayout.union(walk, others)),
+		HudLayout.union(invite, bag),
+		HudLayout.union(updates, settings),
 	})
 	L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, nil)
 	L.toast = toastAbove(sw, withIcons(band, L.icons), { cash })
@@ -2974,6 +2974,12 @@ function HudLayout.inviteBadge(L: Layout): Rect
 		local hang = CONFIG.BadgeHang + stroke
 		return rect(r.x + r.w + hang - size, r.y - hang, size, size)
 	end
+	if L.column then
+		-- In the right edge's column (2026-10-11): tucked into its top-LEFT
+		-- corner, toward the middle, as Index's and Garden's are there.
+		local hang = CONFIG.BadgeHang + stroke
+		return rect(r.x - hang, r.y - hang, size, size)
+	end
 	return rect(r.x + r.w - size / 2, r.y - size / 2, size, size)
 end
 
@@ -3047,13 +3053,11 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	end
 	-- Index in the rail on a desktop until 2026-10-09, and still in compact's
 	-- top row; in the right edge's column with Garden and the Bag since.
-	local rail = if L.column then HudLayout.union(L.shop, L.settings)
+	-- Since the owner's re-layout (2026-10-11) a desktop's rail is Shop and the
+	-- two switches: Settings and EVENTS stand under WHAT'S NEW (the corner),
+	-- INVITE over Index (the column). In compact INVITE is its own group (below).
+	local rail = if L.column then L.shop
 		else HudLayout.union(HudLayout.union(L.index, L.shop), L.settings)
-	-- INVITE (2026-10-06): in the rail's band on a desktop; a group of its own
-	-- under the row in compact (below).
-	if not L.compact and L.invite.w > 0 then
-		rail = HudLayout.union(rail, L.invite)
-	end
 	-- WALK MODE: down the rail's column on a desktop; in compact under EVENTS at
 	-- the right edge (left of it until 2026-10-09), a group of its own there.
 	local walkAlone = L.compact
@@ -3065,17 +3069,23 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	-- EVENTS: inside that band on a desktop; in the top-right corner in compact
 	-- (under the Bag until 2026-10-09), a group of its own there.
 	local events = L.events.w > 0 and L.compact
-	if L.events.w > 0 and not L.compact then
-		rail = HudLayout.union(rail, L.events)
-	end
+	local corner = if L.column then HudLayout.union(HudLayout.union(L.updates, L.events), L.settings) else nil
 	-- Garden and the Bag: with Index in the right edge's column on a desktop and
 	-- a TV (2026-10-09), its badges as they are drawn there -- tucked, which the
 	-- half-off desktop badges were never counted as; at the left edge in compact.
 	local right = if L.column then HudLayout.union(L.index, L.bag) else HudLayout.union(L.garden, L.bag)
+	-- FRIENDS over Index in that column since 2026-10-11, its "!" with the
+	-- badges below.
+	if L.column and L.invite.w > 0 then
+		right = HudLayout.union(right, L.invite)
+	end
 	if withBadges and (L.compact or L.column) then
 		local indexBadge, gardenBadge = HudLayout.badges(L)
 		if L.column then
 			right = HudLayout.union(HudLayout.union(right, indexBadge), gardenBadge)
+			if L.invite.w > 0 then
+				right = HudLayout.union(right, HudLayout.inviteBadge(L))
+			end
 		else
 			rail = HudLayout.union(rail, indexBadge)
 			right = HudLayout.union(right, gardenBadge)
@@ -3098,7 +3108,9 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	-- WHAT'S NEW (2026-10-05): in the top-right corner on a desktop (under the
 	-- Bag until 2026-10-09), by WALK MODE or under Index in compact -- a group
 	-- of its own in both.
-	if L.updates.w > 0 then
+	if corner then
+		table.insert(list, { name = "updates", rect = corner })
+	elseif L.updates.w > 0 then
 		table.insert(list, { name = "updates", rect = L.updates })
 	end
 	-- INVITE in compact (2026-10-06), with its "!" where it is drawn.
@@ -3761,10 +3773,12 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 	if frame then
 		ox, oy, sw, sh = frame.x, frame.y, frame.w, frame.h
 	end
-	-- The band the right column's buttons took (Garden over the Bag until
-	-- 2026-10-09; WHAT'S NEW alone in the corner since, inside it).
-	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
-	local leftEdge = RAIL.Inset + RAIL.WideSize.X + B.EdgeGap
+	-- The band the top corners' buttons take since the owner's re-layout
+	-- (2026-10-11): the rail down to PERFORMANCE MODE, and WHAT'S NEW, EVENTS
+	-- and Settings in the right-hand corner.
+	local railBottom = math.max(L.others.y + L.others.h, L.settings.y + L.settings.h) - oy
+	-- Right of the rail at its widest (railRight): the bigger Shop on a desktop.
+	local leftEdge = L.railRight - ox + B.EdgeGap
 	-- Short of the right edge's column (rightLeft), 8 px off it. Garden and the
 	-- Bag stand at the left edge, left of leftEdge.
 	local rightEdge = L.rightLeft - ox - B.EdgeGap
