@@ -777,6 +777,41 @@ local ok, err = pcall(function()
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Include
 		params.FilterDescendantsInstances = { built }
+		-- THE SAFE ZONE WORDS ON THE BRIDGE (the owner, 2026-10-11: like the
+		-- general biomes'): the road's own marking, shields and all, smaller,
+		-- between the deck's safe end and the line, reading left to right for a
+		-- runner coming home along -X (the canvas reads toward its plate's -Z).
+		local SZM = require(Server.SafeZoneMarking)
+		local mark: BasePart? = nil
+		for _, d in ipairs(built:GetDescendants()) do
+			if d:IsA("BasePart") and d:FindFirstChild("SafeZoneMarking") then
+				mark = d
+			end
+		end
+		local gui = mark and mark:FindFirstChild("SafeZoneMarking") :: SurfaceGui?
+		local words = gui and gui:FindFirstChild("Words") :: TextLabel?
+		local stroke = words and words:FindFirstChildOfClass("UIStroke")
+		local cfg = SZM.Config
+		check(gui ~= nil and words ~= nil and words.Text == cfg.Text and words.Font == cfg.Font
+				and words.TextSize == cfg.TextSize and words.TextColor3 == cfg.Fill and stroke ~= nil
+				and stroke.Thickness == cfg.Stroke and stroke.Color == cfg.Ink and gui:FindFirstChild("ShieldLeft") ~= nil
+				and gui:FindFirstChild("ShieldRight") ~= nil and gui.PixelsPerStud == W.SafeLine.PixelsPerStud,
+			"the bridge's SAFE ZONE words are the road's marking: LuckiestGuy, the same outline, a shield each side")
+		local fits = false
+		if mark then
+			local e = Vector3.zero
+			for _, ax in ipairs({ mark.CFrame.RightVector * mark.Size.X, mark.CFrame.UpVector * mark.Size.Y,
+				mark.CFrame.LookVector * mark.Size.Z }) do
+				e += Vector3.new(math.abs(ax.X), math.abs(ax.Y), math.abs(ax.Z)) * 0.5
+			end
+			local lo, hi = mark.Position - e, mark.Position + e
+			fits = lo.X >= B.Deck.X0 - 1e-3 and hi.X <= RainBiome.SafeLineX() - GameConfig.Map.SafeLineThickness + 1e-3
+				and lo.Z >= B.Deck.Z - B.Deck.Width / 2 and hi.Z <= B.Deck.Z + B.Deck.Width / 2
+		end
+		check(mark ~= nil and fits and game:GetService("CollectionService"):HasTag(mark, W.Tags.Terrain)
+				and mark.CFrame.LookVector:FuzzyEq(Vector3.new(0, 0, -1), 1e-3)
+				and mark.CFrame.RightVector:FuzzyEq(Vector3.new(1, 0, 0), 1e-3),
+			"it lies between the deck's safe end and the line, fades with the biome, and reads left to right going home")
 		-- The lane: walls, pillars and scenery stay out of it (the bridge's own
 		-- descent lands at its first step, so the bridge is not in the sweep).
 		local overlap = OverlapParams.new()

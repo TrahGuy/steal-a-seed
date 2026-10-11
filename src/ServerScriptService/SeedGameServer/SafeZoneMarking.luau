@@ -25,7 +25,12 @@
 -- world -X and the letters' tops at +Z: left to right, upright, for a player
 -- walking IN from the road toward the hub. The plate's own Z now runs across
 -- the entrance, parallel to the red line. MapService's other ground labels are
--- not touched (the rain biome builds its own).
+-- not touched.
+--
+-- THE RAIN BIOME'S BRIDGE builds this same marking (2026-10-11, the owner:
+-- make it look like the general biomes'), smaller -- `pixelsPerStud` -- so it
+-- fits the deck's safe end, and turned by its own `at` for a runner coming
+-- home along -X.
 --
 -- TextSize stops at 100 px whatever the label's box, so the canvas is coarse
 -- for big letters: 7 px a stud makes 100 px fourteen studs of line.
@@ -161,10 +166,11 @@ end
 --==============================================================================
 -- THE MARKING: an invisible, untouchable plate, turned a quarter, and the
 -- canvas on its top. `at` is the marking's centre on the ground (its plate's
--- centre), unturned; the quarter turn is this module's.
+-- centre), unturned; the quarter turn is this module's. `pixelsPerStud`, when
+-- given, scales the whole marking (more pixels a stud, a smaller marking).
 --==============================================================================
-function SafeZoneMarking.build(parent: Instance, at: CFrame): BasePart
-	local P = CONFIG.PixelsPerStud
+function SafeZoneMarking.build(parent: Instance, at: CFrame, pixelsPerStud: number?): BasePart
+	local P = pixelsPerStud or CONFIG.PixelsPerStud
 	local textWidth = wordsWidth()
 	local w, h = SafeZoneMarking.canvas(textWidth)
 

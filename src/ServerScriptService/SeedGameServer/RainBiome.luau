@@ -69,6 +69,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local MapDecor = require(script.Parent:WaitForChild("MapDecor"))
+local SafeZoneMarking = require(script.Parent:WaitForChild("SafeZoneMarking"))
 
 local W = GameConfig.Weather
 local B = W.Biome
@@ -536,32 +537,6 @@ end
 -- is, so the paint and the check never disagree. The island side is safe and
 -- says so on the deck. Built with the biome and faded and removed with it.
 --==============================================================================
-local function floorText(part: BasePart, text: string, color: Color3, size: number)
-	local gui = Instance.new("SurfaceGui")
-	gui.Name = "FloorText"
-	gui.Face = Enum.NormalId.Top
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 24
-	gui.LightInfluence = 0
-	gui.Parent = part
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.FredokaOne
-	label.Text = text
-	label.TextScaled = true
-	label.TextColor3 = color
-	label.Parent = gui
-	local cap = Instance.new("UITextSizeConstraint")
-	cap.MaxTextSize = size
-	cap.Parent = label
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 3
-	stroke.Color = Color3.fromRGB(28, 22, 26)
-	stroke.Transparency = 0.25
-	stroke.Parent = label
-end
-
 function RainBiome.SafeLineX(): number
 	return MAP.FieldWidth * 0.5
 end
@@ -580,20 +555,14 @@ local function buildSafeLine(parent: Instance)
 		studs = false,
 	})
 	line.CanQuery = false
-	-- The words on the safe side, read by a runner coming home along -X.
-	local plate = terrainPart({
-		name = "SafeLineText",
-		size = Vector3.new(14, 0.3, deck.Width - 6),
-		cframe = CFrame.new(edge - MAP.SafeLineThickness - 7.5, Y + deck.Y + 0.15, deck.Z)
-			* CFrame.Angles(0, -math.pi / 2, 0),
-		color = MAP.SafeLineColor,
-		collide = false,
-		transparency = 1,
-		parent = parent,
-		studs = false,
-	})
-	plate.CanQuery = false
-	floorText(plate, W.SafeLine.Text, Color3.fromRGB(255, 255, 255), W.SafeLine.TextSize)
+	-- The words on the safe side: the road's own SAFE ZONE marking, shields and
+	-- all (the owner, 2026-10-11: like the general biomes'), at
+	-- W.SafeLine.PixelsPerStud so it fits between the deck's safe end and the
+	-- line, and turned to read left to right for a runner coming home along -X.
+	local safeFrom, safeTo = deck.X0, edge - MAP.SafeLineThickness
+	local mark = SafeZoneMarking.build(parent, CFrame.new((safeFrom + safeTo) * 0.5, Y + deck.Y + 0.15, deck.Z)
+		* CFrame.Angles(0, -math.pi / 2, 0), W.SafeLine.PixelsPerStud)
+	CollectionService:AddTag(mark, TAGS.Terrain)
 end
 
 local function buildBridge(parent: Instance)

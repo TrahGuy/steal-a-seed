@@ -5186,7 +5186,10 @@ GameConfig.Weather = {
 	-- itself. The island side is safe: crossing it banks a carried pod by the
 	-- ordinary flow, and a guardian stops at it as at the road's.
 	--==========================================================================
-	SafeLine = { Text = "SAFE ZONE", TextSize = 60 },
+	-- Its words are the road's SAFE ZONE marking (SafeZoneMarking, 2026-10-11),
+	-- at this many pixels a stud (the road's is 7): about 44 x 9 studs, between
+	-- the deck's safe end and the line.
+	SafeLine = { PixelsPerStud = 16 },
 	--==========================================================================
 	-- AUDIO (2026-10-02): the cue rows the weather plays (Sfx.Cues has the ids,
 	-- levels and ranges). The rain's music is Music.RainTracks.
