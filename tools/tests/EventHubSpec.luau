@@ -888,6 +888,29 @@ local function body()
 			end
 		end
 	end
+	-- Shut from the grass to the walls' height on each side: no slot between
+	-- the boards, the filler and the wall over them.
+	for _, side in ipairs({ -1, 1 }) do
+		local spans = {}
+		for _, d in ipairs(if fence then fence:GetChildren() else {}) do
+			if d:IsA("BasePart") and d.Name ~= "Post" and (d.Position.X < 0) == (side < 0) then
+				table.insert(spans, { d.Position.Y - d.Size.Y / 2, d.Position.Y + d.Size.Y / 2 })
+			end
+		end
+		table.sort(spans, function(a, b)
+			return a[1] < b[1]
+		end)
+		local reach = MAP.GroundY
+		for _, s in ipairs(spans) do
+			if s[1] > reach + 1e-3 then
+				table.insert(wrong, string.format("slot open from %.2f to %.2f", reach, s[1]))
+			end
+			reach = math.max(reach, s[2])
+		end
+		if reach < MAP.GroundY + MAP.WallHeight - 1e-3 then
+			table.insert(wrong, string.format("shut only to %.2f", reach))
+		end
+	end
 	check(fence ~= nil and runs["-1Rail"] == 2 and runs["1Rail"] == 2 and runs["-1RailGap"] == 1 and runs["1RailGap"] == 1
 			and runs["-1Blocker"] == 1 and runs["1Blocker"] == 1 and (runs["-1Post"] or 0) >= 10 and (runs["1Post"] or 0) >= 10
 			and #wrong == 0 and math.abs(blockerTop - (MAP.GroundY + MAP.WallHeight)) < 1e-3,
