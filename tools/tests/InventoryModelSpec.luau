@@ -401,6 +401,34 @@ local ok, err = pcall(function()
 		"a growing tile counts down the pod due first, and a press means that pod", tostring(left))
 	local readyNow = InventoryModel.podState(readyGroup, NOW)
 	check(readyNow == true and InventoryModel.readyCount(items, NOW) == 1, "the READY tile says so, and HATCH ALL counts 1")
+	-- A Mysterious Pod opens by its own hold, never in a HATCH ALL (the server's
+	-- skips it): the button's number leaves a READY one out, and counts it apart
+	-- for the Bag's badge (2026-10-12, the owner).
+	local SHELL = require(Shared:WaitForChild("EnchantedMistData")).Shell.Id
+	local function shellTool(item, hatchAt)
+		return tool({ SpeciesId = SHELL, CarryingKg = 1, Hatched = false, ItemId = item, [HATCH_AT] = hatchAt })
+	end
+	local mixed = InventoryModel.collect(input({
+		held = {
+			{ Id = "nubkin", Tier = 1, Hatched = false, Item = "81", HatchAt = NOW - 10 },
+			{ Id = SHELL, Tier = 1, Hatched = false, Item = "82", HatchAt = NOW - 5 },
+			{ Id = SHELL, Tier = 1, Hatched = false, Item = "83", HatchAt = NOW + 20 },
+		},
+		tools = { podTool("81", 1, NOW - 10), shellTool("82", NOW - 5), shellTool("83", NOW + 20) },
+	}))
+	local hatchAll, shells = InventoryModel.readyCount(mixed, NOW)
+	check((SeedData.Get(SHELL) :: any).Mystery == true and hatchAll == 1 and shells == 1,
+		"HATCH ALL counts the ordinary READY pod only; a READY Mysterious Pod is counted apart, a growing one not at all",
+		tostring(hatchAll) .. "/" .. tostring(shells))
+	local lone, loneShells = InventoryModel.readyCount(InventoryModel.collect(input({
+		held = { { Id = SHELL, Tier = 1, Hatched = false, Item = "84", HatchAt = NOW - 1 } },
+		tools = { shellTool("84", NOW - 1) },
+	})), NOW)
+	check(lone == 0 and loneShells == 1, "a Bag with only a READY Mysterious Pod offers no HATCH ALL",
+		tostring(lone) .. "/" .. tostring(loneShells))
+	check(string.find(loadout, "podsNow.ready, podsNow.shellsReady = InventoryModel.readyCount(view.items, now)", 1, true)
+			~= nil and string.find(loadout, "badge.Visible = podsNow.ready + podsNow.shellsReady > 0", 1, true) ~= nil,
+		"LoadoutUI: HATCH ALL takes the first number; the Bag's badge still lights for a READY Mysterious Pod")
 	check(InventoryModel.clock(45) == "0:45" and InventoryModel.clock(245) == "4:05" and InventoryModel.clock(4350) == "1:12:30"
 			and InventoryModel.clock(0.2) == "0:01",
 		"the countdown's words: 0:45, 4:05, 1:12:30, and never 0:00 while time is left")

@@ -1,5 +1,25 @@
 # Steal a Seed — Session Handoff
 
+## HATCH ALL NEVER COUNTS A MYSTERIOUS POD — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK, NOT PUBLISHED; NO CAPTURE ASKED; InventoryModelSpec 56/0, HatchInBagSpec 43/0, MistAudioSpec 17/0 AND THE EIGHT SPECS THAT READ LoadoutUI, ALL GREEN; 5 OF 5 MUTANTS CAUGHT)
+
+The bug: the Bag said HATCH ALL (1) with only a READY Mysterious Pod in it. The server's HATCH ALL skips the shell (it opens by its own hold), so the button did nothing. The owner OK'd the fix via the peer, as its own commit.
+- **The fix:**
+  - `InventoryModel.readyCount` returns two numbers: the READY pods HATCH ALL takes, and, apart, the READY Mysterious Pods (`SeedData` species with `Mystery = true`).
+  - LoadoutUI: HATCH ALL's number is the first only.
+  - The Bag button's ready badge adds the two, so a lone READY Mysterious Pod still lights it, as before.
+- **Specs:** InventoryModelSpec §5: a Bag with an ordinary READY pod, a READY shell and a growing shell counts 1 for HATCH ALL and 1 apart. A Bag with only a READY shell offers no HATCH ALL. LoadoutUI's two lines are pinned.
+- **Mutants (5 of 5):** ShellInHatchAll, ShellsNeverApart, SumForHatchAll, BadgeMissesShell, HatchAllGetsShells.
+- **Not seen live:** spec-pinned only, as the owner asked (no capture).
+- **Next (the owner's order):**
+  - The Mysterious Pod's mist texture (rbxassetid 88002993641737), with a shine.
+  - The Mist odds cards: no black window behind the creature.
+  - (b) the Shop plate face.
+  - (c) the Robux buy buttons.
+  - 9, the new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools (plus the raw-SPAWN shell gap).
+
 ## THE MYSTERIOUS POD'S OWN CARD (OBSIDIAN, UNTIL THE MIST UPLOAD) — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; RarityCardsSpec 52/0, InventoryModelSpec 53/0, InventorySpec 47/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (NoticeSpec's known batch flake, 97/3, passed 100/0 alone); 5 OF 5 MUTANTS CAUGHT; captures in output/mysterious-pod-card-2026-10-12)
 
 The owner's ask via the peer: the Mysterious Pod gets ITS OWN card background, mapped by its shell species, never by any rarity. Obsidian (94572104024955) stands in until Codex's "mist" texture is uploaded.

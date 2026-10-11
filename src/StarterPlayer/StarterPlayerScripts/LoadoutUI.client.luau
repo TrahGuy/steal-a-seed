@@ -255,8 +255,10 @@ local equipPending = { id = nil :: string?, untilAt = 0 }
 local assign = { ref = nil :: string?, name = "" }
 -- Pods hatch in the Bag (2026-10-09): the Instant Hatch product's price for THIS
 -- player (RobuxPrice; nil until Roblox has said, and then no price is shown),
--- how many pods were READY at the last redraw, and whether any still grows.
-local podsNow = { price = nil :: number?, ready = 0, growing = false, readyKeys = "", nextTick = 0,
+-- how many pods were READY at the last redraw (HATCH ALL's number; the READY
+-- Mysterious Pods apart, `shellsReady`: each opens by its own hold), and
+-- whether any still grows.
+local podsNow = { price = nil :: number?, ready = 0, shellsReady = 0, growing = false, readyKeys = "", nextTick = 0,
 	mistGrowing = {} :: { [string]: boolean } }
 local sealedUntil: { [string]: number } = {}
 -- What the last redraw collected: every owned item, by ref, and the Bag's
@@ -1127,7 +1129,8 @@ local function refreshHotbar()
 		else HOT.CountOpen
 	local badge = chip.button:FindFirstChild("ReadyBadge")
 	if badge and badge:IsA("GuiObject") then
-		badge.Visible = podsNow.ready > 0
+		-- Any pod READY, a Mysterious Pod too (HATCH ALL leaves it to its hold).
+		badge.Visible = podsNow.ready + podsNow.shellsReady > 0
 	end
 	local layout = hud
 	local camera = Workspace.CurrentCamera
@@ -1296,7 +1299,7 @@ redraw = function()
 			end
 		end
 		podsNow.mistGrowing = mistGrowing
-		podsNow.ready = InventoryModel.readyCount(view.items, now)
+		podsNow.ready, podsNow.shellsReady = InventoryModel.readyCount(view.items, now)
 		podsNow.readyKeys = table.concat(readyKeys, ",")
 		-- A weapon asked of the server goes into the hands once its Tool lands.
 		local waitingFor = equipPending.id

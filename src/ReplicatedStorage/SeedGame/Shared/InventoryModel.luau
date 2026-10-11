@@ -671,7 +671,8 @@ end
 --
 --   clock       whole seconds as the countdown says them: 0:45, 4:05, 1:12:30
 --   podState    a pod tile's: READY, or the countdown of the pod due first
---   readyCount  how many pods in the Bag are READY (HATCH ALL's number)
+--   readyCount  how many pods in the Bag are READY for HATCH ALL (its number),
+--               and how many READY Mysterious Pods it leaves to their own hold
 --==============================================================================
 function InventoryModel.clock(seconds: number): string
 	local s = math.max(0, math.ceil(seconds))
@@ -704,15 +705,23 @@ function InventoryModel.podState(group: Group, now: number): (boolean?, number?)
 	return ready, if soonest then math.max(0, soonest - now) else nil
 end
 
-function InventoryModel.readyCount(items: { Item }, now: number): number
-	local n = 0
+function InventoryModel.readyCount(items: { Item }, now: number): (number, number)
+	local n, shells = 0, 0
 	for _, item in ipairs(items) do
 		if item.kind == "pod" and not item.hatched and not item.restoring and item.hatchAt
 			and now >= (item.hatchAt :: number) then
-			n += 1
+			-- A Mysterious Pod opens by its own hold, never in a HATCH ALL (the
+			-- server's skips it, PlantService.HatchAllFromBag), so the button
+			-- never offers one; the Bag's badge still counts it (LoadoutUI).
+			local species = SeedData.Get(item.speciesId or "")
+			if species and species.Mystery == true then
+				shells += 1
+			else
+				n += 1
+			end
 		end
 	end
-	return n
+	return n, shells
 end
 
 -- Every ref in a group, for a heart that favourites every copy.
