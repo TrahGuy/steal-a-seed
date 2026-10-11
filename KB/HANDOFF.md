@@ -1,5 +1,9 @@
 # Steal a Seed — Session Handoff
 
+## PUSHED: THE ENCHANTED MIST'S SOUNDS (6d1fd3e) — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH; NOT PUBLISHED)
+
+The thirteen uploads, measured and wired (the entry below). The levels are Claude's design numbers from the measurements, never set by ear: the owner to review them by ear. With the hub items already on wip, the owner's next Publish takes them live.
+
 ## THE ENCHANTED MIST'S SOUNDS: THE OWNER'S THIRTEEN UPLOADS, MEASURED AND WIRED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; MistAudioSpec 17/0, EnchantedMistBerrySpec 70/0, THE FULL SUITE 147/147, 13 OF 13 MUTANTS CAUGHT; ONE GUARDED PLAY, ITS TIMELINE IN output/mist-sounds-2026-10-11)
 
 The owner's uploads (CrazyCozy Games, 09:39 UTC; sfx/enchanted-mist-sound-prompts.txt), via the peer.
