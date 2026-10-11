@@ -138,8 +138,10 @@ local ok, err = pcall(function()
 		"no server reads the look, and the Rain/Thunder lottery never hears of the Mist", table.concat(serverReads, ","))
 	local service = Server:WaitForChild("EnchantedMistService")
 	local built = string.match(strip((service :: any).Source), "Look = (%a+),")
-	check(built == "true" and EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowMosskeeper == false,
-		"the Look is built; the event itself still off", built)
+	-- ShowMosskeeper on since 2026-10-11 (the owner: the hub set stands always);
+	-- the look stays the Mist's own.
+	check(built == "true" and EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowMosskeeper == true,
+		"the Look is built; the event's schedule still off, Mosskeeper's hub set on", built)
 end)
 
 if not ok then

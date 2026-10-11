@@ -129,8 +129,12 @@ GameConfig.Map = {
 	-- wide; whatever an event builds stays inside Radius and under MaxHeight,
 	-- and each event clears only its own objects. Enchanted Mist's Mosskeeper
 	-- is the first to stand here, and the owner lets him stay between events:
-	-- the one resident (KB/ENCHANTED-MIST-HOURLY-CLAUDE-PROMPT.md). Polar
-	-- about Centre, like the mini events' Area.
+	-- the one resident (KB/ENCHANTED-MIST-HOURLY-CLAUDE-PROMPT.md). SINCE
+	-- 2026-10-11 his whole set stands here ALWAYS, Mist or not (the owner):
+	-- him on his surround's pad, the surround inside Radius and under
+	-- MaxHeight, and the deck's dress -- moss carpet, mushroom ring, grove --
+	-- out to the deck's edge (MosskeeperService; its own Workspace folder, not
+	-- MapService's map). Polar about Centre, like the mini events' Area.
 	--==========================================================================
 	EventHub = {
 		Centre = Vector3.new(0, 0, 0),

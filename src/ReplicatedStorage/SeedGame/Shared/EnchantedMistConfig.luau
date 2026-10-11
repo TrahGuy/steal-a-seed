@@ -69,10 +69,11 @@ EnchantedMistConfig.Berries = {
 -- KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §8-9)
 --
 -- The resident NPC on GameConfig.Map.EventHub.NpcAnchor. He stands there
--- between Mists too -- talk works then, deposits do not -- but only once
--- `ShowMosskeeper` is on: off until the owner approves, like ShowSign, so the
--- next Publish cannot put him live. His surround (Shared/MistSurroundModel)
--- stands round him only while a Mist runs, and lifts him onto its pad.
+-- between Mists too -- talk works then, deposits do not -- once
+-- `ShowMosskeeper` is on: ON since 2026-10-11 (the owner: he stands live in the
+-- hub; the next Publish puts him there). His surround (Shared/MistSurroundModel)
+-- and the deck's dress stand round him ALWAYS (the owner, 2026-10-11), and he
+-- stands on the surround's pad.
 --
 -- Tap E -- Talk (a TAP: HoldDuration 0, unlike the berry and hatch holds)
 -- within TalkReach; the server re-checks TalkReach + ReachSlack from the prompt.
@@ -80,7 +81,7 @@ EnchantedMistConfig.Berries = {
 -- ClientAction from the client ("give"), ServerAction to it (open / given /
 -- refused).
 --==============================================================================
-EnchantedMistConfig.ShowMosskeeper = false
+EnchantedMistConfig.ShowMosskeeper = true
 EnchantedMistConfig.Mosskeeper = {
 	FolderName = "SeedMosskeeper",
 	PromptName = "MosskeeperTalk",
@@ -172,13 +173,14 @@ EnchantedMistConfig.Mosskeeper = {
 }
 
 --==============================================================================
--- THE HUB DECK DURING A MIST (Shared/MistDeckModel; the owner, 2026-10-11:
+-- THE HUB DECK'S DRESS (Shared/MistDeckModel; the owner, 2026-10-11:
 -- "A's moss carpet together with C's mushroom fairy ring")
 --
--- Up with the surround on each Mist's start, gone whole at its end. A moss
--- carpet over the whole round deck (under the plaza's floor, so the plaza
--- still shows), and a fairy ring of mint-spotted mushrooms near its edge with
--- the road's side left open. Overlays only: nothing collides, is found by a
+-- Standing ALWAYS with the surround since 2026-10-11 (the owner; before, it
+-- came with each Mist and went at its end). A moss carpet over the whole
+-- round deck (under the plaza's floor, so the plaza still shows), and a
+-- fairy ring of mint-spotted mushrooms near its edge with the road's side
+-- left open. Overlays only: nothing collides, is found by a
 -- ray or touches, so the Deck ticket ring (MiniEvent, r 27-43, read by a ray
 -- that respects collision) and the overflow spawn keep working. The ring
 -- stands outside the ticket ring and inside the deck's edge. Reduced FX

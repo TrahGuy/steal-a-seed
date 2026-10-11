@@ -2,12 +2,13 @@
 --==============================================================================
 -- Steal a Seed :: MistDeckModel (2026-10-11, Enchanted Mist stage 3)
 --
--- THE HUB DECK DURING A MIST (EnchantedMistConfig.Deck, the owner's pick of
--- the previews: A's moss carpet with C's mushroom fairy ring). A moss carpet
--- over the round deck, under the plaza's floor; a ring of mint-spotted
--- mushrooms near the deck's edge, the road's side left open. Overlays only:
--- every part anchored, none collides, is found by a ray or touches. Built by
--- MosskeeperService with the surround, gone whole with it.
+-- THE HUB DECK'S DRESS (EnchantedMistConfig.Deck, the owner's pick of the
+-- previews: A's moss carpet with C's mushroom fairy ring, and the grove). A
+-- moss carpet over the round deck, under the plaza's floor; a ring of
+-- mint-spotted mushrooms near the deck's edge, the road's side left open.
+-- Overlays only: every part anchored, none collides, is found by a ray or
+-- touches. Built once by MosskeeperService with the surround, and left
+-- standing, Mist or not (the owner, 2026-10-11).
 --==============================================================================
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local EnchantedMistConfig = require(script.Parent:WaitForChild("EnchantedMistConfig"))

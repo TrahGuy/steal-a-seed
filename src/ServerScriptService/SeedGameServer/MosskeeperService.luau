@@ -5,10 +5,13 @@
 -- THE MOSSKEEPER (KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §8-9): the
 -- resident NPC on GameConfig.Map.EventHub.NpcAnchor, the owner's own model
 -- (Shared/MosskeeperModel), shown once EnchantedMistConfig.ShowMosskeeper is
--- on. He stays between Mists; while one runs, his surround (the owner's
--- Shared/MistSurroundModel) stands round him and he stands on its pad -- built
--- on EnchantedMistService.OnStart, gone whole on OnEnd, there for anybody who
--- joins in between (it is the server's, so it replicates).
+-- on. THE EVENT HUB, ALWAYS (the owner, 2026-10-11; it replaced "only during
+-- a Mist"): with him, built once at start and standing Mist or not, his
+-- surround (the owner's Shared/MistSurroundModel) with him on its pad, and the
+-- deck's dress (Shared/MistDeckModel: A's moss carpet, C's mushroom ring, the
+-- grove). It is the server's, so it replicates to everybody, late joiners too.
+-- Only the Mist's LOOK (MistLook: the night light, wisps, fireflies, glints)
+-- comes and goes with a Mist.
 --
 -- TAP E -- TALK opens his dialogue on that player's screen (MosskeeperUI);
 -- the server says nothing else until the player asks to GIVE ALL. Talk works
@@ -46,8 +49,8 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
 
 local MosskeeperService = {}
--- After EnchantedMistService (75) and its berries (76), whose OnStart and
--- OnEnd this hooks.
+-- After EnchantedMistService (75) and its berries (76); before
+-- MysteryPodService (78), which fills the grant hook below.
 MosskeeperService.Priority = 77
 
 local CFG = EnchantedMistConfig.Mosskeeper
@@ -134,11 +137,11 @@ local Hooks = MosskeeperService.Hooks
 --==============================================================================
 local npc: Model? = nil
 local surround: Model? = nil
--- The hub deck's Mist look (Shared/MistDeckModel), up and down with the surround.
+-- The hub deck's dress (Shared/MistDeckModel), standing with the surround.
 local deck: Model? = nil
 
--- Where his feet go: the plaza's visible floor (a hair over the deck's top)
--- between Mists, the surround's pad during one.
+-- Where his feet go: the surround's pad, which stands with him (the plaza's
+-- visible floor only in the moment before it is built).
 function MosskeeperService.FeetLift(): number
 	if surround then
 		return MistSurroundModel.PadHeight
@@ -174,10 +177,32 @@ end
 
 local onTalk: (any) -> () = function() end
 
--- Builds him (once), on the anchor, with the game's own Talk prompt.
+-- The hub's dress round him, built once and left standing: his surround, with
+-- him on its pad, and the deck's carpet, mushroom ring and grove.
+local function dress()
+	local current = surround
+	if current and current.Parent then
+		return
+	end
+	local model = MistSurroundModel.build(HUB.NpcAnchor, nil)
+	model.Archivable = false
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	model.Parent = Hooks.parent()
+	surround = model
+	local look = MistDeckModel.build(nil)
+	look.Archivable = false
+	look.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	look.Parent = Hooks.parent()
+	deck = look
+	standHim()
+end
+
+-- Builds him (once), on the anchor, with the game's own Talk prompt, and the
+-- hub's dress round him.
 function MosskeeperService.Show(): Model
 	local current = npc
 	if current and current.Parent then
+		dress()
 		return current
 	end
 	local model = MosskeeperModel.build(HUB.NpcAnchor, nil)
@@ -202,42 +227,10 @@ function MosskeeperService.Show(): Model
 	talk.Parent = plate
 	npc = model
 	model.Parent = Hooks.parent()
+	dress()
 	standHim()
-	log(string.format("Mosskeeper stands at the Event Hub (%s).", tostring(model:GetPivot().Position)))
+	log(string.format("Mosskeeper stands at the Event Hub with its dress (%s).", tostring(model:GetPivot().Position)))
 	return model
-end
-
--- The surround round him, and the deck's Mist look, while a Mist runs.
-function MosskeeperService._surroundUp()
-	local current = surround
-	if current and current.Parent then
-		return
-	end
-	local model = MistSurroundModel.build(HUB.NpcAnchor, nil)
-	model.Archivable = false
-	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
-	model.Parent = Hooks.parent()
-	surround = model
-	local look = MistDeckModel.build(nil)
-	look.Archivable = false
-	look.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
-	look.Parent = Hooks.parent()
-	deck = look
-	standHim()
-end
-
-function MosskeeperService._surroundDown()
-	local model = surround
-	surround = nil
-	if model then
-		model:Destroy()
-	end
-	local look = deck
-	deck = nil
-	if look then
-		look:Destroy()
-	end
-	standHim()
 end
 
 --==============================================================================
@@ -409,25 +402,13 @@ function MosskeeperService.Start()
 	table.insert(unhooks, function()
 		leaving:Disconnect()
 	end)
-	table.insert(unhooks, EnchantedMistService.OnStart(function()
-		if generation == mine and npc then
-			MosskeeperService._surroundUp()
-		end
-	end))
-	table.insert(unhooks, EnchantedMistService.OnEnd(function()
-		if generation == mine then
-			MosskeeperService._surroundDown()
-		end
-	end))
 	if not Hooks.shown() then
 		log("off (EnchantedMistConfig.ShowMosskeeper is false).")
 		return
 	end
+	-- Him and the hub's dress, once, Mist or not (a Mist's start and end
+	-- change nothing here; only its look comes and goes).
 	MosskeeperService.Show()
-	-- A Mist already running (a restart mid-Mist): its surround too.
-	if Hooks.active() then
-		MosskeeperService._surroundUp()
-	end
 end
 
 return MosskeeperService

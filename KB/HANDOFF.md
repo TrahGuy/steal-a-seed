@@ -1,5 +1,22 @@
 # Steal a Seed — Session Handoff
 
+## THE EVENT HUB, ALWAYS: MOSSKEEPER AND HIS WHOLE SET STAND MIST OR NOT — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; MosskeeperSpec 58/0, EventHubSpec 49/0, MistLookSpec 13/0, 6 OF 6 MUTANTS CAUGHT)
+
+The owner, via the peer: "Mosskeeper + the surround + A's moss carpet + C's mushroom ring + the grove stand in the Event Hub PERMANENTLY, Mist or not ... Build them once at start (server, late joiners included), not on OnStart/OnEnd. ShowMosskeeper = true so he's live in the hub. Only the Mist LOOK (night light, wisps, fireflies, glints) stays Mist-only."
+- **Built once at start**:
+  - MosskeeperService.Start calls Show() once. Show builds him, then `dress()`: the surround (him on its 0.3 pad) and the deck's dress (moss carpet, mushroom ring, grove).
+  - The set is built once and never torn down. It goes in the server's own `Workspace.SeedMosskeeper` folder, so every client gets it, late joiners too. The models stream as one piece each (Atomic).
+  - The Mist's OnStart/OnEnd hooks and `_surroundUp`/`_surroundDown` are gone. A Mist's start or end changes nothing in the hub; only MistLook (the night light, wisps, fireflies, glints) comes and goes.
+- **`EnchantedMistConfig.ShowMosskeeper = true`**: he is live in the hub. `Enabled` stays false (the owner keeps the event off).
+- **Unchanged**: Talk opens his dialogue Mist or not, and a deposit still needs an active Mist. The dress is overlays only, so the Deck tickets' ray and the overflow spawn work as before. The ring lies outside the ticket ring and the trees inside it, the road's side open.
+- **Specs**:
+  - MosskeeperSpec section 3: the FIRST Show dresses the hub by itself (Start calls it once). A second Show builds no second surround. He stands on the pad. The set stands with no Mist hook in the source.
+  - EventHubSpec: "the one allowance". The map's plaza is still its floor alone; the hub's set stands always, in its own folder, never inside MapService's map.
+  - MistLookSpec: ShowMosskeeper on, Enabled still off.
+  - AdminSpec, EnchantedMistBerrySpec, EnchantedMistSpec and MysteryPodSpec green.
+- **Mutants (6/6 caught)**: ShowSkipsDress, DressTwice, FeetOnFloor, MistEndHookBack, SetInTheMap, MosskeeperHidden. ShowSkipsDress survived the first spec, because its second Show() hid a first build without the dress. The spec now checks the first Show's own result.
+- **Note for the owner's next Publish**: with ShowMosskeeper on, it puts Mosskeeper and the decorated hub live.
+
 ## ENCHANTED MIST: THE LOOK'S FINAL NUMBERS AND CAPTURES — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE LOOK, ITS COMMENT FIX, ITS TUNING AND THE ANIMATION; THE OWNER OK'd THE PUSH; NOT PUBLISHED; EVENT STILL OFF)
 
 - **Final Look, as tuned after the first guarded Play** (0901953; the Look entry below has the first numbers):

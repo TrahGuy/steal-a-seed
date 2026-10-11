@@ -300,8 +300,13 @@ local ok, err = pcall(function()
 	--==========================================================================
 	say("3. Where he stands")
 	--==========================================================================
+	-- SINCE 2026-10-11 (the owner): him, his surround and the deck's dress
+	-- stand ALWAYS, built once by Show(); he stands on the surround's pad.
 	local npc = M.Show()
-	local deckFeet = HUB.NpcAnchor * CFrame.new(0, HUB.Floor.Rise + 0.02, 0)
+	-- Start calls Show once: the first call must dress the hub by itself.
+	local firstSur, firstDeck = M.Surround(), M.Deck()
+	M.Show()
+	local padFeet = HUB.NpcAnchor * CFrame.new(0, MistSurroundModel.PadHeight, 0)
 	local inPlaza, tallest = true, -math.huge
 	for _, p in ipairs(parts(npc)) do
 		for _, c in ipairs(corners(p)) do
@@ -311,13 +316,11 @@ local ok, err = pcall(function()
 			tallest = math.max(tallest, c.Y - (MAP.GroundY + HUB.FloorY))
 		end
 	end
-	check(npc.Parent == stage and (npc:GetPivot().Position - deckFeet.Position).Magnitude < 1e-3
+	check(npc.Parent == stage and (npc:GetPivot().Position - padFeet.Position).Magnitude < 1e-3
 			and npc:GetPivot().LookVector:Dot(Vector3.new(0, 0, -1)) > 0.9999 and M.Show() == npc,
-		"on the hub's anchor, feet on the plaza's floor, facing down the road; built once",
+		"on the hub's anchor, on his surround's pad (0.3 up), facing down the road; built once",
 		tostring(npc:GetPivot().Position))
 	check(inPlaza and tallest <= HUB.MaxHeight, "inside the plaza and under its height", string.format("%.2f", tallest))
-	M._surroundUp()
-	M._surroundUp()
 	local sur = M.Surround()
 	local surrounds = 0
 	for _, c in ipairs(stage:GetChildren()) do
@@ -334,13 +337,12 @@ local ok, err = pcall(function()
 			end
 		end
 	end
-	check(sur ~= nil and surrounds == 1 and sur.Archivable == false and surInPlaza
+	check(sur ~= nil and firstSur == sur and firstDeck ~= nil and firstDeck == M.Deck() and surrounds == 1
+			and sur.Archivable == false and surInPlaza
 			and sur.PrimaryPart.Position:FuzzyEq((HUB.NpcAnchor * CFrame.new(0, MistSurroundModel.PadHeight, 0)).Position,
 				1e-3),
-		"during a Mist: one surround, on his anchor, inside the plaza and under 14, never saved with the place")
-	check(math.abs(npc:GetPivot().Position.Y - (HUB.NpcAnchor.Position.Y + MistSurroundModel.PadHeight)) < 1e-3,
-		"and he stands on its pad, 0.3 up", npc:GetPivot().Position.Y)
-	-- THE DECK'S MIST LOOK (the owner: A's moss carpet with C's fairy ring).
+		"always, from his first Show: one surround, on his anchor, inside the plaza and under 14, never saved with the place")
+	-- THE DECK'S DRESS (the owner: A's moss carpet with C's fairy ring), standing always.
 	local D = EnchantedMistConfig.Deck
 	local deck = M.Deck()
 	local ticketMax, ticketMin = nil, nil
@@ -401,7 +403,7 @@ local ok, err = pcall(function()
 		end
 	end
 	check(deck ~= nil and deck.Parent == stage and deck.Archivable == false and ringParts > 0 and ringParts <= 90,
-		"with the surround, the deck's Mist look: a moss carpet and a fairy ring", ringParts)
+		"always, with the surround, the deck's dress: a moss carpet and a fairy ring", ringParts)
 	check(solidDeck == 0, "overlays only: nothing of it collides, is found by a ray or touches", solidDeck)
 	check(carpetTop ~= nil and carpetTop > deckTop + 1e-3 and carpetTop < deckTop + HUB.Floor.Rise - 1e-3,
 		"the carpet lies a hair over the deck and under the plaza's floor, so the plaza still shows", carpetTop)
@@ -449,17 +451,14 @@ local ok, err = pcall(function()
 		"the path inside the surround's approach, its lanterns just outside it",
 		table.concat(wrongPath, ",") .. " | " .. table.concat(wrongLamp, ","))
 	check(crowd == 0 and tall == 0, "clear of the overflow spawn and of his Talk prompt, under the Mist sign", crowd + tall)
-	M._surroundDown()
-	check(M.Deck() == nil and deck ~= nil and deck.Parent == nil, "and gone whole with the surround")
-	local left = 0
-	for _, d in ipairs(stage:GetDescendants()) do
-		if d:GetAttribute(MistSurroundModel.TagAttribute) ~= nil or d.Name == "NPCAnchor" then
-			left += 1
-		end
-	end
-	check(M.Surround() == nil and sur ~= nil and sur.Parent == nil and left == 0
-			and (npc:GetPivot().Position - deckFeet.Position).Magnitude < 1e-3,
-		"after it: the surround gone whole, nothing left, and he is back on the plaza's floor", left)
+	-- Mist or not: nothing takes the set down (no hook on a Mist's start or end).
+	local serviceSrc = moduleScript.Source
+	check(not string.find(serviceSrc, "EnchantedMistService.OnStart(", 1, true)
+			and not string.find(serviceSrc, "EnchantedMistService.OnEnd(", 1, true)
+			and (M :: any)._surroundDown == nil and (M :: any)._surroundUp == nil
+			and M.Surround() == sur and M.Deck() == deck and sur ~= nil and sur.Parent == stage
+			and deck ~= nil and deck.Parent == stage,
+		"Mist or not, the surround and the deck's dress stand: nothing builds or removes them on a Mist's start or end")
 
 	--==========================================================================
 	say("4. His prompt")
@@ -723,9 +722,9 @@ local ok, err = pcall(function()
 	--==========================================================================
 	local mistSrc = Server:WaitForChild("EnchantedMistService").Source
 	check(M.Priority == 77 and string.find(mistSrc, "EnchantedMistService.Priority = 75", 1, true) ~= nil,
-		"started after the coordinator and the berries it listens with")
-	check(EnchantedMistConfig.ShowMosskeeper == false and EnchantedMistConfig.Enabled == false,
-		"still off: he is not shown and the event does not run until the owner says")
+		"started after the coordinator and its berries")
+	check(EnchantedMistConfig.ShowMosskeeper == true and EnchantedMistConfig.Enabled == false,
+		"he stands in the hub (the owner, 2026-10-11); the event's schedule stays off until the owner says")
 	local ui = Scripts:WaitForChild("MosskeeperUI").Source
 	local view = Scripts:WaitForChild("MosskeeperView").Source
 	check(string.find(ui, "camera.CameraType ~= Enum.CameraType.Custom or camera.CameraSubject ~= humanoid or "

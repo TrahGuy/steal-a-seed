@@ -11,7 +11,9 @@
 --   2. nothing permanent in it: every fixture's ground from its config, and
 --      every part of the map MapService builds -- built fresh here, twice, as
 --      the SeedMapBuilder plugin builds it, so the Edit preview ends current
---      and a rebuild is shown to change nothing
+--      and a rebuild is shown to change nothing; the one allowance (since
+--      2026-10-11, the owner): the event hub's set -- Mosskeeper, his surround
+--      and the deck's dress -- standing always, in its own folder
 --   3. the shop row west of the road's mouth (2026-10-10, the owner: "transfer
 --      them here, shop, rebirth, everything"; Map.Stall's comment): every
 --      fixture on the grass inside Map.ShopRow, facing north; the stall's
@@ -314,7 +316,7 @@ local function body()
 		"the floor: a hair over the deck, a thin darker edge -- no machine, no monument")
 
 	--==========================================================================
-	say("2. Nothing permanent stands in it")
+	say("2. Nothing permanent stands in it but the event hub's set")
 	--==========================================================================
 	local clearOf = {}
 	local nearest, nearestName = math.huge, ""
@@ -420,6 +422,22 @@ local function body()
 	end
 	check(map ~= nil and #inPlaza == 0, "in the map, nothing but the deck and its floor stands in the plaza, to "
 		.. E.MaxHeight .. " studs up", table.concat(inPlaza, ", ", 1, math.min(#inPlaza, 6)))
+	-- THE ONE ALLOWANCE (2026-10-11, the owner: Mosskeeper, his surround, A's
+	-- moss carpet, C's mushroom ring and the grove stand in the hub ALWAYS, Mist
+	-- or not). MosskeeperService builds them once at start into their own
+	-- folder, never into the map: the map's plaza stays its floor alone (above)
+	-- and a rebuild of the map never touches them. Where each part stands is
+	-- MosskeeperSpec's: him and his surround in the plaza under MaxHeight, the
+	-- dress on the deck, overlays only.
+	local mossSrc = sourceOf(Server, "MosskeeperService")
+	local MistCfg = require(Shared:WaitForChild("EnchantedMistConfig"))
+	check(MistCfg.Mosskeeper.FolderName ~= MAP.FolderName
+			and has(mossSrc, "local folder = Workspace:FindFirstChild(CFG.FolderName)")
+			and has(mossSrc, "folder.Parent = Workspace\n")
+			and has(mossSrc, "model.Parent = Hooks.parent()") and has(mossSrc, "look.Parent = Hooks.parent()")
+			and not has(mossSrc, "EnchantedMistService.OnEnd("),
+		"the one allowance: the event hub's set (Mosskeeper, his surround, the deck's dress) stands always, in its "
+			.. "own folder, never the map's", MistCfg.Mosskeeper.FolderName)
 	local hub = map and map:FindFirstChild(MAP.PropsFolderName)
 	hub = hub and hub:FindFirstChild("Hub")
 	local plazaParts = {}
