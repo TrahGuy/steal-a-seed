@@ -692,6 +692,8 @@ local function planting()
 			CarryService = CarryStub,
 			PlantWander = PlantWander,
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
+			-- The item 9 passes (2026-10-12): owned by no stand-in player here.
+			PassService = require(Server:WaitForChild("PassService")),
 			-- The Mysterious Pod (2026-10-11): no shells in this fixture.
 			MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
 				Consume = function() end, TellHatch = function() end },
@@ -991,7 +993,9 @@ local function carryingAndToast()
 	check(toast ~= nil and string.find(toast, "Notice.setRenderer(show)", 1, true) ~= nil
 			and string.find(toast, "action == ActionRefusal.Action", 1, true) ~= nil,
 		"it hears the server's verb, and is the renderer every client raise reaches")
-	check(toast ~= nil and string.find(toast, "local post = ActionRefusal.notice(code)", 1, true) ~= nil,
+	-- With the player's own plant room since 2026-10-12 (a +12 Bag Slots pass).
+	check(toast ~= nil and string.find(toast,
+			"local post = ActionRefusal.notice(code, GameConfig.bagLimit(Players.LocalPlayer))", 1, true) ~= nil,
 		"and shows only a code that has a notice")
 	local _, named = string.gsub(toast or "", "SoundKit%.play%(\"", "")
 	check(toast ~= nil and named == 0

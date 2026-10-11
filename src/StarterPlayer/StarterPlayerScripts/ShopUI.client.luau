@@ -65,6 +65,7 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
@@ -698,6 +699,8 @@ local function shapeCard(card: Card)
 end
 
 local liveCount, soonCount = 0, 0
+-- Every card's shine handle, switched on and off with the panel.
+local cardShines: { any } = {}
 
 local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 	local made = cards[entry.key]
@@ -722,7 +725,14 @@ local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 	-- shelf's upload under everything on it (UIKit.studCard; the solid colour
 	-- until the picture has loaded), a dark keyline round it, and the words
 	-- white with an ink line. The details view keeps its light sheet.
-	local studded = UIKit.studCard(face, 9, Z + 1).set(entry.studs) ~= nil
+	local studSpec = UIKit.studCard(face, 9, Z + 1).set(entry.studs)
+	local studded = studSpec ~= nil
+	-- A card whose studs carry a shine of their own shines (2026-10-12, the
+	-- owner: PASS cards shine -- the passes' obsidian, BagLook.Studs `shine`),
+	-- only while the Shop is open (setOpen), never under Reduced FX.
+	local shine = RarityFX.shine(face, 9, Z + 1)
+	RarityFX.setShine(shine, if studSpec and studSpec.shine then studSpec.shine else nil)
+	table.insert(cardShines, shine)
 	if studded then
 		edge.Color = LOOK.Ink
 		edge.Thickness = 2
@@ -1199,6 +1209,9 @@ local function setOpen(want: boolean)
 	relayout()
 	paint()
 	modal.setOpen(want)
+	for _, h in ipairs(cardShines) do
+		RarityFX.setActive(h, want)
+	end
 end
 
 button.Activated:Connect(function()

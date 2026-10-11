@@ -869,7 +869,7 @@ task.spawn(function()
 	end
 	found.OnClientEvent:Connect(function(action: any, code: any)
 		if action == ActionRefusal.Action and type(code) == "string" then
-			local post = ActionRefusal.notice(code)
+			local post = ActionRefusal.notice(code, GameConfig.bagLimit(Players.LocalPlayer))
 			if post then
 				show(post)
 			end

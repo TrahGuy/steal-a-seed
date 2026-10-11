@@ -715,7 +715,8 @@ local function hideMessage(immediate: boolean?)
 end
 
 local function refreshBuff()
-	local on = GameConfig.cashMultiplier(player) > 1
+	-- x2 and over (Pass.BuffAt): VIP's own 1.1 alone is no x2 (2026-10-12).
+	local on = GameConfig.cashMultiplier(player) >= GameConfig.Pass.BuffAt
 	if buff.Visible == on then
 		return
 	end

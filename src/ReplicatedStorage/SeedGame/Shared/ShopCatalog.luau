@@ -165,16 +165,20 @@ end
 local function passEntry(item: any): Entry
 	local id = tonumber(item.pass) or 0
 	local mul = tonumber(item.multiplier) or 1
+	-- A pass with words of its own (the item 9 passes, 2026-10-12) says them,
+	-- under its own icon; the x2 Money pass says its multiplier.
 	return {
 		key = tostring(item.key),
 		kind = if id > 0 then "pass" else "soon",
 		id = id,
 		title = tostring(item.label),
 		amount = nil,
-		benefit = string.format("Permanent \u{00D7}%d plant income", mul),
-		detail = string.format("A Game Pass: yours for good. Every grown plant in your garden earns \u{00D7}%d. "
-			.. "It does not apply to sales or cash packs.", mul),
-		icon = GameConfig.Pass.BuffIcon or "",
+		benefit = if type(item.benefit) == "string" then item.benefit
+			else string.format("Permanent \u{00D7}%d plant income", mul),
+		detail = if type(item.detail) == "string" then item.detail
+			else string.format("A Game Pass: yours for good. Every grown plant in your garden earns \u{00D7}%d. "
+				.. "It does not apply to sales or cash packs.", mul),
+		icon = ICONS[tostring(item.key)] or GameConfig.Pass.BuffIcon or "",
 		fallback = nil,
 		art = CARDS[tostring(item.key)],
 		multiplier = mul,

@@ -1122,7 +1122,7 @@ local function refreshHotbar()
 			end
 		end
 	end
-	local text, full, known = HotbarSlots.storage(rows, false, GameConfig.Save.MaxHeld)
+	local text, full, known = HotbarSlots.storage(rows, false, GameConfig.bagLimit(player))
 	chip.count.Text = text
 	chip.count.TextColor3 = if not known then HOT.CountLoading
 		elseif full then HOT.CountFull
@@ -1210,7 +1210,7 @@ local function refreshBag()
 		end
 	end
 	local carrying = player:GetAttribute(ATTR.CarryingSpecies) ~= nil
-	local text, full, known = InventoryModel.storage(plantRows, false, GameConfig.Save.MaxHeld, prof.waiting)
+	local text, full, known = InventoryModel.storage(plantRows, false, GameConfig.bagLimit(player), prof.waiting)
 	local podText, podsFull = InventoryModel.podStorage(podRows, carrying, GameConfig.Save.MaxPods)
 	local filtered = state.search ~= "" or state.favouritesOnly
 	panel.paint({
@@ -1219,7 +1219,7 @@ local function refreshBag()
 		footer = text .. "  ·  " .. podText,
 		footerColour = if not known then HOT.CountLoading elseif full or podsFull then HOT.CountFull else HOT.CountOpen,
 		-- The bar beside the words: the plants stored, of their limit.
-		footerFill = if plantRows then plantRows / GameConfig.Save.MaxHeld else nil,
+		footerFill = if plantRows then plantRows / GameConfig.bagLimit(player) else nil,
 		empty = if #entries == 0 then InventoryModel.emptyText(state.category, counts[state.category] or 0, filtered)
 			else nil,
 		compact = hud ~= nil and (hud :: HudLayout.Layout).compact,
@@ -1996,7 +1996,9 @@ end
 -- restore its HeldRestored word.
 do
 	local WheelData = require(Shared:WaitForChild("WheelData"))
-	for _, name in ipairs({ WheelData.Attributes.TrailOwned, WheelData.Attributes.Trail, ATTR.HeldRestored }) do
+	-- And the plant room a +12 Bag Slots pass adds (2026-10-12).
+	for _, name in ipairs({ WheelData.Attributes.TrailOwned, WheelData.Attributes.Trail, ATTR.HeldRestored,
+		GameConfig.Pass.BagSlotsAttribute }) do
 		player:GetAttributeChangedSignal(name):Connect(redraw)
 	end
 end

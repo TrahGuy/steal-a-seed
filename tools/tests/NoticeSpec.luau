@@ -305,7 +305,7 @@ do
 	local scripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
 	local toast = sourceOf(scripts, "ActionToastUI") or ""
 	check(toast:find("Notice.setRenderer(show)", 1, true) ~= nil, "ActionToastUI is the one renderer")
-	check(toast:find("local post = ActionRefusal.notice(code)", 1, true) ~= nil
+	check(toast:find("local post = ActionRefusal.notice(code, GameConfig.bagLimit(Players.LocalPlayer))", 1, true) ~= nil
 			and toast:find("action == ActionRefusal.Action", 1, true) ~= nil,
 		"it draws a server refusal from its code")
 	check(not toast:find("while true", 1, true) and not toast:find("Heartbeat", 1, true)

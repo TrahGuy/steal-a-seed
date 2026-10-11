@@ -539,6 +539,8 @@ local function body()
 	local HatchRoll = loadWith(Shared.HatchRoll, { GameConfig = liveConfig, SeedData = SeedData })
 	local loadOk, loadErr = pcall(function()
 		CarryService = loadWith(Server.CarryService, {
+			-- The item 9 passes (2026-10-12): owned by no stand-in player here.
+			PassService = require(Server:WaitForChild("PassService")),
 			NestService = require(Server:WaitForChild("NestService")),
 			MapService = MapService,
 			PlayerDataService = PlayerDataService,
@@ -552,6 +554,8 @@ local function body()
 			CarryService = CarryService,
 			PlantWander = PlantWander,
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
+			-- The item 9 passes (2026-10-12): owned by no stand-in player here.
+			PassService = require(Server:WaitForChild("PassService")),
 			-- The Mysterious Pod (2026-10-11): no shells in this fixture.
 			MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
 				Consume = function() end, TellHatch = function() end },

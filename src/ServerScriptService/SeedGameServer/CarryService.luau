@@ -57,6 +57,8 @@ local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+-- The item 9 passes (2026-10-12): +12 Bag Slots' room, Faster Hatch's waits.
+local PassService = require(script.Parent:WaitForChild("PassService"))
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 local GuardianCatch = require(script.Parent:WaitForChild("GuardianCatch"))
 local CarryGuard = require(script.Parent:WaitForChild("CarryGuard"))
@@ -2010,7 +2012,7 @@ local function bank(player: Player): boolean
 	-- wait a planted pod of this species and size was given. Stamped on the Tool
 	-- before it is parented, and onto its row by the record below (rowOf).
 	--==========================================================================
-	local hatchAt = os.time() + SeedData.GrowSecondsFor(species, tier)
+	local hatchAt = os.time() + PassService.GrowSeconds(player, species, tier)
 	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false, nil, hatchAt)
 	if not tool then
 		return false
@@ -2457,9 +2459,18 @@ local function countKind(rows: { any }?, pods: boolean): number
 	return n
 end
 
--- The limit of a room: Save.MaxPods for pods, Save.MaxHeld for plants.
-local function limitOf(pods: boolean): number
-	return if pods then SAVE.MaxPods else SAVE.MaxHeld
+-- The limit of a room: Save.MaxPods for pods, Save.MaxHeld for plants -- and
+-- since 2026-10-12 a +12 Bag Slots pass's on top, the player's own.
+local function limitOf(player: Player?, pods: boolean): number
+	if pods then
+		return SAVE.MaxPods
+	end
+	return SAVE.MaxHeld + (if player then PassService.BagBonus(player) else 0)
+end
+
+-- This player's plant room (Save.MaxHeld plus a +12 Bag Slots pass's).
+function CarryService.PlantLimit(player: Player): number
+	return limitOf(player, false)
 end
 
 local function heldSnapshot(player: Player): { any }
@@ -2476,6 +2487,7 @@ local function heldSnapshot(player: Player): { any }
 	-- Each room is read up to its own limit (2026-10-09): pods to Save.MaxPods,
 	-- plants to Save.MaxHeld.
 	local pods, plants = 0, 0
+	local plantLimit = limitOf(player, false)
 	local function collect(container: Instance?)
 		if not container then
 			return
@@ -2483,7 +2495,7 @@ local function heldSnapshot(player: Player): { any }
 		for _, tool in ipairs(container:GetChildren()) do
 			local row = rowOf(tool)
 			local pod = row ~= nil and isPodRow(row)
-			if row and (if pod then pods < SAVE.MaxPods else plants < SAVE.MaxHeld) then
+			if row and (if pod then pods < SAVE.MaxPods else plants < plantLimit) then
 				if pod then
 					pods += 1
 				else
@@ -2627,7 +2639,8 @@ end
 --==============================================================================
 type Stamp = { tool: Instance, item: string?, hatchAt: number? }
 
-local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fresh: Instance?): ({ any }, { Stamp })
+local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fresh: Instance?,
+	plantLimit: number): ({ any }, { Stamp })
 	local merged = {}
 	local stamps: { Stamp } = {}
 	local byItem: { [string]: number } = {}
@@ -2688,7 +2701,7 @@ local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fr
 	local podRows, plantRows = countKind(merged, true), countKind(merged, false)
 	for _, row in ipairs(leftover) do
 		local pod = isPodRow(row)
-		if (if pod then podRows else plantRows) >= limitOf(pod) then
+		if (if pod then podRows else plantRows) >= (if pod then SAVE.MaxPods else plantLimit) then
 			continue
 		end
 		if pod then
@@ -2818,7 +2831,7 @@ local function syncHeld(player: Player, consumed: { Instance }?, fresh: Instance
 	end
 	local merged, stamps = mergeHeld(saved, heldSnapshot(player), function(): string?
 		return PlayerDataService.MintItem(player)
-	end, fresh)
+	end, fresh, limitOf(player, false))
 	if PlayerDataService.SetHeld(player, merged) then
 		applyStamps(stamps)
 	end
@@ -2910,7 +2923,7 @@ function CarryService.HeldRoom(player: Player, own: boolean?, kind: string?): (n
 		return 0, 0, false
 	end
 	local pods = kind == "pod"
-	local limit = limitOf(pods)
+	local limit = limitOf(player, pods)
 	local kept = if pods and carried[player] ~= nil and own ~= true then 1 else 0
 	local count = countKind(profile.Held, pods) + kept
 	if count < limit and armedFor(player) then
@@ -3062,7 +3075,7 @@ local function recordOne(player: Player, species: SeedData.Species, tier: number
 	end
 	local kept = if type(profile.Held) == "table" then table.clone(profile.Held) else {}
 	-- Its own room (2026-10-09): a pod against the pods, a plant against the plants.
-	if countKind(kept, not hatched) >= limitOf(not hatched) then
+	if countKind(kept, not hatched) >= limitOf(player, not hatched) then
 		return false
 	end
 	local item = PlayerDataService.MintItem(player)
@@ -3277,7 +3290,7 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 	if not known or room < 1 then
 		return false
 	end
-	local tool = givePodTool(player, species, size, nil, os.time() + SeedData.GrowSecondsFor(species, size))
+	local tool = givePodTool(player, species, size, nil, os.time() + PassService.GrowSeconds(player, species, size))
 	if not tool then
 		return false
 	end

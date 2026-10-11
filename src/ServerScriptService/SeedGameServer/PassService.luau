@@ -40,6 +40,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local PassService = {}
 --==============================================================================
@@ -51,6 +52,8 @@ PassService.Priority = 22
 
 local STORE = GameConfig.Store
 local ATTRIBUTE = GameConfig.Pass.MultiplierAttribute
+local BAG_ATTRIBUTE = GameConfig.Pass.BagSlotsAttribute
+local VIP_ATTRIBUTE = GameConfig.Pass.VipAttribute
 
 --==============================================================================
 -- A SLOW RE-ASK, FOR THE PURCHASE WE ARE NOT TOLD ABOUT
@@ -64,6 +67,20 @@ local ATTRIBUTE = GameConfig.Pass.MultiplierAttribute
 -- is permanent, so the only transition this has to catch is false -> true.
 --==============================================================================
 local RECHECK_SECONDS = 90
+
+--==============================================================================
+-- A FAILED ANSWER IS ASKED AGAIN SOON (2026-10-12, item 9)
+--
+-- A check that failed -- the web call errored or timed out -- is asked again
+-- after RETRY_FAILED_SECONDS, not at the slow re-ask's 90, so an owner whose
+-- join check failed gets their pass back in seconds. Meanwhile nothing is
+-- taken from anybody: a cached "owned" is never cleared by a failure (below),
+-- and a Bag over the base room only stops taking more (CarryService: a limit
+-- stops a row being added, never takes one off).
+--==============================================================================
+local RETRY_FAILED_SECONDS = 15
+-- Players with a retry already waiting, so failures never stack them.
+local retrying: { [Player]: boolean } = {}
 
 -- key -> the Store item that defines it
 local passes: { [string]: any } = {}
@@ -115,23 +132,52 @@ end
 -- than the larger one silently winning. There is one pass today and this costs
 -- nothing, but the alternative is a rule that only reveals itself as a bug the
 -- day a second one ships.
+--
+-- WHAT A SET OF OWNED PASSES IS WORTH (2026-10-12, item 9: pure, for the specs)
+--
+-- Over the rows of the passes owned: the cash multiplier (a product, as above),
+-- the Bag's extra plant room (`bagSlots`, a sum), a pod's wait factor
+-- (`hatchFactor`, a product of factors under 1) and whether any makes a VIP.
 --==============================================================================
-local function multiplierFor(player: Player): number
-	local mine = owned[player]
-	if not mine then
-		return 1
+export type Benefits = { multiplier: number, bagSlots: number, hatchFactor: number, vip: boolean }
+
+function PassService.benefits(rows: { any }): Benefits
+	local out: Benefits = { multiplier = 1, bagSlots = 0, hatchFactor = 1, vip = false }
+	for _, item in ipairs(rows) do
+		local mul = tonumber(item.multiplier)
+		if mul and mul > 0 then
+			out.multiplier *= mul
+		end
+		local slots = tonumber(item.bagSlots)
+		if slots and slots > 0 then
+			out.bagSlots += math.floor(slots)
+		end
+		local factor = tonumber(item.hatchFactor)
+		if factor and factor > 0 and factor < 1 then
+			out.hatchFactor *= factor
+		end
+		if item.vip == true then
+			out.vip = true
+		end
 	end
-	local n = 1
-	for key, isOwned in pairs(mine) do
-		if isOwned then
-			local item = passes[key]
-			local mul = item and tonumber(item.multiplier)
-			if mul and mul > 0 then
-				n *= mul
+	return out
+end
+
+local function benefitsOf(player: Player): Benefits
+	local rows = {}
+	local mine = owned[player]
+	if mine then
+		for key, isOwned in pairs(mine) do
+			if isOwned and passes[key] then
+				table.insert(rows, passes[key])
 			end
 		end
 	end
-	return n
+	return PassService.benefits(rows)
+end
+
+local function multiplierFor(player: Player): number
+	return benefitsOf(player).multiplier
 end
 
 --==============================================================================
@@ -147,7 +193,13 @@ end
 --==============================================================================
 local function publish(player: Player)
 	if player.Parent then
-		player:SetAttribute(ATTRIBUTE, multiplierFor(player))
+		local worth = benefitsOf(player)
+		player:SetAttribute(ATTRIBUTE, worth.multiplier)
+		-- The item 9 passes (2026-10-12): the Bag's plant room and the VIP flag,
+		-- for the HUD and VipChat; VipService hears Changed.
+		player:SetAttribute(BAG_ATTRIBUTE, GameConfig.Save.MaxHeld + worth.bagSlots)
+		player:SetAttribute(VIP_ATTRIBUTE, worth.vip)
+		PassService.Changed:Fire(player)
 	end
 end
 
@@ -188,12 +240,16 @@ local function refresh(player: Player, force: boolean?)
 		return
 	end
 	local changed = false
+	local failed = false
 	for key, item in pairs(passes) do
 		if force or not mine[key] then
 			local answer = askOne(player, key, item)
 			-- They may have left while the call was in flight.
 			if owned[player] ~= mine then
 				return
+			end
+			if answer == nil then
+				failed = true
 			end
 			if answer ~= nil and answer ~= mine[key] then
 				mine[key] = answer
@@ -206,6 +262,15 @@ local function refresh(player: Player, force: boolean?)
 	end
 	if changed or force then
 		publish(player)
+	end
+	if failed and not retrying[player] then
+		retrying[player] = true
+		task.delay(RETRY_FAILED_SECONDS, function()
+			retrying[player] = nil
+			if owned[player] == mine then
+				refresh(player, false)
+			end
+		end)
 	end
 end
 
@@ -220,6 +285,7 @@ end
 
 local function forget(player: Player)
 	owned[player] = nil
+	retrying[player] = nil
 end
 
 --==============================================================================
@@ -242,6 +308,45 @@ end
 function PassService.CashMultiplier(player: Player): number
 	return multiplierFor(player)
 end
+
+--==============================================================================
+-- THE ITEM 9 PASSES (2026-10-12): 0 / 1 / false for a player still being
+-- checked, so the failure direction is the base game, never a free benefit.
+--==============================================================================
+-- Plant room in the Bag on top of Save.MaxHeld (+12 Bag Slots).
+function PassService.BagBonus(player: Player): number
+	return benefitsOf(player).bagSlots
+end
+
+-- A pod's wait times this (Faster Hatch: 0.75).
+function PassService.HatchFactor(player: Player): number
+	return benefitsOf(player).hatchFactor
+end
+
+function PassService.IsVip(player: Player): boolean
+	return benefitsOf(player).vip
+end
+
+-- A pod's wait in seconds for `factor`: the species' own
+-- (SeedData.GrowSecondsFor) times it -- never a Mysterious Pod's, which keeps
+-- its fixed wait. Pure, for the specs.
+function PassService.growSecondsWith(factor: number, species: any, tier: number?): number
+	local seconds = SeedData.GrowSecondsFor(species, tier)
+	if type(species) == "table" and species.Mystery == true then
+		return seconds
+	end
+	return seconds * factor
+end
+
+-- The wait a pod of this player's is stamped with, where a deadline is
+-- stamped (a bank, a gift, a planting).
+function PassService.GrowSeconds(player: Player, species: any, tier: number?): number
+	return PassService.growSecondsWith(PassService.HatchFactor(player), species, tier)
+end
+
+-- After a player's passes are published (known, or changed): VipService
+-- dresses or undresses their name.
+PassService.Changed = Instance.new("BindableEvent")
 
 --==============================================================================
 -- A TEST DOOR, BECAUSE THE PASS DOES NOT EXIST YET

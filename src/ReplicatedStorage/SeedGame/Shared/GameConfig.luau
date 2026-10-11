@@ -2554,6 +2554,12 @@ GameConfig.RarityFX = {
 			Shine = { Color3.fromRGB(150, 255, 214), Color3.fromRGB(236, 255, 248), Color3.fromRGB(210, 186, 255) },
 			ShinePeak = 0.25,
 		},
+		-- the Shop's passes on the obsidian card (2026-10-12): a gold sweep in
+		-- Divine's own colours, as strong
+		Pass = {
+			Shine = { Color3.fromRGB(255, 196, 84), Color3.fromRGB(255, 236, 170), Color3.fromRGB(255, 196, 84) },
+			ShinePeak = 0.25,
+		},
 	},
 }
 
@@ -7616,7 +7622,10 @@ GameConfig.Store = {
 		--======================================================================
 		-- `studs` (2026-10-04): the shelf's colour as one of the owner's studded
 		-- card uploads (BagLook.Studs), worn by every card on it.
-		{ id = "Passes", heading = "PASSES", layout = "pass", studs = "gold",
+		-- PASSES ON THEIR OWN CARD (2026-10-12, the owner: passes in a colour
+		-- apart from every one-off product, so "yours for good" reads at a
+		-- glance): the obsidian upload, shining gold (its `shine`).
+		{ id = "Passes", heading = "PASSES", layout = "pass", studs = "obsidian",
 			colour = Color3.fromRGB(255, 214, 64),
 			top = Color3.fromRGB(255, 232, 117), bottom = Color3.fromRGB(202, 110, 8) },
 		{ id = "Speed", heading = "SPEED", studs = "sky",
@@ -7695,6 +7704,12 @@ GameConfig.Store = {
 		pod3 = "rbxassetid://81480489766629",
 
 		comingSoon = "rbxassetid://84399068852963",
+
+		-- The owner's item 9 icons (2026-10-11; Images in the group, each
+		-- loaded in Studio Edit, stored 1024 x 1024).
+		bagslots = "rbxassetid://115691273223693",
+		fasterhatch = "rbxassetid://72267498407717",
+		vip = "rbxassetid://126152654716285",
 	},
 
 	--==========================================================================
@@ -7751,6 +7766,33 @@ GameConfig.Store = {
 		Passes = {
 			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 199, pass = 1975418369,
 				kind = "pass", multiplier = 2 },
+			--==================================================================
+			-- THE OWNER'S THREE NEW PASSES (2026-10-12, item 9; ids and prices
+			-- the owner's, re-made as passes -- the first product ids
+			-- 3717932585, 3717932381 and 3717932216 are going off sale and are
+			-- never read). Each its own benefit field, read by PassService:
+			--   bagSlots     plant room in the Bag on top of Save.MaxHeld
+			--   hatchFactor  a pod's wait times this, as its deadline is
+			--                stamped (never a Mysterious Pod's fixed 30 s)
+			--   vip          the gold name (VipService) and the [VIP] chat tag
+			--   multiplier   as the x2 pass's: the plant faucet times it, so
+			--                VIP's 1.1 and x2's 2 stack to 2.2
+			-- `benefit` / `detail` are the card's own words (ShopCatalog).
+			--==================================================================
+			{ key = "bagslots", label = "+12 BAG SLOTS", robux = 149, pass = 2026034867,
+				kind = "pass", bagSlots = 12,
+				benefit = "Room for 12 more plants in your Bag",
+				detail = "A Game Pass: yours for good. Your Bag holds 12 more plants. Pods keep their own room." },
+			{ key = "fasterhatch", label = "FASTER HATCH", robux = 129, pass = 2026400906,
+				kind = "pass", hatchFactor = 0.75,
+				benefit = "Pods hatch 25% faster",
+				detail = "A Game Pass: yours for good. Every pod you bank or are given from now on hatches in "
+					.. "three quarters of its time. A Mysterious Pod keeps its own 30 seconds." },
+			{ key = "vip", label = "VIP", robux = 249, pass = 2025452917,
+				kind = "pass", vip = true, multiplier = 1.1,
+				benefit = "Gold name, [VIP] chat tag, +10% money",
+				detail = "A Game Pass: yours for good. Your name shows in gold over your head, your chat "
+					.. "carries a [VIP] tag, and every grown plant earns 10% more -- on top of x2 Money." },
 		},
 		Speed = {
 			{ key = "speed1", label = "+150K SPEED", robux = 29, product = 3712094350, kind = "speed", amount = 150e3 },
@@ -7843,7 +7885,50 @@ GameConfig.Pass = {
 	BuffMessage = "Earn x2 money permanently.",
 	BuffSeconds = 2.5,
 	BuffFade = 0.25,
+	-- The x2 card shows at this multiplier and over (2026-10-12): VIP's own
+	-- 1.1 alone is no x2.
+	BuffAt = 2,
+	--==========================================================================
+	-- THE ITEM 9 PASSES' BENEFITS (2026-10-12; their rows in Store.Items.Passes)
+	--
+	-- PassService publishes, for the client's eyes only, the player's plant room
+	-- (Save.MaxHeld plus a +12 Bag Slots pass's) and whether they are a VIP. The
+	-- server never reads either back: it asks PassService.
+	--==========================================================================
+	BagSlotsAttribute = "BagSlots",
+	VipAttribute = "Vip",
+	-- THE VIP'S GOLD NAME (VipService): the engine's own name tag hidden, the
+	-- player's DisplayName in gold where it stood, in the HUD's outlined type,
+	-- at a player name's size (ADMIN's phone size, 15, which matches the
+	-- engine's name -- OwnerTitle.PhoneTextSize). ANCHORED WHERE THE TITLES ARE
+	-- (their Rise, 2.4 studs) and Drop of its own height under it: the ADMIN
+	-- and REBIRTH titles stand over that anchor by their Lift, in PIXELS, so
+	-- the gap between the name and a title is the same at every distance (an
+	-- anchor in studs below theirs met them at 95 studs -- captured
+	-- 2026-10-12). Drop clears even a phone's half-size ADMIN (PassBenefitsSpec
+	-- measures every title at every scale). Hidden past MaxDistance and behind
+	-- the world, as the engine's (OccludeAll, 100 studs).
+	VipName = {
+		Name = "SeedVipName",
+		Tag = "SeedVipName",
+		Colour = Color3.fromRGB(255, 208, 64),
+		Outline = Color3.fromRGB(62, 38, 0),
+		TextSize = 15,
+		Size = Vector2.new(220, 20),
+		Rise = 2.4,
+		Drop = -0.35,
+		MaxDistance = 100,
+	},
+	-- THE [VIP] CHAT TAG (VipChat.client), before the speaker's name.
+	VipChat = { Text = "[VIP]", Colour = "#FFD040" },
 }
+
+-- A VIP's chat prefix (VipChat.client): the gold [VIP] before the speaker's
+-- own prefix (their name), as rich text. Pure, for the specs.
+function GameConfig.vipPrefix(prefixText: string): string
+	local tag = GameConfig.Pass.VipChat
+	return string.format('<font color="%s">%s</font> %s', tag.Colour, tag.Text, prefixText)
+end
 
 --==============================================================================
 -- Display only. `SeedData.IncomePerSecond` stays pass-agnostic on purpose: it
@@ -7864,6 +7949,18 @@ function GameConfig.cashMultiplier(player: Player?): number
 		return 1
 	end
 	return n
+end
+
+-- The player's plant room in the Bag, for display (2026-10-12): Save.MaxHeld
+-- plus a +12 Bag Slots pass's, as PassService publishes it. The server asks
+-- PassService itself; a client's own copy only changes what its HUD prints.
+function GameConfig.bagLimit(player: Player?): number
+	local base = GameConfig.Save.MaxHeld
+	local n = if player then tonumber(player:GetAttribute(GameConfig.Pass.BagSlotsAttribute)) else nil
+	if not n or n ~= n or n < base then
+		return base
+	end
+	return math.floor(n)
 end
 
 --==============================================================================
@@ -8824,8 +8921,10 @@ GameConfig.BagLook = {
 			top = Color3.fromRGB(241, 240, 241), bottom = Color3.fromRGB(216, 219, 224) },
 		holo = { image = "rbxassetid://78921871175240", pitch = 86.1,
 			top = Color3.fromRGB(52, 40, 150), bottom = Color3.fromRGB(44, 20, 120) },
-		-- Uploaded with them, worn by nothing yet: Secret's option A.
-		obsidian = { image = "rbxassetid://94572104024955", pitch = 86.1,
+		-- Uploaded with them as Secret's option A; since 2026-10-12 the Shop's
+		-- PASSES (Store.Sections), shining gold (RarityFX.ShineOnly.Pass) -- the
+		-- only card that wears it, so the shine is the texture's own.
+		obsidian = { image = "rbxassetid://94572104024955", pitch = 86.1, shine = "Pass",
 			top = Color3.fromRGB(58, 64, 68), bottom = Color3.fromRGB(23, 26, 28) },
 		-- COMMON'S OWN (2026-10-11, Codex's art/textures/common-studs-2026-10-11,
 		-- the owner's upload): a neutral stone grey between the pearl and the

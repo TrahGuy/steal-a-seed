@@ -1,5 +1,46 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 9A: THE THREE GAME PASSES — +12 BAG SLOTS, FASTER HATCH, VIP — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; PassBenefitsSpec 31/0 (NEW), HotbarSpec 38/0, ActionRefusalSpec 74/0, NoticeSpec 100/0, RarityCardsSpec 60/0 and the 12 strict-map specs green, THE FULL SUITE 151/151 IN FIVE SMALL BATCHES (NoticeSpec's toast pin followed the new call, then 100/0; TutorialSpotlightSpec's 0.2 ms timing check 50/1 under batch load, 51/0 alone); 22 OF 22 MUTANTS CAUGHT; TWO GUARDED PLAYS; captures in output/item9-passes-2026-10-12)
+
+The owner's item 9 via the peer, part A: the three passes the owner re-made as Game Passes. Part B (the Starter Pack, Server Luck and Summon Rain products) comes next.
+- **The passes:** +12 BAG SLOTS 2026034867 (149 R$), FASTER HATCH 2026400906 (129 R$) and VIP 2025452917 (249 R$). They are GameConfig.Store.Items.Passes rows with their words (benefit, detail) and the owner's icons (Store.Icons: 115691273223693, 72267498407717, 126152654716285). The first product ids (3717932585, 3717932381, 3717932216) are not used: the owner is taking them off sale.
+- **The Shop:** the Passes shelf is now on obsidian studs, and each pass card wears a gold shine (Studs.obsidian.shine = "Pass", RarityFX.ShineOnly.Pass, peak 0.25). Shop card shines run only while the Shop is open.
+- **LIVE-LOOK CHANGE, for the owner's review:** the published x2 MONEY card moves with the other passes, from the gold shelf to obsidian.
+- **What a pass is worth (PassService.benefits, pure):** money multipliers multiply (x2 Money and VIP's 1.1 make 2.2), bag slots add, and hatch factors multiply. PassService publishes CashMultiplier, BagSlots (Save.MaxHeld + 12 = 36) and Vip on the player, and fires PassService.Changed.
+- **+12 BAG SLOTS:** every plant room is the player's own. In CarryService that covers the snapshot, the merge, HeldRoom and the record (limitOf / PlantLimit). PlantService's garden plan fits use it too. The Bag's count and bar use GameConfig.bagLimit, never under the base. A full Bag's toast says the player's own count (ActionRefusal.notice(code, plantLimit)). The pods' room (60) is unchanged.
+- **A pass lost or not yet known (the peer's rule): nothing is deleted, dropped or hidden.**
+  - Every saved plant is kept, and given back its Tool at a join with no room asked.
+  - Over the room, only adding stops.
+  - A failed ownership check never clears an owned pass, and is asked again after 15 s, not the usual 90.
+  - The limit: ownership is never saved (by design; Roblox is the record). If a new session's very first check fails, the base room shows until the retry lands; nothing is taken meanwhile.
+- **FASTER HATCH:** a pod stamped after the pass waits 0.75 of its time. That covers a banked pod, a given pod and a planted pod (PassService.GrowSeconds).
+- **VIP:**
+  - +10% money, which multiplies with x2 Money. The x2 card shows only at x2 and over (Pass.BuffAt 2), so VIP's 1.1 alone never shows one.
+  - THE GOLD NAME (VipService, new): the player's DisplayName in gold LuckiestGuy with a dark outline, replacing the engine's name tag (the Humanoid's DisplayDistanceType None). It hides by the engine tag's rules: past 100 studs, and behind the world (AlwaysOnTop false, as the titles are). It sits at the ADMIN and REBIRTH titles' own anchor (2.4 studs) and 7 px under it, so the gap is fixed in pixels at every distance. That gap is at least 3.8 px on any screen, measured against a phone's half-size ADMIN; it is 10.6 px on a desktop. Its size, 15, is ADMIN's phone size, measured to match the engine's name. It came back 4.5 s after a respawn.
+  - THE [VIP] CHAT TAG (VipChat.client, new): a gold [VIP] before a VIP speaker's name, in every chat window (TextChatService.OnIncomingMessage, the project's only one: assigning it anywhere else replaces it).
+- **Specs:** PassBenefitsSpec (new, 31 checks) covers the manifest, the Shop, the stacking, the waits, the client, the gold name, the wiring, and a pass lost or not yet known. Pins that followed the new calls: HotbarSpec, ActionRefusalSpec, NoticeSpec. RarityCardsSpec's no-shine check uses stone now that obsidian shines. PlantService and CarryService now require PassService, so the 12 strict sibling maps got it: ActionRefusal, FirstMinute, HatchDelivery x2, HatchInBag x2, HatchReveal, HatchRoll, HatchStorage x2, HatchTimer, InstantHatch, PlantStreaming, PlotRelease, StorageDoors x2.
+- **Mutants (22 of 22):** BagIgnoresPass, SnapshotCapsBase, BankFullWait, PlantedFullWait, MysteryHurried, VipNotStacking, NoBagPublish, EngineNameStays, X2CardForVip, PassesGold, NoPassShine, RefusalBaseCount, FailureClears, NoQuickRetry, NoRetry, RestoreChecksRoom, SavedRowsCapped, NameStudAnchor, NameUnderOldRise, NameMeetsPhoneAdmin, NameTitleSized, ChatTagPlain.
+- **Live (two guarded Plays, SeedTest_mistlook_20261011), desktop.** The test account owns all four passes, so nothing was bought or pressed to buy.
+  - 01: the Passes shelf, obsidian with gold OWNED.
+  - 02: the first gold name, a close-up copy in a ScreenGui at 2x (test-only, removed). That first look is superseded by 07.
+  - 03: the chat window is CoreGui and is not captured; the tag's words are spec-pinned (GameConfig.vipPrefix).
+  - 04: the gold name after a respawn.
+  - 05: the Bag at 0/36.
+  - 06: the first look at 25, 60 and 95 studs. Its stud anchor met ADMIN at 95; fixed.
+  - 07: the fixed name at 25, 60 and 95 studs, plus a strip of the three.
+- **Not seen:** phones (the emulator was not switched); the phone gap is spec-measured.
+- **Open for the owner (flagged defaults; each stands until the owner says otherwise):**
+  - The x2 MONEY card's move to obsidian (above), and the look choices: obsidian for passes and the 0.25 shine peak.
+  - Faster Hatch leaves the Mysterious Pod out (the Mist brief fixes it at 30 s). A pod already growing keeps the timer it started with.
+  - VIP stacks multiplicatively with x2 Money (2.2).
+  - **THE VIP SPOT, A PROPOSAL, NOT BUILT:** a 14 x 14 gold-trimmed pad at the free east end of the shop row's back line, centred (-140, -127). It stands in line with the two chests (bonus chest -193, community chest -240, same z, facing north) and across the walkway from Marigold's stall. It is inside GameConfig.Map.ShopRow, not in the Event Hub. A gold rope and sign, and an entrance only a VIP passes (the Vip attribute). No prompt, so it never shares prompt ground. What stands inside is the owner's call. Before it is built: EventHubSpec's walkway and plot clearances, and a survey in Play (the Edit preview lacks the runtime fixtures).
+  - The gold name's size and place.
+- **Next:**
+  - 9B, the three products.
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## (c) EVERY ROBUX BUY BUTTON ON THE GREEN ROBUX ART — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; RobuxPriceSpec 22/0 (4 new checks), WheelSpec 163/0, InstantHatchSpec 57/0, StoreSpec, BagMenuSpec, InventorySpec, CompactMenusSpec, StuddedLookSpec, PhoneMenuSpec, SourceIconsSpec all green, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (two batch-only flakes, each green alone: PlotReleaseSpec's async save timing 40/2 then 42/0 twice, TutorialSpotlightSpec's 0.2 ms timing check 50/1 then 51/0); 7 OF 7 MUTANTS CAUGHT; captures in output/robux-buy-buttons-2026-10-12)
 
 The owner's item (c) via the peer: every Robux buy button on the green Robux art (113135959052678, the desktop Shop face's), with the price right of its mark and no separate Robux glyph. Fitted at ~3 : 1, never stretched. A state that is not a purchase keeps its look.

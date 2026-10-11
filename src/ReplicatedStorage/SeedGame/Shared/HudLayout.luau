@@ -3980,7 +3980,7 @@ function HudLayout.measure(gui: ScreenGui, cashWidth: number?): Input
 	local icons = if me then me:GetAttribute(ICONS.Attribute) else nil
 	local removeRow = if me then me:GetAttribute(HOT.RemoveRowAttribute) == true else false
 	local dockShut = if me then me:GetAttribute(CONFIG.Phone.Panel.ShutAttribute) == true else false
-	local buff = if me then GameConfig.cashMultiplier(me) > 1 else false
+	local buff = if me then GameConfig.cashMultiplier(me) >= GameConfig.Pass.BuffAt else false
 	local input: Input = {
 		safe = size,
 		touch = UserInputService.TouchEnabled,

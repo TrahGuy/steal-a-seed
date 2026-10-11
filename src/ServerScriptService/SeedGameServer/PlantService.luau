@@ -96,6 +96,8 @@ local Notice = require(Shared:WaitForChild("Notice"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+-- Faster Hatch's waits and +12 Bag Slots' room (2026-10-12, item 9).
+local PassService = require(script.Parent:WaitForChild("PassService"))
 -- The Mysterious Pod (Enchanted Mist stage 4): a shell hatches into its saved creature.
 local MysteryPodService = require(script.Parent:WaitForChild("MysteryPodService"))
 local EnchantedMistData = require(SeedGame:WaitForChild("Shared"):WaitForChild("EnchantedMistData"))
@@ -358,7 +360,7 @@ local function storageFull(player: Player, code: string, door: string?, always: 
 			end
 		end
 		log(string.format("%s: %s, plant storage full (%d/%d plants saved).", player.Name, door, saved,
-			GameConfig.Save.MaxHeld))
+			GameConfig.Save.MaxHeld + PassService.BagBonus(player)))
 	end
 	ActionRefusal.send(player, code)
 end
@@ -2302,7 +2304,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		-- field with the time already past, because nothing reads it.
 		hatchAt = if hatched then now
 			elseif podDue then podDue
-			else now + SeedData.GrowSecondsFor(species, tier),
+			else now + PassService.GrowSeconds(player, species, tier),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
 		-- Off the placement id, so consecutive plantings come out scattered.
 		-- Re-placing a plant you picked up gives it a NEW bearing, which is the
@@ -2636,7 +2638,7 @@ function PlantService.EquipBest(player: Player): (boolean, string, number, numbe
 	-- (2026-10-09). Pods have their own, and a pod in the arms keeps its place
 	-- there, so neither is counted against these.
 	if not GardenPlan.fits(plantRowsOf(player), false, #plan.plant, #plan.ret,
-		GameConfig.Save.MaxHeld) then
+		GameConfig.Save.MaxHeld + PassService.BagBonus(player)) then
 		return false, "STORAGE_FULL", 0, 0
 	end
 
@@ -2705,7 +2707,8 @@ function PlantService.UnequipAll(player: Player): (boolean, string, number)
 		return true, "NOTHING", 0
 	end
 	-- The PLANT room only (2026-10-09), as EQUIP BEST counts it.
-	if not GardenPlan.fits(plantRowsOf(player), false, 0, #grown, GameConfig.Save.MaxHeld) then
+	if not GardenPlan.fits(plantRowsOf(player), false, 0, #grown,
+		GameConfig.Save.MaxHeld + PassService.BagBonus(player)) then
 		return false, "STORAGE_FULL_ALL", 0
 	end
 	local returned = 0

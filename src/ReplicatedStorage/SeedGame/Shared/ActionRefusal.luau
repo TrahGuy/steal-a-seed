@@ -317,15 +317,21 @@ function ActionRefusal.plotFull(canUpgrade: boolean, hasGrown: boolean): string
 end
 
 -- The notice a refusal code puts up, or nil for a code nobody named.
-function ActionRefusal.notice(code: string): Notice.Post?
+-- `plantLimit`: the player's own plant room (GameConfig.bagLimit, 2026-10-12: a
+-- +12 Bag Slots pass's on top), for the full Bag's count.
+function ActionRefusal.notice(code: string, plantLimit: number?): Notice.Post?
 	local line = if type(code) == "string" then ActionRefusal.Notices[code] else nil
 	if not line then
 		return nil
 	end
+	local detail = line.detail
+	if code == "STORAGE_FULL" and plantLimit and plantLimit ~= MAX_HELD then
+		detail = string.format("%d/%d. Plant or sell one to make room.", plantLimit, plantLimit)
+	end
 	return {
 		kind = line.kind or "blocked",
 		title = line.title,
-		detail = line.detail,
+		detail = detail,
 		key = "refusal:" .. code,
 	}
 end
