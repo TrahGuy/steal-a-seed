@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST, STAGE 2 DONE: THE SHARED DEWBERRIES — 2026-10-11 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; THE EVENT STILL OFF: EnchantedMistConfig.Enabled = false, Mosskeeper/Pod/Look unbuilt; EnchantedMistBerrySpec 64/0, 11 OF 11 MUTANTS CAUGHT, EnchantedMistSpec 37/0; NO PLAY RUN)
+
+This finishes the "STAGE 2: THE DEWBERRIES" checkpoint entry below.
+- **New since the checkpoint**:
+  - `EnchantedMistBerries.client`: at 5/5 carried, every berry's Collect Dewberry prompt goes out of reach on THAT client only (reach 0). Other players still see and take the berry. A reach somebody else writes back while the player is full (PromptHoldLock's end) is put out again; a delivery under the cap gives the reach back. Carrying a pod needs nothing here: PromptUI already hides every prompt.
+  - EnchantedMistBerryService:
+    - A save that throws during a pick removes the berry, so it is never offered again (no double credit). A pick the save refuses leaves the berry for anybody (NOT_CREDITED).
+    - A berry whose model fails to build is dropped without a notice.
+    - The per-second loop survives a failing step.
+    - Spec hooks: `_holdBegan`, `_left`, `_roomAt`, `_pickSpot`.
+  - EnchantedMistData.Spawn (DRAFT): `BiomeX` {24, 50} (off the racing line; GameConfig.PodGuide treats |X| under 24 as the racing line) and `BiomeNearMargin` 36 (past the Pod Guide stand at In 13 and its board).
+  - `EnchantedMistService.Built.Berries = true`. Still missing: Mosskeeper, MysteriousPod, Look, the unregistered creatures and the owner's odds.
+- **EnchantedMistBerrySpec** (Edit; service and client loaded from source with stand-ins):
+  - the numbers;
+  - the berry model and prompt;
+  - notices: nobody full or loading told; one folding key;
+  - spawning: 5 s, max 6, 60 s life, no catch-up burst, quiet last 10 s, a skipped chance never made up;
+  - every pick refusal: no hold, short hold, dead, far, pod in hand, not loaded, Mist over, not credited, a throwing save, expired, a hold that finishes after the end;
+  - a duplicate pick, two players racing for one berry, and a full player leaving the berry for another;
+  - end cleanup;
+  - 80 real-map spots: floor, plots, props, hub, shop row, racing line, zones, about 60/40;
+  - spacing 14 and pod clearance 10;
+  - the client's hiding: only berries, put out again, given back, late join;
+  - the save cleanup;
+  - a rebirth never touching the counts;
+  - wiring pins.
+
+  11 mutants, all caught. Rojo synced; probe 347 scripts, 0 differ, 0 ZZ.
+- **Not verified**: no Play yet (the event is off, and Mosskeeper isn't built, so berries can't be handed in). The real prompt hold, a phone or pad press, and streaming haven't been seen in-game.
+- **For the owner**: supply is at most 59 berries a Mist (one per 5 s, none in the last 10 s). Six players earning a pod each in one Mist need 60. Carried berries and progress persist, so pods accumulate across Mists. Faster spawns, or is this fine?
+- **Next: stage 3**, the Mosskeeper (dialogue, Give all, the overhead bar, deliveries). Its NPC model must come from the owner.
+
 ## THE SHOP ROW WEST OF THE ROAD'S MOUTH AND A SOLID FRONT FENCE — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; THE TOUCHED SPECS GREEN; FULL SUITE NOT RUN, LEFT FOR TOMORROW; ONE GUARDED PLAY ON SeedTest_shoprow_20261011)
 
 The owner, via the peer (screenshot 39.png): "transfer them here, shop, rebirth, everything, add a fence on the edges of the map too". The answers: the row "West of road mouth" (the east strip loses ground to plot 6 at levels 3-7) and the fence "Front edge only, solid". Then "lift BAT SHOP! over the roof", "lean tests to save token" and "proceed tomorrow" (stop for today).

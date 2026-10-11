@@ -59,9 +59,11 @@ EnchantedMistData.HatchSeconds = 30
 --
 -- WHERE (EnchantedMistBerryService): the safe share in MiniEventService's
 -- ticket zones SafeZones names, by weight; the biome share on a biome's
--- floor between the running line and the walls (|X| in BiomeX), its Near/Far
--- margins clear of the gates, an early biome likelier (weight 1 / Order) so a
--- beginner meets berries too. Every spot passes the tickets' checks (the hub
+-- floor between the racing line (|X| under 24, as GameConfig.PodGuide keeps)
+-- and the walls (|X| in BiomeX), BiomeNearMargin inside its arch (past the
+-- Pod Guide stand at In 13 and its board) and BiomeFarMargin short of the next
+-- gate, an early biome likelier (weight 1 / Order) so a beginner meets berries
+-- too. Every spot passes the tickets' checks (the hub
 -- and its NPCs, the plots, the nests and their guardians, the props, a real
 -- floor), stays Spacing studs from every other berry and PodClear studs from
 -- every pod, so no two prompts share ground. Tries spots per opportunity; an
@@ -78,8 +80,8 @@ EnchantedMistData.Spawn = {
 	Reach = 10,
 	ReachSlack = 6,
 	SafeZones = { Field = 3, Front = 2 },
-	BiomeX = { 16, 50 },
-	BiomeNearMargin = 14,
+	BiomeX = { 24, 50 },
+	BiomeNearMargin = 36,
 	BiomeFarMargin = 10,
 	Spacing = 14,
 	PodClear = 10,

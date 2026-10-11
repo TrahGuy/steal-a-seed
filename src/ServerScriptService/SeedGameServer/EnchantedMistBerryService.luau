@@ -292,11 +292,8 @@ local function build(berry: Berry)
 	prompt.RequiresLineOfSight = false
 	prompt:SetAttribute(B.BerryAttribute, berry.id)
 	prompt.Parent = root:FindFirstChild("PickupAnchor") or root
-	-- The hold the server SAW begin is the one a pick is measured against.
 	prompt.PromptButtonHoldBegan:Connect(function(player)
-		if berries[berry.id] == berry then
-			berry.holds[player] = Hooks.now()
-		end
+		EnchantedMistBerryService._holdBegan(player, berry.id, Hooks.now())
 	end)
 	prompt.Triggered:Connect(function(player)
 		EnchantedMistBerryService._claim(player, berry.id, Hooks.now())
@@ -339,7 +336,13 @@ function EnchantedMistBerryService._spawn(now: number): Berry?
 		claimed = false,
 	}
 	berries[berry.id] = berry
-	build(berry)
+	local built, why = pcall(build, berry)
+	if not built then
+		-- No model, no berry and no notice.
+		remove(berry)
+		log(string.format("%s was not built: %s", berry.id, tostring(why)))
+		return nil
+	end
 	run.spawned += 1
 	announce(berry)
 	return berry
@@ -348,6 +351,15 @@ end
 --==============================================================================
 -- A PICK
 --==============================================================================
+-- The hold the server SAW begin is the one a pick is measured against; a new
+-- hold starts the measure again.
+function EnchantedMistBerryService._holdBegan(player: any, id: string, now: number)
+	local berry = berries[id]
+	if berry and not berry.claimed then
+		berry.holds[player] = now
+	end
+end
+
 function EnchantedMistBerryService._claim(player: any, id: string, now: number): (boolean, string)
 	local berry = berries[id]
 	if not berry or berry.claimed then
@@ -384,7 +396,7 @@ function EnchantedMistBerryService._claim(player: any, id: string, now: number):
 	-- Reserved, credited, removed: one resumption, nothing yields between.
 	berry.claimed = true
 	local carried = 0
-	local credited = Hooks.update(player, function(p: any): boolean
+	local done, credited = pcall(Hooks.update, player, function(p: any): boolean
 		local have = tonumber(p.DewberriesCarried) or 0
 		if have >= CAP then
 			return false
@@ -393,9 +405,18 @@ function EnchantedMistBerryService._claim(player: any, id: string, now: number):
 		carried = have + 1
 		return true
 	end)
+	if not done then
+		-- An uncertain credit: the berry is never offered again.
+		remove(berry)
+		log(string.format("%s's pick of %s threw; the berry is gone: %s", tostring(player.Name), id,
+			tostring(credited)))
+		return false, "ERROR"
+	end
 	if not credited then
+		-- Nothing credited (a profile gone, the cap reached): the berry stays
+		-- for anybody.
 		berry.claimed = false
-		return false, "FULL"
+		return false, "NOT_CREDITED"
 	end
 	remove(berry)
 	run.picked += 1
@@ -479,6 +500,17 @@ function EnchantedMistBerryService.Model(id: string): Model?
 	return berry and berry.model
 end
 
+-- A player who leaves takes their holds with them.
+function EnchantedMistBerryService._left(player: any)
+	for _, berry in pairs(berries) do
+		berry.holds[player] = nil
+	end
+end
+
+-- For the spec: the placement rules on their own.
+EnchantedMistBerryService._roomAt = roomAt
+EnchantedMistBerryService._pickSpot = pickSpot
+
 --==============================================================================
 -- LIFECYCLE
 --==============================================================================
@@ -516,11 +548,7 @@ function EnchantedMistBerryService.Start()
 			EnchantedMistBerryService._stop(if type(info) == "table" then tostring(info.reason) else "end")
 		end
 	end))
-	local leaving = Players.PlayerRemoving:Connect(function(player)
-		for _, berry in pairs(berries) do
-			berry.holds[player] = nil
-		end
-	end)
+	local leaving = Players.PlayerRemoving:Connect(EnchantedMistBerryService._left)
 	table.insert(unhooks, function()
 		leaving:Disconnect()
 	end)
@@ -528,7 +556,11 @@ function EnchantedMistBerryService.Start()
 		while generation == mine do
 			task.wait(1)
 			if generation == mine and run.eventId then
-				EnchantedMistBerryService._step(Hooks.now())
+				-- One bad second never ends the loop.
+				local stepped, why = pcall(EnchantedMistBerryService._step, Hooks.now())
+				if not stepped then
+					log("a step failed: " .. tostring(why))
+				end
 			end
 		end
 	end)
