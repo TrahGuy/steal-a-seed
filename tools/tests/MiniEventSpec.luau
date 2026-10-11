@@ -811,7 +811,9 @@ local ok, err = pcall(function()
 				break
 			end
 		end
-		check(plotted and not E.mini.InPlot(Vector3.new(0, 0, -100)) and E.mini.PropAt(Vector3.new(-104, 0, -148))
+		-- The screen stands where the owner moved it (2026-10-11): read its spot.
+		local screenAt = require(Shared.WeatherTeaser).Placement().Position
+		check(plotted and not E.mini.InPlot(Vector3.new(0, 0, -100)) and E.mini.PropAt(screenAt)
 				and not E.mini.PropAt(Vector3.new(10, 0, -120)),
 			"a plot's middle is a plot, the weather screen's housing is a prop, the open front is neither")
 		-- 5. Night shuts the biomes; their tickets go with them.
