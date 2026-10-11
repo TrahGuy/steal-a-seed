@@ -199,6 +199,114 @@ local ok, err = pcall(function()
 	holder:Destroy()
 	check(dark == 0 and drawn == #EnchantedMistData.Pool.Entries,
 		"every Odds and reel card shows its creature: no \"???\" left", string.format("dark %d drawn %d", dark, drawn))
+
+	--==========================================================================
+	say("5. Animated: their idles (the walks are PlantRigsSpec's)")
+	--==========================================================================
+	local SecretIdle = require(Shared:WaitForChild("SecretIdle"))
+	local PlantIdles = require(Shared:WaitForChild("PlantIdles"))
+	-- Every joint each idle is written to move -- a name spelled wrong would be
+	-- skipped without a word, so the set is pinned.
+	local function list(prefix, n, extra)
+		local out = table.clone(extra or {})
+		for i = 1, n do
+			table.insert(out, prefix .. i)
+		end
+		return out
+	end
+	local POSED = {
+		mossbristle = { "Root", "HipFL", "HipFR", "HipHL", "HipHR", "BackA", "BackB", "BackC", "Head", "EarL", "EarR",
+			"Sprout", "Tail1", "Tail2" },
+		briarstag = list("Mane", 4, { "Chest", "NeckLower", "NeckUpper", "Head", "Jaw", "EarL", "EarR", "Tail1",
+			"Tail2", "Sapling" }),
+		hollowl = list("PrimaryR", 3, list("PrimaryL", 3, { "Chest", "Neck", "Head", "TuftL", "TuftR", "WingUpperL",
+			"WingUpperR", "Tail", "TailFeatherL", "TailFeatherR" })),
+		elderbough = list("VineR", 3, list("VineL", 3, list("FingerR", 3, list("FingerL", 3, { "Spine", "Chest",
+			"Neck", "Head", "BrowL", "BrowR", "Jaw", "CanopyTop", "CanopyFront", "CanopyBack", "CanopyL", "CanopyR",
+			"BranchL1", "BranchR1", "BranchL2", "BranchR2", "WispHub", "WispA", "WispB", "WispC", "UpperArmL",
+			"UpperArmR", "ForearmL", "ForearmR" })))),
+		gnarlmaw = list("WhipR", 3, list("WhipL", 3, list("VineR", 4, list("VineL", 4, list("Frond", 6, { "Bulb",
+			"Trunk", "Neck1", "Neck2", "Head", "LobeUpper", "LobeLower", "Tongue", "Lure1", "Lure2" }))))),
+	}
+	local stage = Instance.new("Folder")
+	local function snapshot(model)
+		local out = {}
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				out[d] = d.CFrame
+			end
+		end
+		return out
+	end
+	local function worst(a, b)
+		local w = 0
+		for part, cf in pairs(a) do
+			local o = b[part]
+			w = math.max(w, (cf.Position - o.Position).Magnitude, (cf.LookVector - o.LookVector).Magnitude,
+				(cf.UpVector - o.UpVector).Magnitude)
+		end
+		return w
+	end
+	local wrongSets, drift, restOff, moved = {}, 0, 0, {}
+	local plateRise = 0
+	for _, id in ipairs({ "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }) do
+		local sp = SeedData.Get(id)
+		local tier = if (sp :: any).Secret then SeedData.SecretTier else 1
+		local model = CreatureModel.Build(sp, tier, CreatureModel.STAGE_GROWN, CFrame.new(0, 0, 0), stage)
+		local rest = snapshot(model)
+		local rig = SecretIdle.Rig(model)
+		if not (rig and PlantIdles.Idles[id]) then
+			table.insert(wrongSets, id .. ": no rig or idle")
+			continue
+		end
+		table.clear(rig.pose)
+		PlantIdles.Idles[id](rig, 12.3)
+		local got = {}
+		for name in pairs(rig.pose) do
+			got[name] = true
+		end
+		for _, name in ipairs(POSED[id]) do
+			if not got[name] then
+				table.insert(wrongSets, id .. " misses " .. name)
+			end
+			got[name] = nil
+		end
+		for name in pairs(got) do
+			table.insert(wrongSets, id .. " also " .. name)
+		end
+		-- Absolute from the clock: the same moment is the same pose, whatever came between.
+		SecretIdle.Step(rig, 3)
+		local a = snapshot(model)
+		for k = 1, 40 do
+			SecretIdle.Step(rig, 3 + k * 0.37)
+		end
+		local mid = snapshot(model)
+		SecretIdle.Step(rig, 3)
+		drift = math.max(drift, worst(a, snapshot(model)))
+		if worst(a, mid) > 1e-3 then
+			table.insert(moved, id)
+		end
+		-- Mossbristle's puff: the bark plates up, 0.3 of its unit at the peak.
+		if id == "mossbristle" then
+			local at = 0.6 - rig.phase + 80
+			SecretIdle.Step(rig, at)
+			for _, node in ipairs(rig.nodes) do
+				if node.motor == "BackA" then
+					plateRise = node.part.Position.Y - rest[node.part].Position.Y
+				end
+			end
+		end
+		SecretIdle.Rest(rig)
+		restOff = math.max(restOff, worst(rest, snapshot(model)))
+		model:Destroy()
+	end
+	stage:Destroy()
+	check(#wrongSets == 0, "each idle moves exactly the joints it is written for (no name skipped)",
+		table.concat(wrongSets, "; "))
+	check(drift < 1e-4 and #moved == 5 and restOff < 1e-4,
+		"they all move, every pose absolute from the clock (no drift), and at rest they are the built model",
+		string.format("drift %.1e, rest %.1e, moved %d", drift, restOff, #moved))
+	check(plateRise > 0.1, "Mossbristle puffs: at the peak its bark plates stand up", plateRise)
 end)
 
 if not ok then

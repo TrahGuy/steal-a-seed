@@ -30,7 +30,9 @@ local spec: SecretForms.FormSpec = {
 	Source = "ENCHANTED MIST/Gnarlmaw (Secret)", Kind = "plant", Yaw = 0,
 	Size = Vector3.new(31.748169, 44.733791, 37.495594), Height = 44.733791, PartCount = 129,
 	Base = 1,
-	Unit = 1, ModelScale = 4.690845,
+	-- Unit: the builder's `Scale` attribute (0.55), the unit its idle's distances are written in (the
+	-- generator looked for a `Unit` attribute, which these rigs do not carry).
+	Unit = 0.55, ModelScale = 4.690845,
 	Attributes = {},
 	Parts = {
 		{ n = "Footing", s = "Block", z = Vector3.new(12.899822, 0.515993, 12.899822), cf = CFrame.new(0, 0.000015, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1), c = Color3.fromRGB(30, 24, 18), m = Enum.Material.Plastic, t = 1, cs = false }, -- 1

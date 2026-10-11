@@ -1329,4 +1329,335 @@ for id, profile in pairs(InviteForms.Profiles) do
 	})
 end
 
+--==============================================================================
+-- THE ENCHANTED MIST'S FIVE (2026-10-11, the owner: "animated, with idle and
+-- walk like the Rain creatures got")
+--
+-- MOSSBRISTLE's idle is its own MossbristleIdle script, ported as written: it
+-- breathes (the bark plates ripple), sniffs, looks around, blinks, flicks its
+-- ears, sways its sprout and tail, pulses its tail lantern, and PUFFS every
+-- 8 s -- plates up, ears pinned back, the tail wagging harder, the lantern
+-- flaring, a puff of spores. Its trot is the script's too (diagonal pairs, the
+-- hips swinging 26 degrees), as a walk over the game's own gait.
+--
+-- THE OTHER FOUR came with no script. Their idles are built from their own
+-- joints in the same grammar -- a slow breath through the torso, a head that
+-- looks round now and then, each creature's own secondary parts (a mane, folded
+-- wings, a canopy, fronds and vines) lagging it -- small and slow, every pose
+-- absolute from the clock, never accumulated. Briarstag grazes and chews;
+-- Hollowl turns its head as an owl does and rustles its wings; Elderbough's
+-- canopy sways and its three wisps circle its crown; Gnarlmaw's neck weaves,
+-- its lure dangles and its maw snaps now and then.
+--
+-- THESE RIGS' JOINTS ARE AUTHORED AT ANGLES, so the idles turn each joint
+-- about the MODEL's axes -- pitch about X (positive lifts the front), yaw about
+-- Y, roll about Z -- each taken into the joint's own frame once, from the
+-- form's data (MIST_AXES, `turn`). Their legs belong to the gait.
+--==============================================================================
+local PlantForms = require(script.Parent:WaitForChild("PlantForms"))
+
+local MIST_IDS = { "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }
+local MIST_AXES: { [string]: { [string]: { Vector3 } } } = {}
+for _, id in ipairs(MIST_IDS) do
+	local spec = PlantForms.Plants[id]
+	local axes: { [string]: { Vector3 } } = {}
+	if spec then
+		for _, j in ipairs(spec.Joints) do
+			local part0 = spec.Parts[j.a]
+			if j.k == "Motor6D" and part0 then
+				local frame = part0.cf * j.c0
+				axes[j.n] = {
+					frame:VectorToObjectSpace(Vector3.xAxis),
+					frame:VectorToObjectSpace(Vector3.yAxis),
+					frame:VectorToObjectSpace(Vector3.zAxis),
+				}
+			end
+		end
+	end
+	MIST_AXES[id] = axes
+end
+PlantIdles.MistAxes = MIST_AXES
+
+-- A Mist joint turned by `pitch`, `yaw` and `roll` about the model's X, Y and
+-- Z, and moved `rise` (studs at this copy's size) up the model's Y.
+local function turn(rig: any, name: string, pitch: number, yaw: number, roll: number, rise: number?)
+	local axes = MIST_AXES[rig.form]
+	local a = axes and axes[name]
+	if not a then
+		return
+	end
+	local cf = CFrame.fromAxisAngle(a[2], yaw) * CFrame.fromAxisAngle(a[1], pitch) * CFrame.fromAxisAngle(a[3], roll)
+	if rise and rise ~= 0 then
+		cf = CFrame.new(a[2] * rise) * cf
+	end
+	set(rig, name, cf)
+end
+
+-- An event once per `period` (a burst, a snap): true the first frame of each
+-- cycle at or past `at` seconds into it.
+local function onceEvery(rig: any, t: number, period: number, at: number): boolean
+	local cycle = math.floor(t / period)
+	if t % period >= at and cycle ~= rig.lastEvent then
+		rig.lastEvent = cycle
+		return true
+	end
+	return false
+end
+
+EYES.mossbristle = { "Eye", "Pupil" }
+EYES.briarstag = { "Eye", "Pupil" }
+EYES.hollowl = { "Eye", "Pupil" }
+EYES.elderbough = { "Eye" }
+EYES.gnarlmaw = { "Eye", "Pupil" }
+
+-- MOSSBRISTLE: MossbristleIdle, as written.
+local MOSS_BULB_A = Color3.new(1, 0.933333, 0.588235)
+local MOSS_BULB_B = Color3.new(1, 0.745098, 0.25098)
+TINTS.mossbristle = { bulb = { "Bulb" } }
+local function mossPuff(k: number): number
+	if k < 0 then
+		return 0
+	elseif k < 0.25 then
+		return ease(k / 0.25)
+	elseif k < 1.0 then
+		return 1
+	elseif k < 1.7 then
+		return 1 - ease((k - 1.0) / 0.7)
+	end
+	return 0
+end
+IDLES.mossbristle = function(rig, t)
+	local u = rig.plant.u
+	local wk = walkOf(rig)
+	local puff = mossPuff(t % 8) * (1 - wk)
+	if puff > 0.95 and onceEvery(rig, t, 8, 0.25) then
+		burst(rig, "Spores", 18)
+	end
+	-- Breathing; the lean is taken back at the hips so the paws stay planted.
+	local breath = wave(t, 2.6)
+	local lean = rad(0.9) * breath
+	turn(rig, "Root", lean, 0, 0)
+	for _, tag in ipairs({ "FL", "FR", "HL", "HR" }) do
+		turn(rig, "Hip" .. tag, -lean, 0, 0)
+	end
+	-- The bark plates ripple with the breath and rise in the puff.
+	for i, name in ipairs({ "BackA", "BackB", "BackC" }) do
+		local rip = wave(t, 2.6, i * 0.6)
+		turn(rig, name, rad(2.5) * rip, 0, 0, u * (0.03 * rip + 0.3 * puff))
+	end
+	-- The head sniffs, looks around, and pulls back in the puff.
+	local look = wave(t, 6.5) * (1 - puff) * (1 - wk * 0.5)
+	local s = t % 5.0
+	local sniff = if s < 0.5 then sin(s / 0.5 * pi) else 0
+	turn(rig, "Head", rad(3) * wave(t, 1.9) - rad(10) * sniff + rad(10) * puff, rad(16) * look, rad(3) * wave(t, 4.1))
+	-- The ears flick now and then and pin back in the puff.
+	local e1, e2 = t % 6.1, (t + 3.3) % 6.1
+	local flickR = if e1 < 0.2 then sin(e1 / 0.2 * pi) else 0
+	local flickL = if e2 < 0.2 then sin(e2 / 0.2 * pi) else 0
+	turn(rig, "EarR", rad(30) * puff, 0, rad(12) * flickR)
+	turn(rig, "EarL", rad(30) * puff, 0, -rad(12) * flickL)
+	-- The sprout and the tail.
+	turn(rig, "Sprout", rad(7) * wave(t, 2.3), 0, rad(9) * wave(t, 3.3))
+	turn(rig, "Tail1", rad(2) * wave(t, 3, 0.5) - rad(8) * puff, rad(12) * wave(t, 2.2) * (1 + puff), 0)
+	turn(rig, "Tail2", rad(3) * wave(t, 2.6, 0.8), rad(16) * wave(t, 2.2, 0.9) * (1 + puff), 0)
+	-- The lantern bulb pulses and flares in the puff.
+	for _, p in ipairs(rig.plant.tints.bulb or {}) do
+		p.part.Color = MOSS_BULB_A:Lerp(MOSS_BULB_B, 0.5 + 0.5 * wave(t, 1.7))
+	end
+	lampAll(rig, 1 + 0.35 * wave(t, 1.7) + 1.4 * puff)
+	blinkEyes(rig, (t % 4.1) < 0.12, 0.15)
+end
+
+-- BRIARSTAG: breathes, looks round, flicks its ears and tail; every 14 s it
+-- lowers its head to graze and chews.
+IDLES.briarstag = function(rig, t)
+	local u = rig.plant.u
+	local wk = walkOf(rig)
+	local idle = 1 - wk
+	local breath = wave(t, 3.4)
+	turn(rig, "Chest", rad(1.2) * breath, 0, 0, u * 0.02 * breath)
+	local graze = display(t, 14, 8, 9.2, 11.5, 12.8) * idle
+	local look = wave(t, 7.5) * (1 - graze)
+	turn(rig, "NeckLower", rad(2) * wave(t, 3.4, 0.4) - rad(22) * graze, rad(4) * look, 0)
+	turn(rig, "NeckUpper", -rad(10) * graze, rad(10) * look, rad(2) * wave(t, 5.2))
+	turn(rig, "Head", rad(3) * wave(t, 2.1) - rad(6) * graze, rad(4) * look, rad(2) * wave(t, 5))
+	local chew = graze * math.max(0, sin(t * 2 * pi / 0.7))
+	turn(rig, "Jaw", -rad(7) * chew, 0, 0)
+	local e1, e2 = t % 5.3, (t + 2.4) % 5.3
+	local flickL = if e1 < 0.22 then sin(e1 / 0.22 * pi) else 0
+	local flickR = if e2 < 0.22 then sin(e2 / 0.22 * pi) else 0
+	turn(rig, "EarL", rad(3) * wave(t, 4.4), 0, -rad(14) * flickL)
+	turn(rig, "EarR", rad(3) * wave(t, 4.4, 0.6), 0, rad(14) * flickR)
+	-- A short white-tail flick every few seconds, a slow sway between.
+	local f = t % 4.6
+	local flick = if f < 0.5 then sin(f / 0.5 * pi) else 0
+	turn(rig, "Tail1", rad(10) * flick + rad(3) * wave(t, 3.1), rad(6) * wave(t, 2.4), 0)
+	turn(rig, "Tail2", rad(8) * flick, rad(5) * wave(t, 2.4, 0.7), 0)
+	for i = 1, 4 do
+		turn(rig, "Mane" .. i, rad(3) * wave(t, 3.4, 0.3 * i), 0, rad(3) * wave(t, 4.9, 0.5 * i))
+	end
+	turn(rig, "Sapling", rad(4) * wave(t, 2.9), 0, rad(5) * wave(t, 3.7))
+	lampAll(rig, 0.85 + 0.3 * (0.5 + 0.5 * wave(t, 2.9)))
+	blinkEyes(rig, clockBlink(t, 4.9, 4.72, 4.86), 0.15)
+end
+
+-- HOLLOWL: breathes; turns its head well round to one side, holds, back, then
+-- the other, as an owl does; tilts it now and then; flicks its tufts; every
+-- 11 s rustles its folded wings and fans its tail.
+IDLES.hollowl = function(rig, t)
+	local u = rig.plant.u
+	local wk = walkOf(rig)
+	local idle = 1 - wk
+	local breath = wave(t, 3.0)
+	turn(rig, "Chest", rad(1.5) * breath, 0, 0, u * 0.02 * breath)
+	local left = display(t, 12, 2, 2.6, 4.5, 5.1)
+	local right = display(t, 12, 8, 8.6, 10.5, 11.1)
+	local tilt = display(t, 17, 13, 13.3, 14.6, 14.9)
+	turn(rig, "Neck", rad(2) * wave(t, 3.0, 0.4), rad(18) * (left - right) * idle, 0)
+	turn(rig, "Head", rad(3) * wave(t, 2.3), rad(37) * (left - right) * idle, rad(14) * tilt * idle)
+	local e = t % 6.7
+	local tuft = if e < 0.25 then sin(e / 0.25 * pi) else 0
+	turn(rig, "TuftL", rad(2) * wave(t, 3.8), 0, -rad(10) * tuft)
+	turn(rig, "TuftR", rad(2) * wave(t, 3.8, 0.5), 0, rad(10) * tuft)
+	local rustle = display(t, 11, 6, 6.3, 6.9, 7.4) * idle
+	turn(rig, "WingUpperL", 0, 0, -rad(10) * rustle)
+	turn(rig, "WingUpperR", 0, 0, rad(10) * rustle)
+	for i = 1, 3 do
+		turn(rig, "PrimaryL" .. i, 0, -rad(4 + 3 * i) * rustle, 0)
+		turn(rig, "PrimaryR" .. i, 0, rad(4 + 3 * i) * rustle, 0)
+	end
+	turn(rig, "Tail", rad(2) * wave(t, 2.8), rad(4) * wave(t, 4.1), 0)
+	turn(rig, "TailFeatherL", 0, -rad(12) * rustle, 0)
+	turn(rig, "TailFeatherR", 0, rad(12) * rustle, 0)
+	lampAll(rig, 0.85 + 0.3 * (0.5 + 0.5 * wave(t, 3.3)))
+	blinkEyes(rig, clockBlink(t, 3.7, 3.55, 3.68), 0.12)
+end
+
+-- ELDERBOUGH: breathes slowly; looks round; raises its brows now and then;
+-- its canopy and branches sway in their own wind, its vines dangle, its
+-- fingers flex, and its three wisps circle the crown and bob.
+IDLES.elderbough = function(rig, t)
+	local u = rig.plant.u
+	local wk = walkOf(rig)
+	local breath = wave(t, 4.2)
+	turn(rig, "Spine", rad(0.8) * breath, 0, 0)
+	turn(rig, "Chest", rad(1) * breath, 0, 0, u * 0.02 * breath)
+	local look = wave(t, 9)
+	turn(rig, "Neck", rad(1.5) * wave(t, 4.2, 0.5), rad(5) * look, 0)
+	turn(rig, "Head", rad(2) * wave(t, 4.2, 0.9), rad(7) * look, rad(2) * wave(t, 6.3))
+	local brows = display(t, 13, 9, 9.4, 10.6, 11.2)
+	turn(rig, "BrowL", 0, 0, 0, u * 0.08 * brows)
+	turn(rig, "BrowR", 0, 0, 0, u * 0.08 * brows)
+	turn(rig, "Jaw", -rad(2) * (0.5 + 0.5 * wave(t, 5.1)), 0, 0)
+	for i, name in ipairs({ "CanopyTop", "CanopyFront", "CanopyBack", "CanopyL", "CanopyR" }) do
+		turn(rig, name, rad(2.5) * wave(t, 5.4, 0.5 * i), 0, rad(3) * wave(t, 6.8, 0.7 * i))
+	end
+	turn(rig, "BranchL1", 0, 0, -rad(3) * wave(t, 5.8))
+	turn(rig, "BranchR1", 0, 0, rad(3) * wave(t, 5.8, 0.9))
+	turn(rig, "BranchL2", 0, 0, -rad(4) * wave(t, 5.8, 0.5))
+	turn(rig, "BranchR2", 0, 0, rad(4) * wave(t, 5.8, 1.4))
+	-- The wisps go round the crown once every 12 s.
+	turn(rig, "WispHub", 0, (t % 12) / 12 * 2 * pi, 0)
+	for i, name in ipairs({ "WispA", "WispB", "WispC" }) do
+		turn(rig, name, 0, 0, 0, u * 0.15 * wave(t, 2.5, i * 2.1))
+	end
+	-- The arms hang and sway (the walk swings them on top); the fingers flex.
+	local swayArms = 1 - wk
+	turn(rig, "UpperArmL", rad(2) * wave(t, 4.2, 0.3) * swayArms, 0, -rad(1.5) * wave(t, 6.1))
+	turn(rig, "UpperArmR", rad(2) * wave(t, 4.2, 0.8) * swayArms, 0, rad(1.5) * wave(t, 6.1, 0.6))
+	turn(rig, "ForearmL", rad(3) * wave(t, 4.2, 0.6), 0, 0)
+	turn(rig, "ForearmR", rad(3) * wave(t, 4.2, 1.1), 0, 0)
+	for i = 1, 3 do
+		turn(rig, "FingerL" .. i, rad(6) * wave(t, 3.1, i * 0.4), 0, 0)
+		turn(rig, "FingerR" .. i, rad(6) * wave(t, 3.1, i * 0.4 + 0.9), 0, 0)
+	end
+	for i = 1, 3 do
+		turn(rig, "VineL" .. i, rad(4) * wave(t, 3.8, i * 0.5), 0, rad(3) * wave(t, 5.1, i * 0.5))
+		turn(rig, "VineR" .. i, rad(4) * wave(t, 3.8, i * 0.5 + 1.2), 0, rad(3) * wave(t, 5.1, i * 0.5 + 1.2))
+	end
+	lampAll(rig, 0.85 + 0.3 * (0.5 + 0.5 * wave(t, 4.2)))
+	blinkEyes(rig, clockBlink(t, 6.3, 6.1, 6.26), 0.15)
+end
+
+-- GNARLMAW: breathes through its bulb; its neck weaves, its lure dangles, its
+-- fronds, vines and whips sway at their own paces, and every 9 s its maw
+-- snaps shut on nothing, the tongue flicking.
+IDLES.gnarlmaw = function(rig, t)
+	local u = rig.plant.u
+	local wk = walkOf(rig)
+	local breath = wave(t, 3.6)
+	turn(rig, "Bulb", rad(1) * breath, 0, 0, u * 0.03 * breath)
+	turn(rig, "Trunk", rad(1.5) * breath, rad(2) * wave(t, 8.2), 0)
+	turn(rig, "Neck1", rad(2) * wave(t, 3.6, 0.4), rad(8) * wave(t, 6), rad(2) * wave(t, 7.3))
+	turn(rig, "Neck2", rad(2) * wave(t, 3.6, 0.8), rad(8) * wave(t, 6, 0.6), 0)
+	local snap = display(t, 9, 6, 6.25, 6.6, 7) * (1 - wk)
+	turn(rig, "Head", rad(3) * wave(t, 3.6, 1.2), rad(6) * wave(t, 6, 1.2), rad(3) * wave(t, 7.3, 0.6))
+	turn(rig, "LobeUpper", rad(3) * (0.5 + 0.5 * breath) + rad(16) * snap, 0, 0)
+	turn(rig, "LobeLower", -rad(2) * (0.5 + 0.5 * breath) - rad(12) * snap, 0, 0)
+	turn(rig, "Tongue", -rad(10) * snap, rad(8) * snap * wave(t, 0.4), 0)
+	turn(rig, "Lure1", rad(5) * wave(t, 2.2), 0, rad(6) * wave(t, 2.9))
+	turn(rig, "Lure2", rad(7) * wave(t, 2.2, 0.6), 0, rad(8) * wave(t, 2.9, 0.6))
+	for i = 1, 6 do
+		turn(rig, "Frond" .. i, rad(4) * wave(t, 3.6, i * 0.7), 0, rad(3) * wave(t, 4.7, i * 0.5))
+	end
+	for i = 1, 4 do
+		turn(rig, "VineL" .. i, rad(4) * wave(t, 4.4, i * 0.5), 0, -rad(4) * wave(t, 5.3, i * 0.4))
+		turn(rig, "VineR" .. i, rad(4) * wave(t, 4.4, i * 0.5 + 1.1), 0, rad(4) * wave(t, 5.3, i * 0.4 + 1.1))
+	end
+	for i = 1, 3 do
+		turn(rig, "WhipL" .. i, 0, rad(6) * wave(t, 3.2, i * 0.6), rad(3) * wave(t, 4.1, i * 0.5))
+		turn(rig, "WhipR" .. i, 0, rad(6) * wave(t, 3.2, i * 0.6 + 1.3), -rad(3) * wave(t, 4.1, i * 0.5 + 1.3))
+	end
+	lampAll(rig, 0.85 + 0.3 * (0.5 + 0.5 * wave(t, 3.6)) + 0.6 * snap)
+	blinkEyes(rig, clockBlink(t, 5.1, 4.92, 5.06), 0.15)
+end
+
+-- THEIR WALKS, every distance in the supplied model's studs (the gait scales
+-- it by the build factor). A stride's reach is about a tenth of the creature's
+-- height (Monsoad's rule), shorter where the legs are short. Only Mossbristle
+-- has a joint called Root; the other four walk with a VIRTUAL body -- the rig's
+-- own root part, as the bipeds' chains do.
+PlantIdles.Walks.mossbristle = walk({
+	-- The script's trot: the diagonal pairs together (FR with HL, FL with HR).
+	legs = {
+		swing("HipFR", 0, "AnkleFR"), swing("HipHL", 0, "AnkleHL"),
+		swing("HipFL", 0.5, "AnkleFL"), swing("HipHR", 0.5, "AnkleHR"),
+	},
+	duty = 0.55, reach = 1.3, lift = 0.62, crouch = 0.06, bob = 0.18, bobPeak = 0.25,
+	roll = rad(1), rollPeak = 0.3,
+})
+PlantIdles.Walks.briarstag = walk({
+	-- A deer's lateral walk, back left first (Monsoad's order).
+	legs = {
+		chain("ThighHL", "ShinHL", "HoofHL", 0), chain("ThighFL", "ShinFL", "HoofFL", 0.25),
+		chain("ThighHR", "ShinHR", "HoofHR", 0.5), chain("ThighFR", "ShinFR", "HoofFR", 0.75),
+	},
+	duty = 0.66, reach = 2.6, lift = 1.5, crouch = 0.2, bob = 0.25, bobPeak = 0.2, roll = rad(0.8), rollPeak = 0.45,
+	virtual = true,
+})
+PlantIdles.Walks.hollowl = walk({
+	-- An owl's waddle on short legs: a rocking roll.
+	legs = { chain("ThighL", "ShinL", "FootL", 0), chain("ThighR", "ShinR", "FootR", 0.5) },
+	duty = 0.6, reach = 1.2, lift = 0.8, crouch = 0.1, bob = 0.2, bobPeak = 0.3, roll = rad(4), rollPeak = 0.3,
+	lean = -rad(2), virtual = true,
+})
+PlantIdles.Walks.elderbough = walk({
+	-- A slow, heavy biped stride; the arms swing against the legs (the idle
+	-- writes them every frame, so nothing accumulates).
+	legs = { chain("ThighL", "ShinL", "FootL", 0), chain("ThighR", "ShinR", "FootR", 0.5) },
+	duty = 0.62, reach = 3.0, lift = 1.6, crouch = 0.3, bob = 0.4, bobPeak = 0.31, roll = rad(1.5), rollPeak = 0.31,
+	arms = { { joint = "UpperArmL", leg = 2, gain = 0.5 }, { joint = "UpperArmR", leg = 1, gain = 0.5 } },
+	virtual = true,
+})
+PlantIdles.Walks.gnarlmaw = walk({
+	-- Two tripods of its six root legs (Torrentacle's order).
+	legs = {
+		swing("RootUpperFL", 0, "RootLowerFL"), swing("RootUpperMR", 0, "RootLowerMR"),
+		swing("RootUpperBL", 0, "RootLowerBL"), swing("RootUpperFR", 0.5, "RootLowerFR"),
+		swing("RootUpperML", 0.5, "RootLowerML"), swing("RootUpperBR", 0.5, "RootLowerBR"),
+	},
+	duty = 0.6, reach = 2.0, lift = 1.0, crouch = 0.15, bob = 0.3, bobPeak = 0.25, roll = rad(1), rollPeak = 0.3,
+	virtual = true,
+})
+
 return PlantIdles

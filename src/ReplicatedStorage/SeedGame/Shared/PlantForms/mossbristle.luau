@@ -30,7 +30,9 @@ local spec: SecretForms.FormSpec = {
 	Source = "ENCHANTED MIST/Mossbristle (Legendary)", Kind = "plant", Yaw = 0,
 	Size = Vector3.new(18.84787, 19.02668, 35.000153), Height = 19.02668, PartCount = 60,
 	Base = 1,
-	Unit = 1, ModelScale = 3.850957,
+	-- Unit: the builder's `Scale` attribute (0.8), the unit its MossbristleIdle script's distances are written in (the
+	-- generator looked for a `Unit` attribute, which these rigs do not carry).
+	Unit = 0.8, ModelScale = 3.850957,
 	Attributes = {},
 	Parts = {
 		{ n = "Footing", s = "Block", z = Vector3.new(7.393838, 0.616153, 7.393838), cf = CFrame.new(0, 0.000001, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1), c = Color3.fromRGB(30, 24, 18), m = Enum.Material.Plastic, t = 1, cs = false }, -- 1

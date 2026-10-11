@@ -71,7 +71,10 @@ local LEGS = {
 	bellchime = 0, thornwhorl = 0, lanterncap = 0, novaorb = 0, cosmospire = 0,
 	cinderpaw = 4, snapmoss = 4, kilnhusk = 2, crookreed = 4, emberquill = 2, slagbloom = 4,
 	voidpetal = 4, astralhorn = 4, raincup = 4, suncrown = 4, gloomlotus = 4, pyrelotus = 4, supernovus = 4,
+	-- The Enchanted Mist's five (2026-10-11): walked in section 3 with the rest.
+	mossbristle = 4, briarstag = 4, hollowl = 2, elderbough = 2, gnarlmaw = 6,
 }
+local MIST = { "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }
 -- The ones whose scripts never blinked (SuperNovus has no eyes).
 local NO_BLINK = { supernovus = true }
 
@@ -147,7 +150,7 @@ local ok, err = pcall(function()
 	-- And since 2026-10-11 the Enchanted Mist's five (MistCreaturesSpec's), sized
 	-- by their TinyHeight like the road rigs, never Supplied.
 	local mistFive = 0
-	for _, id in ipairs({ "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }) do
+	for _, id in ipairs(MIST) do
 		if PlantForms.Plants[id] and PlantForms.TinyHeight[id] and not PlantForms.Supplied[id] then
 			mistFive += 1
 		end
@@ -265,8 +268,15 @@ local ok, err = pcall(function()
 	say("3. Each rig idles, blinks and walks on the existing system")
 	--==========================================================================
 	local FPS, SLICE = 60, 3
-	for _, id in ipairs(IDS) do
-		for _, tier in ipairs({ 1, SeedData.TierCount }) do
+	-- The road's twenty-five and, since 2026-10-11, the Enchanted Mist's five
+	-- (Gnarlmaw, a Secret, at its one size).
+	local walkers = table.clone(IDS)
+	for _, id in ipairs(MIST) do
+		table.insert(walkers, id)
+	end
+	for _, id in ipairs(walkers) do
+		local secret = SeedData.Get(id) ~= nil and (SeedData.Get(id) :: any).Secret == true
+		for _, tier in ipairs(if secret then { SeedData.SecretTier } else { 1, SeedData.TierCount }) do
 			local sp = SeedData.Get(id)
 			local spec = PlantForms.Plants[id]
 			local scale = PlantForms.Scale(id, SeedData.SizeScale(tier))

@@ -30,7 +30,9 @@ local spec: SecretForms.FormSpec = {
 	Source = "ENCHANTED MIST/Hollowl (Mythic)", Kind = "plant", Yaw = 0,
 	Size = Vector3.new(12.067276, 22.288755, 13.530441), Height = 22.288755, PartCount = 87,
 	Base = 1,
-	Unit = 1, ModelScale = 3.131153,
+	-- Unit: the builder's `Scale` attribute (0.6), the unit its idle's distances are written in (the
+	-- generator looked for a `Unit` attribute, which these rigs do not carry).
+	Unit = 0.6, ModelScale = 3.131153,
 	Attributes = {},
 	Parts = {
 		{ n = "Footing", s = "Block", z = Vector3.new(5.636075, 0.375738, 5.636075), cf = CFrame.new(0, 0.064455, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1), c = Color3.fromRGB(30, 24, 18), m = Enum.Material.Plastic, t = 1, cs = false }, -- 1

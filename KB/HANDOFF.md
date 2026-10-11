@@ -1,5 +1,36 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE FIVE CREATURES ANIMATED (IDLE AND WALK) — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; PUSHED AFTER THE LOOK; NOT PUBLISHED; MistCreaturesSpec 11/0, PlantRigsSpec 622/0, 4 OF 4 MUTANTS CAUGHT; CLIPS FOR THE OWNER IN output/mosskeeper-2026-10-11/anim_clips)
+
+The owner via the peer: the five Mist creatures "ANIMATED, with idle and walk like the Rain creatures got". The same route: client-side, SecretIdle's kinematic tree over the PlantForms rigs, PlantIdles' numbers, no drift.
+- **Mossbristle's idle is its own MossbristleIdle script, ported as written**:
+  - it breathes (bark plates ripple), sniffs, looks round, blinks, flicks its ears, sways sprout and tail;
+  - its lantern bulb pulses ColA↔ColB and its light with it;
+  - it PUFFS every 8 s: plates up, ears pinned, tail wagging, lantern flaring, 18 spores.
+  - Its trot is the script's: diagonal pairs, 26° hips, as a game walk.
+- **The other four had no script**, so their idles are built from their own joints in the same grammar, small, slow and absolute from the clock:
+  - Briarstag grazes every 14 s and chews, flicks its ears and tail; mane and sapling sway.
+  - Hollowl turns its head ~55° to each side and holds, tilts it, flicks its tufts, rustles its wings and fans its tail.
+  - Elderbough breathes slowly; brows lift; canopy, branches and vines sway; fingers flex; its three wisps circle the crown every 12 s.
+  - Gnarlmaw: its neck weaves, its lure dangles, fronds, vines and whips sway; its maw snaps every 9 s.
+- **Walks** over their own legs:
+  - Briarstag a lateral walk (thigh/shin/hoof chains);
+  - Hollowl a rocking waddle and Elderbough a heavy stride with arm swing (biped chains);
+  - Gnarlmaw two tripods of its six root legs.
+  - Only Mossbristle has a `Root` joint; the other four walk with a VIRTUAL body (the rig's own root part), the bipeds' existing path.
+- **How**:
+  - These rigs' joints are authored at angles, so the idles turn each joint about the MODEL's axes, taken into the joint's frame once from the form's data (`PlantIdles.MistAxes`, `turn`).
+  - The forms' `Unit` is now the builder's `Scale` attribute (0.8/0.6/0.6/0.45/0.55), the unit the script's distances are in.
+- **Tests**:
+  - PlantRigsSpec (section 3 now also walks the Mist five; Gnarlmaw at its one size): every rig idles and blinks; a planted foot stays put (slip and sink < 3% of height) and every stepping foot lifts; the strides follow the distance; a carried copy never steps; it stops when the model stops. 622/0.
+  - MistCreaturesSpec section 5: each idle moves exactly the joints it is written for; every pose absolute from the clock (no drift); at rest the built model; the puff lifts the plates.
+  - Mutants 4/4: SproutMisspelt, PoseAccumulates, PuffNeverRises, BriarstagNoVirtualBody.
+  - SecretWalk/RainFamily/InviteRewards/SecretForms/StarbloomLimb/PlantForms specs green.
+- **Clips**: `output/mosskeeper-2026-10-11/anim_clips/<id>_idle.gif` (12 s at 2×) and `<id>_walk.gif` (real time), from Edit previews (cleared).
+  - Edit draws no particles, so the spores and motes are not in them.
+  - A stale `output/mosskeeper-2026-10-11/anim/` holds 40 mislabelled frames and an empty test.gif. Claude Code's safety check refused to let me delete it; the owner may remove it.
+- **Not verified**: in Play on a real plot (spec-driven and Edit clips only); phones.
+
 ## ENCHANTED MIST: THE LOOK, A MOONLIT NIGHT OVER THE DAY — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; PUSHED ONLY AFTER THE PEER OKs THE OFF/ON CAPTURES; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false; MistLookSpec 13/0, 5 OF 5 MUTANTS CAUGHT)
 
 The owner's go via the peer, brief §3: a readable magical night while gameplay stays Day, composed through the existing owners, no competing Lighting loop, no fog, no gameplay effect, the current state restored at the end.
