@@ -1,5 +1,9 @@
 # Steal a Seed — Session Handoff
 
+## PUSHED: THE DESKTOP HUD RE-LAYOUT (de6cc31) — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH ON THE CAPTURES; NOT PUBLISHED)
+
+The rail closed up under a bigger Shop, EVENTS and Settings down the top-right corner, FRIENDS over Index (the entry below). The owner's next Publish takes it live. Still parked: the Shop's plate face (150 x 50) and the Robux buy buttons. Next: the Mosskeeper talk rebuild, then the rain biome's light beacon.
+
 ## THE DESKTOP HUD RE-LAYOUT: THE RAIL CLOSED UP UNDER A BIGGER SHOP, EVENTS AND SETTINGS DOWN THE TOP-RIGHT CORNER, FRIENDS OVER INDEX — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUSHED, NOT PUBLISHED; THE FULL SUITE 147/147, 12 OF 12 MUTANTS CAUGHT; ONE GUARDED PLAY; CAPTURES IN output/hud-relayout-2026-10-11 — OK'd by Claude on the owner's handoff; owner to review)
 
 The owner's brief via the peer (item 6), with the owner's answer on the rail: "CLOSE THE GAP". This applies to a desktop and a TV only; compact windows and phones are unchanged.
