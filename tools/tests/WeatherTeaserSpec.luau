@@ -121,9 +121,22 @@ local ok, err = pcall(function()
 		end
 	end
 	check(parts == 7 and lights == 0 and sounds == 0, "seven parts, no lights or sounds")
-	local shutterHalf = (Config.Map.CorridorWidth + Config.WorldCycle.Barrier.WidthPad) * 0.5
-	check(min.X > shutterHalf or max.X < -shutterHalf,
-		"entire board outside the road AND the night shutter's width, on either side")
+	local roadHalf = Config.Map.CorridorWidth * 0.5
+	check(min.X > roadHalf or max.X < -roadHalf, "entire board outside the road's width, on either side")
+	-- The night shutter's box, as MapService.buildNightBarrier stands it: the
+	-- corridor plus WidthPad wide, Thickness deep, its far face on the red line's
+	-- plane. The owner's spot (2026-10-11) puts the top trim's end over the
+	-- shutter's end in X, so the rule is no overlap, not "beyond its width".
+	local B = Config.WorldCycle.Barrier
+	local shutterHalf = (Config.Map.CorridorWidth + B.WidthPad) * 0.5
+	local farZ, nearZ = -Config.Map.FieldFront, -Config.Map.FieldFront + B.Thickness
+	local shutter = { Vector2.new(-shutterHalf, farZ), Vector2.new(-shutterHalf, nearZ),
+		Vector2.new(shutterHalf, farZ), Vector2.new(shutterHalf, nearZ) }
+	local shutterGap = math.huge
+	for _, bp in ipairs(boardPrints) do
+		shutterGap = math.min(shutterGap, gap(bp, shutter))
+	end
+	check(shutterGap > 0, string.format("no part of the board overlaps the night shutter (%.2f studs)", shutterGap))
 	check(min.Z > -Config.Map.FieldFront + Config.Map.SafeLineThickness, "entire board on safe side of red line")
 	check(min.Y >= Config.Map.GroundY - 0.001, "feet above ground")
 	local screenPart = board:FindFirstChild("Screen") :: BasePart

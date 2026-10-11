@@ -40,24 +40,22 @@ local GLOW_DISCS = 10
 local DISC_ALPHA = 1 - (1 - CFG.GlowMax) ^ (1 / GLOW_DISCS)
 
 --==============================================================================
--- WHERE IT STANDS: THE LEFT SIDE OF THE ROAD MOUTH, BECAUSE OF THE PLOTS
+-- WHERE IT STANDS: EAST OF THE ROAD MOUTH, BY THE FRONT FENCE (THE OWNER'S SPOT)
 --
--- Codex first stood it on the right, 34 studs out from the corridor and 22 in
--- from the red line. That is clear of today's starter plots and NOT clear of a
--- fully upgraded Plot_06: from level 3 the plot grows a 40-stud wing, and plot
--- 6's wing points at the road mouth, reaching z -164 at level 5 -- its rail ran
--- 14.7 studs into the board's top trim (measured 2026-09-21, exact footprint
--- test). Plot_01 is the mirror position but its wing grows AWAY from the mouth,
--- so the same spot on the left keeps 25 studs from a level-5 Plot_01, 11.5
--- outside the night shutter and 7.6 behind the red line. WeatherTeaserSpec
--- checks all six plots at max level.
+-- 2026-10-11: the owner moved the screen here in Studio -- its back to the
+-- front fence, its front looking north up the field -- and it stays where they
+-- put it. The numbers are read off their move (the Housing at (94.8, 12.1,
+-- -164.905), turned 180 degrees). Never move it back: a spec that disagrees
+-- with this spot changes, not the screen.
 --
--- It faces the field between the hub and the mouth, so a player walking from
--- any plot toward the road sees its front.
+-- Before: the left side of the mouth, (-104, -148), facing the field between
+-- the hub and the mouth; first the right side, 34 studs out from the corridor
+-- and 22 in from the red line, which a level-5 Plot_06's wing ran 14.7 studs
+-- into. WeatherTeaserSpec checks all six plots at max level.
 --==============================================================================
 function Teaser.Placement(): CFrame
-	local pos = Vector3.new(-(MAP.CorridorWidth * 0.5 + 34), MAP.GroundY, -MAP.FieldFront + 22)
-	return CFrame.lookAt(pos, Vector3.new(0, pos.Y, -MAP.FieldFront + 110))
+	local pos = Vector3.new(94.8, MAP.GroundY, -164.905)
+	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, 1))
 end
 
 --==============================================================================

@@ -945,6 +945,32 @@ local function body()
 	check(decor ~= nil and #names(onRow) == 0 and #names(onFence) == 0,
 		"no tree, hedge or flower of the field's stands on the shop row or against the fence",
 		table.concat(names(onRow), ", ") .. " | " .. table.concat(names(onFence), ", "))
+	-- Nor inside the weather screen, where the owner stood it by the fence
+	-- (2026-10-11): its box and a stud round it.
+	local sign = props and props:FindFirstChild("WeatherTeaser")
+	local onSign = {}
+	if sign and sign:IsA("Model") and decor then
+		local cf, size = sign:GetBoundingBox()
+		local lo = cf.Position - size * 0.5 - Vector3.new(1, 0, 1)
+		local hi = cf.Position + size * 0.5 + Vector3.new(1, 0, 1)
+		for _, d in ipairs(decor:GetDescendants()) do
+			if d:IsA("BasePart") then
+				local h = d.Size * 0.5
+				local dlo, dhi = Vector3.new(math.huge, 0, math.huge), Vector3.new(-math.huge, 0, -math.huge)
+				for _, sx in ipairs({ -1, 1 }) do
+					for _, sz in ipairs({ -1, 1 }) do
+						local w = d.CFrame:PointToWorldSpace(Vector3.new(h.X * sx, 0, h.Z * sz))
+						dlo, dhi = dlo:Min(w), dhi:Max(w)
+					end
+				end
+				if dlo.X < hi.X and dhi.X > lo.X and dlo.Z < hi.Z and dhi.Z > lo.Z then
+					onSign[d.Parent and d.Parent.Name or d.Name] = true
+				end
+			end
+		end
+	end
+	check(sign ~= nil and decor ~= nil and #names(onSign) == 0,
+		"no tree, hedge or flower of the field's stands in the weather screen", table.concat(names(onSign), ", "))
 	check(has(mapSrc, "fence.Name = \"FrontFence\"") and has(mapSrc, "local inner = MAP.CorridorWidth * 0.5 + MAP.WallThickness")
 			and has(mapSrc, "local blocker = build({ name = \"Blocker\", size = Vector3.new(length, MAP.WallHeight - FENCE_TOP, FENCE_THICK),"),
 		"(MapService builds it from the map's own numbers)")
