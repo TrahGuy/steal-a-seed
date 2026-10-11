@@ -98,7 +98,7 @@ EnchantedMistConfig.Mosskeeper = {
 	TalkingAttribute = "SeedMosskeeperTalking",
 	Lines = {
 		Active = "Bring me 10 Dewberries for a Mysterious Pod. You can deliver them a few at a time.",
-		Inactive = "I'm waiting for Enchanted Mist. Keep your berries safe—I can accept them when it returns.",
+		Inactive = "I'm waiting for Enchanted Mist. Keep your berries safe: I can take them when it returns.",
 	},
 	Words = {
 		Title = "MOSSKEEPER",
@@ -170,6 +170,85 @@ EnchantedMistConfig.Mosskeeper = {
 		ChipHeight = 30,
 		-- The page's tallest; past it, it scrolls.
 		ViewHeight = 300,
+	},
+	--==========================================================================
+	-- HIS TALK (the owner, 2026-10-11, from a clip of a Grow-a-Garden-style shop
+	-- NPC). Talk eases the camera behind the player's shoulder, facing him; his
+	-- line types out over his head; the player's four replies float beside the
+	-- player as outlined words, no panel; a reply goes up over the player's own
+	-- head, then he answers. Shared/MosskeeperTalk decides, MosskeeperUI draws.
+	-- Plain ASCII words only: LuckiestGuy draws every one of them.
+	--==========================================================================
+	Talk = {
+		-- The replies, keys 1-4 in this order (a click, a tap, the D-pad and A too).
+		Options = {
+			{ id = "give", text = "Give all Dewberries" },
+			{ id = "odds", text = "Odds" },
+			{ id = "howto", text = "How to play" },
+			{ id = "bye", text = "Nevermind" },
+		},
+		-- His answers to a Give all, by the server's own answer.
+		Given = "%d/%d, %s more for a pod!",
+		GivenPod = "Here's your Mysterious Pod!",
+		Refused = {
+			INACTIVE = "I'm waiting for Enchanted Mist...",
+			EMPTY = "You have no Dewberries to give.",
+			FAR = "Come a little closer.",
+			BAG_FULL = "Make room in your Bag.",
+			BAG_NOT_READY = "Your Bag is still loading. Try again in a moment.",
+			POD_NOT_READY = "The Mysterious Pod isn't ready yet.",
+			CARRYING = "Put the pod down first.",
+			NOT_LOADED = "Your save is still loading.",
+			BUSY = "One moment...",
+		},
+		-- An answer this late is not waited for: he says Refused.BUSY.
+		Patience = 6,
+		Numbers = { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" },
+		-- How to play: his short run of lines ({cap}: the carry cap; {pod}: berries a pod).
+		HowTo = {
+			"When Enchanted Mist rolls in, Dewberries grow near the plots and in the biomes.",
+			"Hold to pick one up. You can carry {cap} at a time.",
+			"Bring them to me. Every {pod} makes a Mysterious Pod!",
+			"Your berries and your progress are saved between Mists.",
+		},
+		-- Under the replies: the player's own numbers.
+		Counts = "Carrying %d/%d    Next pod %d/%d",
+		-- Typing, in characters a second; a line in a run stays ReadHold plus
+		-- ReadPerChar a character once typed.
+		CharsPerSecond = 40,
+		ReadHold = 1.2,
+		ReadPerChar = 0.04,
+		-- The player's own line stands this long before he answers.
+		PlayerHold = 0.9,
+		-- The camera: Back, Up and Side studs behind the player's right shoulder,
+		-- looking at his pivot plus LookUp (between his head and his bar), eased
+		-- over EaseSeconds -- the player bottom left, him in the middle, clear of
+		-- each other (the first Play, 2026-10-11: closer in, the player's head hid him).
+		Camera = { Back = 10, Up = 3.5, Side = 5.5, LookUp = 6.8, EaseSeconds = 0.6 },
+		-- His line's bottom this far over the top of his bar (studs); the
+		-- player's this far over the top of their head.
+		OverBar = 0.5,
+		OverHead = 1.2,
+		-- The replies start Beside studs right of him, BesideUp over his pivot (his
+		-- chest) -- beside the player and him, over neither -- and keep Margin px
+		-- off the screen's edge and every part of the HUD.
+		Beside = 3.2,
+		BesideUp = 3.5,
+		Margin = 8,
+		-- The look: px type, a reply's row and the gap between rows (a touch
+		-- screen's rows tall enough to tap), the bubbles' type and widest. The
+		-- tight looks are for where the first will not stand clear (a 640 x 360
+		-- phone): a touch screen's rows stay 44 px.
+		Look = {
+			Desktop = { Type = 26, Row = 34, Gap = 2, Bubble = 24, BubbleWidth = 380, Counts = 18 },
+			DesktopTight = { Type = 22, Row = 30, Gap = 0, Bubble = 22, BubbleWidth = 340, Counts = 16 },
+			Touch = { Type = 22, Row = 44, Gap = 2, Bubble = 20, BubbleWidth = 300, Counts = 16 },
+			TouchTight = { Type = 20, Row = 44, Gap = 0, Bubble = 18, BubbleWidth = 260, Counts = 14 },
+			Number = Color3.fromRGB(255, 214, 64),
+			Text = Color3.fromRGB(255, 255, 255),
+			Chosen = Color3.fromRGB(150, 255, 196),
+			Stroke = 2.5,
+		},
 	},
 }
 

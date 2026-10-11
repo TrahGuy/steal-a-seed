@@ -1,5 +1,51 @@
 # Steal a Seed — Session Handoff
 
+## THE MOSSKEEPER'S TALK, REBUILT: OVER THE SHOULDER, HIS LINE TYPED OVER HIS HEAD, THE PLAYER'S FOUR REPLIES BESIDE HIM — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUSHED, NOT PUBLISHED; MosskeeperTalkSpec 30/0 (NEW), MosskeeperSpec 58/0, MistAudioSpec 17/0, THE FULL SUITE 148/148; 17 OF 17 MUTANTS CAUGHT; THREE GUARDED PLAYS; CAPTURES IN output/mosskeeper-talk-2026-10-11 — OK'd by Claude on the owner's handoff; owner to review)
+
+The owner's brief via the peer (item 7), from the owner's clip of a Grow-a-Garden-style shop NPC. The studded dialogue panel is gone.
+- **Talk**:
+  - E eases the camera behind the player's right shoulder, facing him, and turns the player to him (yaw only).
+  - Anything solid between the player and the shot pulls the camera in. Leaves and dress never do: only collidable parts count.
+  - His line types out over his bar: the Mist active line, or the waiting one.
+- **The replies**: #1 ["Give all Dewberries"], #2 ["Odds"], #3 ["How to play"], #4 ["Nevermind"].
+  - Plain LuckiestGuy words with a dark outline: the number gold, the words white, and mint while chosen. There is no panel.
+  - They sit beside him on screen, with the player's counts under them ("Carrying 1/5 Next pod 0/10").
+  - They take the nearest spot 8 px clear of every part of the HUD and of his line. Where even the tight look can't clear his line (small phones), his line is put away while they show.
+  - Rows are 44 px on a touch screen. The 640 x 360 phone fits by spec.
+- **Picking**: the player's own bubble says the reply first (his line gives way, as in the clip), then he answers.
+  - **Give all**: the server decides as before. His answers: "5/10, five more for a pod!", "Here's your Mysterious Pod!", "Make room in your Bag.", "I'm waiting for Enchanted Mist...", plus his own words for every other refusal. His bar fills as before.
+  - **Odds**: the odds cards on a panel of their own (MistOddsView); Back, B or Backspace returns to the replies.
+  - **How to play**: his run of four short lines, then the replies.
+  - **Nevermind**: closes, and the camera eases back.
+- **Kept**:
+  - The server's checks, unchanged.
+  - The sounds: HELLO on open, GIVE ALL on a delivery taken, Action Blocked as he refuses, POD EARNED from his bar.
+  - The camera's borrow rules.
+  - Closing on walking off, death, respawn, him going, another panel or the Roblox menu, with the camera back at once.
+  - Reduced Motion: no typing and no camera tween.
+- **Input**:
+  - A click or a tap on a row.
+  - Keys 1-4, bound over the strip's keys while he talks (never a slot change); A too (never a jump).
+  - The D-pad, read through UserInputService (never a GUI selection).
+- **Glyphs**: every word the talk shows is plain ASCII, checked by spec. His waiting line's em dash became a colon.
+- **Bubbles**: always on top in the game, so nothing in the world hides them. Studio captures never draw always-on-top billboards, so the capture run turned that off on the live bubbles by hand (test only, never in the code).
+- **Live (three guarded Plays, SeedTest_mistlook_20261011, desktop 1005 x 716)**: every step above was driven by clicks.
+  - The admin console's START / END MIST NOW was used.
+  - One real berry was picked and delivered: "1/10, nine more for a pod!", the bar at 1/10, the quiet notice.
+  - No errors.
+  - The second Play caught a script-order bug (the camera never moved); it is fixed, and the unknown-global check is clean.
+- **Not seen live**:
+  - Keys 1-4: MCP's virtual input refuses the number keys. They are pinned by spec.
+  - The D-pad and A: no pad.
+  - Phones: the emulator can't be switched from here. Placement is checked by spec on nine screens.
+  - Reduced Motion.
+- **Captures**: 00_talk_sheet.png (13 labelled steps) and 00_talk_slideshow.gif (a slideshow of the Play's stills, not a screen recording). The single frames are 01-21.
+- **Mutants (17 of 17)**: PodNotTaken, WordOffByOne, TypesWhenReduced, ShoulderLeft, RepliesLeftOfHim, PlaceIgnoresHud, HowToUnfilled, CountsUnclamped, GreetingSwapped, TouchRowsShort, GlyphTab, KeysPassToStrip, NoPullIn, BubblesBehindWorld, GiveSendsAmount, DeathEasesBack, HelloSilentTalk.
+- **For the owner's eye**:
+  - The shot's numbers (Back 10, Up 3.5, Side 5.5) and the typing speed (40 characters a second) are Claude's.
+  - An admin's own ADMIN title can sit over the end of his bar in the shot.
+- **Queue (the owner's order)**: next 7b, his event animations; then 8, the rain biome beacon; then (b) the Shop plate face and (c) the Robux buy buttons.
+
 ## PUSHED: THE DESKTOP HUD RE-LAYOUT (de6cc31) — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH ON THE CAPTURES; NOT PUBLISHED)
 
 The rail closed up under a bigger Shop, EVENTS and Settings down the top-right corner, FRIENDS over Index (the entry below). The owner's next Publish takes it live. Still parked: the Shop's plate face (150 x 50) and the Robux buy buttons. Next: the Mosskeeper talk rebuild, then the rain biome's light beacon.
