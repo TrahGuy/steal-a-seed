@@ -204,6 +204,37 @@ EnchantedMistConfig.Deck = {
 	StemColour = Color3.fromRGB(214, 244, 226),
 	CapColours = { Color3.fromRGB(96, 158, 76), Color3.fromRGB(92, 140, 66) },
 	SpotColour = Color3.fromRGB(150, 255, 200),
+	--==========================================================================
+	-- THE GROVE (the owner, 2026-10-11: "more trees around Mosskeeper, more
+	-- enchanted decoration, a pathway leading to him ... just improvise"):
+	-- woodland trees in the band between the plaza (Map.EventHub.Radius) and
+	-- the Deck ticket ring, none on the road's side; glowing flower clusters
+	-- between them; a stepping-stone path from short of the overflow spawn to
+	-- the surround's open front, inside its approach, mint lanterns either side
+	-- just outside it. Overlays only, like the rest; under TreeMaxHeight, so
+	-- the shared Mist sign above the hub stays in sight.
+	--==========================================================================
+	Grove = {
+		TreeRadius = 23.5,
+		TreeAngles = { 62, 98, 132, 166, 194, 228, 262, 298 },
+		TreeMaxHeight = 12.5,
+		RoadGapDegrees = 45,
+		FlowerRadius = 24.5,
+		FlowerAngles = { 80, 115, 149, 180, 211, 245, 280 },
+		PathFrom = 21,
+		PathTo = 7,
+		PathWidth = 4.2,
+		PathStones = 8,
+		LanternSide = 7.6,
+		LanternCount = 3,
+		Trunk = Color3.fromRGB(110, 74, 48),
+		TrunkDark = Color3.fromRGB(82, 54, 38),
+		Leaves = { Color3.fromRGB(44, 94, 52), Color3.fromRGB(66, 126, 62), Color3.fromRGB(96, 158, 76) },
+		Stone = Color3.fromRGB(124, 128, 114),
+		Moss = Color3.fromRGB(92, 140, 66),
+		Mint = Color3.fromRGB(150, 255, 200),
+		Petal = Color3.fromRGB(214, 244, 226),
+	},
 }
 
 -- What MistState says.

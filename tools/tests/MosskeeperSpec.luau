@@ -343,13 +343,14 @@ local ok, err = pcall(function()
 	-- THE DECK'S MIST LOOK (the owner: A's moss carpet with C's fairy ring).
 	local D = EnchantedMistConfig.Deck
 	local deck = M.Deck()
-	local ticketMax = nil
+	local ticketMax, ticketMin = nil, nil
 	local function findDeckZone(t, depth)
 		if depth > 6 or type(t) ~= "table" then
 			return
 		end
 		if t.Name == "Deck" and type(t.MaxRadius) == "number" then
 			ticketMax = t.MaxRadius
+			ticketMin = t.MinRadius
 			return
 		end
 		for _, v in pairs(t) do
@@ -366,6 +367,8 @@ local ok, err = pcall(function()
 		end
 		if p.Name == "MossCarpet" then
 			carpetTop = p.Position.Y + p.Size.X / 2
+		elseif p.Parent and p.Parent.Name == "Grove" then
+			-- measured below, on its own rules
 		else
 			ringParts += 1
 			-- A round part (a cap, a spot) by its real radius, a block by its corners.
@@ -405,6 +408,47 @@ local ok, err = pcall(function()
 	check(ticketMax ~= nil and outRing and inside and onRoad == 0 and nearSpawn == 0,
 		"the ring stands outside the Deck ticket ring and inside the deck, the road's side open, the overflow spawn clear",
 		string.format("ticket max %s, road %d, spawn %d", tostring(ticketMax), onRoad, nearSpawn))
+	-- THE GROVE: trees and flowers round him, a path to his front.
+	local G = D.Grove
+	local grove = deck and deck:FindFirstChild("Grove")
+	local groveParts = grove and parts(grove) or {}
+	local plate = M.PromptPoint()
+	local half = HUB.ApproachWidth / 2
+	local signBottom = MAP.GroundY + HUB.FloorY + EnchantedMistConfig.Sign.Above - EnchantedMistConfig.Sign.Height
+	local wrongPlace, wrongPath, wrongLamp, crowd, tall = {}, {}, {}, 0, 0
+	for _, p in ipairs(groveParts) do
+		local name = p.Name
+		for _, c in ipairs(corners(p)) do
+			local f = flat(c) - flat(HUB.Centre)
+			local r = f.Magnitude
+			if r > MAP.HubRadius then
+				table.insert(wrongPlace, name)
+			end
+			if (string.find(name, "^Tree") or string.find(name, "^Flowers")) and (r < HUB.Radius or r > (ticketMin or 0)) then
+				table.insert(wrongPlace, name)
+			end
+			if string.find(name, "^Path") and (math.abs(f.X) > half or r > G.PathFrom + 0.5) then
+				table.insert(wrongPath, name)
+			end
+			if string.find(name, "^Lantern") and (math.abs(f.X) < half or r > (ticketMin or 0)) then
+				table.insert(wrongLamp, name)
+			end
+			if (flat(c) - flat(MAP.OverflowSpawn)).Magnitude < 4 or (plate and (flat(c) - flat(plate)).Magnitude < 4) then
+				crowd += 1
+			end
+			if c.Y > MAP.GroundY + HUB.FloorY + G.TreeMaxHeight or c.Y > signBottom then
+				tall += 1
+			end
+		end
+	end
+	check(grove ~= nil and #groveParts > 0 and #groveParts <= 220,
+		"the grove: trees, glowing flowers, a stepping-stone path and its lanterns", #groveParts)
+	check(#wrongPlace == 0, "trees and flowers between the plaza and the Deck ticket ring, all inside the deck",
+		table.concat(wrongPlace, ","))
+	check(#wrongPath == 0 and #wrongLamp == 0,
+		"the path inside the surround's approach, its lanterns just outside it",
+		table.concat(wrongPath, ",") .. " | " .. table.concat(wrongLamp, ","))
+	check(crowd == 0 and tall == 0, "clear of the overflow spawn and of his Talk prompt, under the Mist sign", crowd + tall)
 	M._surroundDown()
 	check(M.Deck() == nil and deck ~= nil and deck.Parent == nil, "and gone whole with the surround")
 	local left = 0

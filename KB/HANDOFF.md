@@ -1,5 +1,23 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE HUB GROVE ROUND THE MOSSKEEPER — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF WITH THE EVENT: Enabled = false; MosskeeperSpec 60/0, 4 OF 4 MUTANTS CAUGHT; LOOK OK'd by Claude on the owner's handoff; owner to review)
+
+The owner, via the peer: "MORE TREES around Mosskeeper, more ENCHANTED DECORATION, and a PATHWAY leading to him ... just improvise".
+- **`Shared/MistDeckModel`** adds a "Grove" folder to the Mist deck model, so it goes up and comes down with the surround/deck (Mist start, whole on end, late joiners see it). Settings in `EnchantedMistConfig.Deck.Grove`:
+  - 8 blocky trees at r 23.5 (trunk, 3 roots, 3 canopy tiers in the deck's greens, 2 mint glow fruit). None on the road side (45° gap).
+  - 7 glowing flower clusters at r 24.5, between the trees.
+  - 8 stepping stones from r 21 to r 7 down the surround's approach, with moss edging, and 3 mint lanterns each side just outside the walk lane.
+  - Overlays only: anchored, no collide/query/touch. Neon parts carry `MistGlow`, so MosskeeperView's Reduced FX stills them.
+- **MosskeeperSpec 60/0** pins:
+  - at most 220 parts;
+  - trees and flowers between the plaza and the Deck ticket ring (r < 27), inside the deck;
+  - the path inside the approach; lanterns outside it;
+  - nothing within 4 studs of the overflow spawn or the Talk plate;
+  - all of it under TreeMaxHeight and the Mist sign.
+  - Mutants 4/4 caught.
+- **Look**: captures are `output/mosskeeper-2026-10-11/deck/grove_wide.png`, `grove_path.png` and `grove_side.png` (an Edit preview, cleared afterwards). OK'd by Claude on the owner's handoff; owner to review.
+- **Not verified**: in a live Mist run (the event is off); phones (the part count is small).
+
 ## ENCHANTED MIST, STAGE 3: THE MOSSKEEPER — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF: ShowMosskeeper = false, Enabled = false; MosskeeperSpec 50/0, 7 OF 7 MUTANTS CAUGHT; ONE GUARDED PLAY ON SeedTest_mosskeeper_20261011)
 
 The brief: KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §8-9, plus the owner's additions via the peer: the surround during the Mist only, the idle animation, Odds as rarity cards, the studded panels, and the berry -> pod bar icons. The owner OKed the Odds panel (capture 08).
