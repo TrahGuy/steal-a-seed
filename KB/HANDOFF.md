@@ -1,5 +1,17 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE LOOK'S FINAL NUMBERS AND CAPTURES — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE LOOK, ITS COMMENT FIX, ITS TUNING AND THE ANIMATION; THE OWNER OK'd THE PUSH; NOT PUBLISHED; EVENT STILL OFF)
+
+- **Final Look, as tuned after the first guarded Play** (0901953; the Look entry below has the first numbers):
+  - Light: Brightness 1.9, Ambient (104,94,166), OutdoorAmbient (126,114,188), EnvironmentDiffuseScale 0.8, Exposure 0.5; ClockTime 0 and the violet tone unchanged.
+  - Wisps self-lit (LightEmission 0.6, no light influence), 0.7 transparency, size 6→11, rate 8 (touch 3).
+  - Fireflies size 0.5, rate 14 (touch 5) over a 70-stud area.
+- **Why tuned**: in the first captures the night was too dark for a phone, and the wisps drew as dark smudges (lit by the night) and the fireflies were too small to see.
+- **Captures**: `output/mosskeeper-2026-10-11/look/` (first, untuned) and `look2/` (final). Both are guarded Plays on SeedTest_mistlook_20261011 with MistState and Rain set on one client only and restored.
+  - Hub, field and road off vs on; road with Rain over the Mist; road after the restore (the day exactly back); close-ups at the player, where the wisps and fireflies are (they follow the player's camera).
+  - OK'd by Claude on the owner's handoff; the owner OK'd the push.
+- **Also pushed**: adb55ac (the glints' comment), a10c438 (the five creatures animated; its own entry above).
+
 ## ENCHANTED MIST: THE FIVE CREATURES ANIMATED (IDLE AND WALK) — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; PUSHED AFTER THE LOOK; NOT PUBLISHED; MistCreaturesSpec 11/0, PlantRigsSpec 622/0, 4 OF 4 MUTANTS CAUGHT; CLIPS FOR THE OWNER IN output/mosskeeper-2026-10-11/anim_clips)
 
 The owner via the peer: the five Mist creatures "ANIMATED, with idle and walk like the Rain creatures got". The same route: client-side, SecretIdle's kinematic tree over the PlantForms rigs, PlantIdles' numbers, no drift.
