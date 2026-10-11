@@ -169,6 +169,43 @@ EnchantedMistConfig.Mosskeeper = {
 	},
 }
 
+--==============================================================================
+-- THE HUB DECK DURING A MIST (Shared/MistDeckModel; the owner, 2026-10-11:
+-- "A's moss carpet together with C's mushroom fairy ring")
+--
+-- Up with the surround on each Mist's start, gone whole at its end. A moss
+-- carpet over the whole round deck (under the plaza's floor, so the plaza
+-- still shows), and a fairy ring of mint-spotted mushrooms near its edge with
+-- the road's side left open. Overlays only: nothing collides, is found by a
+-- ray or touches, so the Deck ticket ring (MiniEvent, r 27-43, read by a ray
+-- that respects collision) and the overflow spawn keep working. The ring
+-- stands outside the ticket ring and inside the deck's edge. Reduced FX
+-- stills the spots' glow (MosskeeperView).
+--==============================================================================
+EnchantedMistConfig.Deck = {
+	ModelName = "MistDeck",
+	-- The carpet: this far in from the deck's edge, its top this far over the
+	-- deck's top (under the plaza floor's Rise).
+	CarpetInset = 0.3,
+	CarpetLift = 0.03,
+	CarpetThickness = 0.05,
+	CarpetColour = Color3.fromRGB(92, 140, 66),
+	-- The ring: Count mushrooms round RingRadius, none within RoadGapDegrees of
+	-- the road (-Z), the tall and short alternating.
+	RingRadius = 44.8,
+	Count = 20,
+	RoadGapDegrees = 26,
+	StemWidth = 0.5,
+	StemTall = 1.5,
+	StemShort = 1.1,
+	CapWidth = 1.9,
+	CapThickness = 0.45,
+	SpotSize = 0.28,
+	StemColour = Color3.fromRGB(214, 244, 226),
+	CapColours = { Color3.fromRGB(96, 158, 76), Color3.fromRGB(92, 140, 66) },
+	SpotColour = Color3.fromRGB(150, 255, 200),
+}
+
 -- What MistState says.
 EnchantedMistConfig.States = {
 	Disabled = "disabled", -- switched off, or a binding missing: COMING SOON

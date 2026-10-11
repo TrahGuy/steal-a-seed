@@ -40,6 +40,7 @@ local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local MosskeeperModel = require(Shared:WaitForChild("MosskeeperModel"))
 local MistSurroundModel = require(Shared:WaitForChild("MistSurroundModel"))
+local MistDeckModel = require(Shared:WaitForChild("MistDeckModel"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
@@ -126,6 +127,8 @@ local Hooks = MosskeeperService.Hooks
 --==============================================================================
 local npc: Model? = nil
 local surround: Model? = nil
+-- The hub deck's Mist look (Shared/MistDeckModel), up and down with the surround.
+local deck: Model? = nil
 
 -- Where his feet go: the plaza's visible floor (a hair over the deck's top)
 -- between Mists, the surround's pad during one.
@@ -156,6 +159,10 @@ end
 
 function MosskeeperService.Surround(): Model?
 	return surround
+end
+
+function MosskeeperService.Deck(): Model?
+	return deck
 end
 
 local onTalk: (any) -> () = function() end
@@ -193,7 +200,7 @@ function MosskeeperService.Show(): Model
 	return model
 end
 
--- The surround round him, while a Mist runs.
+-- The surround round him, and the deck's Mist look, while a Mist runs.
 function MosskeeperService._surroundUp()
 	local current = surround
 	if current and current.Parent then
@@ -204,6 +211,11 @@ function MosskeeperService._surroundUp()
 	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	model.Parent = Hooks.parent()
 	surround = model
+	local look = MistDeckModel.build(nil)
+	look.Archivable = false
+	look.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	look.Parent = Hooks.parent()
+	deck = look
 	standHim()
 end
 
@@ -212,6 +224,11 @@ function MosskeeperService._surroundDown()
 	surround = nil
 	if model then
 		model:Destroy()
+	end
+	local look = deck
+	deck = nil
+	if look then
+		look:Destroy()
 	end
 	standHim()
 end

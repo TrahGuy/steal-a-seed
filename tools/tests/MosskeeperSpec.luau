@@ -340,7 +340,73 @@ local ok, err = pcall(function()
 		"during a Mist: one surround, on his anchor, inside the plaza and under 14, never saved with the place")
 	check(math.abs(npc:GetPivot().Position.Y - (HUB.NpcAnchor.Position.Y + MistSurroundModel.PadHeight)) < 1e-3,
 		"and he stands on its pad, 0.3 up", npc:GetPivot().Position.Y)
+	-- THE DECK'S MIST LOOK (the owner: A's moss carpet with C's fairy ring).
+	local D = EnchantedMistConfig.Deck
+	local deck = M.Deck()
+	local ticketMax = nil
+	local function findDeckZone(t, depth)
+		if depth > 6 or type(t) ~= "table" then
+			return
+		end
+		if t.Name == "Deck" and type(t.MaxRadius) == "number" then
+			ticketMax = t.MaxRadius
+			return
+		end
+		for _, v in pairs(t) do
+			findDeckZone(v, depth + 1)
+		end
+	end
+	findDeckZone(GameConfig.MiniEvent, 0)
+	local deckTop = MAP.GroundY + HUB.FloorY
+	local solidDeck, inside, outRing, onRoad, nearSpawn, carpetTop = 0, true, true, 0, 0, nil
+	local ringParts = 0
+	for _, p in ipairs(deck and parts(deck) or {}) do
+		if not p.Anchored or p.CanCollide or p.CanQuery or p.CanTouch then
+			solidDeck += 1
+		end
+		if p.Name == "MossCarpet" then
+			carpetTop = p.Position.Y + p.Size.X / 2
+		else
+			ringParts += 1
+			-- A round part (a cap, a spot) by its real radius, a block by its corners.
+			local round = p:IsA("Part") and (p.Shape == Enum.PartType.Cylinder or p.Shape == Enum.PartType.Ball)
+			local reach = if round then p.Size.Y / 2 else 0
+			local centreR = (flat(p.Position) - flat(HUB.Centre)).Magnitude
+			if round and (centreR + reach > MAP.HubRadius or (ticketMax and centreR - reach < ticketMax + 0.5)) then
+				if centreR + reach > MAP.HubRadius then
+					inside = false
+				else
+					outRing = false
+				end
+			end
+			for _, c in ipairs(if round then { p.Position } else corners(p)) do
+				local f = flat(c) - flat(HUB.Centre)
+				if not round and f.Magnitude > MAP.HubRadius then
+					inside = false
+				end
+				if not round and ticketMax and f.Magnitude < ticketMax + 0.5 then
+					outRing = false
+				end
+				local a = math.atan2(f.X, -f.Z)
+				if math.abs(a) < math.rad(D.RoadGapDegrees) - 0.05 then
+					onRoad += 1
+				end
+				if (flat(c) - flat(MAP.OverflowSpawn)).Magnitude < 4 then
+					nearSpawn += 1
+				end
+			end
+		end
+	end
+	check(deck ~= nil and deck.Parent == stage and deck.Archivable == false and ringParts > 0 and ringParts <= 90,
+		"with the surround, the deck's Mist look: a moss carpet and a fairy ring", ringParts)
+	check(solidDeck == 0, "overlays only: nothing of it collides, is found by a ray or touches", solidDeck)
+	check(carpetTop ~= nil and carpetTop > deckTop + 1e-3 and carpetTop < deckTop + HUB.Floor.Rise - 1e-3,
+		"the carpet lies a hair over the deck and under the plaza's floor, so the plaza still shows", carpetTop)
+	check(ticketMax ~= nil and outRing and inside and onRoad == 0 and nearSpawn == 0,
+		"the ring stands outside the Deck ticket ring and inside the deck, the road's side open, the overflow spawn clear",
+		string.format("ticket max %s, road %d, spawn %d", tostring(ticketMax), onRoad, nearSpawn))
 	M._surroundDown()
+	check(M.Deck() == nil and deck ~= nil and deck.Parent == nil, "and gone whole with the surround")
 	local left = 0
 	for _, d in ipairs(stage:GetDescendants()) do
 		if d:GetAttribute(MistSurroundModel.TagAttribute) ~= nil or d.Name == "NPCAnchor" then
@@ -636,6 +702,9 @@ local ok, err = pcall(function()
 	check(string.find(ui, "theme = MenuKit.studdedTheme(CFG.Look)", 1, true) ~= nil
 			and string.find(ui, "MistOddsView.build(oddsHolder", 1, true) ~= nil,
 		"his panels wear the studded kit; the Odds page is the cards")
+	check(string.find(view, "p:GetAttribute(\"MistGlow\")", 1, true) ~= nil
+			and string.find(view, "if reduced then Enum.Material.SmoothPlastic else Enum.Material.Neon", 1, true) ~= nil,
+		"Reduced FX stills the fairy ring's glow on that screen")
 	check(string.find(view, "RunService.PreSimulation:Connect", 1, true) ~= nil
 			and not string.find(moduleScript.Source, "MosskeeperIdle", 1, true),
 		"his life runs on each client, never the server")

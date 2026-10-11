@@ -249,8 +249,30 @@ Workspace:GetAttributeChangedSignal(EnchantedMistConfig.Attributes.State):Connec
 	refresh()
 end)
 
+--==============================================================================
+-- 3. THE DECK'S GLOW (Shared/MistDeckModel): the fairy ring's mint spots glow,
+-- or under Reduced FX are plain, on this screen only.
+--==============================================================================
+local stilledDeck: Instance? = nil
+local stilled: boolean? = nil
+local function stillTheDeck()
+	local folder = Workspace:FindFirstChild(CFG.FolderName)
+	local deck = folder and folder:FindFirstChild(EnchantedMistConfig.Deck.ModelName)
+	local reduced = StatusText.reducedMotion()
+	if deck == stilledDeck and reduced == stilled then
+		return
+	end
+	stilledDeck, stilled = deck, reduced
+	for _, p in ipairs(deck and deck:GetDescendants() or {}) do
+		if p:IsA("BasePart") and p:GetAttribute("MistGlow") then
+			p.Material = if reduced then Enum.Material.SmoothPlastic else Enum.Material.Neon
+		end
+	end
+end
+
 -- Follow him: on his Footing while he stands, hidden while he does not.
 RunService.Heartbeat:Connect(function()
+	stillTheDeck()
 	local model = npcModel()
 	local root = model and model.PrimaryPart
 	if board.Adornee ~= root then
