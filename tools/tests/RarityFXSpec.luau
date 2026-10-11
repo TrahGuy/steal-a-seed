@@ -270,6 +270,11 @@ local ok, err = pcall(function()
 	RarityFX.still = function()
 		return false
 	end
+	-- And back on, with nothing running to notice (PERFORMANCE MODE switches
+	-- Reduced FX on and off live, 2026-10-11): the next step sets them moving.
+	RarityFX.step(1011)
+	check(RarityFX.isRunning(t2) and RarityFX.isRunning(e2) and e2.frame.Visible and t2.gradient.Rotation == 0,
+		"turned back on: the next step sets both moving again -- the edge's light too, as its owner asked")
 
 	--==========================================================================
 	-- 6. A BAG TILE AND A STRIP SLOT

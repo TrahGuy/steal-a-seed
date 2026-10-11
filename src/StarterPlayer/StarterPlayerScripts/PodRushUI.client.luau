@@ -556,6 +556,8 @@ ringFolder.Name = "SeedPodRushRings"
 ringFolder.Parent = Workspace
 local rings: { [Instance]: Model } = {}
 local ringsOn = false
+-- Reduced FX as the standing rings were built (still, or breathing).
+local ringsStill = false
 
 local function buildRing(site: Instance)
 	if rings[site] or not site:IsA("BasePart") then
@@ -563,7 +565,7 @@ local function buildRing(site: Instance)
 	end
 	local model = Instance.new("Model")
 	model.Name = "Ring_" .. site.Name
-	local breathe = not StatusText.reducedMotion()
+	local breathe = not ringsStill
 	for _, seg in ipairs(PodRush.ring(site.Position)) do
 		local part = Instance.new("Part")
 		part.Name = "Glow"
@@ -595,18 +597,22 @@ local function dropRing(site: Instance)
 	end
 end
 
+-- Asked every quarter second. Reduced FX switched while the rings stand
+-- (PERFORMANCE MODE turns it on and off live, 2026-10-11) builds them again,
+-- breathing or still.
 local function setRings(on: boolean)
-	if on == ringsOn then
+	local still = StatusText.reducedMotion()
+	if on == ringsOn and (not on or still == ringsStill) then
 		return
 	end
+	for site in pairs(rings) do
+		dropRing(site)
+	end
 	ringsOn = on
+	ringsStill = still
 	if on then
 		for _, site in ipairs(CollectionService:GetTagged(GameConfig.Tags.NestSite)) do
 			buildRing(site)
-		end
-	else
-		for site in pairs(rings) do
-			dropRing(site)
 		end
 	end
 end

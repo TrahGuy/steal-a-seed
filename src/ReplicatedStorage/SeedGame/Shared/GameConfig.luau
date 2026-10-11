@@ -1811,24 +1811,37 @@ GameConfig.WalkMode = {
 }
 
 --==============================================================================
--- OTHER PLANTS: A DISPLAY PREFERENCE, THIS SCREEN ONLY (2026-10-05)
+-- PERFORMANCE MODE: A DISPLAY PREFERENCE, THIS SCREEN ONLY (2026-10-11; it was
+-- OTHER PLANTS, 2026-10-05)
 --
--- OTHER PLANTS: ON shows every garden, as it always did; OFF hides OTHER
--- players' GROWN plants in their plots -- the models, their labels, income pops
--- and effects -- on this player's screen and nobody else's (PlantVisibility,
--- OtherPlantsUI). Their own plants, every pod still in the ground, a carried or
--- loose pod, players, guardians, plots and the map stay. Nothing on the server
--- changes: income, ownership, collisions, pickups, spawns and saves are exactly
--- what they were.
+-- The owner, 2026-10-11: the HUD's OTHER PLANTS switch became PERFORMANCE
+-- MODE, with a lightning bolt. ON is what OTHER PLANTS: OFF was -- OTHER
+-- players' GROWN plants in their plots, their labels, income pops and effects
+-- not drawn on this player's screen (PlantVisibility, OtherPlantsUI) -- and
+-- Reduced FX on as well (Shared/PerformanceMode). OFF shows every garden, as
+-- it always did, and leaves Reduced FX to the player's own setting. Their own
+-- plants, every pod still in the ground, a carried or loose pod, players,
+-- guardians, berries, prompts, pickups, plots and the map stay. Nothing on the
+-- server changes: income, ownership, collisions, pickups, spawns and saves are
+-- exactly what they were.
 --
--- Kept for the session and through every respawn as a LOCAL attribute on the
--- player -- written by the client, never replicated, never saved. Default ON.
+-- Still the ONE local attribute it was, read the other way round: `Attribute`
+-- (ShowOtherPlants) false is PERFORMANCE MODE ON. Kept for the session and
+-- through every respawn -- written by the client, never replicated, never
+-- saved -- so nobody's view changes with the update: default OFF, everything
+-- shown, as OTHER PLANTS: ON was. While it holds Reduced FX on, the player's
+-- own Reduced FX choice waits in OwnQualityAttribute (local too) and comes back
+-- when it turns OFF.
 --==============================================================================
 GameConfig.OtherPlants = {
 	Attribute = "ShowOtherPlants",
-	Label = "OTHER PLANTS",
+	Label = "PERFORMANCE MODE",
 	OnText = "ON",
 	OffText = "OFF",
+	-- U+26A1, a colour emoji: drawn in LuckiestGuy with the HUD's outline from 10
+	-- to 40 px (measured in Studio, 2026-10-11). On the switch's thumb.
+	Icon = "\u{26A1}",
+	OwnQualityAttribute = "SeedOwnAfterimageQuality",
 }
 
 --==============================================================================

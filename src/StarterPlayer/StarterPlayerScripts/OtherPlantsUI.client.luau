@@ -2,6 +2,18 @@
 -- Steal a Seed :: OtherPlantsUI
 --
 --==============================================================================
+-- PERFORMANCE MODE: ON / OFF (2026-10-11, the owner: this switch was OTHER
+-- PLANTS, and became PERFORMANCE MODE with a lightning bolt)
+--
+-- ON is what OTHER PLANTS: OFF was -- other players' grown plants not drawn
+-- here -- and Reduced FX on as well; OFF shows everything and gives Reduced FX
+-- back to the player's own choice (Shared/PerformanceMode owns both). The one
+-- local preference is read the other way round, so nobody's view changes on
+-- the update: OFF, everything shown, is where every session starts. Below,
+-- the switch as it was built for OTHER PLANTS; what changed for PERFORMANCE
+-- MODE is at THE WORDS AND THE BOLT.
+--
+--==============================================================================
 -- OTHER PLANTS: ON / OFF (2026-10-05, the owner's brief)
 --
 -- A display preference, on this screen only: ON shows every garden; OFF hides
@@ -50,6 +62,7 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local PlantVisibility = require(Shared:WaitForChild("PlantVisibility"))
+local PerformanceMode = require(Shared:WaitForChild("PerformanceMode"))
 
 local RAIL = GameConfig.Rail
 local OTHERS = GameConfig.OtherPlants
@@ -75,6 +88,21 @@ local SLIDE_SECONDS = 0.14
 -- left, a small switch at its right, the state's word inside the track beside
 -- the thumb. The whole row is the press.
 local ROW = HudLayout.Config.Phone.Switch
+
+--==============================================================================
+-- THE WORDS AND THE BOLT (2026-10-11): PERFORMANCE MODE is longer than OTHER
+-- PLANTS, and the switch keeps its size and its place (HudLayout's `others`;
+-- the phone's top row has no spare width). So the words are the name alone,
+-- at the largest size that fits on one line -- 119 px at 12 in the rail's
+-- 126, 110 at 11 in OthersCompact's 114 (LuckiestGuy, measured) -- and on a
+-- phone's row two lines at its 10 px (73 x 20 in 73 x 28, as OTHER PLANTS
+-- filled its 73). ON or OFF stands in the track beside the thumb, as the
+-- phone's row always had it, and the lightning bolt (GameConfig.OtherPlants
+-- .Icon, a colour emoji) rides on the thumb.
+--==============================================================================
+local NAME_WIDE = 12
+local NAME_NARROW = 11
+local WORD_SIZE = 10
 
 --==============================================================================
 -- RE-RUN SAFE: the new copy removes the old switch (WalkModeUI says why).
@@ -103,7 +131,7 @@ local labelLine = label:FindFirstChildOfClass("UIStroke")
 label.Position = UDim2.fromOffset(2, 0)
 label.Size = UDim2.new(1, -4, 0, LABEL_H)
 label.TextXAlignment = Enum.TextXAlignment.Left
-label.Text = OTHERS.Label .. ": " .. OTHERS.OnText
+label.Text = OTHERS.Label
 label.ZIndex = 7
 
 local track = Instance.new("Frame")
@@ -156,13 +184,25 @@ do
 	shine.Parent = thumb
 	UIKit.corner(shine, 2)
 end
+-- The lightning bolt on the thumb: it slides with it.
+local bolt = Instance.new("TextLabel")
+bolt.Name = "Bolt"
+bolt.BackgroundTransparency = 1
+bolt.AnchorPoint = Vector2.new(0.5, 0.5)
+bolt.Position = UDim2.fromScale(0.5, 0.5)
+bolt.Size = UDim2.fromScale(1, 1)
+bolt.Font = Enum.Font.LuckiestGuy
+bolt.Text = OTHERS.Icon
+bolt.TextSize = THUMB.Y - 8
+bolt.ZIndex = 10
+bolt.Parent = thumb
 
--- ON or OFF in the compact row's track, on the side the thumb is not.
+-- ON or OFF in the track, on the side the thumb is not -- in every layout
+-- since PERFORMANCE MODE (the phone's row had it before).
 local stateWord = UIKit.outlined(track, "State", ROW.Word, WHITE, 1)
 stateWord.Size = UDim2.new(0, ROW.Track.X - ROW.Thumb - 2, 1, 0)
 stateWord.TextXAlignment = Enum.TextXAlignment.Center
 stateWord.ZIndex = 7
-stateWord.Visible = false
 
 --==============================================================================
 -- ONE SWITCH, EVERY LAYOUT (WalkModeUI's rules): the words over the track on
@@ -181,7 +221,6 @@ local function placeSwitch()
 	slab.Size = UDim2.fromOffset(r.w, r.h)
 	slab.Position = HudLayout.place(r, slab.AnchorPoint, layout.safe)
 	local inline = layout.switchInline == true
-	stateWord.Visible = inline
 	if labelLine then
 		-- A thinner outline on the row's smaller words, so their counters stay open.
 		labelLine.Thickness = if inline then 1.5 else 2
@@ -189,23 +228,32 @@ local function placeSwitch()
 	if inline then
 		label.TextSize = ROW.Label
 		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextWrapped = true
 		label.Position = UDim2.fromOffset(ROW.PadLeft, 0)
 		label.Size = UDim2.new(1, -(ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), 1, 0)
 		track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)
 		track.AnchorPoint = Vector2.new(1, 0.5)
 		track.Position = UDim2.new(1, -ROW.PadRight, 0.5, 0)
 		thumb.Size = UDim2.fromOffset(ROW.Thumb, ROW.Thumb)
+		stateWord.TextSize = ROW.Word
+		stateWord.Size = UDim2.new(0, ROW.Track.X - ROW.Thumb - 2, 1, 0)
+		bolt.TextSize = ROW.Thumb - 6
 	else
 		local wide = r.w >= RAIL.WideSize.X
 		local right = r.x + r.w / 2 > layout.safe.X / 2
-		label.TextSize = if wide then 13 else 12
+		label.TextSize = if wide then NAME_WIDE else NAME_NARROW
 		label.TextXAlignment = if right then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
+		label.TextWrapped = false
 		label.Position = UDim2.fromOffset(2, 0)
 		label.Size = UDim2.new(1, -4, 0, LABEL_H)
-		track.Size = UDim2.fromOffset(if wide then TRACK_WIDE else TRACK_NARROW, TRACK_H)
+		local trackW = if wide then TRACK_WIDE else TRACK_NARROW
+		track.Size = UDim2.fromOffset(trackW, TRACK_H)
 		track.AnchorPoint = Vector2.new(if right then 1 else 0, 0)
 		track.Position = if right then UDim2.new(1, -3, 0, TRACK_Y) else UDim2.fromOffset(3, TRACK_Y)
 		thumb.Size = UDim2.fromOffset(THUMB.X, THUMB.Y)
+		stateWord.TextSize = WORD_SIZE
+		stateWord.Size = UDim2.new(0, trackW - THUMB.X - 2, 1, 0)
+		bolt.TextSize = THUMB.Y - 8
 	end
 	if inline ~= inlineRow then
 		inlineRow = inline
@@ -233,12 +281,9 @@ local painted = false
 local paintedRow = false
 
 function paint()
-	local on = PlantVisibility.showOthers(player)
-	label.Text = OTHERS.Label .. ": " .. (if on then OTHERS.OnText else OTHERS.OffText)
-	-- The compact row says the state in its switch, on the thumb's other side.
-	if inlineRow then
-		label.Text = OTHERS.Label
-	end
+	-- PERFORMANCE MODE (2026-10-11): ON is the old OTHER PLANTS: OFF.
+	local on = PerformanceMode.isOn(player)
+	label.Text = OTHERS.Label
 	stateWord.Text = if on then OTHERS.OnText else OTHERS.OffText
 	stateWord.AnchorPoint = Vector2.new(if on then 0 else 1, 0)
 	stateWord.Position = if on then UDim2.fromOffset(2, 0) else UDim2.new(1, -2, 0, 0)
@@ -309,7 +354,7 @@ slab.Activated:Connect(function()
 		return
 	end
 	lastFlip = now
-	PlantVisibility.setShowOthers(player, not PlantVisibility.showOthers(player))
+	PerformanceMode.set(player, not PerformanceMode.isOn(player))
 end)
 
 --==============================================================================

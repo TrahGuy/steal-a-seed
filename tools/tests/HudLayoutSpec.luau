@@ -3480,20 +3480,37 @@ end
 -- compact OthersCompact, as wide as its 12-px label, at the right edge under
 -- EVENTS (under WALK MODE in a window too short for that); on a phone a
 -- see-through row under Shop, over WALK MODE's (2026-10-05). A trap's REMOVE
--- row never moves it.
+-- row never moves it. PERFORMANCE MODE since 2026-10-11 (the owner): the same
+-- rects, the name alone over the track (ON or OFF beside the thumb, the bolt
+-- on it), and on a phone's row two lines.
 --==============================================================================
-say("-- the other plants switch --")
+say("-- the other plants switch (PERFORMANCE MODE) --")
 do
 	local OC = CFG.OthersCompact
 	local I, W, G6, M8, G8 = RAIL.Inset, RAIL.WideSize, RAIL.Gap, CFG.Margin, CFG.Gap
 	local function labelW(text, size)
 		return TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
 	end
-	local widest = math.max(labelW("OTHER PLANTS: OFF", 13), labelW("OTHER PLANTS: ON", 13))
-	local widestSmall = math.max(labelW("OTHER PLANTS: OFF", 12), labelW("OTHER PLANTS: ON", 12))
-	check(widest + 4 <= W.X and widestSmall + 6 <= OC.X and OC.X >= 44 and OC.Y >= 44 and OC.Y == CFG.WalkHeight,
-		string.format("its longer words fit one line: %d px at 13 in the rail's %d, %d px at 12 in OthersCompact's %d; "
+	local NAME = GameConfig.OtherPlants.Label
+	local widest = labelW(NAME, 12)
+	local widestSmall = labelW(NAME, 11)
+	check(widest + 4 <= W.X and widestSmall + 4 <= OC.X and OC.X >= 44 and OC.Y >= 44 and OC.Y == CFG.WalkHeight,
+		string.format("its name fits one line: %d px at 12 in the rail's %d, %d px at 11 in OthersCompact's %d; "
 			.. "46 tall, a full touch target", widest, W.X, widestSmall, OC.X))
+	do
+		-- A phone's row: the name in two lines at the row's size, beside the
+		-- track; ON / OFF beside the thumb in every track.
+		local SWR = CFG.Phone.Switch
+		local boxW = SWR.W - (SWR.PadLeft + SWR.PadRight + 4 + SWR.Track.X)
+		local first, second = string.match(NAME, "^(%S+) (.+)$")
+		local lineW = math.max(labelW(first or NAME, SWR.Label), labelW(second or "", SWR.Label))
+		local word = math.max(labelW("ON", 10), labelW("OFF", 10))
+		local wordRow = math.max(labelW("ON", SWR.Word), labelW("OFF", SWR.Word))
+		check(lineW <= boxW and SWR.Label * 2 <= SWR.H and word <= 58 - 26 - 2 and wordRow <= SWR.Track.X - SWR.Thumb - 2,
+			string.format("a phone's row: %s in two lines, %d px at %d in its %d x %d; ON / OFF fit beside the thumb (%d in "
+				.. "the narrow track's %d, %d in the row's %d)", NAME, lineW, SWR.Label, boxW, SWR.H, word, 58 - 26 - 2,
+				wordRow, SWR.Track.X - SWR.Thumb - 2))
+	end
 
 	local function same(a, b)
 		return math.abs(a.x - b.x) < 1e-6 and math.abs(a.y - b.y) < 1e-6 and a.w == b.w and a.h == b.h
@@ -3655,9 +3672,13 @@ do
 		"local TRACK_WIDE = 64", "local TRACK_NARROW = 58", "local SLIDE_SECONDS = 0.14",
 		"local OFF_FACE = { LOOK.DangerTop, LOOK.DangerBottom, LOOK.DangerEdge }",
 		"local ON_FACE = { LOOK.ButtonTop, LOOK.ButtonBottom, LOOK.ButtonEdge }",
-		"UIKit.pressPop(slab, 1.04, 0.95)", "label.TextSize = if wide then 13 else 12" }) do
+		"UIKit.pressPop(slab, 1.04, 0.95)" }) do
 		look = look and src:find(line, 1, true) ~= nil and walkSrc:find(line, 1, true) ~= nil
 	end
+	-- Its name's sizes (PERFORMANCE MODE, 2026-10-11): one line in each rect.
+	look = look and src:find("local NAME_WIDE = 12\nlocal NAME_NARROW = 11\n", 1, true) ~= nil
+		and src:find("label.TextSize = if wide then NAME_WIDE else NAME_NARROW", 1, true) ~= nil
+		and walkSrc:find("label.TextSize = if wide then 13 else 12", 1, true) ~= nil
 	check(look and src:find("local r = layout.others", 1, true) ~= nil
 			and src:find("slab.Visible = not (phone and ObbyData.onCourse(player)) and not away", 1, true) ~= nil
 			and not src:find("FireServer", 1, true) and not src:find("GameEvent", 1, true),
@@ -3795,22 +3816,32 @@ do
 	local oth, walkW = GameConfig.OtherPlants.Label, GameConfig.WalkMode.Label
 	local onW = math.max(labelW(GameConfig.WalkMode.OnText, SW.Word), labelW(GameConfig.WalkMode.OffText, SW.Word),
 		labelW(GameConfig.OtherPlants.OnText, SW.Word), labelW(GameConfig.OtherPlants.OffText, SW.Word))
-	check(SW.PadLeft + labelW(oth, SW.Label) + 4 + SW.Track.X + SW.PadRight <= SW.W
+	-- PERFORMANCE MODE (2026-10-11) holds its name in two lines (its longer
+	-- line in the box), WALK MODE in one.
+	local othFirst, othSecond = string.match(oth, "^(%S+) (.+)$")
+	local othLine = math.max(labelW(othFirst or oth, SW.Label), labelW(othSecond or "", SW.Label))
+	check(SW.PadLeft + othLine + 4 + SW.Track.X + SW.PadRight <= SW.W and SW.Label * 2 <= SW.H
 			and SW.PadLeft + labelW(walkW, SW.Label) + 4 + SW.Track.X + SW.PadRight <= SW.W
 			and SW.Thumb >= SW.Track.Y and SW.Thumb <= SW.H and onW <= SW.Track.X - SW.Thumb - 2
 			and SW.Label >= 10 and SW.Word >= 8 and SW.Gap >= CFG.Gap,
-		string.format("the see-through rows hold their words inline: OTHER PLANTS %d px and WALK MODE %d at %d, "
-			.. "beside a %d x %d switch whose ON / OFF (%d px at %d) fits beside its thumb, in %d x %d rows a group's "
-			.. "8 px apart", labelW(oth, SW.Label), labelW(walkW, SW.Label), SW.Label, SW.Track.X, SW.Track.Y, onW,
+		string.format("the see-through rows hold their words inline: PERFORMANCE MODE in two lines (%d px) and WALK "
+			.. "MODE %d at %d, beside a %d x %d switch whose ON / OFF (%d px at %d) fits beside its thumb, in %d x %d "
+			.. "rows a group's 8 px apart", othLine, labelW(walkW, SW.Label), SW.Label, SW.Track.X, SW.Track.Y, onW,
 			SW.Word, SW.W, SW.H))
 	local walkSrc, othersSrc = sourceOf("WalkModeUI") or "", sourceOf("OtherPlantsUI") or ""
 	local rowLines = true
 	for _, line in ipairs({ "local ROW = HudLayout.Config.Phone.Switch", "local inline = layout.switchInline == true",
-		"stateWord.Visible = inline", "label.TextSize = ROW.Label",
+		"label.TextSize = ROW.Label",
 		"track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)", "thumb.Size = UDim2.fromOffset(ROW.Thumb, ROW.Thumb)",
 		"local stateWord = UIKit.outlined(track, \"State\", ROW.Word, WHITE, 1)" }) do
 		rowLines = rowLines and walkSrc:find(line, 1, true) ~= nil and othersSrc:find(line, 1, true) ~= nil
 	end
+	-- WALK MODE says ON / OFF in its track on a phone only; PERFORMANCE MODE in
+	-- every layout (its name has no room for it), its name wrapped on a phone.
+	rowLines = rowLines and walkSrc:find("stateWord.Visible = inline", 1, true) ~= nil
+		and not othersSrc:find("stateWord.Visible", 1, true)
+		and othersSrc:find("label.TextSize = ROW.Label\n\t\tlabel.TextXAlignment = Enum.TextXAlignment.Left\n"
+			.. "\t\tlabel.TextWrapped = true", 1, true) ~= nil
 	check(rowLines and walkSrc:find("label.Text = WALK.Label\n", 1, true) ~= nil
 			and othersSrc:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
 			and not walkSrc:find("RowPlate", 1, true) and not othersSrc:find("RowPlate", 1, true),

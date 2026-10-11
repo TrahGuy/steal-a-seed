@@ -77,6 +77,9 @@ export type Handle = {
 	frame: Frame?,
 	stroke: UIStroke?,
 	corner: UICorner?,
+	-- edge: whether its owner wants the light (setEdge's `glint`), kept apart from
+	-- `animated` so motion coming back can give it back.
+	glint: boolean?,
 }
 
 --==============================================================================
@@ -371,6 +374,7 @@ function RarityFX.setEdge(h: Handle, rarity: string?, glint: boolean)
 	local frame = h.frame :: Frame
 	local s = RarityFX.style(rarity)
 	h.rarity = if s then rarity else nil
+	h.glint = glint
 	local show = s ~= nil and glint and not RarityFX.still()
 	if s and show then
 		local style = s :: Style
@@ -524,21 +528,30 @@ local function redrawAll()
 			local label = h.label :: TextLabel
 			RarityFX.setText(h, h.rarity, label.TextColor3)
 		elseif h.kind == "edge" then
-			RarityFX.setEdge(h, h.rarity, h.animated)
+			RarityFX.setEdge(h, h.rarity, h.glint == true)
 		elseif h.kind == "shine" then
 			RarityFX.setShine(h, h.rarity)
 		end
 	end
 end
 
+-- The motion setting the handles were last redrawn for, as a whole.
+local drawnStill = false
+
 function RarityFX.step(now: number)
-	if next(running) == nil or now - lastStep < FX.StepSeconds then
+	if now - lastStep < FX.StepSeconds then
 		return
 	end
 	lastStep = now
-	-- Motion turned off while something runs: everything goes still, now.
-	if RarityFX.still() then
+	-- A change of motion setting redraws every handle for it, both ways: still
+	-- now, while something runs -- and moving again, when nothing can run to
+	-- notice (PERFORMANCE MODE, 2026-10-11, switches Reduced FX on and off live).
+	local still = RarityFX.still()
+	if still ~= drawnStill then
+		drawnStill = still
 		redrawAll()
+	end
+	if still or next(running) == nil then
 		return
 	end
 	local phase = (now % FX.CycleSeconds) / FX.CycleSeconds

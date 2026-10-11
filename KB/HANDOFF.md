@@ -1,5 +1,34 @@
 # Steal a Seed — Session Handoff
 
+## PERFORMANCE MODE: THE OTHER PLANTS SWITCH, WITH A LIGHTNING BOLT AND REDUCED FX — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; OtherPlantsSpec 65/0, HudLayoutSpec 1459/0, RarityFXSpec 72/0, all 22 HudLayout-calling specs green, 10 OF 10 MUTANTS CAUGHT; ONE GUARDED PLAY, CAPTURES IN output/performance-mode-2026-10-11)
+
+The owner, via the peer: the HUD's OTHER PLANTS switch becomes PERFORMANCE MODE with a lightning icon. ON is what OTHER PLANTS: OFF did (other gardens hidden on this screen). Then: "PERFORMANCE MODE ON also turns on REDUCED FX ... reduced = the player's own Reduced FX setting OR Performance Mode ... Turning Performance Mode OFF must NOT switch off a Reduced FX the player set themselves".
+- **The preference**: the same ONE local attribute (ShowOtherPlants), read the other way round: false = PERFORMANCE MODE ON. It was never saved or sent, so there is nothing to migrate. Every session starts OFF, everything shown, as OTHER PLANTS: ON was, so nobody's view changes on the update.
+- **Reduced FX (Shared/PerformanceMode)**:
+  - The rule lives in the one value every Reduced-FX-aware effect already reads: the local quality attribute (SeedAfterimageQuality, "Off" = Reduced FX), read by StatusText.reducedMotion() and by effects directly. No per-effect edits.
+  - ON: the player's own value is put aside once in SeedOwnAfterimageQuality, and the attribute says "Off".
+  - OFF: their own value comes back. Never chosen gives the screen's default, as Settings itself gives it back (an effect reads a cleared attribute as "no change").
+  - Settings' REDUCED FX shows ON, locked (the grey face), with "ON WHILE PERFORMANCE MODE IS ON"; a press does nothing until Performance Mode is off.
+- **The switch (same rect, same place in every layout)**:
+  - The words are the name alone, "PERFORMANCE MODE": 12 px on a desktop (119 of 126 px), 11 px in compact (110 of 114), and two lines at the phone row's 10 px (73 x 20 in its 73 x 28, as OTHER PLANTS filled its 73).
+  - ON / OFF sits in the track beside the thumb in every layout. The ⚡ (U+26A1, a colour emoji) rides the thumb: green with ON at the right, red with OFF at the left.
+  - The bolt was checked drawing in LuckiestGuy at 10-40 px in a capture (00_glyph_test). No upload was needed, and the owner's Instant Hatch icon (a pod with a bolt) was not used.
+- **Live switch (an audit of every Reduced FX reader)**: all but three follow a change at their next use.
+  - RarityFX went still live but never moved again: its step now redraws both ways, and an edge remembers its owner's glint. That fixes the Bag, the strip, the Index, the shop, the invite cards, the Mist odds and the plot boards.
+  - The Pod Rush's nest rings, built once per Rush, now rebuild breathing or still.
+- **Specs**:
+  - OtherPlantsSpec section 5: the rule on a stand-in (default OFF; ON hides and forces; the own choice put aside once; OFF restores the own Off or Reduced, or the default), plus the switch's and Settings' pins and the rings' pin.
+  - HudLayoutSpec: the name fits in each rect, the phone row's two lines, ON/OFF beside the thumb.
+  - RarityFXSpec: motion back with nothing running moves again.
+  - All 22 specs calling HudLayout green.
+- **Mutants (10/10 caught)**: PerfNoReduced, PerfOffDropsOwn, PerfOwnOverwritten, PerfNotInverted, SwitchNoBolt, SettingsNotLocked, LabelTooBig, RarityNoRestore, EdgeForgetsGlint, RingsStayBreathing.
+- **Guarded Play (SeedTest_mistlook_20261011; a 901 x 716 desktop window, mouse)**:
+  - The switch drew PERFORMANCE MODE / OFF with the bolt on a red thumb (01). Pressed ON: green at the right, ON (02); ShowOtherPlants false, quality Off, own Unset.
+  - Settings showed REDUCED FX locked (03), and a press changed nothing. OFF: quality back to Full, the own value gone.
+  - With the player's own REDUCED FX switched on in Settings: ON put "Off" aside, and OFF kept quality Off, Settings still ON.
+  - Captures 01-03 plus zooms; OK'd by Claude on the owner's handoff; owner to review.
+- **Unverified**: phones and compact windows in Play (spec layout checks only: the emulator cannot be switched by MCP); other players' gardens hiding live (no second player; OtherPlantsSpec covers it).
+
 ## THE HUB ITEMS IN ONE GUARDED PLAY: THE PERMANENT HUB, THE SIGN, START / END MIST NOW — 2026-10-11 (CLAUDE, TERMINAL)  (SeedTest_mistlook_20261011; CAPTURES IN output/mosskeeper-2026-10-11/hub_admin; THE FULL SUITE CLEAN, 146 SPECS)
 
 One guarded Play: the store marker, store_guard SAFE, the Ready line on the throwaway store; stopped by me, the marker off after (1 throwaway key removed). The peer was pinged first. The viewport was a 1005 x 716 window with mouse input (no emulator).

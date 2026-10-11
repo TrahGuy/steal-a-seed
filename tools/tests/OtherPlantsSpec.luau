@@ -21,6 +21,12 @@
 --     leaving, a plant moved to another plot, a model streamed out and back --
 --     and no connection left behind (the census)
 --
+--   * PERFORMANCE MODE (2026-10-11, the owner: the switch was OTHER PLANTS):
+--     ON hides the other gardens through the same preference, inverted, and
+--     holds Reduced FX on in the one value every effect reads; OFF gives the
+--     player's own Reduced FX back, never switching off one they set; the
+--     switch's words, its bolt, and Settings showing Reduced FX forced on
+--
 -- NOT here, seen in the guarded Play: real plots and plants from PlantService,
 -- the labels and pops that follow the marker, the switch on a real screen.
 --==============================================================================
@@ -398,14 +404,91 @@ local ok, err = pcall(function()
 		"CashPop: no pop over a hidden plant, and one in the air over it is put away")
 	local ui2 = src(SPS, "OtherPlantsUI")
 	check(ui2:find("PlantVisibility.start(player)", 1, true) ~= nil
-		and ui2:find("PlantVisibility.setShowOthers(player, not PlantVisibility.showOthers(player))", 1, true) ~= nil
+		and ui2:find("PerformanceMode.set(player, not PerformanceMode.isOn(player))", 1, true) ~= nil
 		and not ui2:find("FireServer", 1, true),
-		"OtherPlantsUI flips the one local preference and starts the one watcher; nothing goes to the server")
+		"OtherPlantsUI flips the one local preference (through PerformanceMode) and starts the one watcher; nothing "
+			.. "goes to the server")
 	local vis = src(Shared, "PlantVisibility")
 	check(not vis:find(":Destroy()", 1, true) and not vis:find(".Parent = ", 1, true)
 		and not vis:find("orkspace:GetDescendants", 1, true) and not vis:find("game:GetDescendants", 1, true)
 		and not vis:find("Heartbeat", 1, true) and not vis:find("RenderStepped", 1, true) and not vis:find("FireServer", 1, true),
 		"PlantVisibility never destroys or reparents, never scans the Workspace, runs no loop and sends nothing")
+
+	--==========================================================================
+	say("5. PERFORMANCE MODE: the switch, and Reduced FX with it")
+	--==========================================================================
+	-- Shared/PerformanceMode from its source, with this run's PlantVisibility,
+	-- on a stand-in player (attributes on a real instance).
+	local perfSrc = src(Shared, "PerformanceMode")
+	local perfChunk = assert(loadstring(perfSrc, "=PerformanceMode"))
+	setfenv(perfChunk, setmetatable({ script = Shared.PerformanceMode, require = function(m)
+		if typeof(m) == "Instance" and m.Name == "PlantVisibility" then
+			return PlantVisibility
+		end
+		return require(m)
+	end }, { __index = getfenv(1) }))
+	local Perf = perfChunk()
+	local OP = GameConfig.OtherPlants
+	local QUALITY = GameConfig.Afterimage.QualityAttribute
+	local you = Instance.new("Configuration")
+	you.Name = "PerformanceModeSpecPlayer"
+	local function q()
+		return you:GetAttribute(QUALITY)
+	end
+	check(Perf.isOn(you) == false and PlantVisibility.showOthers(you) and q() == nil,
+		"a new session starts OFF: everything shown, as OTHER PLANTS: ON was -- nobody's view changes")
+	Perf.set(you, true)
+	check(Perf.isOn(you) and you:GetAttribute(OP.Attribute) == false and q() == "Off"
+			and you:GetAttribute(OP.OwnQualityAttribute) == Perf.Unset and Perf.ownReduced(you) == false,
+		"ON: the other gardens hidden (the one preference, inverted) and Reduced FX on; the player's own choice "
+			.. "(none yet) put aside")
+	Perf.set(you, true)
+	check(you:GetAttribute(OP.OwnQualityAttribute) == Perf.Unset,
+		"ON twice: the own choice is put aside once, never overwritten by Performance Mode's own Off")
+	Perf.set(you, false)
+	check(not Perf.isOn(you) and PlantVisibility.showOthers(you) and q() == Perf.deviceQuality()
+			and you:GetAttribute(OP.OwnQualityAttribute) == nil,
+		"OFF: everything shown; never chosen, Reduced FX goes back to the screen's default, as Settings gives it back",
+		tostring(q()))
+	you:SetAttribute(QUALITY, "Off")
+	Perf.set(you, true)
+	local ownWhileOn = Perf.ownReduced(you)
+	Perf.set(you, false)
+	check(ownWhileOn and q() == "Off",
+		"a Reduced FX the player switched on themselves stays on when Performance Mode turns off", tostring(q()))
+	you:SetAttribute(QUALITY, "Reduced")
+	Perf.set(you, true)
+	local whileOn = q()
+	Perf.set(you, false)
+	check(whileOn == "Off" and q() == "Reduced", "and a Reduced quality comes back as it was", tostring(q()))
+	you:Destroy()
+	-- The rule lives in the one value every Reduced-FX-aware effect reads.
+	local statusText = src(Shared, "StatusText")
+	check(statusText:find('player:GetAttribute(GameConfig.Afterimage.QualityAttribute) == "Off"', 1, true) ~= nil
+			and perfSrc:find('player:SetAttribute(QUALITY, "Off")', 1, true) ~= nil,
+		"reduced = own OR Performance Mode, kept in the quality attribute StatusText.reducedMotion and the effects read")
+	-- The effects that built once and kept it now follow a live switch (an audit
+	-- of every Reduced FX reader, 2026-10-11): the Pod Rush's nest rings rebuild
+	-- breathing or still; RarityFX's step redraws both ways (RarityFXSpec).
+	local rush = src(SPS, "PodRushUI")
+	check(rush:find("local breathe = not ringsStill", 1, true) ~= nil
+			and rush:find("if on == ringsOn and (not on or still == ringsStill) then", 1, true) ~= nil,
+		"the Pod Rush's nest rings follow Reduced FX switched mid-Rush: built again, breathing or still")
+	-- The switch.
+	check(ui2:find("local on = PerformanceMode.isOn(player)", 1, true) ~= nil
+			and ui2:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
+			and ui2:find("bolt.Text = OTHERS.Icon", 1, true) ~= nil and ui2:find("bolt.Parent = thumb", 1, true) ~= nil
+			and not ui2:find("stateWord.Visible = inline", 1, true) and not ui2:find("stateWord.Visible = false", 1, true),
+		"the switch: PERFORMANCE MODE, the bolt riding its thumb, ON or OFF in the track in every layout")
+	check(OP.Label == "PERFORMANCE MODE" and OP.Icon == "\u{26A1}" and OP.OnText == "ON" and OP.OffText == "OFF",
+		"its words: PERFORMANCE MODE, ON / OFF, and U+26A1 -- a colour emoji, seen drawing in LuckiestGuy in a capture")
+	-- Settings: REDUCED FX shown forced on while Performance Mode holds it.
+	local settings = src(SPS, "SettingsUI")
+	check(settings:find("if forced then\n\t\treducedToggle.face.style(\"off\")", 1, true) ~= nil
+			and settings:find("\"ON WHILE PERFORMANCE MODE IS ON\"", 1, true) ~= nil
+			and settings:find("reducedToggle.button.Activated:Connect(function()\n\tif PerformanceMode.isOn(player) then\n\t\treturn", 1, true) ~= nil
+			and settings:find("player:GetAttributeChangedSignal(GameConfig.OtherPlants.Attribute):Connect(paintReduced)", 1, true) ~= nil,
+		"Settings: REDUCED FX shown ON and locked while Performance Mode holds it, saying why; the own choice untouched")
 end)
 
 PlantVisibility.stop()

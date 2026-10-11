@@ -56,6 +56,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local PerformanceMode = require(Shared:WaitForChild("PerformanceMode"))
 local RAIL = GameConfig.Rail
 local PANEL = GameConfig.Panel
 local LOOK = GameConfig.BagLook
@@ -700,14 +701,24 @@ end
 
 local restoreQuality: string? = nil
 
+-- PERFORMANCE MODE (2026-10-11) holds Reduced FX on (Shared/PerformanceMode):
+-- shown ON, locked (the face that cannot be pressed), and why. The player's own
+-- choice waits and comes back when Performance Mode turns off.
 local function paintReduced()
 	local on = player:GetAttribute(QUALITY) == "Off"
+	local forced = PerformanceMode.isOn(player)
 	paintToggle(reducedToggle, on)
-	reducedRow.detail.Text = "HIDES TRAILS, SPARKS & UI MOTION"
+	if forced then
+		reducedToggle.face.style("off")
+	end
+	reducedRow.detail.Text = if forced then "ON WHILE PERFORMANCE MODE IS ON" else "HIDES TRAILS, SPARKS & UI MOTION"
 	reducedRow.detail.TextColor3 = if on then CREAM else MUTED
 end
 
 reducedToggle.button.Activated:Connect(function()
+	if PerformanceMode.isOn(player) then
+		return
+	end
 	local now = player:GetAttribute(QUALITY)
 	if now == "Off" then
 		local back = restoreQuality
@@ -721,6 +732,7 @@ reducedToggle.button.Activated:Connect(function()
 end)
 
 player:GetAttributeChangedSignal(QUALITY):Connect(paintReduced)
+player:GetAttributeChangedSignal(GameConfig.OtherPlants.Attribute):Connect(paintReduced)
 
 --==============================================================================
 -- DISCO DANCING (2026-10-03)
