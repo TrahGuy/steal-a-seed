@@ -1,5 +1,24 @@
 # Steal a Seed — Session Handoff
 
+## PUSHED: THE HUB ITEMS AND PERFORMANCE MODE — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH; NOT PUBLISHED; THE ENCHANTED MIST SOUNDS ARE STILL BEING WIRED, UNCOMMITTED, AND NOT IN THIS PUSH)
+
+Pushed on wip, in order, after the owner's OK (via the peer). Each has its own entry below:
+- f22abbc: the Event Hub, always. Mosskeeper, his surround, the moss carpet, the mushroom ring and the grove are built once at start and stand Mist or not; ShowMosskeeper = true.
+- 4faf0ed: the ENCHANTED MIST sign on (ShowSign = true). It reads COMING SOON while the event is off, clears the set below it, and is readable from every plot (a minimum on-screen size; it draws to 300 studs).
+- 40426ef: the admin console's START MIST NOW / END MIST NOW (WORLD tab). They work with Enabled false and leave the schedule untouched; source admin in the log and the audit.
+- 177826c: CompactMenusSpec counts the console's ten actions.
+- 4ab99a6: the hub items' guarded Play (captures in output/mosskeeper-2026-10-11/hub_admin).
+- 47ea7da: PERFORMANCE MODE.
+  - The OTHER PLANTS switch, renamed, with a ⚡ on its thumb. ON hides other gardens and forces Reduced FX; OFF gives the player's own Reduced FX back.
+  - Settings shows REDUCED FX locked while forced. RarityFX and the Pod Rush rings follow a live switch.
+  - Captures in output/performance-mode-2026-10-11.
+
+**Open owner question**: with the schedule ON (Enabled true), an admin Mist counts as a start, so the next eligibility moves to 60 minutes after it. Say if it should leave the schedule alone instead. It cannot happen while Enabled is false.
+
+**Reminder for the owner's next Publish**: with ShowMosskeeper and ShowSign on, it puts Mosskeeper, the decorated hub and the COMING SOON sign live. EnchantedMistConfig.Enabled stays false, so the schedule never runs; an admin can still START MIST NOW. PERFORMANCE MODE goes live with it.
+
+**Owner housekeeping**: the stale `output/mosskeeper-2026-10-11/anim/` folder (superseded by anim_clips/) is the owner's to delete; Claude Code's safety check refused it.
+
 ## PERFORMANCE MODE: THE OTHER PLANTS SWITCH, WITH A LIGHTNING BOLT AND REDUCED FX — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; OtherPlantsSpec 65/0, HudLayoutSpec 1459/0, RarityFXSpec 72/0, all 22 HudLayout-calling specs green, 10 OF 10 MUTANTS CAUGHT; ONE GUARDED PLAY, CAPTURES IN output/performance-mode-2026-10-11)
 
 The owner, via the peer: the HUD's OTHER PLANTS switch becomes PERFORMANCE MODE with a lightning icon. ON is what OTHER PLANTS: OFF did (other gardens hidden on this screen). Then: "PERFORMANCE MODE ON also turns on REDUCED FX ... reduced = the player's own Reduced FX setting OR Performance Mode ... Turning Performance Mode OFF must NOT switch off a Reduced FX the player set themselves".
