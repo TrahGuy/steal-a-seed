@@ -261,8 +261,9 @@ end
 -- The Rain event puts a carrier back on the island when its biome closes. The
 -- travel budget would read that as a teleport and put them back on terrain
 -- that is about to go, so the mover says so here: the guard is re-anchored at
--- the new spot with no slack, exactly as a correction leaves it. Nothing else
--- about the carry changes -- the pod is still in their arms.
+-- the new spot with no slack, exactly as a correction leaves it. Since
+-- 2026-10-11 the evacuation then takes the pod in their arms away (WeatherService,
+-- LOST IN THE RAIN): carried out by the rain's end is not carried home.
 --==============================================================================
 function CarryService.NoteServerMove(player: Player, at: Vector3)
 	local state = guards[player]
@@ -2233,7 +2234,8 @@ end
 -- (its EventId is the workspace's), which is what dusk and the dark rule ask.
 -- `ClearEventPods`: the event's own cleanup -- every loose pod of that event,
 -- wherever it lies, goes with it. A pod in somebody's ARMS is never in this set
--- (CarriedPod, not SeedPod); the evacuation banks it at the landing first.
+-- (CarriedPod, not SeedPod); the evacuation takes it from its carrier
+-- (WeatherService, LOST IN THE RAIN).
 --==============================================================================
 function CarryService.IsLiveEventPod(pod: Instance): boolean
 	local id = pod:GetAttribute(EVENT_ID)

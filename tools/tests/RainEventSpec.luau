@@ -156,6 +156,12 @@ local function recordingMover(player, cf)
 	return true
 end
 WeatherService.useMover(recordingMover)
+-- LOST IN THE RAIN: who the evacuation asked, and how many moves came before.
+local forfeits, carrying = {}, {}
+WeatherService.useForfeit(function(player)
+	table.insert(forfeits, { player = player, movedBefore = #moves })
+	return carrying[player] == true
+end)
 local function sentOf(action)
 	local list = {}
 	for _, s in ipairs(sent) do
@@ -443,9 +449,31 @@ local ok, err = pcall(function()
 	WeatherService.Step(now)
 	local occupants = WeatherService.Occupants()
 	check(#occupants == 3, "three of five are on the terrain", #occupants)
+	forfeits, carrying = {}, { [a] = true }
 	ask(owner, "end", nil)
 	check(#moves == 3 and #sentOf(EVENTS.Evacuated) == 3,
 		"END moves exactly those three, and tells each once", #moves)
+	-- LOST IN THE RAIN (the owner, 2026-10-11): every player moved is asked for
+	-- the pod in their arms right after their own move; only the carrier loses
+	-- one, and only the carrier is told.
+	local inOrder = #forfeits == #moves
+	for i, f in ipairs(forfeits) do
+		if not moves[i] or f.player ~= moves[i].player or f.movedBefore ~= i then
+			inOrder = false
+		end
+	end
+	local lostTo = {}
+	for _, s in ipairs(sentOf("ServerNotice")) do
+		if type(s.payload) == "table" and s.payload.title == W.PodLost.Title and s.payload.detail == W.PodLost.Detail then
+			for _, p in ipairs(s.to or {}) do
+				table.insert(lostTo, p)
+			end
+		end
+	end
+	check(inOrder and #lostTo == 1 and lostTo[1] == a,
+		"a carrier the evacuation moves loses the pod in their arms, right after their own move, and is told once",
+		string.format("%d asked, %d told", #forfeits, #lostTo))
+	carrying = {}
 	local landed, apart, grounded, offTerrain, inSafe = 0, true, true, true, true
 	local field = Workspace:FindFirstChild(GameConfig.Map.FolderName)
 	field = field and field:FindFirstChild(GameConfig.Map.FieldName)
@@ -571,6 +599,10 @@ local ok, err = pcall(function()
 			and string.find(carrySrc, "function CarryService.NoteServerMove(player: Player, at: Vector3)", 1, true) ~= nil
 			and string.find(carrySrc, "CarryGuard.reset(state, at)", 1, true) ~= nil,
 		"a carrier moved by the server keeps the pod: the travel guard is re-anchored, never undone")
+	check(string.find(weatherSrc, "if mover(player, chosen :: CFrame) then\n\t\t\tmoved += 1\n\t\t\t-- LOST IN THE RAIN: right "
+			.. "after the move, before anything can yield.\n\t\t\tif forfeiter(player) then", 1, true) ~= nil
+			and string.find(weatherSrc, "local species = CarryService.ForfeitCarry(player :: Player,", 1, true) ~= nil,
+		"the real loss is CarryService.ForfeitCarry, in the move's own resumption: the bank poll never runs between")
 	local okNote = pcall(CarryService.NoteServerMove, a, Vector3.new(232, 3, 70))
 	check(okNote, "telling the guard about a player who carries nothing is a no-op")
 	-- WHO IS DOWN, in the real game: NestService's ragdoll (a guardian's throw and
@@ -1059,6 +1091,7 @@ WeatherService.useTerrain(nil)
 WeatherService.useBroadcast(nil)
 WeatherService.useMover(nil)
 WeatherService.useLimp(nil)
+WeatherService.useForfeit(nil)
 WeatherService.Init()
 scratch:Destroy()
 if not ok then

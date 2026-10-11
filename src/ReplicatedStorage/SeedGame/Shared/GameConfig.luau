@@ -5113,6 +5113,10 @@ GameConfig.Weather = {
 	},
 	Warning = { Title = "THE RAIN IS PASSING", Detail = "The biome closes in %d s. Make for the bridge." },
 	Evacuated = { Title = "BACK AT THE ENTRANCE", Detail = "The rain has stopped and the biome is fading away." },
+	-- To a carrier the evacuation moved: the pod in their arms is lost, never
+	-- banked (WeatherService, LOST IN THE RAIN, 2026-10-11).
+	PodLost = { Title = "YOUR POD WAS LOST IN THE RAIN",
+		Detail = "Carry a pod over the bridge's SAFE ZONE line before the rain ends to keep it." },
 	Tags = { Terrain = "RainTerrain", Fog = "RainFog", Gate = "RainGate", Site = "RainEncounterSite" },
 	--==========================================================================
 	-- THE TWO MODES (2026-10-02). The console starts either by its verb; only

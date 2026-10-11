@@ -71,6 +71,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local Notice = require(Shared:WaitForChild("Notice"))
 local RainBiome = require(script.Parent:WaitForChild("RainBiome"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 -- The event's nest and guardian (2026-10-02). No cycle: NestService has never
@@ -217,6 +218,30 @@ end
 local mover: (any, CFrame) -> boolean = moveCharacter
 
 --==============================================================================
+-- LOST IN THE RAIN (2026-10-11, the owner: "A pod carried inside the rain
+-- biome is LOST, not banked, if its carrier never went through the safe zone")
+--
+-- The evacuation puts a carrier down on the landing grass, inside the safe
+-- zone, and CarryService's poll would bank the pod in their arms there -- a
+-- pod home without the walk over the bridge's red line. So a carrier the
+-- evacuation moves loses it, as one caught in a biome at nightfall does
+-- (CarryService.ForfeitCarry): the pod in their arms only, never the Backpack
+-- or the plot. Called in the same resumption as the move, with nothing that
+-- yields between, so the bank poll can never run in between. A pod carried
+-- over the line was banked long before the end and is never in arms here.
+-- True when there was a pod to lose.
+--==============================================================================
+local function forfeitPod(player: any): boolean
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then
+		return false
+	end
+	local species = CarryService.ForfeitCarry(player :: Player, "carried out of the rain biome by its end, "
+		.. "never over the safe line")
+	return species ~= nil
+end
+local forfeiter: (any) -> boolean = forfeitPod
+
+--==============================================================================
 -- WHO IS DOWN (2026-10-10, Michael on v1047: "In the rain biome I got hit right
 -- at the timer and wasn't teleported out ... def can get ragdolled and skip the
 -- teleport")
@@ -302,6 +327,11 @@ function WeatherService.useMover(fn: ((any, CFrame) -> boolean)?)
 end
 
 -- Who is knocked down (WHO IS DOWN); a spec stands in its own.
+-- What a moved carrier loses (LOST IN THE RAIN); a spec stands in its own.
+function WeatherService.useForfeit(fn: ((any) -> boolean)?)
+	forfeiter = fn or forfeitPod
+end
+
 function WeatherService.useLimp(fn: ((any) -> boolean)?)
 	limp = fn or isDown
 end
@@ -438,6 +468,13 @@ local function evacuate(event: Event): number
 		end
 		if mover(player, chosen :: CFrame) then
 			moved += 1
+			-- LOST IN THE RAIN: right after the move, before anything can yield.
+			if forfeiter(player) then
+				local words = W.PodLost
+				broadcast(Notice.ServerNotice, { title = words.Title, detail = words.Detail,
+					key = "rain:podlost:" .. tostring(event.id), icon = if event.mode == "thunder" then "thunder" else "rain" },
+					{ player })
+			end
 			if not event.evacuated[player] then
 				event.evacuated[player] = true
 				broadcast(EVENTS.Evacuated, event.id, { player })
@@ -459,7 +496,8 @@ local function close(event: Event, now: number, why: string)
 	publish(event)
 	local moved = evacuate(event)
 	-- Then the unclaimed: the nest's pods, the guardian, the event's pods on
-	-- the ground. Those in arms were just put back with their carriers.
+	-- the ground. Those in the arms of the carriers just moved were lost with
+	-- the move (LOST IN THE RAIN).
 	local okNest, gone = pcall(nestMaker.close, event.id)
 	log(string.format("%s ending (%s, event %d): the bonus is off, the entrance is shut, %d put back at it, "
 		.. "%s unclaimed pod(s) and the guardian gone; the biome fades over %d s.", W.Modes[event.mode].Name, why,
