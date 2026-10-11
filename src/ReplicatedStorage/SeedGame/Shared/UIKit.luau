@@ -2581,7 +2581,14 @@ end
 --==============================================================================
 local PICTURE_Z = 5
 
-function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
+-- A WORD ON THE PICTURE (2026-10-12, the owner's desktop Shop face): a picture
+-- with no word of its own gets ours, in the HUD's outlined type, at its spot
+-- on the picture (shares of the picture's own box) -- shown only once the
+-- picture has loaded, as the picture itself covers ours only then. A call
+-- without one hides it.
+export type PictureWord = { Text: string, Left: number, Right: number, Top: number, Bottom: number }
+
+function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?, word: PictureWord?)
 	local box = button:FindFirstChild("PictureBox")
 	if not image then
 		if box and box:IsA("GuiObject") then
@@ -2626,6 +2633,27 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
 	if shape then
 		shape.AspectRatio = aspect or 1
 	end
+	local said = frame:FindFirstChild("PictureWord")
+	if word and not said then
+		local made = UIKit.outlined(frame, "PictureWord", 40, WHITE, 2)
+		made.TextScaled = true
+		made.Active = false
+		made.Visible = false
+		made.ZIndex = PICTURE_Z + 1
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = 40
+		fit.MinTextSize = 10
+		fit.Parent = made
+		said = made
+	end
+	if said and said:IsA("TextLabel") then
+		if word then
+			said.Text = word.Text
+			said.Position = UDim2.fromScale(word.Left, word.Top)
+			said.Size = UDim2.fromScale(word.Right - word.Left, word.Bottom - word.Top)
+		end
+		said.Visible = false
+	end
 	-- Everything of ours under the picture, once it has loaded and while it is
 	-- still the button's picture.
 	local function hideOurs()
@@ -2637,6 +2665,11 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
 			if child and child:IsA("GuiObject") then
 				child.Visible = false
 			end
+		end
+		-- Ours on the picture, for the picture this call gave it a word for.
+		local shown = frame:FindFirstChild("Picture")
+		if word and said and said:IsA("GuiObject") and shown and shown:IsA("ImageLabel") and shown.Image == image then
+			said.Visible = true
 		end
 		refreshFallback(button)
 	end

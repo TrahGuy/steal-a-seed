@@ -133,8 +133,17 @@ local function placeButton()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h))
-	UIKit.railPicture(button, if layout.shop.w > layout.shop.h then RAIL.StuddedShopArt else nil,
-		RAIL.StuddedShopAspect)
+	-- A desktop's and a TV's rail (2026-10-12, the owner): the green Robux plate
+	-- with our SHOP right of its mark. A phone's corner keeps the studded
+	-- picture, a small window's square ShopArt.
+	local desk = not layout.compact and not layout.sidebar
+	if desk then
+		UIKit.railPicture(button, RAIL.StuddedShopDesktopArt, RAIL.StuddedShopDesktopAspect,
+			RAIL.StuddedShopDesktopWord)
+	else
+		UIKit.railPicture(button, if layout.shop.w > layout.shop.h then RAIL.StuddedShopArt else nil,
+			RAIL.StuddedShopAspect)
+	end
 	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.shop, Vector2.zero, layout.safe)
 end

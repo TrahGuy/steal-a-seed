@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## (b) THE DESKTOP SHOP FACE: THE GREEN ROBUX PLATE WITH OUR SHOP, 150 x 50 — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; HudLayoutSpec 1468/0, RailFallbackSpec 50/0 (4 new checks), InviteHudSpec 438/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (TutorialSpotlightSpec's timing check, 0.232 ms against its 0.2 ms budget under batch load, passed 51/0 alone twice); 6 OF 6 MUTANTS CAUGHT; captures in output/shop-face-2026-10-12)
+
+The owner's item (b) via the peer: on a desktop and a TV, the Shop button is the owner's green Robux plate with SHOP right of its mark, in a 150 x 50 slot.
+- **The upload:** rbxassetid 113135959052678, an Image in the group (744756221). In Studio it loads: Success, IsLoaded, stored 1023 x 342 (the 2000 x 669 plate, 3 : 1 kept). Measured on it: the mark spans 11-31% of the width and 15-78% of the height; the green plate spans 2-98% by 6-92%.
+- **The wiring:**
+  - `GameConfig.Rail.StuddedShopDesktopArt` / `StuddedShopDesktopAspect` (2000/669) / `StuddedShopDesktopWord` (SHOP at 34-95% across, 17-76% down).
+  - `HudLayout.Config.ShopDesktop` is 150 x 50 (150 x 58 before). WALK MODE and PERFORMANCE MODE close up 8 px under it.
+  - `UIKit.railPicture(button, image, aspect, word?)`: a new optional word on the picture, in the HUD's outlined LuckiestGuy (UIKit.outlined), placed by shares of the picture. It shows only once the picture has loaded, as the picture covers ours only then; another picture, or none, hides it. Until then the button keeps its own look and fallback word, as before.
+  - `ShopUI.placeButton`: desktop and TV only (not compact, not the phone sidebar). A phone keeps StuddedShopArt; a small window keeps ShopArt.
+- **Specs:**
+  - HudLayoutSpec: 150 x 50, the art, its aspect matching the slot, SHOP clear of the mark, and ShopUI's desktop branch.
+  - RailFallbackSpec: the word is made in the outlined type over the picture and waits for the load. It shows right of the mark once loaded. Another picture (even loaded), or none, hides it.
+- **Mutants (6 of 6):** ShopStays58, PhoneGetsDesk, DeskOldArt, WordBeforeLoad, WordOnOtherPicture, WordOverMark.
+- **Live (guarded Play, SeedTest_mistlook_20261011), desktop:** the client read the button at 150 x 50 at (12,12), the picture loaded, and SHOP visible (91 x 29.5 px at x 63). 01_hud_desktop_shop_face.png; 02_shop_button_3x.png. No errors.
+- **Not seen:** phones and a TV. The emulator was not switched; their layouts are spec-measured (HudLayoutSpec's screens).
+- **Follow-up for the owner (seen in the capture, not changed):** the guide's "GUIDE" resume pill (`SeedBeginnerGuide.Words.Resume`, shown after a player skips the guide) sits at the top centre under the teleport row. From a plot the camera faces the hub, so the hub's ENCHANTED MIST / COMING SOON sign often stands right behind it in the world, and the two overlap. Worth a plate under the pill, or a new spot, if the owner minds.
+- **Next (the queue the owner handed the peer):**
+  - (c) the Robux buy buttons on the same green art.
+  - 9, the six new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console (the log strip becomes a fading answer).
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## THE MIST ODDS CARDS WITH NO BLACK WINDOW, AND THE LANDED CREATURE HOLDS — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; MysteryPodSpec 33/0 (4 new checks), MistCreaturesSpec 11/0, MosskeeperSpec 69/0, MistAudioSpec 17/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES, NO FAILURE (run before the small ink fix below, whose specs were re-run); 13 OF 13 MUTANTS CAUGHT; captures in output/mist-odds-cards-2026-10-12)
 
 The owner's ask via the peer: on the Mosskeeper's Odds page and the Mysterious Pod's reels, no black window behind the creature: it stands on its card's studs. The peer then found a real bug in my capture note, which this entry also fixes: a sized creature's landed card showed for only ~0.15 s before the size reel replaced it, so a player never saw which creature came out.
