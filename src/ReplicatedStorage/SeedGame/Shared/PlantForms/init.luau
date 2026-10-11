@@ -32,6 +32,11 @@
 -- no biome pool, shelf or reward). Their pods are RainForms', one supplied
 -- model per size.
 --
+-- AND THE ENCHANTED MIST'S FIVE (2026-10-11): Mossbristle, Briarstag, Hollowl,
+-- Elderbough and Gnarlmaw, the owner's "ENCHANTED MIST" models -- what a
+-- Mysterious Pod hatches (SeedData.MistSpecies), sized by the owner's rules
+-- below (THE ENCHANTED MIST'S FIVE).
+--
 --==============================================================================
 -- SIZE: TODAY'S HEIGHT, THE TIER LADDER, ONE NUMBER PER SPECIES
 --
@@ -84,12 +89,18 @@ local IDS = {
 -- The Rain event's second family (2026-10-05), built at its supplied size x the
 -- tier ladder (Supplied, below).
 local RAIN_IDS = { "squallsnapper", "monsoad", "thundershell", "torrentacle" }
+-- The Enchanted Mist's five creatures (2026-10-11): four sized, one Secret,
+-- sized below (THE ENCHANTED MIST'S FIVE).
+local MIST_IDS = { "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }
 
 PlantForms.Plants = {} :: { [string]: SecretForms.FormSpec }
 for _, id in ipairs(IDS) do
 	PlantForms.Plants[id] = load(id)
 end
 for _, id in ipairs(RAIN_IDS) do
+	PlantForms.Plants[id] = load(id)
+end
+for _, id in ipairs(MIST_IDS) do
 	PlantForms.Plants[id] = load(id)
 end
 
@@ -140,6 +151,34 @@ PlantForms.TinyLongest = {
 	snapmoss = 6.74,
 	emberquill = 7.46,
 } :: { [string]: number }
+
+--==============================================================================
+-- THE ENCHANTED MIST'S FIVE (2026-10-11), BY THE OWNER'S RULES
+--
+-- The folder showed them at display sizes (the owner's Scale tool), so their
+-- Tinies are set here, not taken as supplied:
+--
+--   THE FOUR SIZED ONES share ONE factor, so they keep their sizes relative to
+--   each other: Elderbough, the biggest, is exactly as tall at Tiny as the
+--   road's tallest Tiny (Supernovus), so its Colossal is the road's largest
+--   Colossal; the ordinary ladder (x1 .. x7.6) takes each on up from its Tiny.
+--   As measured (drawn heights, studs): Mossbristle 3.93 -> 29.90, Briarstag
+--   6.17 -> 46.90, Hollowl 4.61 -> 35.03, Elderbough 8.86 -> 67.34.
+--
+--   GNARLMAW, A SECRET, has one size and always carries SecretTier (ladder x1):
+--   the folder's display scale undone -- the same factor that takes the
+--   folder's copy of Snarlbloom (38.905174 drawn, measured 2026-10-11) back to
+--   the live Snarlbloom (SecretForms). 44.73 drawn as supplied -> 54.34.
+--==============================================================================
+do
+	local factor = PlantForms.TinyHeight.supernovus / PlantForms.Plants.elderbough.Height
+	for _, id in ipairs({ "mossbristle", "briarstag", "hollowl", "elderbough" }) do
+		PlantForms.TinyHeight[id] = PlantForms.Plants[id].Height * factor
+	end
+	local SNARLBLOOM_COPY_HEIGHT = 38.905174
+	PlantForms.TinyHeight.gnarlmaw = PlantForms.Plants.gnarlmaw.Height
+		* (SecretForms.Plants.snarlbloom.Height / SNARLBLOOM_COPY_HEIGHT)
+end
 
 -- Whether a species is built from its supplied rig.
 function PlantForms.Has(id: string): boolean

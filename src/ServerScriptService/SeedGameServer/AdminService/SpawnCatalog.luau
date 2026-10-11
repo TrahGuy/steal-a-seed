@@ -77,6 +77,9 @@ end
 addGroup("secret", "SECRETS", SeedData.SecretSpecies)
 addGroup("rain", "RAIN EVENT", SeedData.RainSpecies)
 addGroup("invite", "INVITE REWARDS", SeedData.InviteSpecies)
+-- The Enchanted Mist's creatures (2026-10-11); Gnarlmaw, a Secret, keeps the
+-- Secrets' rules (one size, "SECRET") but is shown with its family.
+addGroup("mist", "ENCHANTED MIST", SeedData.MistSpecies)
 
 -- Every group, in the console's order. Copies: nothing a caller does to the
 -- answer reaches the next caller.
@@ -238,13 +241,16 @@ end
 
 -- The small line under a card's name that tells two of a name apart: the Rain
 -- pod or pods a creature comes in ("RAIN POD 1", "RAIN POD 2", "THUNDERSTORM
--- POD 3", "RAIN POD 4/5"), "SECRET", "INVITE"; nil for a listed species.
+-- POD 3", "RAIN POD 4/5"), "SECRET", "INVITE", "MIST" (2026-10-11); nil for a listed
+-- species.
 function SpawnCatalog.tagOf(species: SeedData.Species): string?
 	local s = species :: any
 	if s.Secret == true then
 		return "SECRET"
 	elseif s.Invite == true then
 		return "INVITE"
+	elseif s.Mist == true then
+		return "MIST"
 	elseif s.Event == "rain" then
 		local pods = rainPodsOf(species)
 		if #pods == 0 then

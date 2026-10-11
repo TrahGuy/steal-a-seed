@@ -1,5 +1,29 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE MYSTERIOUS POD'S CREATURES PORTED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false; MistCreaturesSpec 8/0, 4 OF 4 MUTANTS CAUGHT; FULL SUITE GREEN; CARD CAPTURES PENDING: STUDIO WAS MINIMIZED, VIEWPORTS DRAW BLANK)
+
+The owner put the missing creatures in Studio (Workspace "ENCHANTED MIST") and answered the questions via the peer.
+- **Backed up first**: all six models as .rbxm, each re-opened from the file and IDENTICAL to the live original. Files: `output/model-backups/2026-10-11-enchanted-mist-originals/` (+ manifest with sha256).
+- **Ported** through the supplied-rigs route: the read-only generator `re2/gen_form.luau` → `Shared/PlantForms/<id>.luau`.
+  - Mossbristle 60 parts, Briarstag 100, Hollowl 87, Elderbough 157, Gnarlmaw 129. Joints exact; faces along −Z.
+  - Mossbristle's idle Script and every AnimationController were left out.
+- **Snarlbloom copy**: IDENTICAL to the live Snarlbloom (103 parts, 102 joints, every name/shape/colour/material/joint) except a uniform ×0.823 display scale. The existing Snarlbloom is untouched and the copy is not ported.
+- **Registered** as `SeedData.MistSpecies`: unlisted (no pool/shelf/roll/wheel/reward/stall), `Mist = true`, carried overhead. The admin SpawnCatalog has an "ENCHANTED MIST" group (tag "MIST").
+- **Incomes** (the owner's answer: the Rain event ladder ×1/1.15/1.3/1.5/1.8/2.15/2.5 off each Tiny, as `TierIncome`):
+  - Mossbristle 25,000..62,500;
+  - Briarstag = Hollowl 60,000..150,000;
+  - Elderbough 120,000..300,000;
+  - Gnarlmaw Secret, `FixedIncome` 140,000.
+- **Sizes** (the owner's answer: like the road plants, one factor for the four, Elderbough's Colossal = the road's largest Colossal; `PlantForms.TinyHeight`):
+  - Tiny → Colossal: Mossbristle 3.93 → 29.90, Briarstag 6.17 → 46.90, Hollowl 4.61 → 35.03, Elderbough 8.86 → 67.34 (= Supernovus' Colossal).
+  - Gnarlmaw 54.34, one size: the folder's display scale undone, the same factor that takes the Snarlbloom copy back to the live one.
+  - All measured on real builds.
+- **Effect**: every Odds/reel card draws its creature (no "???" left); `CanGrant()` is now true; MissingBindings lists only the Mist's Look.
+- **Tests**: MistCreaturesSpec 8/0 (new): registry/unlisted, Snarlbloom untouched, every rate at every size, the sizes and the one factor, real builds with no scripts, the cards. Mutants 4/4 (LadderTopWrong, AnchoredOnCosmospire, GnarlmawDisplayScaleKept, MistListed). EnchantedMistSpec 37/0 (the missing list now only the Look), AdminSpec 127/0 (every Mist creature spawned at every size), PlantFormsSpec 28/0, MysteryPodSpec 29/0.
+- **Open / follow-ups**:
+  - The creatures have no idle or walk yet. They stand still, and glide when they wander, as the Rain-2 creatures did before their walks. Mossbristle's own idle script (Puff/Walking) is in the backup if the owner wants it ported.
+  - The source folder moves to ServerStorage after this; it needs the owner's Save.
+
 ## ENCHANTED MIST: THE MYSTERIOUS POD'S ODDS CONFIRMED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false, the Look unbuilt)
 
 The owner, via the peer: "APPROVE the draft odds, both tables as they stand".

@@ -160,12 +160,12 @@ local ok, err = pcall(function()
 		"off by default (Enabled false): published disabled, no eligibility")
 	local missing = M.MissingBindings()
 	local text = table.concat(missing, " | ")
-	check(string.find(text, "Look", 1, true) and not string.find(text, "Mosskeeper", 1, true)
-			and not string.find(text, "MysteriousPod", 1, true) and not string.find(text, "shell", 1, true)
-			and string.find(text, "Gnarlmaw", 1, true)
-			and not string.find(text, "approval", 1, true) and not string.find(text, "Snarlbloom", 1, true),
-		"the missing list names the unbuilt pieces and the unregistered creatures, no approval now (Snarlbloom exists)",
-		#missing)
+	-- Since 2026-10-11 every pool creature is registered (SeedData.MistSpecies)
+	-- and both odds tables are confirmed: only the Look is left.
+	check(#missing == 1 and string.find(text, "Look", 1, true) ~= nil
+			and not string.find(text, "creature not registered", 1, true)
+			and not string.find(text, "approval", 1, true) and not string.find(text, "shell", 1, true),
+		"the missing list names only the unbuilt Look: every creature registered, no approval left", text)
 
 	configCopy.Enabled = true
 	M._boot(0)

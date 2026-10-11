@@ -1590,6 +1590,86 @@ SeedData.MysterySpecies = {
 	},
 }
 
+--==============================================================================
+-- THE ENCHANTED MIST'S CREATURES (2026-10-11): WHAT A MYSTERIOUS POD HOLDS
+--
+-- Five of the owner's supplied models (the Workspace folder "ENCHANTED MIST"),
+-- built from PlantForms. Unlisted like the Rain's and the Secrets: no biome
+-- pool, Index shelf, hatch-roll silhouette, wheel, reward, stall or Harvest --
+-- only the Mysterious Pod hatches them (EnchantedMistData.Pool). Snarlbloom,
+-- the pool's sixth, is the existing Secret and is not repeated here.
+--
+-- THE RATES ARE THE OWNER'S (2026-10-11): each sized creature's Tiny rate on
+-- the Rain event's earning ladder, 1 / 1.15 / 1.3 / 1.5 / 1.8 / 2.15 / 2.5,
+-- written out size by size (TierIncome) -- not the size multipliers, not
+-- tier.value, and no rarity or biome factor. Gnarlmaw is a Secret: one fixed
+-- rate, no size.
+--
+--   species       rarity     $/s Tiny / Big / Huge / Mega / Giant / Titan / Colossal
+--   mossbristle   Legendary  25,000 / 28,750 / 32,500 / 37,500 / 45,000 / 53,750 / 62,500
+--   briarstag     Mythic     60,000 / 69,000 / 78,000 / 90,000 / 108,000 / 129,000 / 150,000
+--   hollowl       Mythic     60,000 / 69,000 / 78,000 / 90,000 / 108,000 / 129,000 / 150,000
+--   elderbough    Divine     120,000 / 138,000 / 156,000 / 180,000 / 216,000 / 258,000 / 300,000
+--   gnarlmaw      Secret     140,000 fixed
+--
+-- Heights: each one's Tiny in studs (PlantForms.TinyHeight, the owner's sizing),
+-- Gnarlmaw's its one size. The colours are its own parts': the most of it,
+-- the next, and the gold of its glowing eyes and fruit.
+--==============================================================================
+local MIST_LADDER = { 1, 1.15, 1.3, 1.5, 1.8, 2.15, 2.5 }
+local function mistIncome(tiny: number): { number }
+	local out = {}
+	for i, step in ipairs(MIST_LADDER) do
+		out[i] = math.floor(tiny * step + 0.5)
+	end
+	return out
+end
+local MIST_GOLD = Color3.fromRGB(255, 190, 64)
+SeedData.MistSpecies = {
+	{
+		Id = "mossbristle", Name = "Mossbristle", Rarity = "Legendary", Biome = "greenhollow",
+		Height = 3.93, Form = "secret",
+		Body = Color3.fromRGB(52, 112, 60), Crown = Color3.fromRGB(96, 176, 76), Accent = MIST_GOLD,
+		Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", Mist = true,
+		TierIncome = mistIncome(25000),
+	},
+	{
+		Id = "briarstag", Name = "Briarstag", Rarity = "Mythic", Biome = "greenhollow",
+		Height = 6.17, Form = "secret",
+		Body = Color3.fromRGB(52, 112, 60), Crown = Color3.fromRGB(34, 78, 46), Accent = MIST_GOLD,
+		Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", Mist = true,
+		TierIncome = mistIncome(60000),
+	},
+	{
+		Id = "hollowl", Name = "Hollowl", Rarity = "Mythic", Biome = "greenhollow",
+		Height = 4.61, Form = "secret",
+		Body = Color3.fromRGB(96, 176, 76), Crown = Color3.fromRGB(52, 112, 60), Accent = MIST_GOLD,
+		Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", Mist = true,
+		TierIncome = mistIncome(60000),
+	},
+	{
+		Id = "elderbough", Name = "Elderbough", Rarity = "Divine", Biome = "greenhollow",
+		Height = 8.86, Form = "secret",
+		Body = Color3.fromRGB(104, 72, 48), Crown = Color3.fromRGB(146, 108, 72), Accent = MIST_GOLD,
+		Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", Mist = true,
+		TierIncome = mistIncome(120000),
+	},
+	{
+		Id = "gnarlmaw", Name = "Gnarlmaw", Rarity = "Secret", Biome = "greenhollow",
+		Height = 54.34, Form = "secret",
+		Body = Color3.fromRGB(52, 112, 60), Crown = Color3.fromRGB(96, 176, 76), Accent = MIST_GOLD,
+		Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Mist = true,
+		Secret = true,
+		-- The owner's fixed rate (2026-10-11): $140,000/s, $280,000/s under the x2 pass.
+		FixedIncome = 140000,
+	},
+} :: { Species }
+
 SeedData.InviteSpecies = {
 	{
 		Id = "dustthorn", Name = "Dustthorn", Rarity = "Epic", Biome = "dustbowl",
@@ -1801,6 +1881,19 @@ for _, species in ipairs(SeedData.MysterySpecies) do
 	assert(s.Mystery == true and s.Unsellable == true and s.Unsized == true and s.Secret ~= true and s.Event == nil
 			and type(s.FixedGrowSeconds) == "number",
 		"a Mysterious Pod shell is unlisted, unsellable, unsized and grows in a fixed time: " .. species.Id)
+	register(species, false)
+end
+-- The Enchanted Mist's five (2026-10-11): unlisted, carried overhead, never an
+-- event's batch; a sized one pays the owner's rate size by size, a Secret its
+-- one fixed rate -- never the formula.
+for _, species in ipairs(SeedData.MistSpecies) do
+	local s = species :: any
+	local paid = if s.Secret == true
+		then type(s.FixedIncome) == "number" and s.TierIncome == nil
+		else s.TierIncome ~= nil and s.FixedIncome == nil
+	assert(s.Mist == true and s.Event == nil and s.Carry == "overhead" and paid,
+		"a Mist creature is unlisted, carried overhead, and paid the owner's rate (by size, or fixed for a Secret): "
+			.. species.Id)
 	register(species, false)
 end
 -- Relative weights: finite, none below 0, some above; exactly `n` when given.

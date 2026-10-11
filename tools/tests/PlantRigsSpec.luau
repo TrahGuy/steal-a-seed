@@ -144,8 +144,16 @@ local ok, err = pcall(function()
 			table.insert(roadSupplied, id)
 		end
 	end
-	check(formCount == 25 + 4 and supplied == 4 and #roadSupplied == 0,
-		"PlantForms holds the twenty-five supplied road rigs, and the Rain event's four apart from them",
+	-- And since 2026-10-11 the Enchanted Mist's five (MistCreaturesSpec's), sized
+	-- by their TinyHeight like the road rigs, never Supplied.
+	local mistFive = 0
+	for _, id in ipairs({ "mossbristle", "briarstag", "hollowl", "elderbough", "gnarlmaw" }) do
+		if PlantForms.Plants[id] and PlantForms.TinyHeight[id] and not PlantForms.Supplied[id] then
+			mistFive += 1
+		end
+	end
+	check(formCount == 25 + 4 + 5 and supplied == 4 and #roadSupplied == 0 and mistFive == 5,
+		"PlantForms holds the twenty-five supplied road rigs, and the Rain event's four and the Mist's five apart from them",
 		formCount .. " forms, " .. supplied .. " Supplied, road ones Supplied: " .. table.concat(roadSupplied, ","))
 	for _, id in ipairs(IDS) do
 		local spec = PlantForms.Plants[id]
