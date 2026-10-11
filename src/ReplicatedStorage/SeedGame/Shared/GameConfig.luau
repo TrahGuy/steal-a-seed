@@ -8820,6 +8820,12 @@ GameConfig.BagLook = {
 	-- the jackpot trail the rainbow. (Bats and traps were coral until
 	-- 2026-10-10; they wear their rarity's card now.)
 	StudsByKind = { tickets = "purple", trail = "rainbow" },
+	-- A pod kept by its SHELL, never by any rarity (2026-10-11, the owner): the
+	-- Mysterious Pod reads as an event item and never hints at what is inside,
+	-- in the Bag, on the hotbar and in MY PLANTS (where every other pod's card
+	-- stays plain). Obsidian until Codex's "mist" texture is uploaded
+	-- (art/textures/mist-studs-2026-10-11/CODEX-BRIEF.md): then a one-line swap.
+	StudsBySpecies = { mysterypod = "obsidian" },
 	-- The Shop's featured pack: the only rainbow card in it.
 	StudsFeatured = { spin10 = true },
 	-- On a studded card the words stand on a quiet ink backing (StudWords,

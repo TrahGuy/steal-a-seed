@@ -1,5 +1,38 @@
 # Steal a Seed — Session Handoff
 
+## THE MYSTERIOUS POD'S OWN CARD (OBSIDIAN, UNTIL THE MIST UPLOAD) — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; RarityCardsSpec 52/0, InventoryModelSpec 53/0, InventorySpec 47/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (NoticeSpec's known batch flake, 97/3, passed 100/0 alone); 5 OF 5 MUTANTS CAUGHT; captures in output/mysterious-pod-card-2026-10-12)
+
+The owner's ask via the peer: the Mysterious Pod gets ITS OWN card background, mapped by its shell species, never by any rarity. Obsidian (94572104024955) stands in until Codex's "mist" texture is uploaded.
+- **The wiring:**
+  - `GameConfig.BagLook.StudsBySpecies = { mysterypod = "obsidian" }`: a pod's card by its SHELL species. When the mist texture comes, the swap is one line.
+  - `InventoryModel` face: `studs = STUDS_BY_SPECIES[species.Id] or (if known then STUDS_BY_RARITY[known] else nil)`. The Bag tile wears it. The pod still shows no rarity and no creature.
+  - `GardenUI` (MY PLANTS), the pod branch: the same card by species, with the studded card's ink edge, words band, white name and cream countdown. Every other pod's card stays plain.
+  - The hotbar slot stays plain glass, like every slot.
+- **Correction:** the stone entry below said its commit turned the Mysterious Pod's card stone grey. It did not: PlantInfo gives the shell no rarity, so its card stayed plain. That line is now fixed.
+- **Specs:**
+  - RarityCardsSpec: the shell's card is `StudsBySpecies[EnchantedMistData.Shell.Id]` = obsidian. Its Bag face wears it with no rarity, not the placeholder rarity's card. An ordinary pod still gets no studs.
+  - RarityCardsSpec §5: GardenUI's pod branch reads StudsBySpecies and shows the words band only on a studded card.
+- **Mutants (5 of 5):** ShellByRarity, NoShellCard, ShellOnStone, EveryPodStudded, GardenPlainShell.
+- **Live (guarded Play, SeedTest_mistlook_20261011), the real path:**
+  - An admin Mist, 10 Dewberries in two trips of 5, and GIVE ALL to the Mosskeeper twice.
+  - The Bag shows the pod on obsidian, READY, with its name and no rarity (01_bag_mysterious_pod.png). The card and the hotbar slot enlarged (02_card_and_hotbar_2x.png). No errors.
+  - MY PLANTS is spec-pinned only: planting the pod in a bed through MCP was not done.
+  - The reveal draws only the pool's creature cards (no pod card), so it is unchanged.
+- **Found, not changed here:**
+  - The server's raw admin SPAWN would accept a hand-made request for "mysterypod": SeedData knows the id and it has a base size. The console's UI cannot ask for it (SpawnCatalog lists no card for it). Such a record-less shell is refused at hatch ("NO_OUTCOME") and can't be sold, sacrificed or knocked out, so it would sit stranded. Admins only. Flagged for item 12: refuse any species SpawnCatalog doesn't list, plus a real "Give a Mysterious Pod".
+  - The Bag said HATCH ALL (1) with only the Mysterious Pod in it, while the server's HATCH ALL skips the shell. The owner OK'd the fix as its own commit: the next entry.
+- **For the owner's eye:** the owner saw the captures and OK'd the push.
+- **Next (the owner's order):**
+  - The HATCH ALL count fix.
+  - The Mysterious Pod's mist texture (rbxassetid 88002993641737), with a shine.
+  - The Mist odds cards: no black window behind the creature.
+  - (b) the Shop plate face.
+  - (c) the Robux buy buttons.
+  - 9, the new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools.
+
 ## COMMON CARDS ON CODEX'S STONE GREY STUDS — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH CODEX'S ART AND THE OWNER'S OK ON THE CAPTURE, NOT PUBLISHED; RarityCardsSpec 50/0, PlotShowcaseSpec 55/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES, NO FAILURE; 6 OF 6 MUTANTS CAUGHT; captures in output/common-stone-studs-2026-10-11)
 
 The owner's ask via the peer: Common cards get Codex's STONE GREY studs (Codex's entry below has the art), in place of the plain card.
@@ -10,7 +43,7 @@ The owner's ask via the peer: Common cards get Codex's STONE GREY studs (Codex's
   - `StudsByRarity.Common = "stone"`. Common's plain-card rule and its comments are gone, in GameConfig, PlotShowcaseView, MarigoldShopUI and IndexUI.
   - Every Common card follows: the Bag, MY PLANTS, the plot's TOP CREATURES board, Marigold's shop, the Index and the Mist odds. Common bats and traps (the Rootwood Bat) too.
   - No `words`/`light` override: the names and sizes read on the usual ink band (captured).
-- **The Mysterious Pod:** its placeholder rarity is Common, so this commit turns its Bag card stone grey too. The owner has since answered: it gets its own card, a "mist" texture Codex will make (art/textures/mist-studs-2026-10-11/CODEX-BRIEF.md), with obsidian in the meantime. That is the next commit.
+- **The Mysterious Pod:** (corrected 2026-10-12) this commit did NOT change its card. PlantInfo gives the shell no rarity, so its card stayed plain, not stone grey. The owner has since given it its own card: obsidian first, then Codex's "mist" texture (the Mysterious Pod entries above).
 - **Specs:**
   - RarityCardsSpec: the stone card's id, spacing and fallback; Common and the Rootwood Bat on stone.
   - PlotShowcaseSpec: a Common's card on its stone.

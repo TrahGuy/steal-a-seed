@@ -707,19 +707,22 @@ local function paintCard(c: Card, e: Entry, order: number)
 	c.ring.Enabled = selected
 	c.innerRing.Enabled = selected
 	if e.kind == "pod" then
+		-- A pod's card stays plain: it says nothing a pod does not. A shell's own
+		-- card is the one exception (the Mysterious Pod's, BagLook.StudsBySpecies,
+		-- as in the Bag): it names no creature either.
+		local spec = c.studs.set((STUD_LOOK.StudsBySpecies :: any)[e.item.speciesId])
 		RarityFX.setText(c.fxText, nil, face.variantColour or LOOK.Muted)
 		c.variant.Text = face.variant
 		local left = (e.hatchAt or 0) - serverNow()
 		c.rate.Text = if left > 0 then "Growing " .. clock(left) else "READY TO HATCH"
-		c.rate.TextColor3 = if left > 0 then LOOK.Muted else LOOK.Premium
+		c.rate.TextColor3 = if left > 0 then (if spec then LOOK.Cream else LOOK.Muted) else LOOK.Premium
 		RarityFX.setEdge(c.fxEdge, nil, false)
-		c.edge.Color = LOOK.CardEdge
-		-- A pod's card stays plain: it says nothing a pod does not.
+		c.edge.Color = if spec then LOOK.Ink else LOOK.CardEdge
 		MenuKit.cardTint(c.tint, nil)
-		c.studs.set(nil)
 		RarityFX.setShine(c.fxShine, nil)
-		c.words.Visible = false
-		MenuKit.ink(c.name, LOOK.Text)
+		c.words.Visible = spec ~= nil
+		c.words.BackgroundTransparency = if spec and spec.words then spec.words else STUD_LOOK.StudWordsTransparency
+		MenuKit.ink(c.name, if spec then WHITE else LOOK.Text)
 	else
 		c.variant.Text = face.variant
 		RarityFX.setText(c.fxText, if face.variantIsRarity then face.rarity else nil, face.variantColour or LOOK.Muted)

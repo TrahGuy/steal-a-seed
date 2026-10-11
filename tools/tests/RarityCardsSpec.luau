@@ -191,6 +191,18 @@ local ok, err = pcall(function()
 	check(trail.rarity == nil and trail.edge == nil and trail.studs == "rainbow" and tickets.rarity == nil
 			and tickets.studs == "purple",
 		"the trail and tickets: no rarity, their own cards")
+	-- THE MYSTERIOUS POD (2026-10-11, the owner): its own card, kept by its
+	-- shell and never by its placeholder rarity -- obsidian until the mist
+	-- upload -- in the Bag and on the hotbar (this face) and in MY PLANTS (5).
+	local shellId = require(Shared:WaitForChild("EnchantedMistData")).Shell.Id
+	local shellSpecies = require(Shared:WaitForChild("SeedData")).Get(shellId or "")
+	local shellKey = BAG.StudsBySpecies and BAG.StudsBySpecies[shellId]
+	local mystery = InventoryModel.face(item("pod", shellId, 1))
+	local ordinary = InventoryModel.face(item("pod", "nubkin", 1))
+	check(shellKey == "obsidian" and S[shellKey] ~= nil and mystery.studs == shellKey and mystery.rarity == nil
+			and shellSpecies ~= nil and shellKey ~= R[shellSpecies.Rarity] and ordinary.studs == nil,
+		"the Mysterious Pod: its own card by its shell (obsidian until the mist upload), never its placeholder "
+			.. "rarity's, and no rarity said; an ordinary pod's card stays plain", tostring(mystery.studs))
 
 	--==========================================================================
 	-- 3. THE SHINE
@@ -334,6 +346,10 @@ local ok, err = pcall(function()
 				1, true)
 			and string.find(garden, "c.innerRing.Color = if spec and spec.light then LOOK.Ink else WHITE", 1, true),
 		"MY PLANTS: the shine right after the studs, switched with the card's lights; the white card's dark line")
+	check(string.find(garden, "local spec = c.studs.set((STUD_LOOK.StudsBySpecies :: any)[e.item.speciesId])", 1, true)
+			and string.find(garden, "c.words.Visible = spec ~= nil", 1, true)
+			and not string.find(garden, "c.studs.set(nil)", 1, true),
+		"MY PLANTS: a pod's card stays plain but for a shell's own card -- the Mysterious Pod's, as in the Bag")
 	local plot = src(Shared, "PlotShowcaseView")
 	check(order(plot, "local studs = UIKit.studCard(face, 10, Z + 1)", "local shineFX = RarityFX.shine(face, 10, Z + 1)",
 			"local words = MenuKit.frame(face, \"Words\"")

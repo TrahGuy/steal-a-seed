@@ -372,6 +372,7 @@ end
 
 local STUDS_BY_RARITY: { [string]: string } = (GameConfig.BagLook.StudsByRarity :: any)
 local STUDS_BY_KIND: { [string]: string } = (GameConfig.BagLook.StudsByKind :: any)
+local STUDS_BY_SPECIES: { [string]: string } = (GameConfig.BagLook.StudsBySpecies :: any)
 
 function InventoryModel.face(item: Item): Face
 	if item.kind == "weapon" then
@@ -467,8 +468,9 @@ function InventoryModel.face(item: Item): Face
 		art = { kind = "pod", speciesId = drawAs, tier = item.tier, weaponId = nil },
 		search = string.lower(info.title .. " " .. variant),
 		category = "pods",
-		-- Only a rarity the shell already says (a Secret or Rain pod's).
-		studs = if known then STUDS_BY_RARITY[known] else nil,
+		-- A shell's own card (the Mysterious Pod's, by its species), else only a
+		-- rarity the shell already says (a Secret or Rain pod's).
+		studs = STUDS_BY_SPECIES[species.Id] or (if known then STUDS_BY_RARITY[known] else nil),
 	}
 end
 
