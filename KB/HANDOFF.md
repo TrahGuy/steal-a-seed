@@ -1,5 +1,26 @@
 # Steal a Seed — Session Handoff
 
+## THE RAIN BIOME: A POD CARRIED OUT BY THE RAIN'S END IS LOST; THE BRIDGE'S SAFE ZONE WORDS; BERRIES EVERY 3 S — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip: a3b208d, 45840f0, ec6b498; NOT PUBLISHED; TOUCHED SPECS GREEN; 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY ON SeedTest_rainfix_20261011)
+
+The owner, via the peer: "(a) A pod carried inside the rain biome is LOST, not banked, if its carrier never went through the safe zone. (b) Make the rain biome's safe-zone text look like the general biomes' safe-zone text." Then: "berries spawn every 3 s instead of 5 s".
+- **(a) Lost in the rain** (a3b208d):
+  - The leak: the rain's evacuation put a carrier on the landing grass, inside the safe zone, and CarryService's poll then banked the pod in their arms.
+  - Now `WeatherService.evacuate` takes the pod from every carrier it moves, with the nightfall forfeit (`CarryService.ForfeitCarry`). It runs in the move's own resumption, so the bank poll cannot run in between. Only the pod in their arms goes; the Backpack and the plot are untouched.
+  - The carrier sees "YOUR POD WAS LOST IN THE RAIN" (`GameConfig.Weather.PodLost`).
+  - Only reading in the code: an unbanked pod on the rain terrain can only have been picked up there (reaching it means crossing the field), and the evacuation is the only way into the safe zone without the walk over the deck's line.
+  - Seam: `WeatherService.useForfeit`.
+- **(b) The bridge's words** (45840f0): the deck now builds the road's own marking (`SafeZoneMarking.build`, LuckiestGuy, the 7-px outline, a two-tone shield each side).
+  - `build` takes an optional pixels-per-stud. The road's stays 7; the bridge's is 16 (`Weather.SafeLine.PixelsPerStud`), about 44 x 9 studs between the deck's safe end (x 258) and the line.
+  - It reads left to right for a runner coming home along -X and is tagged RainTerrain. RainBiome's `floorText` is gone.
+- **Berries every 3 s** (ec6b498): `EnchantedMistData.Spawn.IntervalSeconds` 5 -> 3, the owner's; the rest stays DRAFT. At most 97 berries a Mist (was 59); six pods need 60. EnchantedMistBerrySpec reads the interval.
+- **Tests** (lean):
+  - RainEventSpec 98/0, RainPodsSpec 67/0, AutoWeatherSpec 44/0, RainFamilySpec 38/0, AdminSpec 127/0, SecretToastSpec 61/0, EnchantedMistBerrySpec 66/0, EnchantedMistSpec 37/0.
+  - Mutants NoForfeit, MarkingRoadScale and MarkingReadsBackward caught.
+  - Guarded Play: carrying a squallsnapper at the rain nest, the rain ended. The player landed at (232, 3, 55) in the safe zone carrying nothing, with 0 bag pods and 0 tools. The log reads "forfeited ... never over the safe line", and the notice showed.
+  - The deck marking matches the road's (captures in output/rain-fixes-2026-10-11).
+  - Store off (1 key removed), hosts gone, probe 347 / 0 differ / 0 ZZ.
+- **Not verified**: a Thunderstorm run (same code path, icon "thunder"); a phone; the berry rate in Play (spec only).
+
 ## THE WEATHER SCREEN WHERE THE OWNER PUT IT; THE FULL SUITE AND THE ROW'S MUTANTS — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip: 560e90f, 9e6ae99, a5c9df3; NOT PUBLISHED; FULL SUITE 141/141 GREEN AFTER ONE SPEC FIX; 10 OF 10 MUTANTS CAUGHT; NO PLAY)
 
 - **Weather screen** (`Shared/WeatherTeaser`, `Teaser.Placement()`): the owner moved it in Studio. The move was a Workspace edit only (probe: 0 scripts differed), and MapService rebuilds the screen from `Placement()` on every Play, so it is copied to disk.
