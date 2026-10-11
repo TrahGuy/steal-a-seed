@@ -46,7 +46,9 @@ EnchantedMistData.BerriesPerPod = 10
 EnchantedMistData.HatchSeconds = 30
 
 --==============================================================================
--- SPAWNING -- DRAFT tuning (proposed, not approved balance)
+-- SPAWNING -- DRAFT tuning (proposed, not approved balance), except
+-- IntervalSeconds: the owner's 3 s (2026-10-11; it was 5). At most 97 berries
+-- a Mist (300 s, none in the last 10 s); six players' pods need 60.
 --
 -- At most MaxActive berries in the world; one spawn or replacement
 -- opportunity every IntervalSeconds, never a catch-up burst after a stall; each
@@ -72,7 +74,7 @@ EnchantedMistData.HatchSeconds = 30
 --==============================================================================
 EnchantedMistData.Spawn = {
 	MaxActive = 6,
-	IntervalSeconds = 5,
+	IntervalSeconds = 3, -- the owner's (2026-10-11)
 	LifetimeSeconds = 60,
 	SafeShare = 0.6,
 	HoldSeconds = 0.75,

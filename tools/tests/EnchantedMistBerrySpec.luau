@@ -9,7 +9,8 @@
 --   1. the numbers: the draft tuning, the racing line and the Pod Guide kept
 --      clear, the supply against six players' demand (a NOTE, for the owner)
 --   2. a berry: its model and prompt, its notice (nobody full or loading told),
---      one opportunity every 5 s, at most 6, 60 s each, no catch-up burst after
+--      one opportunity every IntervalSeconds (the owner's 3 s), at most 6, 60 s
+--      each, no catch-up burst after
 --      a stall, nothing in the last 10 s, a skipped opportunity never made up
 --   3. a pick: every refusal (no hold, a short hold, dead, far, a pod in hand,
 --      not loaded, full, expired, the Mist over, nothing credited, a throwing
@@ -218,9 +219,9 @@ local ok, err = pcall(function()
 	-- 1. THE NUMBERS
 	--==========================================================================
 	say("-- the numbers --")
-	check(SPAWN.MaxActive == 6 and SPAWN.IntervalSeconds == 5 and SPAWN.LifetimeSeconds == 60
-			and SPAWN.SafeShare == 0.6 and SPAWN.HoldSeconds == 0.75,
-		"the brief's proposal: 6 at once, one chance every 5 s, 60 s each, 60% near the plots, a 0.75 s hold")
+	check(SPAWN.MaxActive == 6 and SPAWN.LifetimeSeconds == 60 and SPAWN.SafeShare == 0.6 and SPAWN.HoldSeconds == 0.75,
+		"the brief's proposal: 6 at once, 60 s each, 60% near the plots, a 0.75 s hold")
+	check(SPAWN.IntervalSeconds == 3, "the owner's spawn rate (2026-10-11): one chance every 3 s")
 	check(SPAWN.HoldTolerance > 0 and SPAWN.HoldSeconds - SPAWN.HoldTolerance >= 0.5 and SPAWN.ReachSlack > 0
 			and SPAWN.QuietEndSeconds < SPAWN.LifetimeSeconds,
 		"the server's slack: a hold of at least 0.5 s, a little reach, a quiet end shorter than a berry's life")
@@ -279,27 +280,29 @@ local ok, err = pcall(function()
 	local post = lastA and Notice.readServerNotice(lastA.payload)
 	check(post ~= nil and post.key == "server:" .. B.NoticeKeys.Appeared,
 		"one key for every berry: the next one says its place in the notice already up")
-	stepTo(1004)
-	check(#M.List() == 1, "four seconds on: still one")
-	stepTo(1005)
-	check(#M.List() == 2, "at 5 s: the second")
-	stepTo(1030)
-	check(#M.List() == SPAWN.MaxActive, "then one every 5 s, up to six", #M.List())
+	local I = SPAWN.IntervalSeconds
+	stepTo(1000 + I - 1)
+	check(#M.List() == 1, "a second short of the next chance: still one")
+	stepTo(1000 + I)
+	check(#M.List() == 2, "at the next chance: the second")
+	stepTo(1000 + 5 * I)
+	check(#M.List() == SPAWN.MaxActive, "then one a chance, up to six", #M.List())
 	stepTo(1059)
 	check(#M.List() == SPAWN.MaxActive and listed("spec-1-b1") ~= nil, "never a seventh; the first still there at 59 s")
 	local firstModel = M.Model("spec-1-b1")
 	stepTo(1060)
-	check(listed("spec-1-b1") == nil and firstModel.Parent == nil and #M.List() == SPAWN.MaxActive
-			and M.List()[1].id == "spec-1-b2",
-		"at 60 s the first goes, model and all, and the same step's chance replaces it")
+	check(listed("spec-1-b1") == nil and firstModel.Parent == nil, "at 60 s the first goes, model and all")
+	stepTo(1000 + math.ceil(SPAWN.LifetimeSeconds / I) * I)
+	check(#M.List() == SPAWN.MaxActive and M.List()[1].id == "spec-1-b2",
+		"and the first chance from then on replaces it", #M.List())
 	M._stop("spec")
 	begin("stall", 2000)
 	clock = 2050
 	M._step(2050)
-	stepTo(2054)
+	stepTo(2050 + I - 1)
 	check(#M.List() == 2, "after a 50-second stall: ONE more berry, never a burst to make up", #M.List())
-	stepTo(2055)
-	check(#M.List() == 3, "and the next 5 s after it", #M.List())
+	stepTo(2050 + I)
+	check(#M.List() == 3, "and the next one a whole interval after it", #M.List())
 	-- A spawn at exactly `t`, on a fresh Mist that began at 5000 (ends 5300).
 	local function spawnsAt(t)
 		M._stop("spec")
@@ -323,12 +326,12 @@ local ok, err = pcall(function()
 	begin("skip", 6000)
 	check(#M.List() == 0 and #sent == told, "an opportunity with no spot is skipped: no berry, no notice")
 	fill(5)
-	clock = 6004
-	M._step(6004)
+	clock = 6000 + I - 1
+	M._step(6000 + I - 1)
 	check(#M.List() == 0, "and never made up: a spot found a second later waits for the next chance")
-	clock = 6005
-	M._step(6005)
-	check(#M.List() == 1, "the next chance, 5 s after the last, takes it", #M.List())
+	clock = 6000 + I
+	M._step(6000 + I)
+	check(#M.List() == 1, "the next chance, an interval after the last, takes it", #M.List())
 
 	--==========================================================================
 	-- 3. A PICK
@@ -496,8 +499,9 @@ local ok, err = pcall(function()
 		table.insert(models, M.Model(b.id))
 	end
 	local lastId = M.List()[1].id
+	local before = #M.List()
 	begin("end", 9010)
-	check(#M.List() == 3, "the same start heard twice changes nothing", #M.List())
+	check(before > 0 and #M.List() == before, "the same start heard twice changes nothing", #M.List())
 	M._stop("time")
 	local gone = true
 	for _, mdl in ipairs(models) do
