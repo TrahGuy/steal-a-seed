@@ -386,6 +386,9 @@ local function body()
 			CarryService = CarryService,
 			PlantWander = PlantWander,
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
+			-- The Mysterious Pod (2026-10-11): no shells in this fixture.
+			MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
+				Consume = function() end, TellHatch = function() end },
 		}, { GameConfig = liveConfig, HatchRoll = rollOff })
 		PlantService.Init()
 		PlantService.Start()
@@ -559,7 +562,10 @@ local function body()
 		check(plant ~= nil and plant:find("prompt.Triggered:Connect(function(player)", 1, true)
 				and plant:find("hatch(player, entry)", 1, true),
 			"the free prompt calls the same hatch()")
-		check(plant ~= nil and select(2, plant:gsub("announceReveal%(%{", "")) == 1,
+		-- (Since 2026-10-11 hatch() builds its reveal first and announces it once,
+		-- `announceReveal(reveal)`, at once or after a Mysterious Pod's reels.)
+		check(plant ~= nil and select(2, plant:gsub("announceReveal%(reveal%)", "")) == 1
+				and plant:find("announceReveal({", 1, true) == nil,
 			"which announces the reveal in exactly one place, for both doors",
 			plant and select(2, plant:gsub("announceReveal%(%{", "")))
 

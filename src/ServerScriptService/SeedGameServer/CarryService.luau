@@ -1258,6 +1258,11 @@ function CarryService.DropHeldPod(player: Player, at: Vector3?): (boolean, strin
 		return false, nil
 	end
 	local species = SeedData.Get(tool:GetAttribute("SpeciesId"))
+	-- A Mysterious Pod is never knocked loose (the owner, 2026-10-11): it stays
+	-- in the hands, its hidden outcome with it.
+	if species and (species :: any).Mystery == true then
+		return false, "mystery"
+	end
 	local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
 	local where = at
 	if not where then
@@ -1406,7 +1411,9 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- would name the creature -- so they say their pod and their size only.
 	local rainPod = SeedData.RainPodOf(species)
 	local podRarity = if rainPod then rainPod.Rarity else nil
-	tool.ToolTip = if species.Secret == true
+	-- The Mysterious Pod's shell: its name, nothing that names what is inside.
+	tool.ToolTip = if (species :: any).Mystery == true and not hatched then species.Name
+		elseif species.Secret == true
 		then (if hatched then "Secret" else "Secret pod")
 		elseif rainPod and not hatched and not podRarity then string.format("%s  ·  %d tier", rainPod.Name, tier)
 		elseif rainPod and not hatched then (if rainPod.Sized
@@ -3252,7 +3259,9 @@ end
 -- a receipt lands -- so each caller can tell "not now" from "done": the wheel
 -- keeps its prize owed, and a paid pod's receipt stays open.
 --==============================================================================
-function CarryService.GivePod(player: Player, speciesId: string, tier: number): boolean
+-- Also hands back the new pod's Item id (2026-10-11: the Mysterious Pod keys
+-- its hidden outcome by it); callers that only ask "given?" read the first.
+function CarryService.GivePod(player: Player, speciesId: string, tier: number): (boolean, string?)
 	local species = SeedData.Get(speciesId)
 	if not species then
 		return false
@@ -3276,7 +3285,8 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 		tool:Destroy()
 		return false
 	end
-	return true
+	local item = tool:GetAttribute(ITEM_ID)
+	return true, if type(item) == "string" then item else nil
 end
 
 --==============================================================================

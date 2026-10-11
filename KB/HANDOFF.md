@@ -1,5 +1,62 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST, STAGE 4: THE MYSTERIOUS POD — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF: no pod is granted until every pool creature exists, Enabled = false, ShowMosskeeper = false; MysteryPodSpec 29/0, 11 OF 11 MUTANTS CAUGHT; FULL SUITE RUN ONCE, ITS 15 STAGE-4 FAILURES FIXED AND RE-RUN GREEN; REELS AND BAR LOOKS OK'd by Claude on the owner's handoff; owner to review)
+
+The brief: KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §10-13, plus the owner's five decisions relayed by the peer (no knock-loose, unsellable until hatched, the pedestal refuses it, planting allowed with the record following it, LuckhollowPod art named "Mysterious Pod" with rarity "Event" and no PointLight). The plumbing below is described as built; it was not separately approved.
+- **The shell**:
+  - `SeedData.MysterySpecies`: one generic species "mysterypod", "Mysterious Pod". It is unlisted, unsellable and unsized, and grows in a fixed 30 s.
+    - Its internal `Rarity = "Common"` is a placeholder that is never shown: the Bag/label say "???" and the biome says Unknown.
+  - `PodForms/mysterypod`: the owner's `D:/KAPE/LuckhollowPod/luckhollow_pod_paste.luau`, lifted to 88 parts, with a LidHinge and the Owner attributes (Rarity "Event", no PointLight).
+  - `EnchantedMistData.Shell` binds it (Id, Name, ReelSeconds 3.6).
+- **The hidden outcome** (`MysteryPodService`, Priority 78; it fills MosskeeperService's `grantPod`, `canGrant` and `saveSoon` hooks):
+  - **Grant**: inside Mosskeeper's one Give-all profile change, with no yield. The server picks the creature (`pickCreature`) and, for Legendary/Mythic/Divine only, the size (`pickSize`), once.
+    - It gives one shell into the Bag.
+    - It saves `Profile.MysteryPods[item] = {Species, Size, PoolVersion, SizesVersion, ReadyAt = now + 30}` in the same change as the berries and progress, then asks for a save.
+  - **Never seen by a client**: `ProfileSchema.ServerOnly = {"MysteryPods"}`, stripped by `ProfileSchema.ClientView` in both pushProfile and ProfileReady.
+    - The record is cleaned on load: key ≤ 24, a safe Species, Size 1..7 or nil, a finite ReadyAt, at most 200.
+    - The Tool, row, label and world model all show only the shell.
+  - **Hatch** (Bag or bed): resolves to the saved creature at the saved size (a Secret its own). The record is consumed in the same no-yield step that removes the shell, so it hatches exactly once.
+    - With no record: refused "NO_OUTCOME".
+    - The owner is told (`EnchantedMistConfig.Mystery.Action`); the normal world reveal follows ReelSeconds later.
+  - **Rules**:
+    - never knocked loose (DropHeldPod "mystery");
+    - unsellable;
+    - the sacrifice pedestal refuses it ("HATCH IT FIRST / Hatch your Mysterious Pod first.");
+    - no paid shortcut (instant-hatch offer, bed prompt, credits);
+    - never in HATCH ALL;
+    - planting keeps its Item in the bed, the save and a reload, so the record follows it and it hatches there with the reels.
+  - **Off until real**: `CanGrant()` is false until the shell and every pool creature are registered. Until then a pod-earning delivery is refused whole with POD_NOT_READY (nothing deducted).
+    - `EnchantedMistService.Built.MysteriousPod = true`; MissingBindings names an unbound shell.
+- **The card reels** (`MysteryRevealUI.client`, the owner only, this family only; never the retired hatch cards; no camera):
+  - A studded strip at the top of the screen.
+  - **"WHAT'S INSIDE?"**: `MistOddsView.card` cards (the Odds look, % on top) land on the saved creature.
+  - **"WHAT SIZE?"**: size cards with their % on top land on the saved size. A Secret skips this reel ("A SECRET!").
+  - The filler is drawn by the odds' own mix from the hatch token (`MistOddsView.reelItems`), with no two alike side by side.
+  - Creatures that exist are drawn in their windows (only the ~7 near the landing); missing ones keep the dark "???".
+  - The rainbow/shimmer words move; Reduced Motion snaps to the landed state.
+- **Mosskeeper's bar** (`MosskeeperView`):
+  - The pod icon is now the shell itself, a live render like the berry, replacing the store-pod stand-in.
+  - The solid track (it always was opaque) gains a moss edge (`Bar.TrackEdge`), the mill MilestoneBar's dark-well look, so it reads as solid; the fill has an ink line.
+- **Shared change**: the Odds page size chips' % now come from `MistOddsView.sizeWords`. Colossal's 0.52% shimmer used to be white-on-white, so invisible; it now shows.
+- **Look**: in `output/mosskeeper-2026-10-11/reels/` (Edit previews, all cleared):
+  - `reels_landed.png`, `reels_colossal.png`, `odds_page_after.png`;
+  - `bar_after.png`: MosskeeperView's real bar code re-hosted flat over him, since Edit draws no PlayerGui billboard.
+  - The peer asked for weighted filler, no identical neighbours, the size %, a solid-looking track and the real pod icon; all were done. OK'd by Claude on the owner's handoff; owner to review.
+- **Tests**:
+  - MysteryPodSpec 29/0 (new): the shell, the record and ClientView, grant/size/Secret/refusals/CanGrant, outcome/tell/consume, the rules, the reels' windows, the filler mix over 300 reels, no neighbours alike, the size % and shimmer, the bar.
+  - Mutants 11/11.
+  - EnchantedMistSpec, AdminSpec and MosskeeperSpec were adjusted.
+  - Full suite run once: the 15 failures were all stage 4 fallout and were fixed, then the specs re-run green:
+    - 12 specs' strict PlantService sibling maps got a no-shell MysteryPodService stand-in;
+    - GardenPlan/HatchBonus/HatchReveal/HatchRoll pins were re-anchored to the new item/reveal lines;
+    - the Sacrifice notice was shortened to the 48-char rule.
+- **Not verified**: a live Play of a Mysterious Pod hatch. No pod can be granted while the creatures are missing, and MCP cannot reach the game's module instances, so it is spec-pinned plus Edit previews only. Also unverified: the bar as a real billboard in Play; phones and controllers (the reel panel is max 460 px, 0.92 of the width).
+- **OPEN OWNER QUESTIONS** (the feature stays off until answered):
+  1. The five missing pool creatures (Mossbristle, Briarstag, Hollowl, Elderbough, Gnarlmaw): their models and their incomes.
+  2. Approval of the DRAFT odds: Pool weights 60/17/17/5/0.8/0.2, and the size weights. Both have `Approved = false`, and the Odds page says "Draft odds, not final".
+  3. The shell's internal placeholder Rarity "Common" (never shown): fine, or something else?
+  4. Turning it on: ShowMosskeeper and Enabled stay false; the Mist "Look" (Built.Look) is not built.
+
 ## ENCHANTED MIST: THE HUB GROVE ROUND THE MOSSKEEPER — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF WITH THE EVENT: Enabled = false; MosskeeperSpec 60/0, 4 OF 4 MUTANTS CAUGHT; LOOK OK'd by Claude on the owner's handoff; owner to review)
 
 The owner, via the peer: "MORE TREES around Mosskeeper, more ENCHANTED DECORATION, and a PATHWAY leading to him ... just improvise".

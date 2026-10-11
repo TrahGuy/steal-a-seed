@@ -650,6 +650,9 @@ local function makeWorld(rollOn)
 		CarryService = w.CarryService,
 		PlantWander = PlantWander,
 		GardenFrame = require(Server:WaitForChild("GardenFrame")),
+		-- The Mysterious Pod (2026-10-11): no shells in this fixture.
+		MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
+			Consume = function() end, TellHatch = function() end },
 	}, { GameConfig = config, HatchRoll = w.HatchRoll }, fakeGame)
 	w.PlantService.Init()
 	w.PlantService.Start()

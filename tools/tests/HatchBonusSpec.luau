@@ -341,7 +341,9 @@ local ok, err = pcall(function()
 	local body = string.match(plant, "\nfunction hatch%((.-)\nend\n") or ""
 	local gave = body:find("if not given then", 1, true)
 	local first = body:find("local firstHatch = PlayerDataService.RecordTutorial(player, \"hatch\")", 1, true)
-	local announce = body:find("announceReveal({", 1, true)
+	-- (Since 2026-10-11 the reveal is built first, `local reveal = {`, so a
+	-- Mysterious Pod's can wait for its card reels.)
+	local announce = body:find("announceReveal(reveal)", 1, true)
 	check(gave and first and announce and gave < first and first < announce
 			and body:find("firstHatch = firstHatch == true", 1, true) ~= nil,
 		"in PlantService's hatch, a refused hatch returns before the hatch is recorded or announced; the first-ever "

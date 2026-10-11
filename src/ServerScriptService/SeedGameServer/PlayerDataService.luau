@@ -1440,7 +1440,8 @@ local function pushProfile(player: Player)
 		return
 	end
 	pcall(function()
-		remote:FireClient(player, entry.profile)
+		-- Never the server-only fields (the Mysterious Pods' hidden outcomes).
+		remote:FireClient(player, ProfileSchema.ClientView(entry.profile))
 	end)
 end
 
@@ -1663,7 +1664,7 @@ local function onPlayerAdded(player: Player)
 
 		if profileReady then
 			pcall(function()
-				(profileReady :: RemoteEvent):FireClient(player, true, profile, persistent)
+				(profileReady :: RemoteEvent):FireClient(player, true, ProfileSchema.ClientView(profile), persistent)
 			end)
 		end
 		replicateDirty[player] = true

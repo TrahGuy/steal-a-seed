@@ -476,7 +476,7 @@ local function deliverOne(player: Player, profile: Profile, row: Prize): boolean
 		if not known or room < 1 then
 			return false
 		end
-		return CarryService.GivePod(player, row.Species, prize.tier or 1)
+		return (CarryService.GivePod(player, row.Species, prize.tier or 1))
 	end
 	return false
 end

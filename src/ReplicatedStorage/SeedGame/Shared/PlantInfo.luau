@@ -138,7 +138,13 @@ function PlantInfo.Describe(speciesId: any, tier: any, hatched: boolean,
 	if biome and not secret and not rainPod then
 		info.title = string.format(GameConfig.PodGuide.Words.BagTitle, biome.DisplayName)
 	end
-	if secret and not hatched then
+	if species and (species :: any).Mystery == true and not hatched then
+		-- The Mysterious Pod (Enchanted Mist stage 4): one shell for every
+		-- creature, so its name and nothing else -- no biome, no rarity, no size,
+		-- no colour: any of them could name what is inside.
+		info.title = (species :: SeedData.Species).Name
+		info.biome = PlantInfo.Unknown
+	elseif secret and not hatched then
 		-- A Secret's pod is its own model: its look already says what it is, so
 		-- it reads Secret -- never a size, and never pretends to be ???.
 		local known = species :: SeedData.Species

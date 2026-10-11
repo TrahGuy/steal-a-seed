@@ -106,6 +106,13 @@ MosskeeperService.Hooks = {
 	-- the delivery's own profile change, and must not yield; false refuses the
 	-- whole delivery. nil until it exists: no delivery can earn a pod yet.
 	grantPod = nil :: ((player: any, profile: any) -> boolean)?,
+	-- Whether a pod can be granted at all now (stage 4: every pool creature
+	-- real); false refuses a pod-earning delivery as not ready.
+	canGrant = function(): boolean
+		return true
+	end,
+	-- A save soon after a pod is granted (stage 4).
+	saveSoon = function(_player: any) end,
 	-- Start points these at the GameEvent remote.
 	send = function(_player: any, _payload: { [string]: any }) end,
 	notify = function(_player: any, _payload: { [string]: any }) end,
@@ -295,7 +302,7 @@ function MosskeeperService.Give(player: any): { [string]: any }
 		local pods = EnchantedMistData.deliver(tonumber(profile.DewberryProgress) or 0, carried)
 		if pods > 0 then
 			-- A pod-earning delivery: all of it, or none of it.
-			if Hooks.grantPod == nil then
+			if Hooks.grantPod == nil or not Hooks.canGrant() then
 				return refuse("POD_NOT_READY")
 			end
 			if not Hooks.bagReady(player) then
@@ -336,6 +343,9 @@ function MosskeeperService.Give(player: any): { [string]: any }
 		return refuse("BUSY")
 	end
 	local result = answer :: { [string]: any }
+	if result.phase == "given" and result.pods > 0 then
+		Hooks.saveSoon(player)
+	end
 	if result.phase == "given" then
 		local plural = if result.delivered == 1 then "y" else "ies"
 		log(string.format("%s delivered %d Dewberr%s: %d pod(s), %d/%d saved.", tostring(player.Name),

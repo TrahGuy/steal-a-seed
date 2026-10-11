@@ -69,6 +69,9 @@ PodForms.Pods = {} :: { [string]: SecretForms.FormSpec }
 for _, id in ipairs(PodForms.Ids) do
 	PodForms.Pods[id] = load(id)
 end
+-- The Mysterious Pod's shell (2026-10-11, Enchanted Mist stage 4): the owner's
+-- LuckhollowPod, a lid pod. Not one of the 25 plants' pods (not in Ids).
+PodForms.Pods.mysterypod = load("mysterypod")
 
 -- Which way each pod moves (PodMotion).
 PodForms.Studded = {
@@ -83,6 +86,8 @@ PodForms.Studded = {
 PodForms.LidDegrees = {
 	toadcap = 65, bellchime = 65, pyrelotus = 65, slagbloom = 65, astralhorn = 65, cosmospire = 65, novaorb = 65,
 	kilnhusk = 70, voidpetal = 70, snapmoss = 70, bogbonnet = 70, supernovus = 70, gloomlotus = 70,
+	-- The Mysterious Pod's shell: its builder's 70 degrees.
+	mysterypod = 70,
 } :: { [string]: number }
 
 -- Whether a species is built from the owner's pod.

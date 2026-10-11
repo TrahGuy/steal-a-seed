@@ -256,6 +256,9 @@ local function garden()
 			PlantWander = PlantWander,
 			-- The saved garden's frame (2026-10-07): pure, so the real one.
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
+			-- The Mysterious Pod (2026-10-11): no shells in this fixture.
+			MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
+				Consume = function() end, TellHatch = function() end },
 		})
 		PlantService.Init()
 		PlantService.Start()

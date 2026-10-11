@@ -671,6 +671,9 @@ local function body()
 				CarryService = CarryService,
 				PlantWander = PlantWander,
 				GardenFrame = require(Server:WaitForChild("GardenFrame")),
+				-- The Mysterious Pod (2026-10-11): no shells in this fixture.
+				MysteryPodService = { IsShell = function() return false end, Outcome = function() return nil end,
+					Consume = function() end, TellHatch = function() end },
 			}, { HatchRoll = rollOn, GameConfig = gapless }, fakeGame)
 			PlantService.Init()
 			PlantService.Start()
@@ -886,7 +889,9 @@ local function body()
 			-- rides back beside a refusal), and may again.
 			local from = plant:find("function hatch(player: Player, entry: Planted, early: boolean?)",
 				1, true)
-			local to = from and plant:find("announceReveal({", from, true)
+			-- (Since 2026-10-11 the reveal is built first and announced by show(),
+			-- at once, or after a Mysterious Pod's card reels.)
+			local to = from and plant:find("announceReveal(reveal)", from, true)
 			local slice = if from and to then plant:sub(from, to) else ""
 			-- Comments may say "no wait"; the code may not wait.
 			local code = {}

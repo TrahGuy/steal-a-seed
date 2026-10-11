@@ -34,6 +34,8 @@ local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local MosskeeperIdle = require(Shared:WaitForChild("MosskeeperIdle"))
 local DewberryModel = require(Shared:WaitForChild("DewberryModel"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 
 local CFG = EnchantedMistConfig.Mosskeeper
 local BAR = CFG.Bar
@@ -134,28 +136,49 @@ do
 	eye.Parent = berryIcon
 	berryIcon.CurrentCamera = eye
 end
--- STAND-IN until the Mysterious Pod's own art (stage 4): the owner's own
--- store pod picture, to swap when that art arrives.
-local podIcon = Instance.new("ImageLabel")
+-- The Mysterious Pod at the end, a live render like the berry: the shell
+-- itself (EnchantedMistData.Shell, the owner's Luckhollow pod), never a
+-- stand-in picture. Nothing when the shell is unbound.
+local podIcon = Instance.new("ViewportFrame")
 podIcon.Name = "PodIcon"
 podIcon.AnchorPoint = Vector2.new(1, 0.5)
 podIcon.Position = UDim2.fromScale(0.99, 0.52)
 podIcon.Size = UDim2.fromScale(0.15, 0.56)
 podIcon.BackgroundTransparency = 1
-podIcon.Image = GameConfig.Store.Icons.pod1
-podIcon.ScaleType = Enum.ScaleType.Fit
+podIcon.Ambient = berryIcon.Ambient
+podIcon.LightColor = berryIcon.LightColor
+podIcon.LightDirection = berryIcon.LightDirection
 podIcon.ZIndex = 3
 podIcon.Parent = board
 local podAspect = Instance.new("UIAspectRatioConstraint")
 podAspect.AspectRatio = 1
 podAspect.Parent = podIcon
+do
+	local shell = SeedData.Get(EnchantedMistData.Shell.Id or "")
+	local ok, model = false, nil
+	if shell then
+		ok, model = pcall(CreatureModel.Build, shell, 1, CreatureModel.STAGE_POD, CFrame.new(), podIcon)
+	end
+	if ok and model then
+		-- Framed whole from a little above its front, as the berry is.
+		local box, size = model:GetBoundingBox()
+		local radius = size.Magnitude / 2
+		local eye = Instance.new("Camera")
+		eye.FieldOfView = 40
+		local distance = radius / math.tan(math.rad(eye.FieldOfView / 2)) * 0.8
+		eye.CFrame = CFrame.lookAt(box.Position + Vector3.new(0, radius * 0.3, distance), box.Position)
+		eye.Parent = podIcon
+		podIcon.CurrentCamera = eye
+	end
+end
 
 local track = Instance.new("Frame")
 track.Name = "Track"
 track.AnchorPoint = Vector2.new(0.5, 0)
 track.Position = UDim2.fromScale(0.5, 0.4)
 track.Size = UDim2.fromScale(0.62, 0.24)
--- A solid track (the owner, 2026-10-10: progress bars are never see-through).
+-- A solid track (the owner, 2026-10-10: progress bars are never see-through):
+-- a dark well with a moss edge, the mill's MilestoneBar look.
 track.BackgroundColor3 = BAR.Track
 track.BackgroundTransparency = 0
 track.BorderSizePixel = 0
@@ -166,7 +189,7 @@ trackCorner.CornerRadius = UDim.new(0.5, 0)
 trackCorner.Parent = track
 local trackStroke = Instance.new("UIStroke")
 trackStroke.Thickness = 2
-trackStroke.Color = Color3.fromRGB(16, 22, 18)
+trackStroke.Color = BAR.TrackEdge
 trackStroke.Parent = track
 
 local fill = Instance.new("Frame")
@@ -179,6 +202,10 @@ fill.Parent = track
 local fillCorner = Instance.new("UICorner")
 fillCorner.CornerRadius = UDim.new(0.5, 0)
 fillCorner.Parent = fill
+local fillStroke = Instance.new("UIStroke")
+fillStroke.Thickness = 1.5
+fillStroke.Color = Color3.fromRGB(16, 22, 18)
+fillStroke.Parent = fill
 
 local sub = MenuKit.heading(board, "Sub", 18, Color3.fromRGB(200, 240, 214), 3)
 sub.AnchorPoint = Vector2.new(0.5, 0)

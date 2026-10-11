@@ -83,7 +83,7 @@ EnchantedMistService.Hooks = {
 EnchantedMistService.Built = {
 	Berries = true, -- stage 2: EnchantedMistBerryService, EnchantedMistBerries.client
 	Mosskeeper = true, -- stage 3: MosskeeperService (shown once ShowMosskeeper is on)
-	MysteriousPod = false,
+	MysteriousPod = true, -- stage 4: MysteryPodService, MysteryRevealUI.client
 	Look = false,
 }
 
@@ -93,6 +93,11 @@ function EnchantedMistService.MissingBindings(): { string }
 		if not EnchantedMistService.Built[piece] then
 			table.insert(missing, "code: " .. piece .. " not built yet")
 		end
+	end
+	-- The Mysterious Pod's one shell (stage 4): bound and real.
+	local shell = EnchantedMistData.Shell.Id
+	if type(shell) ~= "string" or SeedData.Get(shell) == nil then
+		table.insert(missing, "binding: the Mysterious Pod's shell (EnchantedMistData.Shell.Id)")
 	end
 	for _, entry in ipairs(EnchantedMistData.Pool.Entries) do
 		if SeedData.Get(entry.Id) == nil then

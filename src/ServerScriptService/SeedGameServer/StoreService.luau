@@ -221,7 +221,7 @@ local function grant(player: Player, item: any): boolean
 				item.key, tostring(item.species)))
 			return false
 		end
-		return CarryService.GivePod(player, item.species, item.tier or 1)
+		return (CarryService.GivePod(player, item.species, item.tier or 1))
 	elseif item.kind == "hatch" then
 		--======================================================================
 		-- A POD OPENED NOW, NOT A THING HANDED OVER

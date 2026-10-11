@@ -149,7 +149,9 @@ EnchantedMistConfig.Mosskeeper = {
 		-- How long a completed bar shows 10/10 before the saved remainder.
 		FullHold = 1.4,
 		Fill = Color3.fromRGB(150, 255, 196),
+		-- A solid dark well with a moss edge (the mill's MilestoneBar look).
 		Track = Color3.fromRGB(38, 62, 44),
+		TrackEdge = Color3.fromRGB(86, 168, 92),
 	},
 	NoticeKey = "mist:mosskeeper",
 	-- His panels wear the studded kit (MenuKit.studdedTheme): a moss band.
@@ -234,6 +236,20 @@ EnchantedMistConfig.Deck = {
 		Moss = Color3.fromRGB(92, 140, 66),
 		Mint = Color3.fromRGB(150, 255, 200),
 		Petal = Color3.fromRGB(214, 244, 226),
+	},
+}
+
+--==============================================================================
+-- THE MYSTERIOUS POD'S HATCH (MysteryPodService -> MysteryRevealUI.client): the
+-- pod's owner is told the saved creature (and size) as its shell breaks, for
+-- their card reels; the world reveal follows Shell.ReelSeconds later.
+--==============================================================================
+EnchantedMistConfig.Mystery = {
+	Action = "MysteryHatch",
+	Words = {
+		Creature = "WHAT'S INSIDE?",
+		Size = "WHAT SIZE?",
+		Secret = "A SECRET!",
 	},
 }
 

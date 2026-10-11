@@ -132,7 +132,7 @@ PodRushService.Hooks = {
 		return BonusChestService.GrantBoost(player, boostId)
 	end,
 	givePod = function(player: any, speciesId: string, tier: number): boolean
-		return CarryService.GivePod(player, speciesId, tier)
+		return (CarryService.GivePod(player, speciesId, tier))
 	end,
 	carrying = function(player: any): number?
 		return CarryService.CarriedTheft(player)

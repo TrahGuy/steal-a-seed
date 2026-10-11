@@ -190,6 +190,7 @@ end
 --   NOT_A_POD      a bat, a trap, or anything else that is not a plant Tool
 --   HATCHED        a grown plant
 --   NOT_OWNED      a pod Tool the saved bag has no row for
+--   MYSTERY        a Mysterious Pod: hatched first (the owner, 2026-10-11)
 --   NO_GARDEN      no plot of their own, or nothing grown on it to boost
 --
 -- The saved bag is the test of OWNED AND BANKED. A pod becomes a row there by
@@ -272,6 +273,11 @@ local function eligible(player: Player, tool: Tool?, pedestal: BasePart,
 	local id, tier, why = podIn(tool)
 	if not (id and tier) then
 		return why or "NOT_A_POD", nil
+	end
+	-- A Mysterious Pod waits for its hatch (the owner, 2026-10-11).
+	local shell = SeedData.Get(id)
+	if shell and (shell :: any).Mystery == true then
+		return "MYSTERY", nil
 	end
 	if savedPods(profile, id, tier) < 1 then
 		return "NOT_OWNED", nil

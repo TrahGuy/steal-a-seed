@@ -186,9 +186,13 @@ local ok, err = pcall(function()
 		"a planted creature's shortcut and heart are kept (owned); a gone item's are not")
 	local plant = sourceOf(ServerScriptService, "PlantService")
 	local schema = sourceOf(ServerScriptService, "ProfileSchema")
-	check(has(plant, "Item = if entry.stage == CreatureModel.STAGE_GROWN then entry.item else nil,")
+	-- (A Mysterious Pod's shell keeps its item in the bed too, since 2026-10-11:
+	-- its hidden outcome is filed under it.)
+	check(has(plant, "Item = if entry.stage == CreatureModel.STAGE_GROWN or (entry.species :: any).Mystery == true\n"
+				.. "\t\t\t\t\tthen entry.item else nil,")
 			and has(plant, "if bagOnly then -1 else nil, nil, true, entry.item)")
-			and has(plant, "item = if hatched and type(tool:GetAttribute(GameConfig.Attributes.ItemId)) == \"string\""),
+			and has(plant, "item = if (hatched or (species :: any).Mystery == true)\n"
+				.. "\t\t\t\tand type(tool:GetAttribute(GameConfig.Attributes.ItemId)) == \"string\""),
 		"the item id goes into the ground with a creature, is saved with it, and comes back on it")
 	check(has(schema, "if used[item] then\n\t\t\t\t\trow.Item = nil") and has(schema, "Item = item,\n\t\t\t\t\t})"),
 		"a saved planted id that a Bag row also has is dropped, never duplicated")

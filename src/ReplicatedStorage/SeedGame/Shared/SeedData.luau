@@ -265,6 +265,10 @@ export type Species = {
 	Invite: boolean?,
 	-- No stall buys it and no screen prices it (SeedData.Sellable).
 	Unsellable: boolean?,
+	-- The Mysterious Pod's generic shell (Enchanted Mist stage 4): a pod that is
+	-- never a plant -- it hatches into the creature saved for it server-side
+	-- (MysteryPodService), and nothing about it names that creature.
+	Mystery: boolean?,
 }
 
 local LEAF = Color3.fromRGB(86, 150, 66)
@@ -1564,6 +1568,28 @@ SeedData.RainBatches = {
 -- Titan. Carried overhead like the Secrets. Biome: Dustbowl, whose sand and
 -- sun their art wears; it decides nothing else here.
 --==============================================================================
+--==============================================================================
+-- THE MYSTERIOUS POD'S SHELL (2026-10-11, Enchanted Mist stage 4)
+--
+-- One generic shell for every Mysterious Pod, whatever is inside: the owner's
+-- LuckhollowPod (PodForms.mysterypod), named "Mysterious Pod". Unlisted (no
+-- nest, Index, Harvest or stall), unsellable, one size, ready in the Mist's
+-- HatchSeconds. Never grown: its hatch is the saved creature
+-- (MysteryPodService), and its rarity is a placeholder no screen shows
+-- (PlantInfo writes "???" for it).
+--==============================================================================
+SeedData.MysterySpecies = {
+	{
+		Id = "mysterypod", Name = "Mysterious Pod", Rarity = "Common", Biome = "greenhollow",
+		Height = 2, Form = "secret",
+		Body = Color3.fromRGB(84, 56, 40),
+		Crown = Color3.fromRGB(44, 92, 54),
+		Accent = Color3.fromRGB(238, 192, 70), Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Mystery = true, Unsellable = true, Unsized = true,
+		FixedGrowSeconds = 30,
+	},
+}
+
 SeedData.InviteSpecies = {
 	{
 		Id = "dustthorn", Name = "Dustthorn", Rarity = "Epic", Biome = "dustbowl",
@@ -1766,6 +1792,15 @@ for _, species in ipairs(SeedData.InviteSpecies) do
 	assert(s.Invite == true and s.Unsellable == true and s.Unsized == true and s.Secret ~= true and s.Event == nil
 			and type(s.FixedIncome) == "number" and s.Carry == "overhead",
 		"an invite reward is unlisted, unsellable, unsized, fixed-rate and carried overhead: " .. species.Id)
+	register(species, false)
+end
+-- The Mysterious Pod's shell: unlisted, unsellable, one size, never a Secret or an
+-- event's, grown in a fixed time.
+for _, species in ipairs(SeedData.MysterySpecies) do
+	local s = species :: any
+	assert(s.Mystery == true and s.Unsellable == true and s.Unsized == true and s.Secret ~= true and s.Event == nil
+			and type(s.FixedGrowSeconds) == "number",
+		"a Mysterious Pod shell is unlisted, unsellable, unsized and grows in a fixed time: " .. species.Id)
 	register(species, false)
 end
 -- Relative weights: finite, none below 0, some above; exactly `n` when given.

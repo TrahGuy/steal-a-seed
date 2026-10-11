@@ -1075,9 +1075,13 @@ local ok, err = pcall(function()
 			allPods = false
 		end
 	end
+	-- Every species but the Mysterious Pod's shell, which is never spawned: it
+	-- only ever comes from the Mosskeeper with its hidden outcome (stage 4).
 	local speciesCount = 0
-	for _ in pairs(SeedData.ById) do
-		speciesCount += 1
+	for _, s in pairs(SeedData.ById) do
+		if (s :: any).Mystery ~= true then
+			speciesCount += 1
+		end
 	end
 	check(#wrongCombos == 0 and #SpawnCatalog.all() == speciesCount,
 		string.format("every one of the %d species, in every size it comes in, as a pod and grown: %d spawns, each "

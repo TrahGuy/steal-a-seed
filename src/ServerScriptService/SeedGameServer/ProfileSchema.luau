@@ -53,6 +53,10 @@ local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
 
+-- A Mysterious Pod's hidden outcome (MysteryPods; server only).
+export type MysteryRecord = { Species: string, Size: number?, PoolVersion: number, SizesVersion: number,
+	ReadyAt: number }
+
 export type Profile = {
 	Tutorial: TutorialData.Progress,
 	--==========================================================================
@@ -213,6 +217,16 @@ export type Profile = {
 	--==========================================================================
 	DewberriesCarried: number,
 	DewberryProgress: number,
+	--==========================================================================
+	-- THE MYSTERIOUS POD'S HIDDEN OUTCOMES (2026-10-11, Enchanted Mist stage 4)
+	--
+	-- SERVER ONLY: never sent to a client (ProfileSchema.ClientView strips it).
+	-- Keyed by the pod's Item id: the creature and (Legendary to Divine) the size
+	-- chosen ONCE at the grant, the pool and size versions they were chosen
+	-- from, and when the pod is ready. The pod's own row and Tool carry only
+	-- the generic shell. Old saves: none.
+	--==========================================================================
+	MysteryPods: { [string]: MysteryRecord },
 	-- DISCO DANCING (2026-10-03): the third stored setting -- dance at the hub
 	-- while a disco runs. ON unless the player switched it off; an old save
 	-- with no key reads ON. Kept by a progress reset, like Walk Mode.
@@ -492,6 +506,7 @@ function ProfileSchema.Default(): Profile
 		PodRush = { Id = "", Count = 0, Paid = 0, Top = 0, PodOwed = "" },
 		DewberriesCarried = 0,
 		DewberryProgress = 0,
+		MysteryPods = {},
 		DiscoDance = true,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
@@ -558,6 +573,66 @@ local function number(value: any, fallback: number, min: number, max: number): n
 end
 
 ProfileSchema.number = number
+
+--==============================================================================
+-- THE MYSTERIOUS POD'S HIDDEN OUTCOMES, CLEANED (2026-10-11)
+--
+-- Keyed by an Item id (a string of at most 24 characters); each record names a
+-- species (an id of plain letters and digits), a size 1..TierCount or none (a
+-- Secret keeps its own), the two versions, and a finite ready time. Anything
+-- else is dropped, never repaired into a guess; at most MYSTERY_MAX records.
+--==============================================================================
+local MYSTERY_MAX = 200
+
+function ProfileSchema.cleanMystery(raw: any): { [string]: MysteryRecord }
+	local out: { [string]: MysteryRecord } = {}
+	if type(raw) ~= "table" then
+		return out
+	end
+	local kept = 0
+	for item, rec in pairs(raw) do
+		if kept >= MYSTERY_MAX then
+			break
+		end
+		if type(item) == "string" and #item > 0 and #item <= 24 and type(rec) == "table"
+			and type(rec.Species) == "string" and #rec.Species > 0 and #rec.Species <= 40
+			and string.match(rec.Species, "^[%w_]+$") ~= nil
+			and type(rec.ReadyAt) == "number" and rec.ReadyAt == rec.ReadyAt and math.abs(rec.ReadyAt) < 1e12 then
+			local size: number? = nil
+			if rec.Size ~= nil then
+				if type(rec.Size) ~= "number" or rec.Size ~= math.floor(rec.Size) or rec.Size < 1
+					or rec.Size > SeedData.TierCount then
+					continue
+				end
+				size = rec.Size
+			end
+			out[item] = {
+				Species = rec.Species,
+				Size = size,
+				PoolVersion = math.floor(number(rec.PoolVersion, 0, 0, 1e6)),
+				SizesVersion = math.floor(number(rec.SizesVersion, 0, 0, 1e6)),
+				ReadyAt = rec.ReadyAt,
+			}
+			kept += 1
+		end
+	end
+	return out
+end
+
+--==============================================================================
+-- WHAT A CLIENT MAY SEE OF A PROFILE (2026-10-11): everything but the
+-- server-only fields -- the Mysterious Pods' hidden outcomes. A shallow copy:
+-- the rest is the same tables, read-only on the way out.
+--==============================================================================
+ProfileSchema.ServerOnly = { "MysteryPods" }
+
+function ProfileSchema.ClientView(profile: any): any
+	local view = table.clone(profile)
+	for _, key in ipairs(ProfileSchema.ServerOnly) do
+		view[key] = nil
+	end
+	return view
+end
 
 -- The ten levels Overclock ever had (see convertOverclock).
 local OVERCLOCK_LEVELS = 10
@@ -1265,6 +1340,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- cap or a full pod's worth less one.
 	p.DewberriesCarried = math.floor(number(raw.DewberriesCarried, 0, 0, EnchantedMistData.CarryCap))
 	p.DewberryProgress = math.floor(number(raw.DewberryProgress, 0, 0, EnchantedMistData.BerriesPerPod - 1))
+	p.MysteryPods = ProfileSchema.cleanMystery(raw.MysteryPods)
 	-- ON unless saved false: an old save with no key dances.
 	p.DiscoDance = raw.DiscoDance ~= false
 

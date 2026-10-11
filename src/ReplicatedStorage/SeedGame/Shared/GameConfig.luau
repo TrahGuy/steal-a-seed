@@ -1035,6 +1035,7 @@ GameConfig.Sacrifice = {
 		NOTHING_HELD = { title = "NO POD IN HAND", detail = "Hold an unhatched pod from your Bag." },
 		NOT_A_POD = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
 		NOT_OWNED = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
+		MYSTERY = { title = "HATCH IT FIRST", detail = "Hatch your Mysterious Pod first." },
 		HATCHED = { title = "PODS ONLY", detail = "A grown plant can't be sacrificed." },
 		CARRYING = { title = "BANK IT FIRST", detail = "Carry that pod past the red line." },
 		NO_GARDEN = { title = "NOTHING TO BOOST", detail = "Grow a plant on your plot first." },

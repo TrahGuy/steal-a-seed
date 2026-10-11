@@ -96,6 +96,9 @@ local Notice = require(Shared:WaitForChild("Notice"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+-- The Mysterious Pod (Enchanted Mist stage 4): a shell hatches into its saved creature.
+local MysteryPodService = require(script.Parent:WaitForChild("MysteryPodService"))
+local EnchantedMistData = require(SeedGame:WaitForChild("Shared"):WaitForChild("EnchantedMistData"))
 local PlantWander = require(script.Parent:WaitForChild("PlantWander"))
 -- What frame a SAVED garden's X/Z are in, and plot 6's at Levels 6-7: arithmetic only.
 local GardenFrame = require(script.Parent:WaitForChild("GardenFrame"))
@@ -840,7 +843,10 @@ local function record(plot: Model): { any }
 				Z = saved.Z,
 				Stage = entry.stage,
 				Facing = entry.facing,
-				Item = if entry.stage == CreatureModel.STAGE_GROWN then entry.item else nil,
+				-- A grown plant's item id, and a Mysterious Pod's in the bed (its hidden
+				-- outcome is filed under it).
+				Item = if entry.stage == CreatureModel.STAGE_GROWN or (entry.species :: any).Mystery == true
+					then entry.item else nil,
 			})
 		end
 	end
@@ -1016,8 +1022,9 @@ local function attachInstantPrompt(entry: Planted)
 	if not (model and handle and INSTANT_ITEM) or entry.stage ~= CreatureModel.STAGE_POD then
 		return
 	end
-	-- Nothing is sold to skip a free 30 s gift that hatches itself.
-	if entry.starter then
+	-- Nothing is sold to skip a free 30 s gift that hatches itself, nor to open a
+	-- Mysterious Pod (no paid shortcuts in the Mist's first release).
+	if entry.starter or (entry.species :: any).Mystery == true then
 		return
 	end
 	-- No product, no prompt: a dead button is worse than no button. Every tier is
@@ -1779,6 +1786,21 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	if not early and not isReady(entry, os.time()) then
 		return false, nil
 	end
+	-- THE MYSTERIOUS POD (Enchanted Mist stage 4): the shell in the bed hatches
+	-- into the creature saved for it at the grant (MysteryPodService), by its
+	-- item id; nothing else is read, and no paid shortcut opens one.
+	local species, tier = entry.species, entry.tier
+	local mystery: MysteryPodService.Outcome? = nil
+	if (entry.species :: any).Mystery == true then
+		if early then
+			return false, "MYSTERY"
+		end
+		mystery = if entry.item then MysteryPodService.Outcome(player, entry.item) else nil
+		if not mystery then
+			return false, "NO_OUTCOME"
+		end
+		species, tier = mystery.species, mystery.tier
+	end
 	--==========================================================================
 	-- THE ROLL IS GIVEN ITS TIME BEFORE ANYTHING IS HANDED OVER (2026-09-29)
 	--
@@ -1792,8 +1814,11 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- NO ROLL FOR THE RAIN EVENT'S PODS (the owner's rule, 2026-10-02): their
 	-- creature is revealed and handed over straight away, exactly as a hatch
 	-- with the roll switched off -- which every other pod still has on.
-	local revealAt = if entry.species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)
-	local rolled = math.max(revealAt - now, 0)
+	-- A Mysterious Pod's own card reels come first, and no roll after them.
+	local reel = if mystery then EnchantedMistData.Shell.ReelSeconds else 0
+	local revealAt = if mystery then now + reel
+		elseif species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)
+	local rolled = if mystery then 0 else math.max(revealAt - now, 0)
 	--==========================================================================
 	-- THE EQUIP WAITS FOR THE REVEAL, THE TOOL DOES NOT
 	--
@@ -1813,7 +1838,7 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	--==========================================================================
 	local equipAfter = if rolled > 0
 		then rolled + HATCH.Reveal.Seconds
-		else BURST + HATCH.Reveal.Seconds + (if early then HATCH.Paid.PulseSeconds else 0)
+		else BURST + HATCH.Reveal.Seconds + (if early then HATCH.Paid.PulseSeconds else 0) + reel
 	-- HANDED OVER AND PUT ON THE RECORD IN ONE CALL (the last argument), BEFORE
 	-- THE POD LEAVES THE GARDEN. The Backpack's own watcher would write the row
 	-- a moment later, after this function has returned -- and not at all while
@@ -1824,7 +1849,7 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- is built, and the reason rides back for the caller to say: the pod is
 	-- still in the table, still in the garden, still ready, and nothing below
 	-- this line has run.
-	local given, why = CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter,
+	local given, why = CarryService.GiveHatched(player, species, tier, equipAfter,
 		if rolled > 0 then revealAt else nil, true)
 	if not given then
 		return false, why
@@ -1832,7 +1857,7 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- Said here rather than in CarryService, which also hands a Tool over for a
 	-- pickup and for a rejoin and cannot tell the three apart.
 	log(string.format("%s %s a %d tier %s.", player.Name,
-		if early then "instantly hatched" else "hatched", entry.tier, entry.species.Name))
+		if early then "instantly hatched" else "hatched", tier, species.Name))
 
 	-- STOPS WALKING BEFORE IT LEAVES THE TABLE. The model outlives this call by
 	-- the length of a burst or a lift, and a model still carrying a leg is a
@@ -1843,17 +1868,21 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	entry.model = nil
 	dropAnchor(entry)
 	persist(entry.plot)
+	-- The hidden outcome spent with the shell, in the same step: once only.
+	if mystery and entry.item then
+		MysteryPodService.Consume(player, entry.item)
+	end
 	-- THE REVEAL IS THE HATCH. Until the shell breaks you do not know which
 	-- species you had, so this is the moment the Almanac learns it. It answers
 	-- TRUE only the first time, which is exactly what the label needs to know.
-	local discovered = PlayerDataService.MarkSeen(player, entry.species.Id)
+	local discovered = PlayerDataService.MarkSeen(player, species.Id)
 	-- TRUE only the first time this record has a hatch (the guide's hatch step;
 	-- every load re-derives it from the Almanac, the bag and the garden): what
 	-- the hatch bonus names a FIRST hatch rather than a welcome back (2026-10-01).
 	local firstHatch = PlayerDataService.RecordTutorial(player, "hatch")
 	-- THE FIRST CATCH COMING UP (FirstMinute): the pod taken while `steal` was
 	-- not done, at the size it was taken at. True once, and only words ride on it.
-	local firstCatch = PlayerDataService.TakeFirstCatch(player, entry.species.Id, entry.tier)
+	local firstCatch = PlayerDataService.TakeFirstCatch(player, species.Id, tier)
 
 	-- Everything from here is decoration. The plant is theirs and the garden is
 	-- saved; step 7 of the order above.
@@ -1861,14 +1890,14 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- the soil under it and the way it was facing. See standCF.
 	local where = standCF(entry)
 	revealToken += 1
-	announceReveal({
+	local reveal = {
 		token = revealToken,
-		species = entry.species.Id,
-		tier = entry.tier,
-		rarity = entry.species.Rarity,
+		species = species.Id,
+		tier = tier,
+		rarity = species.Rarity,
 		-- The same figure the garden panel and the pop print, from the same
 		-- function, so a reveal cannot advertise a rate the plant will not pay.
-		income = SeedData.IncomePerSecond(entry.species, entry.tier),
+		income = SeedData.IncomePerSecond(species, tier),
 		cf = where,
 		owner = player,
 		paid = early == true,
@@ -1878,14 +1907,24 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 		firstCatch = firstCatch == true,
 		-- Server time, so every client starts the same animation at the same
 		-- moment without being told each frame.
-		at = now,
+		at = now + reel,
 		-- WHEN THE PLANT MAY BE SHOWN (HatchRoll.revealAt), in the same clock:
 		-- until then the place where the pod stood turns silhouettes over, for
 		-- everybody who can see it. The same as `at` with the roll off.
 		revealAt = revealAt,
-	})
-	if model and model.Parent then
-		burst(model, entry.tier)
+	}
+	local function show()
+		announceReveal(reveal)
+		if model and model.Parent then
+			burst(model, entry.tier)
+		end
+	end
+	if mystery then
+		-- The owner's card reels, then the shell breaks for everyone.
+		MysteryPodService.TellHatch(player, mystery, revealToken)
+		task.delay(reel, show)
+	else
+		show()
 	end
 	return true, nil
 end
@@ -2275,7 +2314,10 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		prompt = nil,
 		-- The Tool's own item id, for a creature (MY PLANTS): it is the same item
 		-- in the ground, and comes back to the Bag as itself.
-		item = if hatched and type(tool:GetAttribute(GameConfig.Attributes.ItemId)) == "string"
+		-- A Mysterious Pod keeps its pod's item id in the bed: its hidden outcome
+		-- (MysteryPodService) is filed under it.
+		item = if (hatched or (species :: any).Mystery == true)
+				and type(tool:GetAttribute(GameConfig.Attributes.ItemId)) == "string"
 			then tool:GetAttribute(GameConfig.Attributes.ItemId) :: string else nil,
 	}
 	byPlot[id] = entry
@@ -2854,6 +2896,23 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	local podTool = tool :: Tool
 	local tier = math.clamp(math.floor(tonumber(row.Tier) or 1), 1, SeedData.TierCount)
 	local due = tonumber(row.HatchAt)
+	-- THE MYSTERIOUS POD (Enchanted Mist stage 4): the shell hatches into the
+	-- creature saved for it at the grant (MysteryPodService), by this item id;
+	-- ready at the later of its row's time and its own, never by a paid shortcut.
+	local mystery: MysteryPodService.Outcome? = nil
+	local shell = s
+	if (s :: any).Mystery == true then
+		if early == true then
+			return false, "MYSTERY", false, false, 0
+		end
+		mystery = MysteryPodService.Outcome(player, item)
+		if not mystery then
+			return false, "NO_OUTCOME", false, false, 0
+		end
+		if due then
+			due = math.max(due, mystery.readyAt)
+		end
+	end
 	if due == nil then
 		-- CarryService stamps every pod it makes; this only mends a row an older
 		-- writer left without one, whose wait starts now.
@@ -2865,9 +2924,14 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	end
 	-- When its moment plays (HATCH ALL's lead from now) and when the plant may be
 	-- shown: the roll after that, none for the Rain pods -- a bed hatch's timing.
-	local delay = math.max(tonumber(lead) or 0, 0)
+	-- A Mysterious Pod: its owner's card reels first, no roll after them.
+	local delay = math.max(tonumber(lead) or 0, 0) + (if mystery then EnchantedMistData.Shell.ReelSeconds else 0)
 	local at = Workspace:GetServerTimeNow() + delay
-	local revealAt = if s.SkipHatchRoll == true then at else HatchRoll.revealAt(at)
+	if mystery then
+		s = mystery.species
+		tier = mystery.tier
+	end
+	local revealAt = if mystery or s.SkipHatchRoll == true then at else HatchRoll.revealAt(at)
 	local rolled = math.max(revealAt - at, 0)
 	local risen = delay + (if rolled > 0
 		then rolled + HATCH.Reveal.Seconds
@@ -2894,6 +2958,10 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	-- 3. The pod off the Bag: its Tool, and its row by its own id.
 	podTool:Destroy()
 	CarryService.SyncHeldNow(player, { podTool })
+	-- The hidden outcome spent with the shell, in the same step: once only.
+	if mystery then
+		MysteryPodService.Consume(player, item)
+	end
 	log(string.format("%s %s a %d tier %s in the Bag: %s.", player.Name,
 		if early == true then "instantly hatched" else "hatched", tier, s.Name,
 		if entry then "planted in a free bed" else "into the Bag, no bed free"))
@@ -2923,6 +2991,10 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 		where = frontOf(player, tier, slot or 0)
 	end
 	revealToken += 1
+	if mystery then
+		-- The owner's card reels now; the world reveal follows the reel.
+		MysteryPodService.TellHatch(player, mystery, revealToken)
+	end
 	local payload = {
 		token = revealToken,
 		species = s.Id,
@@ -2940,7 +3012,8 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	}
 	local function show()
 		if where then
-			burstShellAt(s, tier, where :: CFrame)
+			-- The pod that breaks is the pod it was: a Mysterious Pod's shell.
+			burstShellAt(if mystery then shell else s, if mystery then 1 else tier, where :: CFrame)
 		end
 		announceReveal(payload)
 	end
@@ -2998,7 +3071,8 @@ function PlantService.HatchAllFromBag(player: Player): (boolean, string, number,
 	local ready: { { item: string, due: number } } = {}
 	for _, row in ipairs(profile.Held) do
 		local due = if type(row) == "table" and row.Hatched ~= true then tonumber(row.HatchAt) else nil
-		if due and now >= due and type(row.Item) == "string" then
+		-- A Mysterious Pod is opened by its own hold, never in a HATCH ALL.
+		if due and now >= due and type(row.Item) == "string" and not MysteryPodService.IsShell(row.Id) then
 			table.insert(ready, { item = row.Item, due = due })
 		end
 	end
@@ -3058,6 +3132,10 @@ function PlantService.OfferInstantHatchBag(player: Player, item: string): (boole
 	local row, tool = bagPod(player, item)
 	if not (row and tool) then
 		return false, "NO_POD"
+	end
+	-- No paid shortcut opens a Mysterious Pod.
+	if MysteryPodService.IsShell(row.Id) then
+		return false, "MYSTERY"
 	end
 	if os.time() >= (tonumber(row.HatchAt) or 0) then
 		-- A ready pod hatches free; nothing is sold for it.
@@ -3547,7 +3625,8 @@ local function restore(player: Player, plot: Model)
 					facing = facing or facingFor(id),
 					model = nil,
 					prompt = nil,
-					item = if stage == CreatureModel.STAGE_GROWN and row and type(row.Item) == "string"
+					item = if (stage == CreatureModel.STAGE_GROWN or (species :: any).Mystery == true) and row
+							and type(row.Item) == "string"
 						then row.Item else nil,
 					-- The starter pod still growing (FirstMinute): the row the
 					-- game planted at the profile's StarterAt. It hatches itself

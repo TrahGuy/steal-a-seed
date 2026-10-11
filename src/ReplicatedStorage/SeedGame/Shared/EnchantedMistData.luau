@@ -46,6 +46,23 @@ EnchantedMistData.BerriesPerPod = 10
 EnchantedMistData.HatchSeconds = 30
 
 --==============================================================================
+-- THE MYSTERIOUS POD'S SHELL (stage 4; MysteryPodService) -- A BINDING
+--
+-- One generic shell for every outcome: the pod's row and Tool name this
+-- species id and nothing else (the outcome is the server's alone,
+-- Profile.MysteryPods). With no shell id, or one SeedData does not know, no pod can be granted and
+-- the event stays off (EnchantedMistService.MissingBindings). The shell's own
+-- species must grow in HatchSeconds (FixedGrowSeconds) and be unlisted.
+-- ReelSeconds: how long the owner's card reels run before the world reveal.
+--==============================================================================
+EnchantedMistData.Shell = {
+	-- Bound (2026-10-11): the owner's LuckhollowPod, SeedData.MysterySpecies.
+	Id = "mysterypod" :: string?,
+	Name = "Mysterious Pod",
+	ReelSeconds = 3.6,
+}
+
+--==============================================================================
 -- SPAWNING -- DRAFT tuning (proposed, not approved balance), except
 -- IntervalSeconds: the owner's 3 s (2026-10-11; it was 5). At most 97 berries
 -- a Mist (300 s, none in the last 10 s); six players' pods need 60.
