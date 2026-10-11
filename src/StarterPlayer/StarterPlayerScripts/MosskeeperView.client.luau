@@ -11,6 +11,13 @@
 --    streamed in and the camera within ANIMATE_RANGE. He "serves" -- bows,
 --    opens his satchel -- while this player is in his dialogue (MosskeeperUI's
 --    local attribute). Reduced FX stills his glow; the motion stays.
+--    HIS MOOD AND MOMENTS (the owner, 2026-10-11): lively while a Mist runs,
+--    sleepy otherwise, from the replicated MistState -- so a late joiner sees
+--    the right one -- and a moment on a LIVE change only (a Mist starting or
+--    ending while this client watches; never what a join finds). Never one
+--    mid-talk: it waits for the talk to end, up to MOMENT_PATIENCE seconds, and
+--    a talk begun mid-moment wins (the brain lets it go). Reduced Motion: no
+--    moments; Reduced FX: no flare, burst or extra glow (one setting here).
 -- 2. HIS BAR (§9): this player's OWN saved progress over his head --
 --    "Dewberries 5/10 / Next Mysterious Pod", or "Waiting for Enchanted Mist"
 --    while none runs. It moves only on the server's numbers (the player's
@@ -58,6 +65,22 @@ end
 local brain: MosskeeperIdle.Brain? = nil
 local brainOf: Model? = nil
 
+local MIST = EnchantedMistConfig.Attributes.State
+local ACTIVE = EnchantedMistConfig.States.Active
+local MOMENT_PATIENCE = 12
+local mistNow = Workspace:GetAttribute(MIST)
+local moment: MosskeeperIdle.Moment? = nil
+local pending: { kind: string, since: number }? = nil
+Workspace:GetAttributeChangedSignal(MIST):Connect(function()
+	local was = mistNow
+	mistNow = Workspace:GetAttribute(MIST)
+	if mistNow == ACTIVE and was ~= ACTIVE then
+		pending = { kind = "start", since = os.clock() }
+	elseif was == ACTIVE and mistNow ~= ACTIVE then
+		pending = { kind = "end", since = os.clock() }
+	end
+end)
+
 RunService.PreSimulation:Connect(function()
 	local model = npcModel()
 	if model ~= brainOf then
@@ -81,10 +104,26 @@ RunService.PreSimulation:Connect(function()
 			table.insert(at, root.Position)
 		end
 	end
-	b.step(os.clock(), {
+	local now = os.clock()
+	local serving = player:GetAttribute(CFG.TalkingAttribute) == true
+	-- A moment waits out a talk; one kept waiting too long is let go.
+	local due = pending
+	if due then
+		if now - due.since > MOMENT_PATIENCE then
+			pending = nil
+		elseif not serving then
+			moment = { kind = due.kind, at = now }
+			pending = nil
+		end
+	end
+	local reduced = StatusText.reducedMotion()
+	b.step(now, {
 		players = at,
-		serving = player:GetAttribute(CFG.TalkingAttribute) == true,
-		reducedFx = StatusText.reducedMotion(),
+		serving = serving,
+		reducedFx = reduced,
+		reducedMotion = reduced,
+		mood = if mistNow == ACTIVE then "lively" else "sleepy",
+		moment = moment,
 	})
 end)
 

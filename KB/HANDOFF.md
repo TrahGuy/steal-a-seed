@@ -1,5 +1,29 @@
 # Steal a Seed — Session Handoff
 
+## THE MOSSKEEPER'S MOODS AND MOMENTS: A MIST'S START AND END, LIVELY DURING, SLEEPY BETWEEN — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED: THE OWNER WAIVED THE GIF REVIEW; MosskeeperMoodsSpec 23/0 (NEW), MosskeeperSpec 58/0, THE FULL SUITE 149/149; 17 OF 17 MUTANTS CAUGHT; the GIFs made before the waiver are in output/mosskeeper-moods-2026-10-11)
+
+The owner's item 7b via the peer, on his existing client animator (Shared/MosskeeperIdle, MosskeeperView).
+- **Moods**, from the replicated MistState on each client, so a late joiner sees the right one (set outright on a brain's first step):
+  - **Lively** during a Mist: a cheerful sway, a "come here" beckon every 9 s, the Dewdrop brighter, and a mint glow at his satchel (a client-made light).
+  - **Sleepy** between Mists: he nods off on a 7-s cycle and catches himself, leans on his staff, breathes slower and deeper, eyes half shut, the Dewdrop dim.
+  - A player who walks up (GreetRange) or talks wakes him: he turns and faces them and waves. 4 s after they leave he dozes off again.
+- **Moments**, on a live MistState change only; never what a join finds:
+  - **Start (3.5 s, the BEGINS clip)**: he looks up at the sky and raises his staff; the staff lifts with his hand on it (it hangs from his pelvis, not his hand). The Dewdrop flares with one mint burst, then a happy little bow toward the road.
+  - **End (4 s)**: he waves goodbye toward the road, yawns with an overhead stretch, and settles into the sleepy idle.
+- **The talk wins**: a moment due during a talk waits for it to end (up to 12 s, else dropped). A talk begun mid-moment blends the moment out as he turns to serve.
+- **Settings**: Reduced Motion keeps the moods without the moments; Reduced FX drops the flare, the burst and the extra glow. This game has one setting for both (StatusText.reducedMotion), so both follow it.
+- **Kept**: every pose is absolute from the clock (no drift, now checked in both moods too). With no mood given, the classic idle is unchanged, joint for joint (MosskeeperSpec's pins).
+- **Axes** read off Edit previews with the joints solved by hand (Edit runs no joints): the staff hand rises on +X with the staff lifted 1.2 studs, the beckon is the free arm +X with the forearm up, and the yawn is that arm overhead.
+- **Live (guarded Plays, SeedTest_mistlook_20261011, 901 x 716)**:
+  - The moments were triggered by flipping MistState on the test client alone (a client-local attribute change that MosskeeperView sees as a live transition), so the admin panel stayed off the shot; the server's Mist was untouched.
+  - The tutorial was skipped on the throwaway profile for clear shots.
+  - No errors.
+- **GIFs (slideshows of the Play's stills, ~0.4 s apart; not screen recordings)**: 01_start.gif, 02_during.gif, 03_sleepy.gif, 04_wake_on_approach.gif, 05_end.gif, plus a sheet of each.
+  - In the start GIF the Mist look's own fade-in washes the screen white as he flares.
+- **Mutants (17 of 17)**: MoodNotOutright, NeverWakes, NoNodCatch, NoLean, NoBeckon, NoStaffRaise, StaffNotLifted, BeckonBackward, BurstEveryFrame, BurstUnderFx, TalkDoesNotWin, MomentsUnderReduced, BrightAsleep, MomentAtJoin, PlaysMidTalk, MoodSwapped, NoReducedMotionPassed.
+- **For the owner's eye**: all timings and angles are Claude's (the nod's 7 s, the beckon's 9 s, the wake's 4 s, the moments' shapes).
+- **Next (the owner's order)**: the Event Hub detail (tufts, flowers, a small pond, plants), then 8, the rain biome beacon, then (b) the Shop plate face and (c) the Robux buy buttons.
+
 ## PUSHED: THE MOSSKEEPER'S TALK, REBUILT (0781d7d) — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH ON THE CAPTURES; NOT PUBLISHED)
 
 Over the shoulder, his line typed over his bar, the player's four replies beside him (the entry below). The owner's next Publish takes it live. Next: 7b, his event animations; then 8, the rain biome beacon; then (b) the Shop plate face and (c) the Robux buy buttons.
