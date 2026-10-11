@@ -267,13 +267,15 @@ EnchantedMistConfig.Mystery = {
 -- sound bed (no approved Mist audio exists).
 --==============================================================================
 EnchantedMistConfig.Look = {
+	-- Tuned 2026-10-11 after the first Play captures: a notch lighter, so the
+	-- field, the plots and the far biome read on a phone too.
 	Light = {
 		ClockTime = 0,
-		Brightness = 1.5,
-		Ambient = Color3.fromRGB(92, 82, 150),
-		OutdoorAmbient = Color3.fromRGB(112, 100, 172),
-		EnvironmentDiffuseScale = 0.75,
-		Exposure = 0.35,
+		Brightness = 1.9,
+		Ambient = Color3.fromRGB(104, 94, 166),
+		OutdoorAmbient = Color3.fromRGB(126, 114, 188),
+		EnvironmentDiffuseScale = 0.8,
+		Exposure = 0.5,
 		-- A soft blue-violet tone, a touch more colour.
 		Tint = Color3.fromRGB(226, 218, 255),
 		Saturation = 0.08,
@@ -281,30 +283,33 @@ EnchantedMistConfig.Look = {
 		FadeSeconds = 4,
 		FadeOutSeconds = 6,
 	},
-	-- Soft mint wisps low over the ground round the camera: big, faint, slow.
+	-- Soft mint wisps low over the ground round the camera: big, faint, slow,
+	-- and SELF-LIT (Glow, no light influence) -- lit by the night they read as
+	-- dark smudges (the first Play's captures).
 	Wisps = {
-		Rate = 5,
-		ReducedRate = 2,
+		Rate = 8,
+		ReducedRate = 3,
 		Area = 110,
 		Above = 0.4,
 		Texture = "rbxasset://textures/particles/smoke_main.dds",
 		Colour = Color3.fromRGB(150, 255, 210),
 		Far = Color3.fromRGB(186, 168, 255),
-		Size = { 5, 9 },
-		Transparency = 0.84,
+		Size = { 6, 11 },
+		Transparency = 0.7,
+		Glow = 0.6,
 		Lifetime = { 7, 10 },
 		Speed = { 0.3, 0.9 },
 	},
-	-- Sparse sparkles drifting a few studs up: fireflies and glinting leaves.
+	-- Sparkles drifting a few studs up: fireflies and glinting leaves.
 	Fireflies = {
-		Rate = 7,
-		ReducedRate = 3,
-		Area = 80,
+		Rate = 14,
+		ReducedRate = 5,
+		Area = 70,
 		Above = 1.5,
 		Height = 5,
 		Texture = "rbxasset://textures/particles/sparkles_main.dds",
 		Colours = { Color3.fromRGB(150, 255, 200), Color3.fromRGB(255, 236, 150) },
-		Size = 0.32,
+		Size = 0.5,
 		Lifetime = { 2.5, 4.5 },
 		Speed = { 0.3, 0.8 },
 	},

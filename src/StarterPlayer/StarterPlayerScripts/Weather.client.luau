@@ -193,8 +193,9 @@ wisps.Transparency = NumberSequence.new({
 	NumberSequenceKeypoint.new(1, 1),
 })
 wisps.Color = ColorSequence.new(MIST.Wisps.Colour, MIST.Wisps.Far)
-wisps.LightEmission = 0.35
-wisps.LightInfluence = 0.25
+-- Self-lit: the night's light would draw them as dark smudges.
+wisps.LightEmission = MIST.Wisps.Glow
+wisps.LightInfluence = 0
 wisps.Rotation = NumberRange.new(0, 360)
 wisps.RotSpeed = NumberRange.new(-10, 10)
 wisps.Acceleration = Vector3.new(0, 0.04, 0)
