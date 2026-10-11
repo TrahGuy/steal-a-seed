@@ -160,16 +160,19 @@ local ok, err = pcall(function()
 		"off by default (Enabled false): published disabled, no eligibility")
 	local missing = M.MissingBindings()
 	local text = table.concat(missing, " | ")
-	-- Since 2026-10-11 every pool creature is registered (SeedData.MistSpecies)
-	-- and both odds tables are confirmed: only the Look is left.
-	check(#missing == 1 and string.find(text, "Look", 1, true) ~= nil
-			and not string.find(text, "creature not registered", 1, true)
-			and not string.find(text, "approval", 1, true) and not string.find(text, "shell", 1, true),
-		"the missing list names only the unbuilt Look: every creature registered, no approval left", text)
+	-- Since 2026-10-11 every piece is built (the Look last), every pool creature
+	-- registered (SeedData.MistSpecies) and both odds tables confirmed.
+	check(#missing == 0, "nothing is missing: every piece built, every creature registered, both tables confirmed",
+		text)
 
+	-- The guard still holds: with a piece unbuilt, switching on does nothing.
 	configCopy.Enabled = true
+	M.Built.Look = false
+	local unbuilt = table.concat(M.MissingBindings(), " | ")
 	M._boot(0)
-	check(M.State() == STATES.Disabled, "switched on but with bindings missing: still off")
+	check(M.State() == STATES.Disabled and string.find(unbuilt, "Look", 1, true) ~= nil,
+		"switched on but with a binding missing: still off", unbuilt)
+	M.Built.Look = true
 	M.MissingBindings = function()
 		return {}
 	end

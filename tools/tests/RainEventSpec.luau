@@ -1105,7 +1105,10 @@ local ok, err = pcall(function()
 	check(string.find(clockSrc2, "Lighting.ShadowSoftness = baseShadow", 1, true) ~= nil
 			and string.find(clockSrc2, 'Instance.new("ColorCorrectionEffect")', 1, true) ~= nil
 			and string.find(clockSrc2, 'Instance.new("Clouds")', 1, true) ~= nil
-			and string.find(clockSrc2, "RAIN.Ambient:Lerp(RAIN.NightAmbient, t)", 1, true) ~= nil
+			-- (Since 2026-10-11 the night pair follows the Enchanted Mist's night too:
+			-- tn = MistLook.nightness(t, mist), which is t with no Mist.)
+			and string.find(clockSrc2, "RAIN.Ambient:Lerp(RAIN.NightAmbient, tn)", 1, true) ~= nil
+			and string.find(clockSrc2, "local tn = MistLook.nightness(t, mist)", 1, true) ~= nil
 			and string.find(clockSrc2, "else RAIN.FadeOutSeconds", 1, true) ~= nil
 			and string.find(clockSrc2, 'rain = if state == "opening" or state == "active" then 1 else 0', 1, true) ~= nil
 			and count(clockSrc2, "Lighting.Brightness = ") == 1,

@@ -58,6 +58,10 @@ local RainClouds = require(Shared:WaitForChild("RainClouds"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 -- The disco's palette (2026-10-03): the same colours as every disco light.
 local DiscoLights = require(Shared:WaitForChild("DiscoLights"))
+-- The Enchanted Mist's night over the day (2026-10-11): its numbers and their
+-- arithmetic, shared with Weather.client's wisps. See THE ENCHANTED MIST.
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
+local MistLook = require(Shared:WaitForChild("MistLook"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -784,6 +788,35 @@ local function applyDiscoTone()
 	discoTone.Enabled = true
 end
 
+--==============================================================================
+-- THE ENCHANTED MIST, UNDER THE RAIN AND THE DISCO (2026-10-11)
+--
+-- A fourth number, `mist`, 0 to 1, eased toward "a Mist is active"
+-- (MistLook.step: in over Look.Light.FadeSeconds, out over FadeOutSeconds) and
+-- laid over the day/night blend BEFORE the rain and the disco: the night sky
+-- (ClockTime toward 0), a moonlit brightness, blue-violet ambients and a soft
+-- violet tone through a ColorCorrection of this script's own -- while the
+-- phase underneath stays Day. The rain's own day/night pair follows it, so a
+-- rain in the Mist is a rainy night. NOT THE FOG: applyFog rides the phase
+-- alone, so the road and the biomes stay open and clear. When the Mist ends
+-- the light is simply recomputed with mist at 0 -- MistLook.compose(base, 0)
+-- is base -- so what comes back is whatever day, night, rain or disco is live
+-- then. Kept under Reduced FX: it is the event's look, as the disco's colour
+-- is; the wisps and fireflies are Weather.client's and go.
+--==============================================================================
+local MIST_STATE = EnchantedMistConfig.Attributes.State
+local mist = 0
+-- Re-run safe, like the disco's tone.
+for _, staleTone in ipairs(Lighting:GetChildren()) do
+	if staleTone.Name == "MistTone" and staleTone:IsA("ColorCorrectionEffect") then
+		staleTone:Destroy()
+	end
+end
+local mistTone = Instance.new("ColorCorrectionEffect")
+mistTone.Name = "MistTone"
+mistTone.Enabled = false
+mistTone.Parent = Lighting
+
 local baseShadow = Lighting.ShadowSoftness
 local baseSpecular = Lighting.EnvironmentSpecularScale
 
@@ -807,9 +840,22 @@ end
 
 local function applyLight(t: number)
 	local r = rain
-	Lighting.ClockTime = day.ClockTime + (night.ClockTime - day.ClockTime) * t
-	local kept = RAIN.Brightness + (RAIN.NightBrightness - RAIN.Brightness) * t
-	Lighting.Brightness = (day.Brightness + (night.Brightness - day.Brightness) * t)
+	-- The phase's light, then the Mist's night over it (THE ENCHANTED MIST);
+	-- the rain's own day/night pair follows the darker of the two.
+	local tn = MistLook.nightness(t, mist)
+	local lit = MistLook.compose({
+		ClockTime = day.ClockTime + (night.ClockTime - day.ClockTime) * t,
+		Brightness = day.Brightness + (night.Brightness - day.Brightness) * t,
+		Ambient = day.Ambient:Lerp(night.Ambient, t),
+		OutdoorAmbient = day.OutdoorAmbient:Lerp(night.OutdoorAmbient, t),
+		EnvironmentDiffuseScale = day.EnvironmentDiffuseScale
+			+ (night.EnvironmentDiffuseScale - day.EnvironmentDiffuseScale) * t,
+		ExposureCompensation = day.ExposureCompensation
+			+ (night.ExposureCompensation - day.ExposureCompensation) * t,
+	}, mist)
+	Lighting.ClockTime = lit.ClockTime
+	local kept = RAIN.Brightness + (RAIN.NightBrightness - RAIN.Brightness) * tn
+	Lighting.Brightness = lit.Brightness
 		* (1 - (1 - kept) * r)
 		* (1 - (1 - DISCO_LIGHT.Brightness) * disco)
 	-- The disco's ambient: toward the palette's colour, scaled so it tints
@@ -817,16 +863,14 @@ local function applyLight(t: number)
 	local discoAmbient = Color3.new(discoColour.R * DISCO_LIGHT.AmbientValue, discoColour.G * DISCO_LIGHT.AmbientValue,
 		discoColour.B * DISCO_LIGHT.AmbientValue)
 	local discoMix = DISCO_LIGHT.AmbientMix * disco
-	Lighting.Ambient = day.Ambient:Lerp(night.Ambient, t)
-		:Lerp(RAIN.Ambient:Lerp(RAIN.NightAmbient, t), RAIN.AmbientMix * r)
+	Lighting.Ambient = lit.Ambient
+		:Lerp(RAIN.Ambient:Lerp(RAIN.NightAmbient, tn), RAIN.AmbientMix * r)
 		:Lerp(discoAmbient, discoMix)
-	Lighting.OutdoorAmbient = day.OutdoorAmbient:Lerp(night.OutdoorAmbient, t)
-		:Lerp(RAIN.OutdoorAmbient:Lerp(RAIN.NightOutdoorAmbient, t), RAIN.AmbientMix * r)
+	Lighting.OutdoorAmbient = lit.OutdoorAmbient
+		:Lerp(RAIN.OutdoorAmbient:Lerp(RAIN.NightOutdoorAmbient, tn), RAIN.AmbientMix * r)
 		:Lerp(discoAmbient, discoMix)
-	Lighting.EnvironmentDiffuseScale = day.EnvironmentDiffuseScale
-		+ (night.EnvironmentDiffuseScale - day.EnvironmentDiffuseScale) * t
-	Lighting.ExposureCompensation = day.ExposureCompensation
-		+ (night.ExposureCompensation - day.ExposureCompensation) * t
+	Lighting.EnvironmentDiffuseScale = lit.EnvironmentDiffuseScale
+	Lighting.ExposureCompensation = lit.ExposureCompensation
 		+ RAIN.Exposure * r
 		+ DISCO_LIGHT.Exposure * disco
 		+ flash
@@ -836,10 +880,16 @@ local function applyLight(t: number)
 	tone.Saturation = RAIN.Saturation * r
 	tone.Contrast = RAIN.Contrast * r
 	tone.Enabled = r > 0.001
+	local mistTint, mistSaturation, mistContrast = MistLook.tone(mist)
+	mistTone.TintColor = mistTint
+	mistTone.Saturation = mistSaturation
+	mistTone.Contrast = mistContrast
+	mistTone.Enabled = mist > 0.001
 	sky.Cover = skyBase.Cover + (RAIN.Sky.Cover - skyBase.Cover) * r
 	sky.Density = skyBase.Density + (RAIN.Sky.Density - skyBase.Density) * r
-	sky.Color = skyBase.Color:Lerp(RAIN.Sky.DayColor:Lerp(RAIN.Sky.NightColor, t), r)
+	sky.Color = skyBase.Color:Lerp(RAIN.Sky.DayColor:Lerp(RAIN.Sky.NightColor, tn), r)
 	sky.Enabled = skyBase.Enabled or r > 0.001
+	-- The fog banks are the PHASE's, never the Mist's: the road stays open.
 	applyFog(t)
 end
 
@@ -890,6 +940,11 @@ RunService.RenderStepped:Connect(function(dt)
 		-- The palette drifts every frame, and the ambient follows it.
 		changed = true
 	end
+	local nextMist = MistLook.step(mist, MistLook.wanted(Workspace:GetAttribute(MIST_STATE)), dt)
+	if nextMist ~= mist then
+		mist = nextMist
+		changed = true
+	end
 	local want = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0
 	if blend ~= want then
 		local step = dt / math.max(0.05, NIGHT.FadeSeconds)
@@ -911,6 +966,8 @@ do
 	-- And the disco's, likewise (2026-10-03).
 	disco = discoWanted()
 	applyDiscoTone()
+	-- And a running Mist's night (2026-10-11).
+	mist = MistLook.wanted(Workspace:GetAttribute(MIST_STATE))
 end
 applyLight(if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0)
 blend = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0

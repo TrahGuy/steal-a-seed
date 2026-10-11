@@ -253,6 +253,71 @@ EnchantedMistConfig.Mystery = {
 	},
 }
 
+--==============================================================================
+-- THE MIST'S LOOK (Shared/MistLook; brief §3, the owner's go 2026-10-11): a
+-- readable, magical night over the day while the gameplay phase stays Day.
+--
+-- LIGHT (WorldClock): toward the night sky -- ClockTime 0, its moon and stars
+-- -- but lighter and more violet than the plain night the plots are tuned for
+-- (WorldCycle.Night: Brightness 1.1, ambients 58,66,96 / 66,78,116), so the
+-- road, the berries and the far biomes keep reading. No fog of any kind.
+-- WISPS and FIREFLIES (Weather.client), GLINTS (EnchantedMistBerries.client):
+-- decoration, off under Reduced FX, a touch screen's lower rates. Every
+-- texture is the engine's own particle (rbxasset://), never an upload; no
+-- sound bed (no approved Mist audio exists).
+--==============================================================================
+EnchantedMistConfig.Look = {
+	Light = {
+		ClockTime = 0,
+		Brightness = 1.5,
+		Ambient = Color3.fromRGB(92, 82, 150),
+		OutdoorAmbient = Color3.fromRGB(112, 100, 172),
+		EnvironmentDiffuseScale = 0.75,
+		Exposure = 0.35,
+		-- A soft blue-violet tone, a touch more colour.
+		Tint = Color3.fromRGB(226, 218, 255),
+		Saturation = 0.08,
+		Contrast = 0.04,
+		FadeSeconds = 4,
+		FadeOutSeconds = 6,
+	},
+	-- Soft mint wisps low over the ground round the camera: big, faint, slow.
+	Wisps = {
+		Rate = 5,
+		ReducedRate = 2,
+		Area = 110,
+		Above = 0.4,
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Colour = Color3.fromRGB(150, 255, 210),
+		Far = Color3.fromRGB(186, 168, 255),
+		Size = { 5, 9 },
+		Transparency = 0.84,
+		Lifetime = { 7, 10 },
+		Speed = { 0.3, 0.9 },
+	},
+	-- Sparse sparkles drifting a few studs up: fireflies and glinting leaves.
+	Fireflies = {
+		Rate = 7,
+		ReducedRate = 3,
+		Area = 80,
+		Above = 1.5,
+		Height = 5,
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Colours = { Color3.fromRGB(150, 255, 200), Color3.fromRGB(255, 236, 150) },
+		Size = 0.32,
+		Lifetime = { 2.5, 4.5 },
+		Speed = { 0.3, 0.8 },
+	},
+	-- Each berry's glint: a twinkle now and then at its middle.
+	Glints = {
+		Rate = 0.7,
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Colour = Color3.fromRGB(244, 255, 239),
+		Size = 0.9,
+		Lifetime = 0.7,
+	},
+}
+
 -- What MistState says.
 EnchantedMistConfig.States = {
 	Disabled = "disabled", -- switched off, or a binding missing: COMING SOON

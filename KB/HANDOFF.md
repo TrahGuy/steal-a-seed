@@ -1,5 +1,35 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST: THE LOOK, A MOONLIT NIGHT OVER THE DAY — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; PUSHED ONLY AFTER THE PEER OKs THE OFF/ON CAPTURES; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false; MistLookSpec 13/0, 5 OF 5 MUTANTS CAUGHT)
+
+The owner's go via the peer, brief §3: a readable magical night while gameplay stays Day, composed through the existing owners, no competing Lighting loop, no fog, no gameplay effect, the current state restored at the end.
+- **`Shared/MistLook`** (new, pure) is the arithmetic the owners share; the numbers are in `EnchantedMistConfig.Look`.
+  - `compose(base, m)`: `compose(base, 0)` IS base, so nothing is ever restored from a snapshot.
+  - `step` eases in over 4 s and out over 6 s.
+  - `wanted` is 1 only while `MistState` is active.
+  - `nightness`: the rain's day/night pair follows the Mist.
+  - `tone`, and `rates` (none under Reduced FX, lower on touch).
+- **Light** (WorldClock, Lighting's one owner): a fourth eased number, `mist`, laid over the day/night blend and under the rain and the disco.
+  - It moves toward the night sky (ClockTime 0, moon and stars), Brightness 1.5, blue-violet ambients (92,82,150)/(112,100,172), Exposure +0.35, a soft violet `MistTone` ColorCorrection.
+  - It is lighter than the plain night the plots are tuned for.
+  - The biome FOG still rides the phase alone, so the road and the far biomes stay open and clear. It is kept under Reduced FX (the event's look, like the disco's colour).
+  - When the Mist ends the light is recomputed with mist 0: whatever day, night, rain or disco is live comes back.
+  - A late joiner gets it at once.
+- **Wisps and fireflies** (Weather.client, the weather's FX owner):
+  - Two camera-local emitter parts at the player's feet: faint mint wisps (smoke) and a few twinkling mint/gold fireflies.
+  - Rates 5/7, touch 2/3, none under Reduced FX.
+  - The engine pools the particles and the camera area is the cull.
+- **Glints** (EnchantedMistBerries.client): a client-only twinkle on each berry's PickupAnchor, off under Reduced FX. Berries and prompts never dim.
+- **Nothing invented**: the engine's own particle textures (rbxasset://), no upload. No sound bed: no approved Mist audio exists.
+- **Composes** with Rain/Thunder (a rainy night), the disco and Pod Rush. No server reads it; WeatherService's lottery is untouched.
+- **`EnchantedMistService.Built.Look = true`**: MissingBindings is now EMPTY. The event can be switched on by the owner (Enabled, ShowMosskeeper), and nothing else is missing.
+- **Tests**:
+  - MistLookSpec 13/0 (new). Mutants 5/5: ComposeNotIdentity, RatesIgnoreReducedFx, FogRidesTheMist, WispsNeverStepped, DarkerThanNight.
+  - EnchantedMistSpec 37/0 (nothing missing; the switched-on guard tested with a piece unbuilt). RainEventSpec re-pinned (98/0).
+  - The other specs reading WorldClock/Weather/the berries are green.
+- **Not verified yet**: the captures, Mist off vs on in Play with a local attribute (field, hub, road; one with Rain). The owner's Studio was minimized all along, and a minimized Studio draws no 3D. Also phones.
+- **Open owner questions**: a sound bed, if they want one (the existing NightTracks music, or new approved audio); any tuning after the captures.
+
 ## ENCHANTED MIST: THE MYSTERIOUS POD'S CREATURES PORTED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; EVENT STILL OFF: Enabled = false, ShowMosskeeper = false; MistCreaturesSpec 8/0, 4 OF 4 MUTANTS CAUGHT; FULL SUITE GREEN; CARD CAPTURES PENDING: STUDIO WAS MINIMIZED, VIEWPORTS DRAW BLANK)
 
 The owner put the missing creatures in Studio (Workspace "ENCHANTED MIST") and answered the questions via the peer.

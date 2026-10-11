@@ -8,7 +8,8 @@
 -- server's attributes (GameConfig.Weather.Attributes); nothing here decides
 -- anything, and a player who joins mid-event is right on their first frame.
 -- The sky's cloud layer and the overcast light are WorldClock's (Lighting has
--- one owner); its icon over the hotbar is BoostIconsUI's.
+-- one owner); its icon over the hotbar is BoostIconsUI's. Since 2026-10-11 it
+-- also draws the Enchanted Mist's wisps and fireflies (THE ENCHANTED MIST).
 --
 --==============================================================================
 -- THE RAIN, OVER THE CAMERA, EVERYWHERE
@@ -55,6 +56,9 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local RainClouds = require(Shared:WaitForChild("RainClouds"))
+-- The Enchanted Mist's wisps and fireflies (2026-10-11). See THE ENCHANTED MIST.
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
+local MistLook = require(Shared:WaitForChild("MistLook"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local player = Players.LocalPlayer
@@ -156,6 +160,116 @@ local function placeAnchors()
 	local ahead = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.zero
 	anchor.CFrame = CFrame.new(cf.Position + Vector3.new(0, 28, 0) + ahead * 16)
 	farAnchor.CFrame = CFrame.new(cf.Position + Vector3.new(0, 44, 0) + ahead * 40)
+end
+
+--==============================================================================
+-- THE ENCHANTED MIST (2026-10-11): ITS WISPS AND FIREFLIES, OVER THE CAMERA
+--
+-- The decoration of MistLook's night (its light is WorldClock's): soft mint
+-- wisps low over the ground and a few fireflies a little above them, on two
+-- parts that follow the camera at the player's feet -- under the camera, like
+-- the rain's sheets, so they never replicate. The engine pools the particles
+-- and the camera's own area is the distance cull. Eased in and out with the
+-- Mist's state (MistLook.step), full at once for a late joiner; a touch
+-- screen at the lower rates; nothing under Reduced FX (MistLook.rates).
+--==============================================================================
+local MIST = EnchantedMistConfig.Look
+local MIST_STATE = EnchantedMistConfig.Attributes.State
+
+local wispAnchor = sheet("MistWisps", MIST.Wisps.Area)
+local wisps = Instance.new("ParticleEmitter")
+wisps.Name = "MistWisps"
+wisps.Texture = MIST.Wisps.Texture
+wisps.Rate = 0
+wisps.Lifetime = NumberRange.new(MIST.Wisps.Lifetime[1], MIST.Wisps.Lifetime[2])
+wisps.Speed = NumberRange.new(MIST.Wisps.Speed[1], MIST.Wisps.Speed[2])
+wisps.EmissionDirection = Enum.NormalId.Top
+wisps.SpreadAngle = Vector2.new(80, 80)
+wisps.Size = NumberSequence.new(MIST.Wisps.Size[1], MIST.Wisps.Size[2])
+wisps.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(0.3, MIST.Wisps.Transparency),
+	NumberSequenceKeypoint.new(0.7, MIST.Wisps.Transparency),
+	NumberSequenceKeypoint.new(1, 1),
+})
+wisps.Color = ColorSequence.new(MIST.Wisps.Colour, MIST.Wisps.Far)
+wisps.LightEmission = 0.35
+wisps.LightInfluence = 0.25
+wisps.Rotation = NumberRange.new(0, 360)
+wisps.RotSpeed = NumberRange.new(-10, 10)
+wisps.Acceleration = Vector3.new(0, 0.04, 0)
+wisps.Drag = 0.4
+wisps.Parent = wispAnchor
+
+local fireflyAnchor = sheet("MistFireflies", MIST.Fireflies.Area)
+fireflyAnchor.Size = Vector3.new(MIST.Fireflies.Area, MIST.Fireflies.Height, MIST.Fireflies.Area)
+local fireflies = Instance.new("ParticleEmitter")
+fireflies.Name = "MistFireflies"
+fireflies.Texture = MIST.Fireflies.Texture
+fireflies.Rate = 0
+fireflies.Lifetime = NumberRange.new(MIST.Fireflies.Lifetime[1], MIST.Fireflies.Lifetime[2])
+fireflies.Speed = NumberRange.new(MIST.Fireflies.Speed[1], MIST.Fireflies.Speed[2])
+fireflies.SpreadAngle = Vector2.new(180, 180)
+fireflies.Size = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0),
+	NumberSequenceKeypoint.new(0.2, MIST.Fireflies.Size),
+	NumberSequenceKeypoint.new(0.8, MIST.Fireflies.Size),
+	NumberSequenceKeypoint.new(1, 0),
+})
+-- A twinkle: bright, dimmer, bright again, gone.
+fireflies.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(0.15, 0.1),
+	NumberSequenceKeypoint.new(0.5, 0.45),
+	NumberSequenceKeypoint.new(0.85, 0.1),
+	NumberSequenceKeypoint.new(1, 1),
+})
+fireflies.Color = ColorSequence.new(MIST.Fireflies.Colours[1], MIST.Fireflies.Colours[2])
+fireflies.LightEmission = 1
+fireflies.LightInfluence = 0
+fireflies.Acceleration = Vector3.new(0, 0.1, 0)
+fireflies.Drag = 1
+fireflies.Parent = fireflyAnchor
+
+-- How much of the Mist's decoration shows, eased; 1 at once for a late joiner.
+local mistLevel = MistLook.wanted(Workspace:GetAttribute(MIST_STATE))
+local shownWisps, shownFireflies = -1, -1
+
+-- Where the ground is under the camera: the player's feet, or a little under
+-- the camera when there is no body.
+local function mistGround(camera: Camera): Vector3
+	local at = camera.CFrame.Position
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if root and root:IsA("BasePart") and humanoid then
+		return Vector3.new(at.X, root.Position.Y - root.Size.Y / 2 - humanoid.HipHeight, at.Z)
+	end
+	return at - Vector3.new(0, 8, 0)
+end
+
+local function stepMist(dt: number)
+	mistLevel = MistLook.step(mistLevel, MistLook.wanted(Workspace:GetAttribute(MIST_STATE)), dt)
+	local wispRate, fireflyRate =
+		MistLook.rates(mistLevel, UserInputService.TouchEnabled, StatusText.reducedMotion())
+	if wispRate ~= shownWisps or fireflyRate ~= shownFireflies then
+		shownWisps, shownFireflies = wispRate, fireflyRate
+		wisps.Rate = wispRate
+		fireflies.Rate = fireflyRate
+	end
+	local camera = Workspace.CurrentCamera
+	if (wispRate > 0 or fireflyRate > 0) and camera then
+		if wispAnchor.Parent ~= camera then
+			wispAnchor.Parent = camera
+			fireflyAnchor.Parent = camera
+		end
+		local ground = mistGround(camera)
+		wispAnchor.CFrame = CFrame.new(ground + Vector3.new(0, MIST.Wisps.Above, 0))
+		fireflyAnchor.CFrame = CFrame.new(ground + Vector3.new(0, MIST.Fireflies.Above + MIST.Fireflies.Height / 2, 0))
+	elseif wispAnchor.Parent ~= nil and mistLevel <= 0 then
+		wispAnchor.Parent = nil
+		fireflyAnchor.Parent = nil
+	end
 end
 
 --==============================================================================
@@ -489,6 +603,8 @@ local function step(dt: number)
 		anchor.Parent = nil
 		farAnchor.Parent = nil
 	end
+	-- The Mist's wisps and fireflies, every frame (THE ENCHANTED MIST).
+	stepMist(dt)
 
 	fogClock += dt
 	if fogClock < FOG_EVERY then
@@ -551,6 +667,8 @@ local function cleanup()
 	table.clear(connections)
 	anchor:Destroy()
 	farAnchor:Destroy()
+	wispAnchor:Destroy()
+	fireflyAnchor:Destroy()
 	clearClouds()
 	SoundKit.stop(AUDIO.RainAmbience)
 	for _, spot in ipairs(strikeSpots) do

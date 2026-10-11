@@ -84,7 +84,9 @@ EnchantedMistService.Built = {
 	Berries = true, -- stage 2: EnchantedMistBerryService, EnchantedMistBerries.client
 	Mosskeeper = true, -- stage 3: MosskeeperService (shown once ShowMosskeeper is on)
 	MysteriousPod = true, -- stage 4: MysteryPodService, MysteryRevealUI.client
-	Look = false,
+	-- The night over the day (2026-10-11): MistLook, through WorldClock's light,
+	-- Weather.client's wisps and fireflies and EnchantedMistBerries.client's glints.
+	Look = true,
 }
 
 function EnchantedMistService.MissingBindings(): { string }
