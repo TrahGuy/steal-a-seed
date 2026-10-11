@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## THE MIST ODDS CARDS WITH NO BLACK WINDOW, AND THE LANDED CREATURE HOLDS — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; MysteryPodSpec 33/0 (4 new checks), MistCreaturesSpec 11/0, MosskeeperSpec 69/0, MistAudioSpec 17/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES, NO FAILURE (run before the small ink fix below, whose specs were re-run); 13 OF 13 MUTANTS CAUGHT; captures in output/mist-odds-cards-2026-10-12)
+
+The owner's ask via the peer: on the Mosskeeper's Odds page and the Mysterious Pod's reels, no black window behind the creature: it stands on its card's studs. The peer then found a real bug in my capture note, which this entry also fixes: a sized creature's landed card showed for only ~0.15 s before the size reel replaced it, so a player never saw which creature came out.
+- **No black window (MistOddsView.card, the Odds page and the reels alike):**
+  - A creature that exists stands clear on its studded card (the window frame's BackgroundTransparency 1). Its ViewportFrame is white (ImageColor3) and lit by the Odds' own brighter light: `EnchantedMistConfig.Mosskeeper.Odds.Ambient` 176,178,188 and `LightColour` 255,252,240 (the Index's are 132,134,146 and 255,250,236).
+  - Only a creature with no model yet keeps the Index's dark "???" window. None of the six is like that now.
+  - **Look choice for the owner's review:** the light level. Three were compared in Edit; this one reads on pearl and gold without washing out the greens.
+  - **The % on a light card (the peer's catch on the captures):** Divine's cream "5%" was lost on the pearl. On the pearl and the stone grey (`Odds.LightCards`), a pale rarity colour now takes its deep ink (`Odds.InkOnLight`): Divine a deep gold (184,128,14), Common slate (52,54,58). Mythic's rose already read there and stays. Confirmed in an Edit crop (08_elderbough_ink_edit_3x.png).
+- **The landed creature holds (EnchantedMistData.reelTimes, MysteryRevealUI):**
+  - A sized creature's landed card stays `Shell.LandHoldSeconds` 1.1 s (CARD LANDS plays as it lands) before the size reel starts. No confirmation tap. Reduced Motion still lands each reel at once.
+  - `Shell.ReelSeconds` 3.6 -> 4.2, so the size still lands before the world reveal, which the server times by it.
+  - Planned times: the creature reel spins 1.55 s, holds 1.1 s, and the size reel spins 1.15 s and lands at 3.8 s. The world reveal comes at 4.2 s and the strip closes at 4.8 s. A Secret lands at 3.1 s, with "A SECRET!" right after.
+  - Measured live on the client (a real hatch): the creature visibly rests at ~1.1 s, "WHAT SIZE?" replaces it at 2.73 s, the size rests at ~3.5 s, and the strip closes at 4.82 s.
+- **Specs (MysteryPodSpec):**
+  - No black window: a made creature stands on its studs, white, in the Odds' light. A stand-in with no model keeps the dark "???".
+  - The hold timeline: a hold of about 1 s; the size lands before the world reveal; the whole reveal is under 5 s.
+  - The reveal takes its times from reelTimes.
+  - The light-card ink: Divine's on the pearl is dark enough to read; Mythic's rose and a gold card's own colour stay.
+- **Mutants (13 of 13):** WindowStaysDark, GhostClear, TintedView, IndexAmbient, IndexLightColour; NoHold, ShortHold, SizeAfterReveal, LongReveal, UIIgnoresHold; NoInk, PaleInk, NoLightPearl.
+- **Live (guarded Play, SeedTest_mistlook_20261011):**
+  - 01-03: the Odds page (top, all six cards, the sizes), and 07: the six cards at 2x.
+  - 04 / 06: a real hatch's creature reel landed on Briarstag (the server log: "hatched a 2 tier Briarstag"). Test-only: that frame is a held COPY of the panel, made by a client watcher at the exact landing and removed afterwards. An unaided try missed it: the MCP's own hold call took 3.4 s.
+  - 05: an earlier hatch's size reel landed on Mega, unaided (the log: a tier 4 Mossbristle).
+  - Three real pods were earned the real way (admin Mists, 30 Dewberries, six GIVE ALLs). No errors.
+- **Next (the queue the owner handed the peer):**
+  - (b) the Shop plate face, 150x50.
+  - (c) the Robux buy buttons.
+  - 9, the six new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console (the log strip becomes a fading answer).
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## THE MYSTERIOUS POD ON CODEX'S MIST STUDS, SHINING — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; RarityCardsSpec 60/0, InventorySpec 47/0, InventoryModelSpec 56/0, PlotShowcaseSpec 55/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (TutorialSpotlightSpec's known timing flake, 50/1, passed 51/0 alone); 10 OF 10 MUTANTS CAUGHT; captures in output/mysterious-pod-mist-2026-10-12)
 
 The owner's ask via the peer: the Mysterious Pod's card on its own uploaded texture (Codex's studs-enchanted-mist-v1, rbxassetid 88002993641737), in place of the obsidian stand-in, and the card should SHINE. Codex's art folder and Codex's HANDOFF entry for it (below) are in this commit.

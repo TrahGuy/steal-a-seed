@@ -170,6 +170,20 @@ EnchantedMistConfig.Mosskeeper = {
 		ChipHeight = 30,
 		-- The page's tallest; past it, it scrolls.
 		ViewHeight = 300,
+		-- A creature on its card (2026-10-12, the owner: no black window behind
+		-- it): standing on the studs, lit brighter than the Index's dark window
+		-- needs, so it reads on the white pearl and the gold as on the holo.
+		Ambient = Color3.fromRGB(176, 178, 188),
+		LightColour = Color3.fromRGB(255, 252, 240),
+		-- A chance on a LIGHT card (2026-10-12, the peer for the owner: Divine's
+		-- cream "5%" was lost on the pearl): on these studded cards (BagLook.Studs
+		-- keys) it takes its rarity's deep ink below, where one is given --
+		-- Mythic's own rose already reads there.
+		LightCards = { pearl = true, stone = true },
+		InkOnLight = {
+			Divine = Color3.fromRGB(184, 128, 14), -- a deep gold
+			Common = Color3.fromRGB(52, 54, 58), -- slate on the stone grey
+		},
 	},
 	--==========================================================================
 	-- HIS TALK (the owner, 2026-10-11, from a clip of a Grow-a-Garden-style shop

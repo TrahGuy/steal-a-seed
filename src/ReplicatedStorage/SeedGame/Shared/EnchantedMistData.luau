@@ -53,13 +53,19 @@ EnchantedMistData.HatchSeconds = 30
 -- Profile.MysteryPods). With no shell id, or one SeedData does not know, no pod can be granted and
 -- the event stays off (EnchantedMistService.MissingBindings). The shell's own
 -- species must grow in HatchSeconds (FixedGrowSeconds) and be unlisted.
--- ReelSeconds: how long the owner's card reels run before the world reveal.
+-- ReelSeconds: how long the owner's card reels run before the world reveal;
+-- LandHoldSeconds: how long a landed creature card stays before the size reel
+-- starts (reelTimes, below).
 --==============================================================================
 EnchantedMistData.Shell = {
 	-- Bound (2026-10-11): the owner's LuckhollowPod, SeedData.MysterySpecies.
 	Id = "mysterypod" :: string?,
 	Name = "Mysterious Pod",
-	ReelSeconds = 3.6,
+	-- 4.2 since 2026-10-12 (3.6 before): room for the landed creature's hold.
+	ReelSeconds = 4.2,
+	-- 2026-10-12, the owner via the peer: the size reel replaced the landed
+	-- creature after ~0.15 s, so a player never saw which creature came out.
+	LandHoldSeconds = 1.1,
 }
 
 --==============================================================================
@@ -149,6 +155,28 @@ local SIZED = { Legendary = true, Mythic = true, Divine = true }
 -- Whether a pool entry rolls a size (Secrets never do).
 function EnchantedMistData.isSized(rarity: string): boolean
 	return SIZED[rarity] == true
+end
+
+-- THE REVEAL'S TIMES (MysteryRevealUI), in seconds from its start, for a
+-- reveal `seconds` long (Shell.ReelSeconds; the world reveal follows it):
+--   creature  the creature reel's spin: it lands then
+--   next      a sized creature's card has held Shell.LandHoldSeconds -- long
+--             enough to read which creature came out -- and the size reel
+--             starts; a Secret's "A SECRET!" comes right after it lands
+--   sizeSpin  the size reel's spin, landing before the world reveal (0 for a
+--             Secret)
+--   close     the strip closes
+export type ReelTimes = { creature: number, next: number, sizeSpin: number, close: number }
+
+function EnchantedMistData.reelTimes(sized: boolean, seconds: number): ReelTimes
+	local hold = EnchantedMistData.Shell.LandHoldSeconds
+	local spin = math.max(seconds - hold, 0.6)
+	if sized then
+		local creature = spin * 0.5
+		return { creature = creature, next = creature + hold, sizeSpin = math.max(spin - creature - 0.4, 0.2),
+			close = seconds + 0.6 }
+	end
+	return { creature = spin, next = spin + 0.15, sizeSpin = 0, close = seconds + 0.6 }
 end
 
 -- The pool entry a uniform `r` in [0, 1) lands on.

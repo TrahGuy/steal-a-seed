@@ -9,7 +9,9 @@
 -- came out (MysteryPodService.TellHatch, to its owner alone), a compact
 -- studded strip at the top of the screen reels the pool's creature cards and
 -- lands on the SAVED creature; for Legendary to Divine a second reel lands on
--- the SAVED size; a Secret skips it ("A SECRET!"). Then the world reveal
+-- the SAVED size once the landed creature has held a moment to be read
+-- (Shell.LandHoldSeconds, 2026-10-12); a Secret skips it ("A SECRET!"). Then
+-- the world reveal
 -- (HatchFX) plays as for any hatch, Shell.ReelSeconds after it began. The
 -- client decides nothing: the reel's filler order comes from the hatch's own
 -- token, and it always lands where the server said. No camera is touched.
@@ -225,7 +227,9 @@ local function play(payload: any)
 	clear()
 	gui.Enabled = true
 	local sized = size ~= nil and EnchantedMistData.isSized(tostring(payload.rarity))
-	local creatureSeconds = if sized then seconds * 0.5 else seconds * 0.75
+	-- The landed creature holds before the size reel (2026-10-12): reelTimes.
+	local times = EnchantedMistData.reelTimes(sized, seconds)
+	local creatureSeconds = times.creature
 	title.Text = W.Creature
 	-- The filler: drawn by the pool's own odds from the hatch's token (mostly
 	-- the commonest, the Secrets rarest), so the reel never misstates them.
@@ -248,13 +252,13 @@ local function play(payload: any)
 		local card = MistOddsView.card(slot, e, Z + 2, CARD_H, moving, fx, if near then views else {})
 		card.Size = UDim2.fromScale(1, 1)
 	end, creatureSeconds)
-	-- The creatures that exist stand in their windows, as on the Odds page.
+	-- The creatures that exist stand on their cards' studs, as on the Odds page.
 	MistOddsView.drawViews(views)
 	for _, h in ipairs(fx) do
 		RarityFX.setActive(h, true)
 	end
 	stopMoving = MistOddsView.animate(moving)
-	task.delay(creatureSeconds + 0.15, function()
+	task.delay(times.next, function()
 		if mine ~= playing then
 			return
 		end
@@ -303,10 +307,10 @@ local function play(payload: any)
 			if stroke then
 				stroke.Color = INK
 			end
-		end, seconds - creatureSeconds - 0.4)
+		end, times.sizeSpin)
 		stopMoving = MistOddsView.animate(moving)
 	end)
-	task.delay(seconds + 0.6, function()
+	task.delay(times.close, function()
 		if mine == playing then
 			clear()
 			gui.Enabled = false

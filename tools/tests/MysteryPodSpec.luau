@@ -299,6 +299,70 @@ local ok, err = pcall(function()
 			and string.find(reels, "MistOddsView.drawViews(views)", 1, true) ~= nil,
 		"a reel's card draws a creature that exists in its window; one not made yet stays \"???\"",
 		string.format("made %s drawn %s dark %s", tostring(made and made.Id), tostring(drawn), tostring(dark)))
+	-- No black window behind a creature (2026-10-12, the owner), on the Odds
+	-- page and the reels alike: a made one stands on its card's studs, white,
+	-- in the Odds' own light; only one with no model yet keeps the dark "???".
+	local ODDS = EnchantedMistConfig.Mosskeeper.Odds
+	local clearHolder = Instance.new("Frame")
+	local clear = MistOddsView.card(clearHolder, made, 1, 140, {}, {}, {})
+	local ghost = MistOddsView.card(clearHolder, { Id = "zz_unmade", Name = "Nobody", Rarity = "Mythic", Weight = 0 },
+		1, 140, {}, {}, {})
+	local well, plantView = clear:FindFirstChild("Preview", true), clear:FindFirstChild("Plant", true)
+	local ghostWell, ghostWord = ghost:FindFirstChild("Preview", true), ghost:FindFirstChild("Unknown", true)
+	local lit = plantView ~= nil and plantView.ImageColor3 == Color3.new(1, 1, 1) and plantView.Ambient == ODDS.Ambient
+		and plantView.LightColor == ODDS.LightColour and ODDS.Ambient ~= nil
+	local studded = clear:FindFirstChild("Studs", true)
+	clearHolder:Destroy()
+	check(well ~= nil and well.BackgroundTransparency == 1 and studded ~= nil and studded.Visible and lit
+			and ghostWell ~= nil and ghostWell.BackgroundTransparency == 0 and ghostWord ~= nil
+			and ghostWord.Text == "???" and ghost:FindFirstChild("Plant", true) == nil,
+		"no black window behind a creature: it stands on its card's studs, white, in the Odds' own light; only one "
+			.. "with no model yet keeps the dark \"???\" window")
+	-- THE LANDED CREATURE HOLDS (2026-10-12, the owner via the peer: the size
+	-- reel replaced it after ~0.15 s): ~1 s to read it before the size reel;
+	-- the size still lands before the world reveal; the whole reveal compact.
+	-- A chance on a LIGHT card in its rarity's deep ink (2026-10-12, the peer
+	-- for the owner: Divine's cream "5%" was lost on the pearl): dark enough to
+	-- read there; Mythic keeps its own rose, a card that is not light its own.
+	local GameConfig = require(Shared:WaitForChild("GameConfig"))
+	local inkHolder = Instance.new("Frame")
+	local function chanceOf(rarity)
+		local card = MistOddsView.card(inkHolder, { Id = made.Id, Name = "Ink", Rarity = rarity, Weight = 5 }, 1, 140,
+			{}, {}, {})
+		return card:FindFirstChild("Chance", true)
+	end
+	local divine, mythic, legendary = chanceOf("Divine"), chanceOf("Mythic"), chanceOf("Legendary")
+	inkHolder:Destroy()
+	local function lum(c)
+		return 0.299 * c.R + 0.587 * c.G + 0.114 * c.B
+	end
+	local pearlTop = GameConfig.BagLook.Studs.pearl.top
+	check(ODDS.LightCards.pearl == true and ODDS.LightCards.stone == true and divine ~= nil
+			and divine.TextColor3 == ODDS.InkOnLight.Divine and lum(pearlTop) - lum(divine.TextColor3) >= 0.3
+			and mythic ~= nil and mythic.TextColor3 == GameConfig.RarityColor.Mythic
+			and legendary ~= nil and legendary.TextColor3 == GameConfig.RarityColor.Legendary
+			and ODDS.InkOnLight.Common ~= nil and lum(ODDS.InkOnLight.Common) < 0.35,
+		"a chance on a light card (the pearl, the stone) in its rarity's deep ink, dark enough to read; Mythic's rose "
+			.. "and a gold card's own colour stay",
+		divine and tostring(divine.TextColor3))
+	local S = SHELL.ReelSeconds
+	local sizedT = EnchantedMistData.reelTimes(true, S)
+	local secretT = EnchantedMistData.reelTimes(false, S)
+	check(SHELL.LandHoldSeconds >= 1 and SHELL.LandHoldSeconds <= 1.2
+			and sizedT.creature >= 1.2 and sizedT.next - sizedT.creature >= 1 - 1e-9
+			and sizedT.sizeSpin >= 1 and sizedT.next + sizedT.sizeSpin <= S - 0.2
+			and secretT.next - secretT.creature <= 0.2 and secretT.close - secretT.creature >= 1
+			and sizedT.close <= 5 and secretT.close <= 5,
+		"a sized creature's landed card holds ~1 s before the size reel, which lands before the world reveal; a "
+			.. "Secret says so as it lands; the whole reveal stays under 5 s",
+		string.format("creature %.2f next %.2f size %.2f close %.2f", sizedT.creature, sizedT.next, sizedT.sizeSpin,
+			sizedT.close))
+	check(string.find(reels, "local times = EnchantedMistData.reelTimes(sized, seconds)", 1, true) ~= nil
+			and string.find(reels, "task.delay(times.next, function()", 1, true) ~= nil
+			and string.find(reels, "end, times.sizeSpin)", 1, true) ~= nil
+			and string.find(reels, "task.delay(times.close, function()", 1, true) ~= nil
+			and not string.find(reels, "creatureSeconds + 0.15", 1, true),
+		"the reveal takes its times from reelTimes (Reduced Motion still lands each reel at once)")
 	-- The reels' filler: by the odds' own mix (never misstating them), the
 	-- answer always at the landing, never two alike side by side.
 	local LAND, COUNT = 12, 17

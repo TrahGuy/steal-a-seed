@@ -17,8 +17,9 @@
 -- the rest stay still. Reduced FX: the rainbow and shimmer stand still, and
 -- RarityFX stills its own.
 --
--- A creature with no model yet stands in the Index's undiscovered DARK window
--- ("???"), never a stand-in creature; one that exists is drawn live.
+-- A creature that exists is drawn live, standing on its card's studs with no
+-- window behind it (2026-10-12, the owner: no black window); one with no model
+-- yet stands in the Index's undiscovered DARK window ("???"), never a stand-in.
 --==============================================================================
 local RunService = game:GetService("RunService")
 
@@ -113,9 +114,9 @@ local function chanceWords(parent: GuiObject, name: string, size: number, chance
 end
 
 -- ONE CREATURE'S RARITY CARD (the Odds page and the Mysterious Pod's reels):
--- its % at the top, its window (live when the creature exists, else the dark
--- "???"), its name and rarity on the ink backing. `moving`, `fx` and `views`
--- collect what the caller starts and stops.
+-- its % at the top, the creature live on the studs (the dark "???" window only
+-- for one with no model yet), its name and rarity on the ink backing.
+-- `moving`, `fx` and `views` collect what the caller starts and stops.
 function MistOddsView.card(parent: GuiObject, entry: any, z: number, cardH: number, moving: { Moving },
 	fx: { any }, views: { { view: ViewportFrame, species: any, built: boolean } }): Frame
 	local chance = EnchantedMistData.creatureChance(entry.Id)
@@ -131,18 +132,26 @@ function MistOddsView.card(parent: GuiObject, entry: any, z: number, cardH: numb
 	table.insert(fx, shine)
 	local rare = RarityFX.edgeColour(entry.Rarity)
 	MenuKit.keyline(face, rare or LOOK.CardEdge, 1, if rare then 0.05 else LOOK.CardEdgeTransparency)
-	-- The % at the card's top edge.
+	-- The % at the card's top edge, in its rarity's colour; on a light card
+	-- (ODDS.LightCards) a pale one takes its deep ink (ODDS.InkOnLight).
 	local colour = (GameConfig.RarityColor :: any)[entry.Rarity] or WHITE
+	local studsKey = (STUD_LOOK.StudsByRarity :: any)[entry.Rarity]
+	if spec and studsKey and ODDS.LightCards[studsKey] then
+		colour = ODDS.InkOnLight[entry.Rarity] or colour
+	end
 	local pct = chanceWords(face, "Chance", 18, chance, colour, z + 6, moving)
 	pct.AnchorPoint = Vector2.new(0.5, 0)
 	pct.Position = UDim2.new(0.5, 0, 0, 3)
 	pct.Size = UDim2.new(1, -8, 0, 20)
-	-- The display window: dark, the creature in it when it exists.
-	local well = MenuKit.frame(face, "Preview", z + 2, LOOK.Window, 0, 6)
+	-- The display window (2026-10-12, the owner: no black window behind the
+	-- creature): clear on its studded card, so a creature that exists stands on
+	-- the studs, in white and the Odds' own brighter light. Only one with no
+	-- model yet keeps the Index's dark "???" window.
+	local species = SeedData.Get(entry.Id)
+	local well = MenuKit.frame(face, "Preview", z + 2, LOOK.Window, if species and spec then 1 else 0, 6)
 	well.ClipsDescendants = true
 	well.Position = UDim2.fromOffset(4, 25)
 	well.Size = UDim2.new(1, -8, 0, cardH - 25 - 40)
-	local species = SeedData.Get(entry.Id)
 	if species then
 		local view = Instance.new("ViewportFrame")
 		view.Name = "Plant"
@@ -150,8 +159,9 @@ function MistOddsView.card(parent: GuiObject, entry: any, z: number, cardH: numb
 		view.Position = UDim2.fromScale(0.5, 0.5)
 		view.Size = UDim2.new(1, -4, 1, -4)
 		view.BackgroundTransparency = 1
-		view.Ambient = GameConfig.Card.Ambient
-		view.LightColor = GameConfig.Card.LightColour
+		view.ImageColor3 = WHITE
+		view.Ambient = ODDS.Ambient
+		view.LightColor = ODDS.LightColour
 		view.LightDirection = GameConfig.Card.LightDirection
 		view.ZIndex = z + 3
 		view.Parent = well
