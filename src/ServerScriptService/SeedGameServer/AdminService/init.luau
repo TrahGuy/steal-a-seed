@@ -6,8 +6,9 @@
 -- start the night or the day for the whole server; announce; (2026-10-07,
 -- SPAWN, which replaced 2026-10-02's SECRET ITEMS) give any plant or pod the
 -- game has to anybody in this server; the weather for this server (every
--- admin account since 2026-10-07); and (2026-10-03, MINI EVENTS) start or end
--- a Ticket Disco for this server.
+-- admin account since 2026-10-07); (2026-10-03, MINI EVENTS) start or end
+-- a Ticket Disco for this server; and (2026-10-11) START or END an Enchanted
+-- Mist for this server.
 -- Nothing else, and nobody else.
 --
 --==============================================================================
@@ -65,7 +66,8 @@
 --      Weather goes to WeatherService and MiniEvent (2026-10-03) to
 --      MiniEventService, each for any allowlisted account (the weather was
 --      the owner's alone until 2026-10-07), with its verb and whole-seconds
---      duration checked here
+--      duration checked here; Mist (2026-10-11) to EnchantedMistService, any
+--      allowlisted account, "start" or "end"
 --   5. otherwise the target is a UserId of a player in THIS server, now
 --   6. the target's profile has loaded
 --   7. for cash and Speed, a finite whole number from 1 to the limit -- the
@@ -102,6 +104,7 @@ local WorldCycleService = require(script.Parent:WaitForChild("WorldCycleService"
 local AnnouncementService = require(script.Parent:WaitForChild("AnnouncementService"))
 local WeatherService = require(script.Parent:WaitForChild("WeatherService"))
 local MiniEventService = require(script.Parent:WaitForChild("MiniEventService"))
+local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
 
 local SAVE = GameConfig.Save
 
@@ -182,6 +185,10 @@ local ACTIONS: { [string]: boolean } = {
 	-- DISCO ONLY, 2026-10-04), "tickets" or "podrush" (POD RUSH, 2026-10-09)
 	-- -- or "end"; the third the duration.
 	MiniEvent = true,
+	-- 2026-10-11: an Enchanted Mist for THIS server, by ANY allowlisted account
+	-- (EnchantedMistService), even with its schedule switched off. The second
+	-- word is "start" (START MIST NOW: the normal 300 s) or "end".
+	Mist = true,
 }
 
 -- The mini event's verbs: each start verb names its mode, and "end".
@@ -975,6 +982,50 @@ local function miniEvent(admin: any, verb: any, seconds: any): Reply
 end
 
 --==============================================================================
+-- ENCHANTED MIST: START MIST NOW, END MIST NOW, FOR THIS SERVER (2026-10-11)
+--
+-- The owner's: any allowlisted account (Handle's first check, by UserId).
+-- "start" begins a normal Mist at once through EnchantedMistService -- 300 s,
+-- the berries, Mosskeeper's deliveries, the look, the sign's ACTIVE countdown
+-- -- even with the event's schedule switched off (the owner keeps it off);
+-- "end" ends the running one through the Mist's own end. One at a time,
+-- every piece built and not at Night are EnchantedMistService's rules; what
+-- it answers is what the console shows, and every change is in the audit.
+--==============================================================================
+local MIST_REFUSALS: { [string]: string } = {
+	ALREADY_ACTIVE = "An Enchanted Mist is already running here. Nothing changed.",
+	NOT_BUILT = "The Enchanted Mist is missing a binding; the server log names it. Nothing changed.",
+	NIGHT = "It is night: the road is shut. Start the Mist after dawn. Nothing changed.",
+	NOT_ACTIVE = "No Enchanted Mist is running here. Nothing changed.",
+}
+
+local function mist(admin: any, verb: any): Reply
+	if verb ~= "start" and verb ~= "end" then
+		return refuse("Unknown Enchanted Mist request. Nothing changed.")
+	end
+	local now = EnchantedMistService.Hooks.now()
+	local ok, why
+	if verb == "start" then
+		ok, why = EnchantedMistService.AdminStart(now, nameOf(admin))
+	else
+		ok, why = EnchantedMistService.AdminEnd(now, nameOf(admin))
+	end
+	if not ok then
+		return refuse(MIST_REFUSALS[why] or "The Mist did not change; the server log says why.")
+	end
+	record(admin, nil, "Mist:" .. verb, nil, nil)
+	if verb == "end" then
+		return { ok = true, message = "Enchanted Mist ended for everyone in this server." }
+	end
+	local endsAt = EnchantedMistService.EndsAt()
+	return {
+		ok = true,
+		message = string.format("Enchanted Mist started for everyone in this server. It ends in %s.",
+			minutes(if endsAt then endsAt - now else 0)),
+	}
+end
+
+--==============================================================================
 -- ONE REQUEST
 --
 -- The whole of the server's side of the console, and the only thing the
@@ -1027,6 +1078,11 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	-- is the verb, the third the duration (miniEvent).
 	if action == "MiniEvent" then
 		return miniEvent(sender, targetId, amount)
+	end
+	-- AN ENCHANTED MIST is any allowlisted admin's (checked above): the second
+	-- word is the verb (mist).
+	if action == "Mist" then
+		return mist(sender, targetId)
 	end
 	if type(targetId) ~= "number" or targetId ~= targetId or targetId <= 0
 		or targetId ~= math.floor(targetId) then

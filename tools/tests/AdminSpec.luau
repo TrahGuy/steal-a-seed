@@ -24,7 +24,8 @@
 -- WorldCycleService's two doors here -- this is about who may press them and
 -- what they are told; CycleSpec runs the real transitions. The weather's three
 -- doors (WeatherService) are stand-ins too, for the same reason: RainEventSpec
--- runs the real event, terrain and all.
+-- runs the real event, terrain and all. So are the Enchanted Mist's two admin
+-- doors (2026-10-11): EnchantedMistSpec runs the real ones on a fake clock.
 --==============================================================================
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
@@ -48,6 +49,7 @@ local CombatService = require(Server.CombatService)
 local WeaponShopService = require(Server.WeaponShopService)
 local WorldCycleService = require(Server.WorldCycleService)
 local WeatherService = require(Server.WeatherService)
+local EnchantedMistService = require(Server.EnchantedMistService)
 local AdminService = require(Server.AdminService)
 local SpawnCatalog = require(Server.AdminService.SpawnCatalog)
 
@@ -92,9 +94,11 @@ local treads: any, plants: any, carry: any = TreadmillService, PlantService, Car
 local combat: any, shop: any, admin: any = CombatService, WeaponShopService, AdminService
 local cycle: any = WorldCycleService
 local weatherSvc: any = WeatherService
+local mistSvc: any = EnchantedMistService
 local real = {
 	StartNight = cycle.StartNight, StartDay = cycle.StartDay,
 	StartRain = weatherSvc.StartRain, StartThunderstorm = weatherSvc.StartThunderstorm, EndRain = weatherSvc.EndRain,
+	AdminStart = mistSvc.AdminStart, AdminEnd = mistSvc.AdminEnd, MistEndsAt = mistSvc.EndsAt,
 	Load = saves.Load, Save = saves.Save, Forget = saves.Forget,
 	SetDesiredLevel = plots.SetDesiredLevel, PlotOf = plots.PlotOf,
 	MountStats = data.MountStats,
@@ -229,6 +233,28 @@ weatherSvc.EndRain = function(by)
 	end
 	sky.mode = nil
 	return true, "Ended.", true
+end
+-- EnchantedMistService's two admin doors (2026-10-11), answering the way the
+-- real ones do: one Mist at a time, and an END with none running refused.
+local mistOn = false
+mistSvc.AdminStart = function(now, by)
+	note("AdminStart", now, by)
+	if mistOn then
+		return false, "ALREADY_ACTIVE"
+	end
+	mistOn = true
+	return true, "STARTED"
+end
+mistSvc.AdminEnd = function(now, by)
+	note("AdminEnd", now, by)
+	if not mistOn then
+		return false, "NOT_ACTIVE"
+	end
+	mistOn = false
+	return true, "ENDED"
+end
+mistSvc.EndsAt = function()
+	return if mistOn then mistSvc.Hooks.now() + 300 else nil
 end
 local function callsOf(name, from)
 	local n = 0
@@ -424,6 +450,44 @@ local ok, err = pcall(function()
 	local adminSrcCode = string.gsub(src, "%-%-[^\n]*", "")
 	check(string.find(adminSrcCode, "IsOwner(admin)", 1, true) == nil and string.find(adminSrcCode, "Owner only", 1, true) == nil,
 		"and the weather has no owner gate left on the server: the allowlist is its door, as for every other action")
+	-- THE ENCHANTED MIST IS ALL THREE ADMINS' (the owner, 2026-10-11: START MIST
+	-- NOW and END MIST NOW, like the weather): each starts one and ends it, a
+	-- second start and a second end refused, each change audited under its admin.
+	local mistBad = {}
+	for _, who in ipairs({ adminA, adminB, adminC }) do
+		local from = #calls
+		local auditFrom = #admin.Audit()
+		local start = admin.Handle(who, "Mist", "start")
+		local twice = admin.Handle(who, "Mist", "start")
+		local stop = admin.Handle(who, "Mist", "end")
+		local stopTwice = admin.Handle(who, "Mist", "end")
+		local asked = callsOf("AdminStart", from) == 2 and callsOf("AdminEnd", from) == 2
+		local byName = calls[from + 1] and calls[from + 1].args[2] == who.Name
+		local entries = admin.Audit()
+		local mine, actions = true, {}
+		for i = auditFrom + 1, #entries do
+			table.insert(actions, entries[i].action)
+			mine = mine and entries[i].admin == who.UserId
+		end
+		local fine = start.ok and start.message == "Enchanted Mist started for everyone in this server. It ends in 5:00."
+			and not twice.ok and twice.message == "An Enchanted Mist is already running here. Nothing changed."
+			and stop.ok and stop.message == "Enchanted Mist ended for everyone in this server."
+			and not stopTwice.ok and stopTwice.message == "No Enchanted Mist is running here. Nothing changed."
+		if not (fine and asked and byName and mine and table.concat(actions, ",") == "Mist:start,Mist:end") then
+			table.insert(mistBad, string.format("%s: %s / %s / %s / %s; audit %s", who.Name, start.message, twice.message,
+				stop.message, stopTwice.message, table.concat(actions, ",")))
+		end
+	end
+	check(#mistBad == 0, "the Enchanted Mist is all three admins': each starts one and ends it, a second start or end "
+		.. "refused with nothing changed, each change in the audit under who made it (Mist:start, Mist:end)",
+		table.concat(mistBad, " | "))
+	local fromMist = #calls
+	local refusedMist = admin.Handle(fourth, "Mist", "start")
+	local oddVerb = admin.Handle(adminA, "Mist", "thunder")
+	check(not refusedMist.ok and refusedMist.message == "Not authorized." and not oddVerb.ok
+			and oddVerb.message == "Unknown Enchanted Mist request. Nothing changed."
+			and callsOf("AdminStart", fromMist) == 0 and callsOf("AdminEnd", fromMist) == 0 and not mistOn,
+		"a fourth id, or a verb that is neither start nor end, is refused before the Mist is asked", refusedMist.message)
 	local titleSrc = sourceOf(Server:FindFirstChild("OwnerTitleService")) or ""
 	check(string.find(titleSrc, "if not AdminService.HasTitle(player) then", 1, true) ~= nil
 			and string.find(titleSrc, "IsAdmin(", 1, true) == nil,
@@ -1358,6 +1422,7 @@ combat.ClearTrap, shop.RefreshTools = real.ClearTrap, real.RefreshTools
 cycle.StartNight, cycle.StartDay = real.StartNight, real.StartDay
 weatherSvc.StartRain, weatherSvc.StartThunderstorm, weatherSvc.EndRain = real.StartRain, real.StartThunderstorm,
 	real.EndRain
+mistSvc.AdminStart, mistSvc.AdminEnd, mistSvc.EndsAt = real.AdminStart, real.AdminEnd, real.MistEndsAt
 admin.FindPlayer = real.FindPlayer
 admin.TellPlayer = real.TellPlayer
 admin.Config.MinInterval = real.MinInterval

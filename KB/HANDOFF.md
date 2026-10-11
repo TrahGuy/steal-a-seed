@@ -1,5 +1,23 @@
 # Steal a Seed — Session Handoff
 
+## ADMIN CONSOLE: START MIST NOW / END MIST NOW — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; EnchantedMistSpec 58/0, AdminSpec 129/0, AdminConsoleSpec 38/0, 11 OF 11 MUTANTS CAUGHT)
+
+The owner, via the peer: "add Enchanted Mist controls to the existing admin console, at least START MIST NOW and END MIST NOW, with the same pattern, admin checks and look as the console's other event buttons ... an admin start MUST still work while Enabled is false ... Source "admin" in the logs, and no effect on the schedule's next eligibility while disabled."
+- **The console (WORLD tab)**: a new "ENCHANTED MIST · THIS SERVER" card between the weather and the mini events.
+  - Its status line: "MIST: ACTIVE • m:ss LEFT", or "MIST: NOT RUNNING • SCHEDULE OFF" / "SCHEDULE ON".
+  - START MIST NOW (a mint face) and END MIST NOW (danger red). Each asks in place (CONFIRM / CANCEL), like the weather.
+  - Every admin account has it; the server checks the allowlist (UserIds) first, as for every action.
+- **The server**: AdminService action `Mist` with verb `start` or `end`, any verb else refused. Audit entries are `Mist:start` and `Mist:end` under the admin.
+  - Refusals: "already running", "missing a binding", "night: the road is shut", "none running"; each says "Nothing changed".
+- **EnchantedMistService.AdminStart / AdminEnd**:
+  - A normal Mist: 300 s, the berries, deliveries, the look, the sign's ACTIVE countdown. It runs WITH `Enabled` FALSE.
+  - Refused while one runs, while a binding is missing, and at Night.
+  - Log: "MIST <id> started (source admin, by <name>) with the schedule off". END runs the Mist's own end (reason "admin").
+  - With the schedule off nothing of the schedule moves: no eligibility is set or published. At its end (time, END, or a forced Night) the state is "disabled" again, and the sign is back to COMING SOON.
+  - Ticks and Night now end an active Mist with the schedule off too.
+- **Open owner question (stubbed safely; the schedule is off, so it cannot happen now)**: with the schedule ON (`Enabled` true), an admin Mist counts as a start, so the next eligibility moves to 60 minutes after it (the rule "measured from the START"). Say if an admin Mist should leave the schedule alone instead.
+- **Mutants (11/11 caught)**: AdminNeedsSchedule, AdminMovesEligibility, AdminEndCoolsDown, TickNeedsSchedule, NightSparesAdmin, StartsAtNight, PublishesEligibility, AdminNoAudit, MistOwnerOnly, ConsoleNoMist, ButtonSendsWeather.
+
 ## THE ENCHANTED MIST SIGN ON: COMING SOON OVER THE HUB, READABLE FROM THE PLOTS — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; EnchantedMistSpec 43/0, EventHubSpec 53/0, 8 OF 8 MUTANTS CAUGHT)
 
 The owner, via the peer: "turn on the shared "ENCHANTED MIST" sign above the hub (EnchantedMistConfig.ShowSign = true). Check it stays clear of the arch, the surround and the grove's trees, and that it reads from the plots."

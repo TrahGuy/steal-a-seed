@@ -12,8 +12,8 @@
 --             a line that says why; the quick chips 1M .. 1Qd and MAX
 --   tabs      PLAYER, SPAWN, WORLD, ANNOUNCE; the sections each shows -- the
 --             weather for every admin account since 2026-10-07 (the owner's
---             alone before); LB / RB's step; the button a controller's
---             selection starts on in each
+--             alone before), the Enchanted Mist since 2026-10-11; LB / RB's
+--             step; the button a controller's selection starts on in each
 --   requests  exactly what each button sends through the one RemoteFunction:
 --             the action and its three words, the same shapes the console sent
 --             before the redesign, and SPAWN's request table (AdminService)
@@ -154,14 +154,15 @@ ConsoleModel.Tabs = {
 } :: { Tab }
 
 -- The sections of a tab, top to bottom. The weather is every admin account's
--- since 2026-10-07 (the owner's alone before), so every console shows it.
+-- since 2026-10-07 (the owner's alone before), so every console shows it; the
+-- Enchanted Mist (2026-10-11) likewise, under it.
 function ConsoleModel.sections(tabId: string): { string }
 	if tabId == "player" then
 		return { "money", "speed", "reset" }
 	elseif tabId == "spawn" then
 		return { "groups", "search", "grid", "form", "size", "quantity", "preview", "spawn" }
 	elseif tabId == "world" then
-		return { "daynight", "weather", "events" }
+		return { "daynight", "weather", "mist", "events" }
 	elseif tabId == "announce" then
 		return { "message", "scope", "send" }
 	end
@@ -225,6 +226,10 @@ ConsoleModel.args = {
 	-- A mode ("ticketdisco", "disco", "party", "tickets") with its seconds, or "end".
 	miniEvent = function(verb: string, seconds: number?): Args
 		return args("MiniEvent", verb, seconds, nil)
+	end,
+	-- "start" (START MIST NOW: the normal 300 s) or "end" (END MIST NOW).
+	mist = function(verb: string): Args
+		return args("Mist", verb, nil, nil)
 	end,
 	-- "server" or "all"; `confirmed` only after YES, ALL SERVERS.
 	announce = function(scope: string, text: string, confirmed: boolean): Args

@@ -14,7 +14,11 @@
 --      binding; a random 20-60 min first eligibility; starts only on an
 --      eligible, natural, completed dawn with the road open; never twice for
 --      one dawn; 300 s active; the next eligibility 60 min from the START; a
---      forced night ends it; its start and end heard once each
+--      forced night ends it; its start and end heard once each; AN ADMIN'S
+--      MIST (2026-10-11): the console's start and end, with the schedule on
+--      (it counts as a start) and OFF (it runs anyway, the schedule
+--      untouched, back to disabled at its end); refused while one runs, at
+--      Night, or with a binding missing
 --   4. WorldCycleService's dawn hook: told after a completed dawn, natural or
 --      forced (with its source), never for a night or a failed dawn, and a
 --      throwing listener cannot fail the dawn
@@ -252,6 +256,85 @@ local ok, err = pcall(function()
 	check(#starts == 2 and #ends == 2 and starts[1].degraded == true and ends[2].reason == "night"
 			and starts[1].eventId ~= second and ends[1].reason == "time",
 		"its start and end are heard once each, with the degraded stock and the reason", #starts .. "/" .. #ends)
+
+	-- AN ADMIN'S MIST (the console's START MIST NOW / END MIST NOW, 2026-10-11).
+	say("-- an admin's Mist --")
+	local night = false
+	M.Hooks.isNight = function()
+		return night
+	end
+	local startsFrom, endsFrom = #starts, #ends
+	-- The schedule ON (as above, cooling down until 9300): it counts as a start.
+	local onOk, onWhy = M.AdminStart(6000, "SpecAdmin")
+	check(onOk and onWhy == "STARTED" and M.IsActive() and published[ATTR.StartedAt] == 6000
+			and published[ATTR.EndsAt] == 6300 and M.EligibleAt() == 9600
+			and string.find(M.EventId() or "", "-admin-", 1, true) ~= nil,
+		"the schedule on: an admin's start is a normal 300 s Mist, and the next eligibility counts from it",
+		tostring(M.EligibleAt()))
+	local twiceOk, twiceWhy = M.AdminStart(6010, "SpecAdmin")
+	check(not twiceOk and twiceWhy == "ALREADY_ACTIVE" and M.EndsAt() == 6300,
+		"a second start while one runs: refused, nothing changed", twiceWhy)
+	local endOk, endWhy = M.AdminEnd(6100, "SpecAdmin")
+	check(endOk and endWhy == "ENDED" and not M.IsActive() and M.State() == STATES.Cooldown
+			and published[ATTR.EndsAt] == nil and published[ATTR.EventId] == nil,
+		"END: over at once, through the Mist's own end; the schedule cools down", endWhy)
+	local endAgainOk, endAgainWhy = M.AdminEnd(6110, "SpecAdmin")
+	check(not endAgainOk and endAgainWhy == "NOT_ACTIVE", "END with none running: refused", endAgainWhy)
+	-- The schedule OFF (the owner's choice: Enabled false), every binding built.
+	configCopy.Enabled = false
+	M._boot(7000)
+	check(M.State() == STATES.Disabled and published[ATTR.EligibleAt] == nil and M.EligibleAt() == 0,
+		"the schedule off: disabled, no eligibility")
+	night = true
+	local nightOk, nightWhy = M.AdminStart(7010, "SpecAdmin")
+	night = false
+	check(not nightOk and nightWhy == "NIGHT" and M.State() == STATES.Disabled,
+		"at Night: refused (the road is shut, and a forced Night would end it)", nightWhy)
+	local realMissing = M.MissingBindings
+	M.MissingBindings = function()
+		return { "binding: a spec's missing piece" }
+	end
+	local unbuiltOk, unbuiltWhy = M.AdminStart(7020, "SpecAdmin")
+	M.MissingBindings = realMissing
+	check(not unbuiltOk and unbuiltWhy == "NOT_BUILT" and M.State() == STATES.Disabled,
+		"a binding missing: refused", unbuiltWhy)
+	local offOk = M.AdminStart(7100, "SpecAdmin")
+	check(offOk and M.IsActive() and published[ATTR.State] == STATES.Active and published[ATTR.StartedAt] == 7100
+			and published[ATTR.EndsAt] == 7400 and published[ATTR.EventId] == M.EventId()
+			and published[ATTR.EligibleAt] == nil and M.EligibleAt() == 0,
+		"the schedule OFF, an admin's start still runs: active for 300 s, the sign's countdown published, the "
+			.. "schedule's eligibility untouched")
+	check(M._onDawn(dawn(30), 7200) == "OFF" and M.IsActive(), "and the schedule stays off: a natural dawn starts nothing")
+	M._tick(7399)
+	check(M.IsActive(), "one second before its end: still active")
+	M._tick(7400)
+	check(not M.IsActive() and M.State() == STATES.Disabled and published[ATTR.State] == STATES.Disabled
+			and published[ATTR.EligibleAt] == nil and published[ATTR.EndsAt] == nil and M.EligibleAt() == 0,
+		"at 300 s it ends on its own, back to disabled -- the sign's COMING SOON -- the schedule untouched")
+	M.AdminStart(7500, "SpecAdmin")
+	M._onNight(7550)
+	check(not M.IsActive() and M.State() == STATES.Disabled, "a forced Night ends it, back to disabled")
+	M.AdminStart(7600, "SpecAdmin")
+	M.AdminEnd(7650, "SpecAdmin")
+	check(not M.IsActive() and M.State() == STATES.Disabled and M.EligibleAt() == 0,
+		"END with the schedule off: over at once, back to disabled")
+	task.wait(0.1)
+	local reasons = {}
+	for i = endsFrom + 1, #ends do
+		table.insert(reasons, ends[i].reason)
+	end
+	local fromAdmin = true
+	for i = startsFrom + 1, #starts do
+		fromAdmin = fromAdmin and starts[i].source == "admin" and starts[i].endsAt == starts[i].startedAt + 300
+	end
+	check(#starts == startsFrom + 4 and fromAdmin and table.concat(reasons, ",") == "admin,time,night,admin",
+		"the berries, Mosskeeper and the look hear each admin start and end once, source admin",
+		table.concat(reasons, ","))
+	local coordinator = moduleScript.Source
+	check(string.find(coordinator, "started (source admin%s)%s; ends in %ds.", 1, true) ~= nil
+			and string.find(coordinator, "ended (%s). The schedule stays off.", 1, true) ~= nil,
+		"its log says source admin, and that the schedule stays off at the end")
+	configCopy.Enabled = EnchantedMistConfig.Enabled
 
 	--==========================================================================
 	-- 4. WorldCycleService's DAWN HOOK

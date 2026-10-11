@@ -26,6 +26,16 @@
 -- OFF UNTIL APPROVED: with EnchantedMistConfig.Enabled false, or any binding
 -- MissingBindings lists, the state is "disabled" and nothing is scheduled.
 --
+-- AN ADMIN'S MIST (the owner, 2026-10-11: START MIST NOW / END MIST NOW on the
+-- admin console, AdminService): a normal Mist -- 300 s, the berries, the
+-- deliveries, the look, the sign's ACTIVE countdown -- started at once, EVEN
+-- WITH Enabled FALSE (every binding built: the owner keeps the schedule off).
+-- Refused while one runs, while a binding is missing, and at Night (the road
+-- is shut, and a forced Night ends a Mist). Source "admin" in the log. With
+-- the schedule off it leaves the schedule untouched -- at its end the state
+-- is "disabled" again, the sign back to COMING SOON. With it on, it counts as
+-- a start: the next eligibility 60 minutes from it, as for any Mist.
+--
 -- Published as Workspace attributes (EnchantedMistConfig.Attributes), times as
 -- Workspace:GetServerTimeNow() values, the state written last. Clients count
 -- down locally; nothing is sent every second.
@@ -70,6 +80,10 @@ EnchantedMistService.Hooks = {
 	end,
 	random = function(min: number, max: number): number
 		return Random.new():NextInteger(min, max)
+	end,
+	-- Whether the world is at Night now (an admin's Mist waits for the day).
+	isNight = function(): boolean
+		return Workspace:GetAttribute(GameConfig.Attributes.WorldPhase) == GameConfig.WorldCycle.PhaseNight
 	end,
 }
 
@@ -175,7 +189,8 @@ end
 
 local function publish()
 	EnchantedMistService.Hooks.publish({
-		[ATTR.EligibleAt] = if st.phase == STATES.Disabled then nil else st.eligibleAt,
+		-- None while the schedule is off, an admin's Mist included.
+		[ATTR.EligibleAt] = if st.phase == STATES.Disabled or not st.running then nil else st.eligibleAt,
 		[ATTR.StartedAt] = if st.phase == STATES.Active then st.startedAt else nil,
 		[ATTR.EndsAt] = if st.phase == STATES.Active then st.endsAt else nil,
 		[ATTR.EventId] = if st.phase == STATES.Active then st.eventId else nil,
@@ -211,10 +226,17 @@ local function finish(reason: string, now: number)
 		return
 	end
 	local id = st.eventId
-	st.phase = if now >= st.eligibleAt then STATES.Eligible else STATES.Cooldown
+	-- An admin's Mist with the schedule off goes back to off.
+	st.phase = if not st.running then STATES.Disabled
+		elseif now >= st.eligibleAt then STATES.Eligible
+		else STATES.Cooldown
 	publish()
-	log(string.format("MIST %s ended (%s). Next eligible in %ds.", tostring(id), reason,
-		math.max(0, math.floor(st.eligibleAt - now))))
+	if st.running then
+		log(string.format("MIST %s ended (%s). Next eligible in %ds.", tostring(id), reason,
+			math.max(0, math.floor(st.eligibleAt - now))))
+	else
+		log(string.format("MIST %s ended (%s). The schedule stays off.", tostring(id), reason))
+	end
 	tell(endListeners, { eventId = id, reason = reason, at = now })
 end
 
@@ -262,25 +284,72 @@ function EnchantedMistService._onDawn(dawn: WorldCycleService.Dawn, now: number)
 end
 
 -- The clock's step: cooldown becomes eligible, an active Mist ends on time.
+-- An admin's Mist ends on time with the schedule off too.
 function EnchantedMistService._tick(now: number)
-	if not st.running then
-		return
-	end
 	if st.phase == STATES.Active then
 		if st.endsAt and now >= (st.endsAt :: number) then
 			finish("time", now)
 		end
-	elseif st.phase == STATES.Cooldown and now >= st.eligibleAt then
+	elseif st.running and st.phase == STATES.Cooldown and now >= st.eligibleAt then
 		st.phase = STATES.Eligible
 		publish()
 	end
 end
 
--- A forced Night (the admin console, the command bar) while the Mist runs.
+-- A forced Night (the admin console, the command bar) while the Mist runs --
+-- an admin's too, with the schedule off.
 function EnchantedMistService._onNight(now: number)
-	if st.running and st.phase == STATES.Active then
+	if st.phase == STATES.Active then
 		finish("night", now)
 	end
+end
+
+--==============================================================================
+-- AN ADMIN'S MIST (AdminService: the console's START MIST NOW, END MIST NOW)
+--==============================================================================
+-- Starts a Mist at once for `by` (an admin's name, for the log). Returns
+-- whether it started and why not: ALREADY_ACTIVE, NOT_BUILT (a binding
+-- missing), NIGHT. Runs with the schedule off.
+function EnchantedMistService.AdminStart(now: number, by: string?): (boolean, string)
+	if st.phase == STATES.Active then
+		return false, "ALREADY_ACTIVE"
+	end
+	local missing = EnchantedMistService.MissingBindings()
+	if #missing > 0 then
+		warn("[Seed/EnchantedMistService] an admin start refused: " .. table.concat(missing, "; "))
+		return false, "NOT_BUILT"
+	end
+	if EnchantedMistService.Hooks.isNight() then
+		return false, "NIGHT"
+	end
+	st.events += 1
+	st.eventId = string.format("%s-admin-%d", st.boot, st.events)
+	st.startedAt = now
+	st.endsAt = now + SCHEDULE.ActiveSeconds
+	-- The schedule's next eligibility only while it runs: with it off, none.
+	if st.running then
+		st.eligibleAt = now + SCHEDULE.CooldownSeconds
+	end
+	st.phase = STATES.Active
+	publish()
+	log(string.format("MIST %s started (source admin%s)%s; ends in %ds.", st.eventId,
+		if by then ", by " .. by else "", if st.running then "" else " with the schedule off", SCHEDULE.ActiveSeconds))
+	tell(startListeners, { eventId = st.eventId, startedAt = now, endsAt = st.endsAt, source = "admin",
+		degraded = false })
+	return true, "STARTED"
+end
+
+-- Ends the running Mist at once, the way its time running out does (reason
+-- "admin"). NOT_ACTIVE when none runs.
+function EnchantedMistService.AdminEnd(now: number, by: string?): (boolean, string)
+	if st.phase ~= STATES.Active then
+		return false, "NOT_ACTIVE"
+	end
+	if by then
+		log("MIST " .. tostring(st.eventId) .. " ended by admin " .. by .. ".")
+	end
+	finish("admin", now)
+	return true, "ENDED"
 end
 
 --==============================================================================

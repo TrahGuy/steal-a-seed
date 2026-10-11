@@ -21,7 +21,8 @@
 --               (the rest dimmed, no picker for a fixed size); how many, up to
 --               the target's free bag room; the preview line; SPAWN
 --   WORLD       Start Night, Start Day; the weather -- every admin account's
---               since 2026-10-07 (the owner's alone before); the mini events
+--               since 2026-10-07 (the owner's alone before); the Enchanted
+--               Mist's START / END MIST NOW (2026-10-11); the mini events
 --   ANNOUNCE    the words and their count, THIS SERVER or ALL SERVERS, SEND
 --   LOG         under every tab: the last five answers, green done or red
 --               refused, with the time
@@ -81,6 +82,8 @@ local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local ItemArt = require(Shared:WaitForChild("ItemArt"))
 local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
+local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -125,6 +128,8 @@ local ATTR = GameConfig.Attributes
 local ANNOUNCE = GameConfig.Announce
 local WEATHER = GameConfig.Weather
 local MINI = GameConfig.MiniEvent
+local MIST = EnchantedMistConfig
+local MIST_SECONDS = EnchantedMistData.Schedule.ActiveSeconds
 local MAX_HELD = GameConfig.Save.MaxHeld
 local Z = 6
 
@@ -553,6 +558,8 @@ local FACES: { [string]: { Color3 } } = {
 	rain = { Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170), Color3.fromRGB(14, 46, 96), WHITE },
 	thunder = { Color3.fromRGB(128, 104, 214), Color3.fromRGB(70, 52, 146), Color3.fromRGB(34, 22, 86), WHITE },
 	night = { Color3.fromRGB(70, 92, 170), Color3.fromRGB(34, 44, 104), Color3.fromRGB(14, 20, 64), WHITE },
+	-- The Enchanted Mist's mint, deepened to carry white words.
+	mist = { Color3.fromRGB(54, 170, 140), Color3.fromRGB(26, 110, 92), Color3.fromRGB(10, 56, 46), WHITE },
 	speed = { Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170), Color3.fromRGB(14, 46, 96), WHITE },
 }
 local function face(b: any, id: string)
@@ -1107,6 +1114,23 @@ do
 	ui.weatherAsk = build.question(wCard, "WeatherQuestion", "full", "CONFIRM")
 	ui.weatherSection = weather
 
+	-- The Enchanted Mist (2026-10-11, the owner): START MIST NOW and END MIST
+	-- NOW for this server -- a normal Mist even while its schedule is off. Every
+	-- admin account's (the server checks the allowlist), each asking in place
+	-- like the weather's.
+	local mist = build.column(page, "Mist", 6)
+	build.heading(mist, "ENCHANTED MIST \u{00B7} THIS SERVER")
+	local mistCard = build.card(mist, "Card")
+	ui.mistLabel, ui.mistDot = build.state(mistCard, "MistStatus")
+	local mistRow = build.buttons(mistCard, 2, 140, "full", { { "StartMist", "START MIST NOW" },
+		{ "EndMist", "END MIST NOW" } })
+	ui.startMist, ui.endMist = mistRow[1], mistRow[2]
+	face(ui.startMist, "mist")
+	face(ui.endMist, "danger")
+	ui.mistRow = ui.startMist.hit.Parent
+	ui.mistAsk = build.question(mistCard, "MistQuestion", "full", "CONFIRM")
+	ui.mistSection = mist
+
 	local mini = build.column(page, "Events", 6)
 	build.heading(mini, "MINI EVENTS \u{00B7} EVERY SERVER")
 	local mCard = build.card(mini, "Card")
@@ -1365,6 +1389,7 @@ function paint.tabs()
 	-- The weather for every admin account (2026-10-07).
 	local shown = Model.sections("world")
 	ui.weatherSection.Visible = table.find(shown, "weather") ~= nil
+	ui.mistSection.Visible = table.find(shown, "mist") ~= nil
 end
 
 function paint.target()
@@ -1595,6 +1620,19 @@ function paint.world()
 			else string.format("%s%s  \u{2022}  %s LEFT", mode.Name, boost, mmss(miniEnds - Workspace:GetServerTimeNow()))
 		ui.miniDot.BackgroundColor3 = if miniState == "ending" then LOOK.Muted else GOOD
 	end
+	local MA = MIST.Attributes
+	local mistState = Workspace:GetAttribute(MA.State)
+	local mistEnds = Workspace:GetAttribute(MA.EndsAt)
+	if mistState == MIST.States.Active and type(mistEnds) == "number" then
+		ui.mistLabel.Text = string.format("MIST: ACTIVE  \u{2022}  %s LEFT", mmss(mistEnds - Workspace:GetServerTimeNow()))
+		ui.mistDot.BackgroundColor3 = GOOD
+	else
+		-- The schedule's own state: off (COMING SOON on the sign) or on.
+		ui.mistLabel.Text = if mistState == MIST.States.Disabled then "MIST: NOT RUNNING  \u{2022}  SCHEDULE OFF"
+			elseif type(mistState) == "string" then "MIST: NOT RUNNING  \u{2022}  SCHEDULE ON"
+			else "MIST: NOT RUNNING"
+		ui.mistDot.BackgroundColor3 = LOOK.Muted
+	end
 	ui.miniHelp.Text = MODE_WORDS[state.miniMode] or ""
 	local sync = screen:GetAttribute("MiniStatus")
 	ui.miniSync.Text = if type(sync) == "string" then sync else "Waiting for the server's sync status…"
@@ -1604,11 +1642,14 @@ function paint.world()
 	local weatherAsk = state.asking == "weather"
 	ui.weatherAsk.block.Visible = weatherAsk
 	ui.weatherRow.Visible = not weatherAsk
+	local mistAsk = state.asking == "mist"
+	ui.mistAsk.block.Visible = mistAsk
+	ui.mistRow.Visible = not mistAsk
 	local miniAsk = state.asking == "mini"
 	ui.miniAsk.block.Visible = miniAsk
 	ui.miniRow.Visible = not miniAsk
-	for _, b in ipairs({ ui.startNight, ui.startDay, ui.startRain, ui.startThunder, ui.endRain, ui.startMini,
-		ui.endMini }) do
+	for _, b in ipairs({ ui.startNight, ui.startDay, ui.startRain, ui.startThunder, ui.endRain, ui.startMist,
+		ui.endMist, ui.startMini, ui.endMini }) do
 		b.label.TextTransparency = if state.busy then 0.5 else 0
 	end
 end
@@ -1970,6 +2011,29 @@ ui.weatherAsk.confirm.hit.Activated:Connect(function()
 	task.spawn(send, Model.args.weather(verb, if verb == "end" then nil else seconds(ui.rainBox)))
 end)
 
+-- THE ENCHANTED MIST (2026-10-11): each asks in place, like the weather.
+local function askMist(verb: string)
+	ui.mistAsk.words.Text = if verb == "end" then "End the Enchanted Mist on this server now?"
+		else string.format("Start an Enchanted Mist on this server now, for %s?", mmss(MIST_SECONDS))
+	setAsking("mist", verb)
+	selectIfPad(ui.mistAsk.cancel.hit)
+end
+ui.startMist.hit.Activated:Connect(function()
+	askMist("start")
+end)
+ui.endMist.hit.Activated:Connect(function()
+	askMist("end")
+end)
+ui.mistAsk.cancel.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	note("Mist unchanged.", nil)
+end)
+ui.mistAsk.confirm.hit.Activated:Connect(function()
+	local verb = state.askVerb or "end"
+	setAsking(nil, nil)
+	task.spawn(send, Model.args.mist(verb))
+end)
+
 for _, choice in ipairs(ui.miniChoices) do
 	choice.button.hit.Activated:Connect(function()
 		state.miniMode = choice.verb
@@ -2124,7 +2188,8 @@ local function tick(want: boolean)
 	step()
 end
 for _, name in ipairs({ ATTR.WorldPhase, ATTR.WorldPhaseEndsAt, WEATHER.Attributes.State, WEATHER.Attributes.EndsAt,
-	WEATHER.Attributes.Mode, MINI.Attributes.State, MINI.Attributes.EndsAt, MINI.Attributes.Mode }) do
+	WEATHER.Attributes.Mode, MIST.Attributes.State, MIST.Attributes.EndsAt, MINI.Attributes.State,
+	MINI.Attributes.EndsAt, MINI.Attributes.Mode }) do
 	Workspace:GetAttributeChangedSignal(name):Connect(function()
 		if state.open then
 			paint.world()

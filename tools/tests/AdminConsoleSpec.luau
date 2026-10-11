@@ -153,10 +153,11 @@ local ok, err = pcall(function()
 		"LB and RB step through them and wrap at both ends")
 	-- The weather is every admin's (owner, 2026-10-07): ConsoleModel.sections no
 	-- longer asks who is looking, so every console draws the same WORLD tab.
+	-- The Enchanted Mist (2026-10-11) likewise, under the weather.
 	local world = Model.sections("world")
-	check(table.concat(world, ",") == "daynight,weather,events",
-		"WORLD shows night/day, the weather and the events to every admin account -- the weather is no longer "
-			.. "hidden for the two that are not the owner's", table.concat(world, ","))
+	check(table.concat(world, ",") == "daynight,weather,mist,events",
+		"WORLD shows night/day, the weather, the Enchanted Mist and the events to every admin account -- the "
+			.. "weather is no longer hidden for the two that are not the owner's", table.concat(world, ","))
 	local modelSrc = ServerScriptService.SeedGameServer.AdminService.ConsoleModel.Source
 	check(string.find(modelSrc, "function ConsoleModel.sections(tabId: string): { string }", 1, true) ~= nil
 			and string.find(modelSrc, "isOwner", 1, true) == nil,
@@ -189,6 +190,8 @@ local ok, err = pcall(function()
 		{ Model.args.weather("end", nil), "Weather|end|nil|nil" },
 		{ Model.args.miniEvent("ticketdisco", 600), "MiniEvent|ticketdisco|600|nil" },
 		{ Model.args.miniEvent("end", nil), "MiniEvent|end|nil|nil" },
+		{ Model.args.mist("start"), "Mist|start|nil|nil" },
+		{ Model.args.mist("end"), "Mist|end|nil|nil" },
 		{ Model.args.announce("all", "Hello", true), "Announce|all|Hello|true" },
 		{ Model.args.announce("server", "Hello", false), "Announce|server|Hello|false" },
 		{ Model.args.spawn(5551, req, "SpecTarget"), "Spawn|5551|{request}|SpecTarget" },
@@ -389,7 +392,7 @@ local ok, err = pcall(function()
 		"it only ever asks, through one InvokeServer of what ConsoleModel built")
 	local builders = { "Model.args.addMoney(", "Model.args.addSpeed(", "Model.args.reset(", "Model.args.startNight(",
 		"Model.args.startDay(", "Model.args.weather(", "Model.args.miniEvent(", "Model.args.announce(",
-		"Model.args.spawn(", "Model.spawnRequest(" }
+		"Model.args.spawn(", "Model.spawnRequest(", "Model.args.mist(" }
 	local missing = {}
 	for _, b in ipairs(builders) do
 		if not has(run, b) then
@@ -398,6 +401,7 @@ local ok, err = pcall(function()
 	end
 	check(#missing == 0, "every button sends through its ConsoleModel builder", table.concat(missing, ", "))
 	check(has(run, "Model.sections(\"world\")") and has(run, "ui.weatherSection.Visible")
+			and has(run, "ui.mistSection.Visible = table.find(shown, \"mist\") ~= nil")
 			and not has(run, "isOwner") and not has(run, "IsOwner") and not has(src, "OWNER ONLY"),
 		"the weather section is shown from ConsoleModel.sections for every admin -- no owner check, no OWNER ONLY "
 			.. "heading, and a press asks the server whoever presses it")
@@ -411,8 +415,13 @@ local ok, err = pcall(function()
 		"a spawn press has its own id, resent unchanged after no answer while the server remembers it, and its "
 		.. "wait counted down on the button")
 	check(has(run, "setAsking(\"give\"") and has(run, "currentTarget().Name") and has(run, "setAsking(\"weather\"")
-			and has(run, "setAsking(\"mini\"") and has(run, "setAsking(\"all\"") and has(run, "typedMatches()"),
-		"giving to anybody else, the weather, the events and ALL SERVERS ask in place; the reset waits for the name")
+			and has(run, "setAsking(\"mini\"") and has(run, "setAsking(\"all\"") and has(run, "typedMatches()")
+			and has(run, "setAsking(\"mist\", verb)")
+			and has(run, "{ { \"StartMist\", \"START MIST NOW\" },")
+			and has(run, "{ \"EndMist\", \"END MIST NOW\" } })")
+			and has(run, "task.spawn(send, Model.args.mist(verb))"),
+		"giving to anybody else, the weather, the Enchanted Mist's START / END MIST NOW, the events and ALL SERVERS "
+			.. "ask in place; the reset waits for the name")
 	check(not has(run, "while true") and not has(run, "Heartbeat") and not has(run, "RenderStepped"),
 		"no loop and no per-frame work: one task.delay chain while it is open")
 	check(has(run, "layout.admin") and has(run, "button.Selectable = true"),
