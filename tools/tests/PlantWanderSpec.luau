@@ -762,9 +762,11 @@ if ok then
 end
 end
 
--- Whatever happens inside, the plot this spec built does not outlive it.
+-- Whatever happens inside, the plots this spec built do not outlive it (plot 6
+-- was left behind until 2026-10-11, one per run).
 local bodyOk, bodyErr = pcall(body)
 plotModel:Destroy()
+plot6Model:Destroy()
 check(bodyOk, "the spec ran to the end", bodyErr)
 
 say(string.format("\nPlantWanderSpec: %d passed, %d failed", pass, fail))
