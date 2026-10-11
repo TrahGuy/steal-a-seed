@@ -82,6 +82,8 @@ local TrapRemove = require(Shared:WaitForChild("TrapRemove"))
 local PodHatch = require(Shared:WaitForChild("PodHatch"))
 -- What the Instant Hatch product costs THIS player (2026-10-09, the Bag's button).
 local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
+-- The Mysterious Pod's species (the Enchanted Mist): its ready moment has a sound.
+local MYSTERY_POD: string? = require(Shared:WaitForChild("EnchantedMistData")).Shell.Id
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -254,7 +256,8 @@ local assign = { ref = nil :: string?, name = "" }
 -- Pods hatch in the Bag (2026-10-09): the Instant Hatch product's price for THIS
 -- player (RobuxPrice; nil until Roblox has said, and then no price is shown),
 -- how many pods were READY at the last redraw, and whether any still grows.
-local podsNow = { price = nil :: number?, ready = 0, growing = false, readyKeys = "", nextTick = 0 }
+local podsNow = { price = nil :: number?, ready = 0, growing = false, readyKeys = "", nextTick = 0,
+	mistGrowing = {} :: { [string]: boolean } }
 local sealedUntil: { [string]: number } = {}
 -- What the last redraw collected: every owned item, by ref, and the Bag's
 -- groups by key.
@@ -1270,18 +1273,29 @@ redraw = function()
 		local now = Workspace:GetServerTimeNow()
 		local readyKeys = {}
 		podsNow.growing = false
+		local mistGrowing: { [string]: boolean } = {}
 		for _, item in ipairs(view.items) do
 			if item.ref then
 				view.byRef[item.ref :: string] = item
 			end
 			if item.kind == "pod" and not item.hatched and item.hatchAt then
+				local mist = MYSTERY_POD ~= nil and item.speciesId == MYSTERY_POD
 				if now >= (item.hatchAt :: number) then
 					table.insert(readyKeys, tostring(item.ref))
+					-- A Mysterious Pod this Bag saw growing turns ready: the
+					-- Enchanted Mist's POD READY, once (none for one ready at a join).
+					if mist and podsNow.mistGrowing[tostring(item.ref)] then
+						SoundKit.play("MistPodReady")
+					end
 				else
 					podsNow.growing = true
+					if mist then
+						mistGrowing[tostring(item.ref)] = true
+					end
 				end
 			end
 		end
+		podsNow.mistGrowing = mistGrowing
 		podsNow.ready = InventoryModel.readyCount(view.items, now)
 		podsNow.readyKeys = table.concat(readyKeys, ",")
 		-- A weapon asked of the server goes into the hands once its Tool lands.

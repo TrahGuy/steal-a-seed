@@ -348,6 +348,8 @@ function MosskeeperService.Give(player: any): { [string]: any }
 			title = if result.pods > 0 then string.format(words.GivenPod, result.delivered)
 				else string.format(words.Given, result.delivered, plural, result.progress, PER_POD),
 			key = CFG.NoticeKey,
+			-- The delivery makes its own sound on the client (GIVE ALL, POD EARNED).
+			quiet = true,
 		})
 	end
 	return result

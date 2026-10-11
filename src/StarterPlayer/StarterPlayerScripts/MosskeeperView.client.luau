@@ -29,6 +29,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
@@ -261,6 +262,10 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 	if (tonumber(payload.pods) or 0) > 0 then
 		holdUntil = os.clock() + BAR.FullHold
 		draw(PER_POD)
+		-- The Enchanted Mist's POD EARNED as the bar lands on 10/10 (its 0.45 s fill).
+		task.delay(if StatusText.reducedMotion() then 0 else 0.45, function()
+			SoundKit.play("MistPodEarned")
+		end)
 		task.delay(BAR.FullHold, function()
 			holdUntil = 0
 			refresh()

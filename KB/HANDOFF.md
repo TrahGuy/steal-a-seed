@@ -1,5 +1,43 @@
 # Steal a Seed — Session Handoff
 
+## THE ENCHANTED MIST'S SOUNDS: THE OWNER'S THIRTEEN UPLOADS, MEASURED AND WIRED — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; MistAudioSpec 17/0, EnchantedMistBerrySpec 70/0, THE FULL SUITE 147/147, 13 OF 13 MUTANTS CAUGHT; ONE GUARDED PLAY, ITS TIMELINE IN output/mist-sounds-2026-10-11)
+
+The owner's uploads (CrazyCozy Games, 09:39 UTC; sfx/enchanted-mist-sound-prompts.txt), via the peer.
+- **Checked, every id**:
+  - Economy says Audio from group 744756221. All load in Studio Edit (IsLoaded, fetch Success), with TimeLength equal to their sfx/ render to the millisecond.
+  - The two DEWBERRY ids were resolved by their assets' full names, never guessed: 105691434133252 = DEWBERRY PICKED, 93161571928576 = DEWBERRY APPEARS.
+- **Measured** (stdlib off the WAVs; ffmpeg for the MP3) in output/mist-sounds-2026-10-11/measurements_*.txt: where each starts, stops sounding (1% of its peak), its peak and RMS. GameConfig.Sfx's Mist rows set volume = designed / peak:
+  - AMBIENCE (299.6 s, RMS -15.6 dB like BGM1's -14.7, quiet for 2.14 s): MistAmbience 0.09, World bus, looped from 2.14. That is about 12 dB under the music.
+  - BEGINS 0.46, faded at its end; ENDS 1.15 (its peak is 26%), quieter than BEGINS.
+  - APPEARS 1.19 at the berry, range 40. PICKED 0.71 (with jitter); FULL 0.44; HELLO 0.32, faded.
+  - GIVE ALL 0.38 from 0.04; POD EARNED 0.52; POD READY 0.35.
+  - REEL TICK 0.20, from 0.05 for 0.08 s: its sound is 0.052-0.124 of 0.48 s; softer than CARD CLICK's 0.30, it plays many in a row.
+  - CARD LANDS 1.03, faded; A SECRET! 0.55, faded.
+  - The designed levels are Claude's, by measurement, not by ear: owner to review by ear.
+- **Wired**:
+  - The bed in Weather.client at the Mist look's own eased level, like the rain's loop (SOUND FX moves it, MUSIC does not; Reduced FX does not touch sound, as with the rain's).
+  - BEGINS once when MistState turns active within 5 s of MistStartedAt, so never for a late state. ENDS once when it leaves.
+  - APPEARS: a server SoundKit.emit AT each new berry (EnchantedMistBerryService Hooks.sound).
+  - PICKED, or FULL on the fifth: on the server's own pick notice, which now says `full` (the count is nil at 0 and stamped at load, so it cannot tell a pick).
+  - HELLO as the dialogue opens; GIVE ALL on "given"; the game's Action Blocked on a refused delivery (the prompt file's reused sound).
+  - POD EARNED as his bar lands on 10/10 (its 0.45 s fill).
+  - POD READY when a Mysterious Pod this Bag saw growing turns ready (LoadoutUI; none for one ready at a join).
+  - The reveal: a REEL TICK each time the centred card changes, CARD LANDS when a reel completes (a reel cut short says nothing; reduced motion lands at once), A SECRET! on a Secret.
+- **Notices**:
+  - "A Dewberry appeared!" is SILENT, every berry (the owner, 2026-10-11) and still updates in place; the twinkle at the berry is a spawn's only sound.
+  - The pick and delivery notices are quiet too: their own sounds play.
+  - The HatchFX reveal by rarity (already wired for Mist pods) is unchanged.
+- **Guarded Play (SeedTest_mistlook_20261011; a desktop window; the console's START / END MIST NOW)**: output/mist-sounds-2026-10-11/sound_timeline.txt. Times on the log's clock:
+  - At the start (37.11): BEGINS at 0.46, stopping after its 3.48 s. The bed started at 0.001, faded to 0.088, played from 2.14 on the World bus.
+  - APPEARS was emitted at every new berry, 75-157 studs from this camera (outside its 40: heard near the berry only).
+  - A real pick (hold E): server "picked (1/5)", PICKED at 0.71 for its 0.36 s.
+  - Talk: the dialogue opened and HELLO played its 1.2 s.
+  - GIVE ALL: server "delivered 1 Dewberry", GIVE ALL at 0.38 for 1.08 s.
+  - END: ENDS at 1.15 for 2.0 s; the bed stopped 6 s later as the look faded out.
+  - No load failures and no errors.
+- **Not heard live (spec-pinned only)**: FULL, POD EARNED, POD READY, the reel's ticks, landings and A SECRET!, and Action Blocked on a refusal. Those need five berries, a pod's ten, or a Mysterious Pod's hatch. Nothing was heard by ear: Claude cannot listen.
+- **Mutants (13/13 caught)**: BedNeverStops, BeginsAtJoin, TwinkleNotEmitted, BerryNoticePings, PickNoticePings, FullNeverSaid, HelloSilent, EarnedIsReady, TickNever, LandsOnCancel, ReadyAtJoin, BedTooLoud, TickWholeFile.
+
 ## PUSHED: THE HUB ITEMS AND PERFORMANCE MODE — 2026-10-11 (CLAUDE, TERMINAL)  (THE OWNER OK'd THE PUSH; NOT PUBLISHED; THE ENCHANTED MIST SOUNDS ARE STILL BEING WIRED, UNCOMMITTED, AND NOT IN THIS PUSH)
 
 Pushed on wip, in order, after the owner's OK (via the peer). Each has its own entry below:

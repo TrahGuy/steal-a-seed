@@ -10573,6 +10573,61 @@ GameConfig.Sfx = {
 		ThunderClap = { id = "rbxassetid://79835427265580", volume = 0.35, range = 640, group = "World" },
 		ThunderstormOpening = { id = "rbxassetid://110362720818059", volume = 0.4, group = "World" },
 		RainAmbience = { id = "rbxassetid://138018201261517", volume = 0.16, looped = true, group = "World" },
+
+		--======================================================================
+		-- THE ENCHANTED MIST (2026-10-11; sfx/enchanted-mist-sound-prompts.txt)
+		--
+		-- The owner's CrazyCozy Games uploads, every id load-tested in Studio
+		-- Edit (IsLoaded, TimeLength), each measured off its render in sfx/ --
+		-- the same length to the millisecond: where it starts, where it stops
+		-- sounding (1% of its peak), its peak. Volume = designed / peak.
+		--======================================================================
+		-- 299.57 s, RMS -15.6 dB (BGM1's is -14.7), quiet for its first 2.14 s.
+		-- The Mist's bed, on the World bus as the rain's is (SOUND FX moves it,
+		-- MUSIC does not): 0.09 is about 12 dB under the music (0.32 of BGM1),
+		-- a bed, not a song. Weather.client fades it with the Mist's look.
+		MistAmbience = {
+			id = "rbxassetid://91905968261795", volume = 0.09, looped = true, start = 2.14, group = "World",
+		},
+		-- Peaks at 98%; 3.48 s and still sounding at its end, so faded. Once for
+		-- everyone as the Mist starts. Designed 0.45.
+		MistBegins = { id = "rbxassetid://107597832765081", volume = 0.46, clip = 3.48, fadeOut = 0.4, group = "UI" },
+		-- Peaks at 26%; quiet after 1.94 s. Quieter than BEGINS. Designed 0.30.
+		MistEnds = { id = "rbxassetid://105565685427294", volume = 1.15, clip = 2.0, group = "UI" },
+		-- Peaks at 21%: a twinkle, two hits in 0.26 s. AT the berry, heard near it
+		-- only (a berry comes every 3 s). Designed 0.25.
+		MistBerryAppears = {
+			id = "rbxassetid://93161571928576", volume = 1.19, range = 40, clip = 0.4, fadeOut = 0.1, group = "World",
+		},
+		-- Peaks at 42%; the pop in its first 0.12 s. Heard fifty times a Mist.
+		-- Designed 0.30.
+		MistBerryPicked = {
+			id = "rbxassetid://105691434133252", volume = 0.71, clip = 0.36, fadeOut = 0.1, jitter = 0.04, group = "UI",
+		},
+		-- Peaks at 79%; quiet after 0.43 s. The fifth berry. Designed 0.35.
+		MistBerriesFull = { id = "rbxassetid://101482706102921", volume = 0.44, clip = 0.44, group = "UI" },
+		-- Peaks at 94%; still sounding at its end (1.2 s), so faded. Designed 0.30.
+		MistHello = { id = "rbxassetid://96949680041955", volume = 0.32, clip = 1.2, fadeOut = 0.3, group = "UI" },
+		-- Peaks at 92%; starts at 0.048, quiet after 1.10 s. Designed 0.35.
+		MistGiveAll = { id = "rbxassetid://97066727639042", volume = 0.38, start = 0.04, clip = 1.08, group = "UI" },
+		-- Peaks at 96%; quiet after 1.84 s. One of the three moments. Designed 0.50.
+		MistPodEarned = { id = "rbxassetid://81157512493666", volume = 0.52, clip = 1.9, group = "UI" },
+		-- Peaks at 100%; quiet after 0.48 s. Designed 0.35.
+		MistPodReady = { id = "rbxassetid://105177825016817", volume = 0.35, clip = 0.5, group = "UI" },
+		-- Peaks at 100%; the tick sounds from 0.052 s to 0.124 s of its 0.48 (CARD
+		-- CLICK's from 0.14 to 0.31 of its 1.0). Many in a row, so softer than
+		-- CardClick's 0.30. Designed 0.20.
+		MistReelTick = {
+			id = "rbxassetid://88081217369132", volume = 0.20, start = 0.05, clip = 0.08, jitter = 0.04, group = "UI",
+		},
+		-- Peaks at 34%; still sounding at its end (0.48 s), so faded. Twice for a
+		-- sized creature. Designed 0.35.
+		MistCardLands = {
+			id = "rbxassetid://106515846422089", volume = 1.03, clip = 0.48, fadeOut = 0.12, group = "UI",
+		},
+		-- Peaks at 100%; still sounding at its end (2.48 s), so faded. Bigger than
+		-- POD EARNED, still not loud. Designed 0.55.
+		MistSecret = { id = "rbxassetid://106270956432929", volume = 0.55, clip = 2.48, fadeOut = 0.4, group = "UI" },
 	},
 
 	--==========================================================================

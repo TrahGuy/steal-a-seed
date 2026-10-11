@@ -236,6 +236,56 @@ fireflies.Parent = fireflyAnchor
 local mistLevel = MistLook.wanted(Workspace:GetAttribute(MIST_STATE))
 local shownWisps, shownFireflies = -1, -1
 
+--==============================================================================
+-- THE MIST'S SOUND (2026-10-11, the owner's uploads): its bed, the
+-- MistAmbience cue on the World bus as the rain's loop is (SOUND FX moves it,
+-- MUSIC does not), at the look's own level -- in and out with it, full at once
+-- for a late joiner -- and BEGINS and ENDS once for everyone, on the state's
+-- own change, never at a join.
+--==============================================================================
+local mistBedShown = -1
+local mistBed: Sound? = nil
+
+local function stepMistBed()
+	local cue = SoundKit.cue("MistAmbience")
+	if not cue then
+		return
+	end
+	if mistLevel <= 0 then
+		if mistBedShown >= 0 then
+			mistBedShown = -1
+			mistBed = nil
+			SoundKit.stop("MistAmbience")
+		end
+		return
+	end
+	local want = (cue.volume or 0.5) * mistLevel
+	if mistBedShown < 0 then
+		mistBedShown = want
+		mistBed = SoundKit.play("MistAmbience", { volume = want })
+	elseif math.abs(want - mistBedShown) > 0.002 then
+		mistBedShown = want
+		local sound = mistBed
+		if sound and sound.Parent then
+			sound.Volume = want
+		end
+	end
+end
+
+local mistWas = Workspace:GetAttribute(MIST_STATE)
+table.insert(connections, Workspace:GetAttributeChangedSignal(MIST_STATE):Connect(function()
+	local now = Workspace:GetAttribute(MIST_STATE)
+	local active = EnchantedMistConfig.States.Active
+	local started = Workspace:GetAttribute(EnchantedMistConfig.Attributes.StartedAt)
+	if now == active and mistWas ~= active and type(started) == "number"
+		and Workspace:GetServerTimeNow() - started <= 5 then
+		SoundKit.play("MistBegins")
+	elseif now ~= active and mistWas == active then
+		SoundKit.play("MistEnds")
+	end
+	mistWas = now
+end))
+
 -- Where the ground is under the camera: the player's feet, or a little under
 -- the camera when there is no body.
 local function mistGround(camera: Camera): Vector3
@@ -271,6 +321,7 @@ local function stepMist(dt: number)
 		wispAnchor.Parent = nil
 		fireflyAnchor.Parent = nil
 	end
+	stepMistBed()
 end
 
 --==============================================================================
@@ -672,6 +723,7 @@ local function cleanup()
 	fireflyAnchor:Destroy()
 	clearClouds()
 	SoundKit.stop(AUDIO.RainAmbience)
+	SoundKit.stop("MistAmbience")
 	for _, spot in ipairs(strikeSpots) do
 		spot:Destroy()
 	end

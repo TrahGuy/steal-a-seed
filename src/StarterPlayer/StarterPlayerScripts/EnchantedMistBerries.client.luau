@@ -30,6 +30,9 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Notice = require(Shared:WaitForChild("Notice"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local B = EnchantedMistConfig.Berries
 local CARRIED = EnchantedMistConfig.PlayerAttributes.Carried
@@ -153,6 +156,22 @@ local folder = Workspace:FindFirstChild(B.FolderName)
 if folder and folder:IsA("Folder") then
 	watchFolder(folder)
 end
+
+-- A pick is heard (the Enchanted Mist's DEWBERRY PICKED, and FULL on the
+-- fifth, 2026-10-11) on the server's own word for it, the pick's notice --
+-- never on the count, which is nil at 0 and stamped again at every load.
+task.spawn(function()
+	local remotes = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Remotes", 20)
+	local event = if remotes then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20) else nil
+	if not (event and event:IsA("RemoteEvent")) then
+		return
+	end
+	(event :: RemoteEvent).OnClientEvent:Connect(function(action: any, payload: any)
+		if action == Notice.ServerNotice and type(payload) == "table" and payload.key == B.NoticeKeys.Picked then
+			SoundKit.play(if payload.full == true then "MistBerriesFull" else "MistBerryPicked")
+		end
+	end)
+end)
 
 -- A pick to the cap puts every berry out of reach; a delivery gives them back.
 player:GetAttributeChangedSignal(CARRIED):Connect(function()

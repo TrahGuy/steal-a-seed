@@ -266,8 +266,8 @@ EnchantedMistConfig.Mystery = {
 -- road, the berries and the far biomes keep reading. No fog of any kind.
 -- WISPS and FIREFLIES (Weather.client), GLINTS (EnchantedMistBerries.client):
 -- decoration, off under Reduced FX, a touch screen's lower rates. Every
--- texture is the engine's own particle (rbxasset://), never an upload; no
--- sound bed (no approved Mist audio exists).
+-- texture is the engine's own particle (rbxasset://), never an upload. Its
+-- sound (the owner's uploads, 2026-10-11) is GameConfig.Sfx's Mist cues.
 --==============================================================================
 EnchantedMistConfig.Look = {
 	-- Tuned 2026-10-11 after the first Play captures: a notch lighter, so the

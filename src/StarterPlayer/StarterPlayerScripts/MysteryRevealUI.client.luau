@@ -17,6 +17,7 @@
 --==============================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
@@ -26,6 +27,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
@@ -185,12 +187,31 @@ local function reel(count: number, land: number, width: number, build: (index: n
 	end
 	if StatusText.reducedMotion() or seconds <= 0 then
 		strip.Position = at(land)
+		SoundKit.play("MistCardLands")
 		return
 	end
 	strip.Position = at(1)
 	local t = TweenService:Create(strip, TweenInfo.new(seconds, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		{ Position = at(land) })
 	tween = t
+	-- The Enchanted Mist's REEL TICK for every card that passes the notches (the
+	-- one centred changes), and CARD LANDS when it stops there -- a reel cut
+	-- short by the next reveal says nothing.
+	local pitch = width + GAP
+	local centred = 1
+	local ticking = RunService.RenderStepped:Connect(function()
+		local i = math.floor((-strip.Position.X.Offset - width / 2) / pitch + 0.5) + 1
+		if i ~= centred then
+			centred = i
+			SoundKit.play("MistReelTick")
+		end
+	end)
+	t.Completed:Once(function(state: Enum.PlaybackState)
+		ticking:Disconnect()
+		if state == Enum.PlaybackState.Completed then
+			SoundKit.play("MistCardLands")
+		end
+	end)
 	t:Play()
 end
 
@@ -240,6 +261,7 @@ local function play(payload: any)
 		if not sized then
 			if payload.rarity == "Secret" then
 				title.Text = W.Secret
+				SoundKit.play("MistSecret")
 			end
 			return
 		end

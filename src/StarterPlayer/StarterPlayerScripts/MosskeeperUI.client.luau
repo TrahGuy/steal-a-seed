@@ -34,6 +34,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
@@ -463,8 +464,11 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 	end
 	if payload.phase == "open" then
 		setOpen(true)
+		SoundKit.play("MistHello")
 	elseif payload.phase == "given" then
 		pending = nil
+		-- Under the bar filling (POD EARNED, if it made one, is the bar's: MosskeeperView).
+		SoundKit.play("MistGiveAll")
 		answerLabel.TextColor3 = LOOK.Money
 		local n = tonumber(payload.delivered) or 0
 		answerLabel.Text = if (tonumber(payload.pods) or 0) > 0 then string.format(W.GivenPod, n)
@@ -472,6 +476,7 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 		refresh()
 	elseif payload.phase == "refused" then
 		pending = nil
+		SoundKit.play("NoticeBlocked")
 		answerLabel.TextColor3 = WARN_TEXT
 		answerLabel.Text = W.Refused[tostring(payload.reason)] or W.Refused.BUSY
 		refresh()

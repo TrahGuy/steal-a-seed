@@ -165,6 +165,11 @@ local ok, err = pcall(function()
 	M.Hooks.parent = function()
 		return stage
 	end
+	-- The sounds it emits AT a part (the Enchanted Mist's DEWBERRY APPEARS).
+	local sounds = {}
+	M.Hooks.sound = function(name, at)
+		table.insert(sounds, { name = name, at = at })
+	end
 	M.Hooks.spot = function()
 		local at = table.remove(spots, 1)
 		if at then
@@ -265,6 +270,8 @@ local ok, err = pcall(function()
 		end
 	end
 	check(still, "every part anchored; nothing to bump, touch or hit")
+	check(#sounds == 1 and sounds[1].name == "MistBerryAppears" and model ~= nil and sounds[1].at == model.PrimaryPart,
+		"its own twinkle AT it (DEWBERRY APPEARS, a server one-shot heard near it only)", #sounds)
 	check(prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.ActionText == "Collect Dewberry"
 			and prompt.HoldDuration == SPAWN.HoldSeconds and prompt.MaxActivationDistance == SPAWN.Reach
 			and prompt.KeyboardKeyCode == Enum.KeyCode.E and prompt.Style == Enum.ProximityPromptStyle.Custom
@@ -280,6 +287,8 @@ local ok, err = pcall(function()
 	local post = lastA and Notice.readServerNotice(lastA.payload)
 	check(post ~= nil and post.key == "server:" .. B.NoticeKeys.Appeared,
 		"one key for every berry: the next one says its place in the notice already up")
+	check(lastA.payload.quiet == true and post ~= nil and post.quiet == true,
+		"and silently, every berry (the owner, 2026-10-11): the twinkle AT the berry is the spawn's only sound")
 	local I = SPAWN.IntervalSeconds
 	stepTo(1000 + I - 1)
 	check(#M.List() == 1, "a second short of the next chance: still one")
@@ -394,6 +403,8 @@ local ok, err = pcall(function()
 		"a held, reachable pick: one berry credited, the berry gone for everybody", why)
 	check(nP == 1 and lastP.payload.title == "Dewberry picked! 1/5" and lastP.payload.detail == nil,
 		"the picker hears the count", lastP and lastP.payload.title)
+	check(lastP.payload.quiet == true and lastP.payload.full == false,
+		"quietly: the pick's own sound (DEWBERRY PICKED) plays on the client, not the notice's ping")
 	okA, why = M._claim(A, b1, clock)
 	check(not okA and why == "GONE" and profiles[A].DewberriesCarried == 1, "the same pick again: GONE, no second credit",
 		why)
@@ -435,6 +446,8 @@ local ok, err = pcall(function()
 	check(profiles[A].DewberriesCarried == CAP and lastFull.payload.title == "Dewberries full! 5/5"
 			and lastFull.payload.detail == "Bring them to the Mosskeeper",
 		"the fifth: full, and where to take them", lastFull.payload.title)
+	check(lastFull.payload.quiet == true and lastFull.payload.full == true,
+		"the fifth says so to the client: its own sound is DEWBERRIES FULL")
 	profiles[A].DewberriesCarried = 0
 
 	-- A new hold measures again; a player who left takes their hold with them.

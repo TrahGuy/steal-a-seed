@@ -38,6 +38,7 @@ local Notice = require(Shared:WaitForChild("Notice"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local DewberryModel = require(Shared:WaitForChild("DewberryModel"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local MiniEventService = require(script.Parent:WaitForChild("MiniEventService"))
 local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
@@ -110,6 +111,11 @@ EnchantedMistBerryService.Hooks = {
 			folder.Parent = Workspace
 		end
 		return folder :: Instance
+	end,
+	-- A sound AT a part, heard near it only (SoundKit's server one-shot): the
+	-- Enchanted Mist's DEWBERRY APPEARS at a new berry (2026-10-11).
+	sound = function(name: string, at: BasePart)
+		SoundKit.emit(name, at)
 	end,
 }
 local Hooks = EnchantedMistBerryService.Hooks
@@ -303,7 +309,9 @@ local function build(berry: Berry)
 end
 
 local function announce(berry: Berry)
-	local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared }
+	-- SILENT, every berry (the owner, 2026-10-11): the twinkle AT the berry is a
+	-- spawn's only sound; the notice still updates in place, one key for all.
+	local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared, quiet = true }
 	for _, player in ipairs(Hooks.players()) do
 		-- Nobody full or still loading is sent after a berry they cannot take.
 		local profile = Hooks.profile(player)
@@ -344,6 +352,10 @@ function EnchantedMistBerryService._spawn(now: number): Berry?
 		return nil
 	end
 	run.spawned += 1
+	local root = berry.model and berry.model.PrimaryPart
+	if root then
+		Hooks.sound("MistBerryAppears", root)
+	end
 	announce(berry)
 	return berry
 end
@@ -425,6 +437,10 @@ function EnchantedMistBerryService._claim(player: any, id: string, now: number):
 		title = string.format(if full then W.PickedFull else W.Picked, carried, CAP),
 		detail = if full then W.FullDetail else nil,
 		key = B.NoticeKeys.Picked,
+		-- The pick makes its own sound on the client (DEWBERRY PICKED, or FULL
+		-- on the fifth: EnchantedMistBerries.client), not the notice's ping.
+		quiet = true,
+		full = full,
 	})
 	log(string.format("%s picked %s (%d/%d).", tostring(player.Name), id, carried, CAP))
 	return true, "OK"
