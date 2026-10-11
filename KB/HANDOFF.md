@@ -1,5 +1,51 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 10: AN ADMIN'S CONSOLE ACTION, SAID TO EVERYBODY — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; AdminAnnounceSpec 41/0 (NEW); AdminSpec 129/0, MiniEventSpec 90/0, AdminConsoleSpec, PodRushSpec, AnnouncementSpec, SourceIconsSpec, AutoWeatherSpec, EnchantedMistSpec and DiscoPartySpec green; THE FULL SUITE 153/153 IN SMALL BATCHES (SacrificeSpec's timed-payment check 289/1 under batch load, 290/0 alone); 14 OF 14 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/item10-admin-announce-2026-10-12)
+
+The owner's item 10 via the peer: when an admin uses the console, everybody in the server is told, by name, in the owner's style.
+- **The lines (GameConfig.AdminAnnounce, built by Shared/AdminAnnounce):**
+  - "NAME started the Rain!", "NAME summoned a Thunderstorm!", "NAME ended the Rain" / "NAME ended the Thunderstorm" (whichever was falling).
+  - "NAME started the Enchanted Mist!", "NAME ended the Enchanted Mist".
+  - "NAME made it night!", "NAME brought the day back!".
+  - "NAME started TICKET DISCO!" (every mini event by its own name), "NAME ended TICKET DISCO".
+  - "NAME gave PLAYER a Colossal Snarlbloom pod!", "NAME gave PLAYER 5 Giant Petalpip pods!", and "NAME spawned ..." for a give to oneself.
+  - "NAME gave PLAYER $1M", "NAME gave PLAYER 500K Speed", "NAME gave themselves $1M".
+  - Each line is drawn in the game's notice stack (Notice.ServerNotice) with the admin console's own gear (SourceIcons.admin).
+- **Only what really happened, from AdminService's handlers only:** each line is said right after its record() -- money, Speed, night, day, spawn, the weather's start and end, the Mist's start and end. A refusal says nothing. NOT said: a progress reset (it would shame a player) and an announcement (already one).
+- **NAMES ARE DISPLAY NAMES**, falling back to the username, the same as the rebirth and SERVER LUCK lines.
+- **A burst folds:** one key per admin, action and player. Gives to the same player within 30 s count up in one line ("…gave Rin $2M"; mixed gives by their form, "…gave Rin 6 pods").
+- **GLOBAL MINI EVENTS:**
+  - The shared record now carries the admins' display names (byShown and endedByShown: optional, at most 40 characters, validated).
+  - Every server the event reaches says the starter's line at the event's own announcement, and an admin's END line when the end reaches it.
+  - The timer's end says nothing new. A server that learned of the event too late to announce says neither.
+  - FLAG for the owner: the admin's display name is shown in EVERY server of the place.
+- **Naturals never:** only AdminService and MiniEventService ever use AdminAnnounce (pinned). The weather lottery, a Pod Rush's own news, the Mist's schedule, nightfall, nest stock and Robux purchases keep their own notices only.
+- **Within the notice's length:** the longest give fits Notice.ServerTitleMax whole (pinned): two 20-letter names, the longest species at its biggest size, and a whole Bag of it.
+- **The acting admin:** their own line arrives while their console is open and lives a few seconds under it (notices draw under open panels), so they read the console's own answer instead. Everybody else sees the line. Item 11's fading answer is the console's.
+- **Specs:** AdminAnnounceSpec (new, 41 checks) covers:
+  - the words for every action;
+  - the fold;
+  - AdminService loaded against stand-ins: each action that happened says its one line, refusals, a reset, an announcement and a mini event say nothing there, and the same spawn request again says nothing;
+  - the real MiniEventService through its seams: the line at the event's announcement in this server and from another server's record, an admin's END, nothing for the timer's end or for a record with no admin's name, and a name over 40 refused;
+  - naturals never.
+- **Mutants (14 of 14):** RefusalAnnounces, NightSilent, ResetAnnounces, ThunderEndsAsRain, NoFold, GiveOwnAsOther, SpawnNoQuantity, MiniTwice, MiniLineNotGlobal, MiniEndSilent, LongNameValid, UsernameNotDisplay, KeyIgnoresPlayer, MixedNamedAsOne.
+- **Live (one guarded Play, SeedTest_mistlook_20261011), desktop:**
+  - The console's START MIST, END MIST and START NIGHT each reached the client: a listener on GameEvent heard "nicnicniccoal ended the Enchanted Mist [admin:4119740186:mistend]" and "nicnicniccoal made it night! [admin:4119740186:night]".
+  - 04 (and its crop) shows "NICNICNICCOAL MADE IT NIGHT!" with the gear, the console closed at once.
+  - In 01-03 the line had already gone under the open console.
+  - A START DAY after dawn had come on its own was refused ("Already day."), and nothing was said.
+  - The zz_ captures are probes: a line fired from a server exec, to prove the drawing.
+- **Not seen live:** a second player's view (Studio has one client); a mini event across real servers (spec only); phones.
+- **Open for the owner (flagged defaults):**
+  - Display names rather than usernames.
+  - "gave themselves" for an admin's own money or Speed.
+  - The admin's name shown in every server for a global mini event.
+  - The gear as the line's picture.
+  - Gives folding within 30 s.
+- **Next:**
+  - 11, the compact admin console (the log strip becomes a fading answer).
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## ITEM 9B: THE THREE DEVELOPER PRODUCTS — STARTER PACK, SERVER LUCK, SUMMON RAIN — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; ServerBoostSpec 65/0 (NEW); CompactMenusSpec 46/0 and WheelSpec 163/0 (pins followed the new shelf and the Starter Pack's tickets); StoreSpec, SpinPurchaseSpec, HatchStorageSpec and StorageDoorsSpec (their StoreService sibling maps), BoostIconsSpec, HudLayoutSpec and the nest, Rain and Pod Rush specs green; THE FULL SUITE 152/152 IN FIVE SMALL BATCHES before the last small fixes, whose specs were re-run (TutorialSpotlightSpec's 0.2 ms timing check and HatchRollSpec's wall-clock check, each green alone); 25 OF 25 MUTANTS CAUGHT; TWO GUARDED PLAYS; captures in output/item9b-products-2026-10-12)
 
 The owner's item 9 via the peer, part B: the three Developer Products. The ids and prices are the owner's; the icons are the owner's uploads.

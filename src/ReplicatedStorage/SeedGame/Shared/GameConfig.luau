@@ -7945,6 +7945,41 @@ GameConfig.ServerBoost = {
 }
 
 --==============================================================================
+-- WHAT AN ADMIN'S CONSOLE ACTION SAYS TO EVERYBODY (2026-10-12, the owner's
+-- item 10; AdminAnnounce). The first %s is always the admin's display name.
+--==============================================================================
+GameConfig.AdminAnnounce = {
+	-- A burst of one admin's gives to one player folds into one line that
+	-- counts up while each lands within this many seconds of the last.
+	FoldSeconds = 30,
+	-- The picture beside the line: the admin console's own (SourceIcons.admin).
+	Icon = "admin",
+	Words = {
+		Rain = "%s started the Rain!",
+		Thunder = "%s summoned a Thunderstorm!",
+		RainEnd = "%s ended the Rain",
+		ThunderEnd = "%s ended the Thunderstorm",
+		MistStart = "%s started the Enchanted Mist!",
+		MistEnd = "%s ended the Enchanted Mist",
+		Night = "%s made it night!",
+		Day = "%s brought the day back!",
+		-- The mode's own Name (MiniEvent.Modes): "TICKET DISCO", "POD RUSH".
+		MiniStart = "%s started %s!",
+		MiniEnd = "%s ended %s",
+		-- SpawnCatalog's words: "a Colossal Snarlbloom pod", "5 Giant Petalpip pods".
+		Spawn = "%s gave %s %s!",
+		SpawnOwn = "%s spawned %s!",
+		Give = "%s gave %s %s",
+		GiveOwn = "%s gave themselves %s",
+		-- A folded burst of different things.
+		Pods = "%d pods",
+		Plants = "%d grown plants",
+		Items = "%d items",
+		Somebody = "An admin",
+	},
+}
+
+--==============================================================================
 -- WHAT A GAME PASS IS WORTH, AND HOW THE CLIENT FINDS OUT
 --
 -- PassService writes the player's total cash multiplier onto the Player as an
@@ -9455,6 +9490,9 @@ GameConfig.SourceIcons = {
 	podrush = GameConfig.PodRush.Art.Icon,
 	-- SERVER LUCK's chip and line (2026-10-12, item 9B): the owner's icon.
 	luck = "rbxassetid://127834257988056",
+	-- An admin's line to everybody (2026-10-12, item 10): the admin console's own
+	-- picture (MenuIcons.admin).
+	admin = GameConfig.Rail.SettingsIcon,
 }
 
 -- A source picture uploaded with a clear margin round it is drawn by its crop

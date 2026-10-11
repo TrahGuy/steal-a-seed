@@ -90,6 +90,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local Notice = require(Shared:WaitForChild("Notice"))
+local AdminAnnounce = require(Shared:WaitForChild("AdminAnnounce"))
 -- What SPAWN can make (2026-10-07): the console draws its choices from the same module.
 local SpawnCatalog = require(script:WaitForChild("SpawnCatalog"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
@@ -396,6 +397,53 @@ local function record(admin: any, target: any, action: string, amount: number?, 
 		targetText, action, amountText))
 end
 
+--==============================================================================
+-- EVERYBODY HEARS IT (2026-10-12, the owner's item 10)
+--
+-- An admin's action that really happened -- right after its record, never for
+-- a refusal -- said to everybody in this server by name (AdminAnnounce), in the
+-- game's notice stack (Notice.ServerNotice) with the admin console's own
+-- picture. Never a progress reset (it would shame a player) nor an
+-- announcement (already one); a GLOBAL mini event is said by MiniEventService,
+-- in every server it reaches. TellEveryone is a seam, like TellPlayer: a spec
+-- records the lines instead of the wire.
+--==============================================================================
+function AdminService.TellEveryone(title: string, key: string)
+	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
+	local remotes = if seedGame then seedGame:FindFirstChild("Remotes") else nil
+	local event = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if event and event:IsA("RemoteEvent") then
+		pcall(function()
+			event:FireAllClients(Notice.ServerNotice,
+				{ title = title, key = key, icon = GameConfig.AdminAnnounce.Icon })
+		end)
+	end
+end
+
+-- The last give per admin, action and player, for a burst to fold into.
+local folds: { [string]: AdminAnnounce.Fold } = {}
+
+local function announce(admin: any, what: AdminAnnounce.What, targetId: number?)
+	local line = AdminAnnounce.line(AdminAnnounce.nameOf(admin), what)
+	if line then
+		AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId))
+	end
+end
+
+-- A give, folded into the same admin's last give of its kind to the same player.
+local function foldGive(admin: any, target: any, give: AdminAnnounce.Give): AdminAnnounce.Fold
+	local key = AdminAnnounce.key(userIdOf(admin) or 0, give.kind, userIdOf(target))
+	local now = os.clock()
+	for k, f in pairs(folds) do
+		if now - f.at > GameConfig.AdminAnnounce.FoldSeconds then
+			folds[k] = nil
+		end
+	end
+	local f = AdminAnnounce.fold(folds[key], now, give)
+	folds[key] = f
+	return f
+end
+
 function AdminService.Audit(): { AuditEntry }
 	return table.clone(audit)
 end
@@ -446,6 +494,12 @@ local function grant(admin: any, target: Player, action: string, amount: any): R
 	local after = tonumber(now and now[field]) or before
 	local added = math.max(0, after - before)
 	record(admin, target, action, added, n)
+	if added > 0 then
+		local kind = if money then "money" else "speed"
+		local f = foldGive(admin, target, { kind = kind, amount = added })
+		announce(admin, { kind = kind, amount = f.amount, own = target == admin,
+			target = AdminAnnounce.nameOf(target) }, userIdOf(target))
+	end
 
 	local shown = if money then "$" .. commas(added) else commas(added) .. " Speed"
 	local message = string.format("Added %s to %s.", shown, target.Name)
@@ -599,6 +653,7 @@ local function changePhase(admin: any, action: string): Reply
 			return refuse(phaseRefusal(why, "Already night."))
 		end
 		record(admin, nil, action, nil, nil)
+		announce(admin, { kind = "night" })
 		return {
 			ok = true,
 			message = string.format("Night started for everyone in this server. Day returns in %d s, "
@@ -610,6 +665,7 @@ local function changePhase(admin: any, action: string): Reply
 		return refuse(phaseRefusal(why, "Already day."))
 	end
 	record(admin, nil, action, nil, nil)
+	announce(admin, { kind = "day" })
 	return {
 		ok = true,
 		message = string.format("Day started for everyone in this server: nests restocked (%d of %d "
@@ -767,6 +823,11 @@ local function giveAll(admin: any, target: Player, species: SeedData.Species, si
 	local words = SpawnCatalog.phrase(species, size, form, quantity)
 	local saved = PlayerDataService.Save(target)
 	record(admin, target, "Spawn", nil, nil, { species = species.Id, size = size, form = form, quantity = quantity })
+	local f = foldGive(admin, target, { kind = "spawn", quantity = quantity, species = species.Id, size = size,
+		form = form })
+	announce(admin, { kind = "spawn", own = own, target = AdminAnnounce.nameOf(target),
+		words = AdminAnnounce.spawnWords(f, SpawnCatalog.phrase(species, size, form, f.quantity)) },
+		userIdOf(target))
 	if not own then
 		AdminService.TellPlayer(target, string.format("An admin gave you %s!", words), "It's in your Bag.",
 			"admin-gift:" .. requestId)
@@ -932,12 +993,17 @@ local function weather(admin: any, verb: any, seconds: any): Reply
 		end
 		if ok then
 			record(admin, nil, "Weather:" .. verb .. ":" .. tostring(seconds), nil, nil)
+			announce(admin, { kind = if verb == "thunder" then "thunder" else "rain" })
 		end
 		return { ok = ok, message = message }
 	elseif verb == "end" then
+		-- Which one is ending, for the line (2026-10-12): read before it goes.
+		local was: any = WeatherService.State()
+		local thunder = was ~= nil and was.mode == "thunder"
 		local ok, message, ended = WeatherService.EndRain(admin)
 		if ended then
 			record(admin, nil, "Weather:end", nil, nil)
+			announce(admin, { kind = "weatherend", thunder = thunder })
 		end
 		return { ok = ok, message = message }
 	end
@@ -1014,6 +1080,7 @@ local function mist(admin: any, verb: any): Reply
 		return refuse(MIST_REFUSALS[why] or "The Mist did not change; the server log says why.")
 	end
 	record(admin, nil, "Mist:" .. verb, nil, nil)
+	announce(admin, { kind = if verb == "start" then "miststart" else "mistend" })
 	if verb == "end" then
 		return { ok = true, message = "Enchanted Mist ended for everyone in this server." }
 	end

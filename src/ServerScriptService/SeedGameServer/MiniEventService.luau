@@ -102,6 +102,8 @@ local WheelData = require(Shared:WaitForChild("WheelData"))
 local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local DancerPlacement = require(Shared:WaitForChild("DancerPlacement"))
+local Notice = require(Shared:WaitForChild("Notice"))
+local AdminAnnounce = require(Shared:WaitForChild("AdminAnnounce"))
 local WheelService = require(script.Parent:WaitForChild("WheelService"))
 
 local MiniEventService = {}
@@ -133,6 +135,10 @@ export type Record = {
 	endedBy: number?,
 	endedByName: string?,
 	endedIds: { string },
+	-- The admins' display names (2026-10-12, item 10), for the line every server
+	-- says; a record from before has neither.
+	byShown: string?,
+	endedByShown: string?,
 }
 
 export type Ticket = {
@@ -159,6 +165,9 @@ export type Event = {
 	endsAt: number,
 	endingAt: number?,
 	byName: string,
+	-- Who started it, for the admin's line (2026-10-12, item 10).
+	by: number?,
+	byShown: string?,
 	announced: boolean,
 	nextDropAt: number,
 	nextCountAt: number,
@@ -1307,6 +1316,8 @@ local function startLocal(record: Record, now: number, source: string)
 		endsAt = record.endsAt,
 		endingAt = nil,
 		byName = record.byName,
+		by = record.by,
+		byShown = record.byShown,
 		-- Learned too late to announce (a new server, a late read): silently.
 		announced = now > announceAt + G.AnnounceGraceSeconds,
 		-- The first ticket a moment in, so the shower has begun by the time the
@@ -1354,6 +1365,13 @@ function MiniEventService.ValidRecord(r: any): boolean
 	if type(r.by) ~= "number" or type(r.byName) ~= "string" or #r.byName > 40 then
 		return false
 	end
+	-- The admins' display names (2026-10-12, item 10): optional, and short.
+	for _, field in ipairs({ "byShown", "endedByShown" }) do
+		local shown = r[field]
+		if shown ~= nil and (type(shown) ~= "string" or #shown > 40) then
+			return false
+		end
+	end
 	if type(r.endedIds) ~= "table" or #r.endedIds > G.EndedKept * 2 then
 		return false
 	end
@@ -1399,6 +1417,15 @@ local function reconcile(now: number, source: string)
 		local ended = record ~= nil and record.id == event.globalId and record.state == "ended"
 		close(event, now, if ended then "ended globally by " .. tostring((record :: Record).endedByName)
 			else "no longer running globally")
+		-- An admin's END (2026-10-12, item 10), named in every server it reaches.
+		-- The timer's end says nothing new.
+		local r = record
+		local shown = if ended and r then r.endedByShown else nil
+		local line = if shown then AdminAnnounce.line(shown, { kind = "miniend", mode = event.mode }) else nil
+		if line and r then
+			broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(r.endedBy or 0, "miniend"),
+				icon = GameConfig.AdminAnnounce.Icon }, nil)
+		end
 	end
 end
 
@@ -1511,6 +1538,16 @@ function MiniEventService.Step(now: number)
 		if not event.announced and now >= event.startedAt + M.AnnounceDelaySeconds then
 			event.announced = true
 			broadcast(EVENTS.Opened, { id = event.globalId, mode = event.mode }, nil)
+			-- THE ADMIN WHO STARTED IT (2026-10-12, item 10), named in every server
+			-- the event reaches, at its own announcement: every global event is an
+			-- admin's (AdminService is StartGlobal's only caller). A server that
+			-- learned of it too late to announce says neither.
+			local shown = event.byShown
+			local line = if shown then AdminAnnounce.line(shown, { kind = "mini", mode = event.mode }) else nil
+			if line then
+				broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(event.by or 0, "mini"),
+					icon = GameConfig.AdminAnnounce.Icon }, nil)
+			end
 		end
 		if hasTickets(event) then
 			-- Expired, or lying where nobody can go any more: the rain biome
@@ -1681,6 +1718,7 @@ local function startGlobal(by: any, mode: string, seconds: number): (boolean, st
 			endsAt = t + seconds,
 			by = byId,
 			byName = byName,
+			byShown = string.sub(AdminAnnounce.nameOf(by), 1, 40),
 			state = "running",
 			endedAt = nil,
 			endedBy = nil,
@@ -1735,6 +1773,7 @@ local function endGlobal(by: any): (boolean, string, boolean)
 		record.endedAt = t
 		record.endedBy = byId
 		record.endedByName = byName
+		record.endedByShown = string.sub(AdminAnnounce.nameOf(by), 1, 40)
 		record.endedIds = carryEnded(p, p.id)
 		ended = record
 		return record
