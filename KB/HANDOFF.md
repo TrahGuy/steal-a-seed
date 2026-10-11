@@ -1,5 +1,36 @@
 # Steal a Seed — Session Handoff
 
+## THE HUB ITEMS IN ONE GUARDED PLAY: THE PERMANENT HUB, THE SIGN, START / END MIST NOW — 2026-10-11 (CLAUDE, TERMINAL)  (SeedTest_mistlook_20261011; CAPTURES IN output/mosskeeper-2026-10-11/hub_admin; THE FULL SUITE CLEAN, 146 SPECS)
+
+One guarded Play: the store marker, store_guard SAFE, the Ready line on the throwaway store; stopped by me, the marker off after (1 throwaway key removed). The peer was pinged first. The viewport was a 1005 x 716 window with mouse input (no emulator).
+- **The permanent hub, from boot**:
+  - MosskeeperService logged "Mosskeeper stands at the Event Hub with its dress".
+  - SeedMosskeeper held Mosskeeper (211 parts) on the surround's pad (y 1.2), the surround (86 parts) and the deck's dress (240 parts).
+  - MistState was "disabled" with no eligibility published. The same set still stood after the admin Mist ended.
+- **The sign**:
+  - ENCHANTED MIST / COMING SOON, MaxDistance 300.
+  - Its live size matched the rule at three distances: the built 22 x 6.4 studs from 32; x1.237 from 113 and x2.812 from 257 (the header's box 19.0 screen units). Its bottom edge stayed 16.70 up each time.
+- **The console, pressed for real** (clicks at each button's centre, recorded by a local input logger):
+  - ADMIN, then WORLD. The Mist card read "MIST: NOT RUNNING • SCHEDULE OFF".
+  - START MIST NOW asked in place: "Start an Enchanted Mist on this server now, for 05:00?". CONFIRM started it:
+    - The server log: "MIST …-admin-1 started (source admin, by nicnicniccoal) with the schedule off; ends in 300s". The audit: "Mist:start".
+    - The console read "MIST: ACTIVE • 04:59 LEFT", and its log "Enchanted Mist started for everyone in this server. It ends in 5:00."
+    - The sign read "ACTIVE · Ends in 05:00" and counted down. No eligibility was published.
+    - Berries spawned (5 within 8 s). The look settled (ClockTime 0, Brightness 1.9, the violet ambient, Exposure 0.5).
+  - END MIST NOW asked "End the Enchanted Mist on this server now?". CONFIRM ended it:
+    - The server log: "ended by admin nicnicniccoal" and "ended (admin). The schedule stays off.". The audit: "Mist:end".
+    - MistState went back to "disabled"; the sign read COMING SOON again; berries 0.
+    - The light returned exactly to the start values (ClockTime 14, Brightness 2.4); the console read "NOT RUNNING • SCHEDULE OFF".
+  - The game logged no errors. Two "SendMousePosition … hits CoreGUI" stacks were the MCP click tool's own, on the top-bar ADMIN button.
+- **Captures (OK'd by Claude on the owner's handoff; owner to review)**, in `output/mosskeeper-2026-10-11/hub_admin/`:
+  - 01-03: the hub by day, from the road, close up and from plot 3's gate.
+  - 04-06: the console's Mist card, its START question, and ACTIVE.
+  - 07-09: the hub in the admin Mist, the console hidden on that screen for the shot.
+  - 10-11: the END question and the card after.
+  - 12-13: the hub after.
+  - The sign shows in the captures: screen_capture does draw BillboardGuis now.
+- **Unverified**: phones (no emulator in this Play). The size rule's phone numbers are spec arithmetic: EnchantedMistSpec and EventHubSpec on a 367-point screen.
+
 ## ADMIN CONSOLE: START MIST NOW / END MIST NOW — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; EnchantedMistSpec 58/0, AdminSpec 129/0, AdminConsoleSpec 38/0, 11 OF 11 MUTANTS CAUGHT)
 
 The owner, via the peer: "add Enchanted Mist controls to the existing admin console, at least START MIST NOW and END MIST NOW, with the same pattern, admin checks and look as the console's other event buttons ... an admin start MUST still work while Enabled is false ... Source "admin" in the logs, and no effect on the schedule's next eligibility while disabled."
