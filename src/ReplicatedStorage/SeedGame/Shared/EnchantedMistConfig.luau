@@ -9,13 +9,14 @@
 --
 -- OFF until the owner approves: `Enabled` is false, and even when it is on the
 -- event runs only once every binding EnchantedMistService.MissingBindings lists
--- is in place. The shared sign shows only with `ShowSign` (its COMING SOON would
--- otherwise go live on the next Publish).
+-- is in place. The shared sign shows with `ShowSign`: ON since 2026-10-11 (the
+-- owner), so while the event is off it reads COMING SOON, and the next Publish
+-- puts it live.
 --==============================================================================
 local EnchantedMistConfig = {}
 
 EnchantedMistConfig.Enabled = false
-EnchantedMistConfig.ShowSign = false
+EnchantedMistConfig.ShowSign = true
 
 -- Workspace attributes the server publishes, the deadline before the state
 -- (WorldCycleService's order), so a client never reads a new state with an old
@@ -340,9 +341,22 @@ EnchantedMistConfig.States = {
 -- the surround (MaxHeight) and of Mosskeeper's own deposit bar. FloatingSign's
 -- family: LuckiestGuy, the dark outline, sized in studs, one plain colour each
 -- line, no backing. Header, status line, note line.
+--
+-- READ FROM THE PLOTS (2026-10-11, measured: EventHubSpec): its bottom edge
+-- (16.7 up) is 2.8 studs over the surround's highest leaf, 3.4 over its arch
+-- and 4.5 over the grove's trees, and nothing of the set or the map stands
+-- between it and any plot. At its 22 studs a plot's camera (100-150 away) drew
+-- its words 5-7 points tall on a phone -- unreadable -- so past the distance
+-- where its header's box would draw under MinHeaderUnits (screen units: pixels
+-- on a computer, points on a phone; the camera's own view), it grows to hold
+-- that size, upward from its bottom edge, which stays where it is. Nearer, it
+-- is the studs it is built at. It draws out to MaxDistance: past the deepest
+-- plot's back (GameConfig.Plot.MaxReach 245, a camera 12 behind it).
 --==============================================================================
 EnchantedMistConfig.Sign = {
 	Above = 19,
+	MaxDistance = 300,
+	MinHeaderUnits = 19,
 	Width = 22,
 	Height = 3.4,
 	SubHeight = 1.7,

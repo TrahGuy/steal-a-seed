@@ -33,6 +33,9 @@
 --      the map" -- the front edge, solid): along the red line from the
 --      corridor's walls to the field's corners, unclimbable, unjumpable, off
 --      every plot at every level, the safe zone unchanged
+--   9. the Enchanted Mist sign over the hub (on since 2026-10-11): clear of
+--      the standing set under it (the surround, its arch, the grove's trees,
+--      him), and drawn, in sight and readable from every plot
 --
 -- Not here, seen in Play instead: the prompts pressed in the row, the routes
 -- walked (PathfindingService from every gate and the road's mouth), the row
@@ -1015,6 +1018,163 @@ local function body()
 	check(has(mapSrc, "fence.Name = \"FrontFence\"") and has(mapSrc, "local inner = MAP.CorridorWidth * 0.5 + MAP.WallThickness")
 			and has(mapSrc, "local blocker = build({ name = \"Blocker\", size = Vector3.new(length, MAP.WallHeight - FENCE_TOP, FENCE_THICK),"),
 		"(MapService builds it from the map's own numbers)")
+
+	--==========================================================================
+	say("9. The Enchanted Mist sign over the hub")
+	--==========================================================================
+	-- ON since 2026-10-11 (the owner: "turn on the shared ENCHANTED MIST sign
+	-- above the hub ... Check it stays clear of the arch, the surround and the
+	-- grove's trees, and that it reads from the plots"). The hub's standing set
+	-- from its builders, where MosskeeperService stands it.
+	local SIGN = MistCfg.Sign
+	local MistStatus = require(Shared:WaitForChild("EnchantedMistStatus"))
+	local setFolder = Instance.new("Folder")
+	setFolder.Name = "ZZEventHubSpecSet"
+	setFolder.Archivable = false
+	setFolder.Parent = Workspace
+	local measured, why = pcall(function()
+		local MistSurroundModel = require(Shared:WaitForChild("MistSurroundModel"))
+		local MistDeckModel = require(Shared:WaitForChild("MistDeckModel"))
+		local MosskeeperModel = require(Shared:WaitForChild("MosskeeperModel"))
+		local sur = MistSurroundModel.build(E.NpcAnchor, nil)
+		sur.Parent = setFolder
+		local dress = MistDeckModel.build(setFolder)
+		local him = MosskeeperModel.build(E.NpcAnchor, setFolder)
+		him:PivotTo(E.NpcAnchor * CFrame.new(0, MistSurroundModel.PadHeight, 0))
+		local tall = SIGN.Height + SIGN.SubHeight + SIGN.NoteHeight
+		local middle = Vector3.new(E.Centre.X, MAP.GroundY + E.FloorY + SIGN.Above, E.Centre.Z)
+		local bottom = middle.Y - tall / 2
+		local function topOf(p)
+			local h, best = p.Size * 0.5, -math.huge
+			for _, sx in ipairs({ -1, 1 }) do
+				for _, sy in ipairs({ -1, 1 }) do
+					for _, sz in ipairs({ -1, 1 }) do
+						best = math.max(best, p.CFrame:PointToWorldSpace(Vector3.new(h.X * sx, h.Y * sy, h.Z * sz)).Y)
+					end
+				end
+			end
+			return best
+		end
+		local parts = {}
+		local tops = { arch = -math.huge, surround = -math.huge, trees = -math.huge, him = -math.huge }
+		for _, m in ipairs({ sur, dress, him }) do
+			for _, d in ipairs(m:GetDescendants()) do
+				if d:IsA("BasePart") then
+					table.insert(parts, d)
+					local y = topOf(d)
+					if m == sur then
+						tops.surround = math.max(tops.surround, y)
+						if string.find(d.Name, "^Arch") then
+							tops.arch = math.max(tops.arch, y)
+						end
+					elseif m == him then
+						tops.him = math.max(tops.him, y)
+					elseif string.find(d.Name, "^Tree") then
+						tops.trees = math.max(tops.trees, y)
+					end
+				end
+			end
+		end
+		check(middle.X == E.Centre.X and middle.Z == E.Centre.Z and tops.arch > -math.huge and tops.trees > -math.huge
+				and bottom - tops.surround >= 1.5 and bottom - tops.arch >= 1.5 and bottom - tops.trees >= 1.5
+				and bottom - tops.him >= 1.5,
+			string.format("over the plaza's middle, its bottom edge (%.1f up) clears the surround by %.1f, its arch by "
+				.. "%.1f, the grove's trees by %.1f and him by %.1f", bottom, bottom - tops.surround, bottom - tops.arch,
+				bottom - tops.trees, bottom - tops.him))
+
+		-- From every plot: its gate (eyes 5 up; a camera 12 behind and 8.5 up),
+		-- and a camera at the starting plot's middle and back and at the deepest
+		-- plot's back.
+		local cams = {}
+		for id = 1, nPlots do
+			for _, c in ipairs({ { "gate", 0, 5 }, { "gate camera", 12, 8.5 },
+				{ "middle camera", startDepth / 2 + 12, 8.5 }, { "back camera", startDepth + 12, 8.5 },
+				{ "deepest back camera", GameConfig.Plot.MaxDepth + 12, 8.5 } }) do
+				table.insert(cams, { name = string.format("plot %d's %s", id, c[1]),
+					at = (gates[id] * CFrame.new(0, c[3], c[2])).Position, gate = c[1] == "gate camera" })
+			end
+		end
+		-- A segment through a part's box (balls and cylinders by their boxes).
+		local function crosses(a, b, p)
+			local la, lb, h = p.CFrame:PointToObjectSpace(a), p.CFrame:PointToObjectSpace(b), p.Size * 0.5
+			local t0, t1 = 0, 1
+			for _, axis in ipairs({ "X", "Y", "Z" }) do
+				local s, d, lim = la[axis], lb[axis] - la[axis], h[axis]
+				if math.abs(d) < 1e-9 then
+					if s < -lim or s > lim then
+						return false
+					end
+				else
+					local u0, u1 = (-lim - s) / d, (lim - s) / d
+					if u0 > u1 then
+						u0, u1 = u1, u0
+					end
+					t0, t1 = math.max(t0, u0), math.min(t1, u1)
+					if t0 > t1 then
+						return false
+					end
+				end
+			end
+			return true
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { map }
+		local farthest, blocked, blockedBy, small, grewAtGate = 0, 0, nil, nil, false
+		-- A phone's screen (the owner's, 367 points tall) and a 1080p window's
+		-- (1022 pixels under the top bar); the default FieldOfView, 70.
+		for _, cam in ipairs(cams) do
+			local d = (middle - cam.at).Magnitude
+			farthest = math.max(farthest, d)
+			for _, screen in ipairs({ 367, 1022 }) do
+				local scale = MistStatus.signScale(d, screen, 70)
+				local units = SIGN.Height * scale * (screen / 2) / math.tan(math.rad(35)) / d
+				if units < SIGN.MinHeaderUnits - 1e-6 then
+					small = small or string.format("%s on %d: %.1f", cam.name, screen, units)
+				end
+				if cam.gate and screen == 1022 and scale > 1 then
+					grewAtGate = true
+				end
+				-- The face it draws there: 3 across, 5 up (its bottom edge, the
+				-- note, the status line, the header, its top).
+				local w, t, lift = MistStatus.signFrame(scale)
+				local at = middle + Vector3.new(0, lift, 0)
+				local look = (at - cam.at).Unit
+				local right = look:Cross(Vector3.yAxis).Unit
+				local up = right:Cross(look).Unit
+				local s = t / tall
+				for _, x in ipairs({ -w / 2, 0, w / 2 }) do
+					for _, y in ipairs({ -t / 2, -t / 2 + SIGN.NoteHeight * s / 2,
+						-t / 2 + (SIGN.NoteHeight + SIGN.SubHeight / 2) * s, t / 2 - SIGN.Height * s / 2, t / 2 }) do
+						local target = at + right * x + up * y
+						local by = nil
+						for _, p in ipairs(parts) do
+							if crosses(cam.at, target, p) then
+								by = p.Name
+								break
+							end
+						end
+						local hit = by == nil and Workspace:Raycast(cam.at, target - cam.at, params)
+						if by or hit then
+							blocked += 1
+							blockedBy = blockedBy or string.format("%s: %s", cam.name, by or hit.Instance:GetFullName())
+						end
+					end
+				end
+			end
+		end
+		check(farthest <= SIGN.MaxDistance, string.format("drawn from every plot: %d cameras, the farthest %.0f studs "
+			.. "away (the deepest plot's back); it draws to %d", #cams, farthest, SIGN.MaxDistance))
+		check(map ~= nil and blocked == 0, "and in sight from every one: nothing of the set or the map between, at the "
+			.. "size it draws there on a phone or a computer", blockedBy)
+		check(small == nil and not grewAtGate, string.format("readable from every one: its header's box %d screen units "
+			.. "tall at the least on a phone (367 points) and a computer (1022 pixels); a computer at a gate sees it at "
+			.. "its built studs", SIGN.MinHeaderUnits), small)
+	end)
+	setFolder:Destroy()
+	if not measured then
+		check(false, "the sign's measures ran to the end", why)
+	end
 end
 
 local ok, err = pcall(body)

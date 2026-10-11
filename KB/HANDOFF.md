@@ -1,5 +1,25 @@
 # Steal a Seed — Session Handoff
 
+## THE ENCHANTED MIST SIGN ON: COMING SOON OVER THE HUB, READABLE FROM THE PLOTS — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; EnchantedMistSpec 43/0, EventHubSpec 53/0, 8 OF 8 MUTANTS CAUGHT)
+
+The owner, via the peer: "turn on the shared "ENCHANTED MIST" sign above the hub (EnchantedMistConfig.ShowSign = true). Check it stays clear of the arch, the surround and the grove's trees, and that it reads from the plots."
+- **`ShowSign = true`**. While the event is off (Enabled false) it reads ENCHANTED MIST / COMING SOON. The next Publish puts it live.
+- **Clear of the set (EventHubSpec section 9, measured from the builders)**:
+  - The sign floats over the plaza's middle with its bottom edge 16.7 up.
+  - That is 2.8 studs over the surround's highest leaf, 3.4 over its arch, 4.5 over the grove's trees and 8.4 over Mosskeeper.
+- **From the plots**: 30 cameras, five per plot: the gate eye, the gate camera, the starting plot's middle and back, and the deepest plot's back.
+  - **In sight**: nothing of the set or the map stands between any camera and the sign (12-15 points of its face, by box tests and map rays).
+  - **Reach**: the farthest camera, at the deepest plot's back, is 257 studs away. The sign draws to 300 (`Sign.MaxDistance`; it was FloatingSign's 150, which cut it at the starting plot's back).
+- **Readable: a minimum on-screen size (a look call, OK'd by Claude on the owner's handoff; owner to review)**:
+  - **Why**: at its 22 studs, a plot's camera drew the words on the owner's phone (367 points tall) at 5-7 points for the header and 3-4 for COMING SOON. That is unreadable. A 1080p computer drew 14-21 px.
+  - **The rule**: near, the sign is the studs it is built at. Past the distance where its header's box would draw under `Sign.MinHeaderUnits` = 19 screen units (pixels on a computer, points on a phone, from the camera's own view), it grows just enough to hold that size.
+  - **The result**: the header's words draw about 16 units tall, capitals close to a player's name tag on a phone (11.4 points); COMING SOON about 9.5. The sign grows upward from its bottom edge, so that edge keeps its clearance over the surround.
+  - **Device effect**: a computer at a plot's gate still sees the built size; phones get the minimum.
+  - **Where it lives**: `EnchantedMistStatus.signScale/signFrame` (pure, spec-tested) and the client's `SeedMistSignClamp` render step, which writes only when the scale moves (PlotOwnerLabels' clamp).
+- **Also**: the client now places the sign at GroundY + FloorY + Above (GroundY was left out; it is 0, so nothing moved).
+- **Mutants (8/8 caught)**: SignOff, SignLow, ShortReach, SmallMin, NeverGrows, GrowsDown, ClientShortReach, ClientNoLift.
+- **Not capturable**: MCP's screen_capture never draws BillboardGuis, so the sign is measured, not captured. The guarded Play reads its words and drawn size.
+
 ## THE EVENT HUB, ALWAYS: MOSSKEEPER AND HIS WHOLE SET STAND MIST OR NOT — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED ON wip; NOT PUBLISHED; MosskeeperSpec 58/0, EventHubSpec 49/0, MistLookSpec 13/0, 6 OF 6 MUTANTS CAUGHT)
 
 The owner, via the peer: "Mosskeeper + the surround + A's moss carpet + C's mushroom ring + the grove stand in the Event Hub PERMANENTLY, Mist or not ... Build them once at start (server, late joiners included), not on OnStart/OnEnd. ShowMosskeeper = true so he's live in the hub. Only the Mist LOOK (night light, wisps, fireflies, glints) stays Mist-only."

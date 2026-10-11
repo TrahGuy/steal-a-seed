@@ -12,10 +12,16 @@
 -- FloatingSign's family (LuckiestGuy, the dark outline, sized in studs, no
 -- backing, no collision, nothing to press), over GameConfig.Map.EventHub's
 -- centre at EnchantedMistConfig.Sign.Above over its floor. Never hidden behind a
--- quest, an owner check, OTHER PLANTS or Reduced FX. Off entirely until
--- EnchantedMistConfig.ShowSign.
+-- quest, an owner check, OTHER PLANTS or Reduced FX. Off entirely without
+-- EnchantedMistConfig.ShowSign (on since 2026-10-11).
+--
+-- READ FROM THE PLOTS (EnchantedMistConfig.Sign): past the distance where its
+-- header would draw under Sign.MinHeaderUnits on this screen, it grows to hold
+-- that size (EnchantedMistStatus.signScale), upward from its bottom edge; it
+-- draws out to Sign.MaxDistance.
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
@@ -43,10 +49,11 @@ folder.Name = "SeedEnchantedMistSign"
 folder.Parent = Workspace
 
 local centre: Vector3 = HUB.Centre
+local middle = Vector3.new(centre.X, (GameConfig.Map :: any).GroundY + HUB.FloorY + SIGN.Above, centre.Z)
 local sign = FloatingSign.new({
 	name = "EnchantedMistSign",
 	parent = folder,
-	at = CFrame.new(centre.X, HUB.FloorY + SIGN.Above, centre.Z),
+	at = CFrame.new(middle),
 	text = SIGN.Header,
 	colour = SIGN.Colour,
 	width = SIGN.Width,
@@ -60,6 +67,7 @@ local sign = FloatingSign.new({
 local sub = sign.sub :: TextLabel
 local note = sign.note :: TextLabel
 sub.TextColor3 = SIGN.SubColour
+sign.gui.MaxDistance = SIGN.MaxDistance
 
 local function view(): EnchantedMistStatus.View
 	return {
@@ -91,6 +99,24 @@ for _, name in ipairs({ ATTR.State, ATTR.EligibleAt, ATTR.EndsAt, GameConfig.Att
 end
 paint()
 sign.setShown(true)
+
+-- Its smallest size, after the camera has moved: a write only when the scale
+-- moves (PlotOwnerLabels' clamp), none while the camera is near.
+local scale = 1
+RunService:BindToRenderStep("SeedMistSignClamp", Enum.RenderPriority.Camera.Value + 1, function()
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local want = EnchantedMistStatus.signScale((middle - camera.CFrame.Position).Magnitude, camera.ViewportSize.Y,
+		camera.FieldOfView)
+	if math.abs(want - scale) > 0.004 then
+		scale = want
+		local width, tall, lift = EnchantedMistStatus.signFrame(want)
+		sign.gui.Size = UDim2.fromScale(width, tall)
+		sign.gui.StudsOffsetWorldSpace = Vector3.new(0, lift, 0)
+	end
+end)
 
 -- Once a second: the countdown's only clock.
 task.spawn(function()

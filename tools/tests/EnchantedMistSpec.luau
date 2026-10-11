@@ -7,7 +7,9 @@
 --   1. the numbers: the confirmed rules (carry 5, 10 per pod, 30 s hatch, the
 --      15-cumulative example), the schedule, the confirmed odds and their picks
 --   2. the sign's words: every state, truthful -- COMING SOON, "Eligible in",
---      waiting with an ESTIMATE, resetting, active, syncing
+--      waiting with an ESTIMATE, resetting, active, syncing; and how big it
+--      draws: its built studs near, never under MinHeaderUnits far, growing
+--      upward
 --   3. the coordinator on a fake clock: off while switched off or missing a
 --      binding; a random 20-60 min first eligibility; starts only on an
 --      eligible, natural, completed dawn with the road open; never twice for
@@ -16,10 +18,12 @@
 --   4. WorldCycleService's dawn hook: told after a completed dawn, natural or
 --      forced (with its source), never for a night or a failed dawn, and a
 --      throwing listener cannot fail the dawn
---   5. the wiring: off by default; the sign off by default
+--   5. the wiring: the event off by default; the shared sign ON (the owner,
+--      2026-10-11), drawn to its MaxDistance at its smallest size
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local StarterPlayer = game:GetService("StarterPlayer")
 local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -121,6 +125,34 @@ local ok, err = pcall(function()
 	check(EnchantedMistStatus.clock(0.2) == "00:01" and EnchantedMistStatus.clock(0) == "00:00"
 			and EnchantedMistStatus.clock(61) == "01:01",
 		"the clock rounds up: it never shows 00:00 while time is left")
+	-- How big it draws (EnchantedMistConfig.Sign, READ FROM THE PLOTS): a
+	-- phone's screen (the owner's, 367 points tall) and a 1080p window's (1022
+	-- pixels), the default FieldOfView.
+	local SIGN = EnchantedMistConfig.Sign
+	local tall = SIGN.Height + SIGN.SubHeight + SIGN.NoteHeight
+	local function headerUnits(distance, screen)
+		return SIGN.Height * EnchantedMistStatus.signScale(distance, screen, 70) * (screen / 2)
+			/ math.tan(math.rad(35)) / distance
+	end
+	check(EnchantedMistStatus.signScale(20, 367, 70) == 1 and EnchantedMistStatus.signScale(112.6, 1022, 70) == 1
+			and headerUnits(112.6, 1022) > SIGN.MinHeaderUnits,
+		"near, or a computer's camera at a plot's gate (112.6 away): the studs it is built at")
+	local phone = EnchantedMistStatus.signScale(112.6, 367, 70)
+	check(phone > 1.5 and math.abs(headerUnits(112.6, 367) - SIGN.MinHeaderUnits) < 1e-6
+			and math.abs(headerUnits(257, 367) - SIGN.MinHeaderUnits) < 1e-6
+			and math.abs(headerUnits(257, 1022) - SIGN.MinHeaderUnits) < 1e-6
+			and EnchantedMistStatus.signScale(257, 367, 70) > phone,
+		"a phone's camera at a gate, or anybody's at the deepest plot's back: it grows just enough to hold "
+			.. "its header's box at MinHeaderUnits", string.format("x%.2f at a phone's gate", phone))
+	local w1, h1, l1 = EnchantedMistStatus.signFrame(1)
+	local w2, h2, l2 = EnchantedMistStatus.signFrame(2.5)
+	check(w1 == SIGN.Width and math.abs(h1 - tall) < 1e-9 and l1 == 0 and math.abs(w2 - SIGN.Width * 2.5) < 1e-9
+			and math.abs(h2 - tall * 2.5) < 1e-9 and math.abs((l2 - h2 / 2) - (l1 - h1 / 2)) < 1e-9,
+		"it grows upward: its bottom edge stays where it is built, over the surround")
+	check(EnchantedMistStatus.signScale(100, 0, 70) == 1, "a viewport not yet measured leaves it as built")
+	check(SIGN.MinHeaderUnits >= 19 and SIGN.MaxDistance >= GameConfig.Plot.MaxReach + 12,
+		"its header's box never under 19 screen units (its words ~16 tall: capitals about a player's name over their "
+			.. "head on a phone, 11.4 points), drawn past the deepest plot's back", SIGN.MinHeaderUnits)
 
 	--==========================================================================
 	-- 3. THE COORDINATOR, ON A FAKE CLOCK
@@ -340,8 +372,19 @@ local ok, err = pcall(function()
 	-- 5. THE WIRING
 	--==========================================================================
 	say("-- the wiring --")
-	check(EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowSign == false,
-		"off by default, and the shared sign hidden (its COMING SOON would go live on a Publish)")
+	check(EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowSign == true,
+		"the event's schedule off by default; the shared sign ON (the owner, 2026-10-11): COMING SOON while it is off")
+	local signSrc = StarterPlayer:WaitForChild("StarterPlayerScripts"):WaitForChild("EnchantedMistSign").Source
+	check(string.find(signSrc, "sign.gui.MaxDistance = SIGN.MaxDistance\n", 1, true)
+			and string.find(signSrc, "local middle = Vector3.new(centre.X, (GameConfig.Map :: any).GroundY + HUB.FloorY + "
+				.. "SIGN.Above, centre.Z)", 1, true)
+			and string.find(signSrc, "RunService:BindToRenderStep(\"SeedMistSignClamp\", Enum.RenderPriority.Camera.Value + 1,",
+				1, true)
+			and string.find(signSrc, "EnchantedMistStatus.signScale((middle - camera.CFrame.Position).Magnitude, "
+				.. "camera.ViewportSize.Y,", 1, true)
+			and string.find(signSrc, "sign.gui.Size = UDim2.fromScale(width, tall)\n", 1, true)
+			and string.find(signSrc, "sign.gui.StudsOffsetWorldSpace = Vector3.new(0, lift, 0)\n", 1, true),
+		"the sign: over the plaza's middle, drawn to MaxDistance, held at its smallest size after the camera moves")
 	local wcs = wcsScript.Source
 	check(string.find(wcs, "tellDawn(built, wanted, source or \"cycle\")", 1, true)
 			and string.find(wcs, "transition(false, \"admin\")", 1, true)

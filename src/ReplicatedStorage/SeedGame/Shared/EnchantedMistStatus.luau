@@ -10,6 +10,9 @@
 -- TRUTHFUL (the owner's brief): an eligible Mist waits for the next completed
 -- reset, so its start is never shown as a guaranteed "Starts in" -- only as an
 -- ESTIMATE, which moves when a Pod Rush holds dusk back.
+--
+-- And how big it draws (signScale, signFrame): EnchantedMistConfig.Sign's READ
+-- FROM THE PLOTS.
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -19,7 +22,8 @@ local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistStatus = {}
 
 local STATES = EnchantedMistConfig.States
-local WORDS = EnchantedMistConfig.Sign.Words
+local SIGN = EnchantedMistConfig.Sign
+local WORDS = SIGN.Words
 
 export type View = {
 	state: string?,
@@ -72,6 +76,27 @@ function EnchantedMistStatus.describe(v: View, now: number): (string, string?)
 		return WORDS.Eligible, nil
 	end
 	return WORDS.Syncing, nil
+end
+
+-- How many times its built studs the sign draws for a camera `distance` studs
+-- from its middle, on a viewport `viewportHeight` screen units tall with a
+-- vertical FieldOfView of `fieldOfView` degrees: 1 near, and past the distance
+-- where its header's box would draw under MinHeaderUnits, just enough to hold
+-- that. A viewport not yet measured leaves it as built.
+function EnchantedMistStatus.signScale(distance: number, viewportHeight: number, fieldOfView: number): number
+	if viewportHeight <= 0 or fieldOfView <= 0 then
+		return 1
+	end
+	local perStud = (viewportHeight / 2) / math.tan(math.rad(fieldOfView / 2)) / math.max(distance, 1e-3)
+	return math.max(1, SIGN.MinHeaderUnits / (SIGN.Height * perStud))
+end
+
+-- The sign's width and height in studs at `scale`, and how far its middle
+-- rises so its bottom edge stays where it is built: it grows upward, clear of
+-- the surround under it.
+function EnchantedMistStatus.signFrame(scale: number): (number, number, number)
+	local tall = SIGN.Height + SIGN.SubHeight + SIGN.NoteHeight
+	return SIGN.Width * scale, tall * scale, (scale - 1) * tall / 2
 end
 
 return EnchantedMistStatus
