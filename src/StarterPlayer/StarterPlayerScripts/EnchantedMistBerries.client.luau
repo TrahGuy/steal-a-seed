@@ -18,7 +18,7 @@
 --
 -- THE GLINTS (2026-10-11, the Mist's look -- MistLook): a twinkle now and then
 -- at each berry's middle, made on this client only and gone with the berry.
--- Decoration, so not under Reduced FX; the berry itself -- its glow, its light
+-- Decoration, so off under Reduced FX; the berry itself -- its glow, its light
 -- and its prompt -- never dims.
 --==============================================================================
 local Players = game:GetService("Players")

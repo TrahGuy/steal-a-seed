@@ -126,7 +126,7 @@ local ok, err = pcall(function()
 	local berries = strip(Scripts:WaitForChild("EnchantedMistBerries").Source)
 	check(string.find(berries, "LOOK.Glints", 1, true) ~= nil and string.find(berries, "StatusText.reducedMotion()", 1, true)
 			~= nil,
-		"the berries glint (not under Reduced FX); the berries themselves never dim")
+		"the berries glint (off under Reduced FX); the berries themselves never dim")
 	local serverReads = {}
 	for _, d in ipairs(Server:GetDescendants()) do
 		if d:IsA("LuaSourceContainer") and string.find(strip((d :: any).Source), "MistLook", 1, true) then
