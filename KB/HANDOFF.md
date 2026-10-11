@@ -1,5 +1,40 @@
 # Steal a Seed — Session Handoff
 
+## ENCHANTED MIST, STAGE 3: THE MOSSKEEPER — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip; NOT PUBLISHED; OFF: ShowMosskeeper = false, Enabled = false; MosskeeperSpec 50/0, 7 OF 7 MUTANTS CAUGHT; ONE GUARDED PLAY ON SeedTest_mosskeeper_20261011)
+
+The brief: KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §8-9, plus the owner's additions via the peer: the surround during the Mist only, the idle animation, Odds as rarity cards, the studded panels, and the berry -> pod bar icons. The owner OKed the Odds panel (capture 08).
+- **Models**, both the owner's own builders ported to code (data tables copied verbatim; their scripts, prompt and speech bubble left out):
+  - `Shared/MosskeeperModel` (211 parts, 25 Motor6D + 185 welds, one anchored Footing; scratchpad `hub/gen_mosskeeper.py`).
+  - `Shared/MistSurroundModel` (the alcove: a 12-stud pad 0.3 up, the arch, roots, rocks, lanterns; the builder's own checks are in MosskeeperSpec).
+- **`MosskeeperService`** (Priority 77):
+  - He is built on `Map.EventHub.NpcAnchor` in Workspace.SeedMosskeeper, only once `EnchantedMistConfig.ShowMosskeeper` is on (false: a Publish cannot put him live).
+  - The surround goes up on `EnchantedMistService.OnStart` and is destroyed whole on `OnEnd`. He stands on the plaza's floor (+0.07) between Mists and on the pad (+0.3) during one.
+  - Tap E Talk (HoldDuration 0) opens the dialogue whether or not a Mist runs.
+  - **Give all**, server-only:
+    - Checked in order: one request at a time and `GiveGap`; him shown; an active Mist; a body within `TalkReach + ReachSlack` of his prompt plate; no pod in hand; a loaded profile; berries carried.
+    - A pod-earning delivery also needs `Hooks.grantPod` (STAGE 4: nil now, so refused "POD_NOT_READY"), the Bag restored, and `CarryService.PodRoom > 0`. Otherwise the WHOLE delivery is refused, nothing deducted ("Make room in your Bag.").
+    - Carried, progress and the grant are one `UpdateDewberries` change with no yield.
+  - `EnchantedMistService.Built.Mosskeeper = true`.
+- **Client**:
+  - `MosskeeperUI` is the studded dialogue (`MenuKit.studdedTheme`, moss band) with Give all / Odds / How to play / Close.
+    - Its camera framing takes only the default camera on the player's own Humanoid, marks it, and gives back only its own.
+    - It closes on Back/Escape/B, range, death, respawn, him going, another panel or the Roblox menu.
+  - `MosskeeperView` is his idle animation (`Shared/MosskeeperIdle`, the owner's brain ported: absolute per-frame poses, no drift) plus the personal bar in PlayerGui.
+    - The bar reads "Dewberries x/10 / Next Mysterious Pod", or "Waiting for Enchanted Mist".
+    - It has the Dewberry render at the start and the POD ICON STAND-IN (`Store.Icons.pod1`, the owner's store art) at the end; swap that in stage 4.
+  - `Shared/MistOddsView` is the Odds page as rarity cards (studs, RarityFX shine, % at the top from `creatureChance`/`sizeChance`): a rainbow on 0.2%, a shimmer under 1%, the size chips apart.
+    - The unmade creatures (Mossbristle, Briarstag, Hollowl, Elderbough, Gnarlmaw) show the Index's dark "???" window.
+- **Tests**:
+  - MosskeeperSpec 50/0 (new): the models, placement and lift, the surround's teardown, the prompt, every Give all path including the 15-berry example and a full Bag, Talk, idle drift, wave and serve, the odds tiers and the wiring.
+  - Mutants 7/7: NoBagCheck, GrantOutsideChange, FeetNotLifted, SurroundLeftBehind, TalkIsAHold, PoseAccumulates, RainbowForAllRare.
+  - EnchantedMistSpec 37/0 (the missing list no longer names Mosskeeper), EnchantedMistBerrySpec 66/0, EventHubSpec 48/0.
+  - Guarded Play: him on the deck, the surround up and down, the dialogue, and a live Give all (3 + 5 saved -> 0 carried, 8 saved), with the bar. Captures in output/mosskeeper-2026-10-11.
+- **Not verified**:
+  - The dialogue's camera framing in Play: the MCP session keeps the client camera Scriptable, so the dialogue correctly declines it. It is spec-pinned only; the owner should try Talk by hand.
+  - Phones and controllers.
+  - A real Mist run (the event is off; the active state was stood in for the test).
+- **Next**: the owner chose the hub deck look (A's moss carpet + C's mushroom fairy ring) as its own commit; stage 4 is the Mysterious Pod (`Hooks.grantPod`, its art, the bar's pod icon).
+
 ## THE RAIN BIOME: A POD CARRIED OUT BY THE RAIN'S END IS LOST; THE BRIDGE'S SAFE ZONE WORDS; BERRIES EVERY 3 S — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip: a3b208d, 45840f0, ec6b498; NOT PUBLISHED; TOUCHED SPECS GREEN; 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY ON SeedTest_rainfix_20261011)
 
 The owner, via the peer: "(a) A pod carried inside the rain biome is LOST, not banked, if its carrier never went through the safe zone. (b) Make the rain biome's safe-zone text look like the general biomes' safe-zone text." Then: "berries spawn every 3 s instead of 5 s".

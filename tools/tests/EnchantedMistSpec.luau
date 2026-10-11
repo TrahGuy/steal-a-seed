@@ -158,7 +158,8 @@ local ok, err = pcall(function()
 		"off by default (Enabled false): published disabled, no eligibility")
 	local missing = M.MissingBindings()
 	local text = table.concat(missing, " | ")
-	check(string.find(text, "Mosskeeper", 1, true) and string.find(text, "Gnarlmaw", 1, true)
+	check(string.find(text, "MysteriousPod", 1, true) and not string.find(text, "Mosskeeper", 1, true)
+			and string.find(text, "Gnarlmaw", 1, true)
 			and string.find(text, "creature odds", 1, true) and not string.find(text, "Snarlbloom", 1, true),
 		"the missing list names the unbuilt pieces, the unregistered creatures and the approvals (Snarlbloom exists)",
 		#missing)

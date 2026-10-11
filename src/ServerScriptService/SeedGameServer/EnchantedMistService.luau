@@ -82,7 +82,7 @@ EnchantedMistService.Hooks = {
 -- Pieces of the event built in code so far (the staged build).
 EnchantedMistService.Built = {
 	Berries = true, -- stage 2: EnchantedMistBerryService, EnchantedMistBerries.client
-	Mosskeeper = false,
+	Mosskeeper = true, -- stage 3: MosskeeperService (shown once ShowMosskeeper is on)
 	MysteriousPod = false,
 	Look = false,
 }
