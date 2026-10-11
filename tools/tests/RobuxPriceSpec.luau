@@ -209,6 +209,49 @@ local ok, err = pcall(function()
 		"with no product id or no answer the capsule is hidden, and the panel narrows to fit")
 	check(has(plantSrc, 'prompt:SetAttribute("RobuxProduct", instantProductId())'),
 		"the server names the product on the prompt, so the client can price it")
+
+	--==========================================================================
+	-- 5. THE GREEN ROBUX TAG (2026-10-12, the owner: every Robux buy button on
+	--    the green Robux art, the price right of its mark, no glyph of ours)
+	--==========================================================================
+	say("\n-- the green Robux tag --")
+	local UIKit = require(Shared.UIKit)
+	local RAIL = require(Shared.GameConfig).Rail
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.fromOffset(200, 40)
+	local tag = UIKit.priceTag(holder, "SpecTag", 3)
+	local shape = tag.frame:FindFirstChildOfClass("UIAspectRatioConstraint")
+	local spot = RAIL.StuddedShopDesktopWord
+	check(shape ~= nil and math.abs(shape.AspectRatio - RAIL.StuddedShopDesktopAspect) < 1e-4
+			and tag.art.Image == RAIL.StuddedShopDesktopArt and tag.art.ScaleType == Enum.ScaleType.Fit
+			and tag.art.Size == UDim2.fromScale(1, 1),
+		"the owner's green plate (the desktop Shop's) at its own 3 : 1, fitted, never stretched")
+	check(tag.price.Font == Enum.Font.LuckiestGuy and tag.price.TextColor3 == Color3.new(1, 1, 1)
+			and tag.price:FindFirstChildOfClass("UIStroke") ~= nil and tag.price.TextScaled
+			and math.abs(tag.price.Position.X.Scale - spot.Left) < 1e-6
+			and math.abs(tag.price.Size.X.Scale - (spot.Right - spot.Left)) < 1e-6
+			and tag.price.ZIndex > tag.art.ZIndex,
+		"the price right of the plate's mark, in the HUD's outlined white type, over the picture")
+	holder:Destroy()
+	local loadoutSrc = sourceOf(scripts:FindFirstChild("LoadoutUI"))
+	local wheelSrc = sourceOf(scripts:FindFirstChild("WheelUI"))
+	local panelSrc = sourceOf(Shared:FindFirstChild("InventoryPanel"))
+	check(has(shopSrc, "local function dressTag(p: Price, buying: boolean)")
+			and has(shopSrc, 'local tag = UIKit.priceTag(plate, "RobuxTag", z + 3)')
+			and has(shopSrc, "\t\tface(\"go\")\n\t\tbuying = true\n") and has(shopSrc, "\tdressTag(p, buying)\nend")
+			and has(shopSrc, "tag.price.Text = p.price.Text"),
+		"the Shop's buy buttons: a buy state's whole face is the tag; SOON, OWNED, OPENING... and OFF SALE keep theirs")
+	check(has(loadoutSrc, "robux = if credits <= 0 and price then RobuxPrice.format(price) else nil")
+			and not has(loadoutSrc, 'R$%s')
+			and has(panelSrc, "if action.robux then")
+			and has(panelSrc, 'local tag = UIKit.priceTag(mb.plate, "RobuxTag", mb.label.ZIndex)'),
+		"the Bag's Instant Hatch: its words, and its price on the tag at the button's right end; a saved one free")
+	check(has(promptSrc, 'local tag = UIKit.priceTag(content, "Price", 3)') and not has(promptSrc, "robux@3x")
+			and has(wheelSrc, 'local tag = UIKit.priceTag(b, "Capsule", 3)') and not has(wheelSrc, "robux@3x")
+			and has(wheelSrc, "choice.capsule.BackgroundTransparency = if tagged then 1 else 0")
+			and has(wheelSrc, "choice.capsule.Size = UDim2.new(0, 72, 0, 24)")
+			and math.ceil(24 * RAIL.StuddedShopDesktopAspect) == 72,
+		"a prompt that sells something and the Wheel's ticket packs: the tag, no glyph of ours; off sale the white pill")
 end)
 
 RobuxPrice.RetryAfter, RobuxPrice.StaleAfter = savedRetry, savedStale

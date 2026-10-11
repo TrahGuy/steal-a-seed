@@ -1,5 +1,30 @@
 # Steal a Seed — Session Handoff
 
+## (c) EVERY ROBUX BUY BUTTON ON THE GREEN ROBUX ART — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; RobuxPriceSpec 22/0 (4 new checks), WheelSpec 163/0, InstantHatchSpec 57/0, StoreSpec, BagMenuSpec, InventorySpec, CompactMenusSpec, StuddedLookSpec, PhoneMenuSpec, SourceIconsSpec all green, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (two batch-only flakes, each green alone: PlotReleaseSpec's async save timing 40/2 then 42/0 twice, TutorialSpotlightSpec's 0.2 ms timing check 50/1 then 51/0); 7 OF 7 MUTANTS CAUGHT; captures in output/robux-buy-buttons-2026-10-12)
+
+The owner's item (c) via the peer: every Robux buy button on the green Robux art (113135959052678, the desktop Shop face's), with the price right of its mark and no separate Robux glyph. Fitted at ~3 : 1, never stretched. A state that is not a purchase keeps its look.
+- **One shared piece:** `UIKit.priceTag(parent, name, z)`. It is the green plate in a box held at its own 3 : 1 (UIAspectRatioConstraint, the picture Fit), with the price in the HUD's outlined white LuckiestGuy at the plate's word spot (Rail.StuddedShopDesktopWord, where the Shop's SHOP stands). Named priceTag because WheelSpec forbids any ".robux" in WheelUI (it guards the list price).
+- **Where it is worn:**
+  - **The Shop (ShopUI):** a buy state ("99", "...", "BUY") wears the tag as the button's whole face (dressTag). The button's plate goes clear only once the art has loaded; until then the price stands on the plate, so a failed load still shows a button. SOON, OWNED, OPENING... and OFF SALE keep their faces.
+  - **The Bag's Instant Hatch (LoadoutUI + InventoryPanel):** the action keeps its words and icon on the premium face. Its price is a tag at the button's right end (a new optional `robux` on a menu action). A saved, free one has no tag. "R$" is gone.
+  - **A prompt that sells something (PromptUI):** its capsule is the tag, 78 x 26.
+  - **The Wheel's ticket packs (WheelUI):** the tag, 72 x 24. BUY stays on the tag; OFF SALE goes back to the white pill in ink.
+- **Specs:** RobuxPriceSpec §5. The tag's art, its 3 : 1 and the Fit; the price's spot, type and layer; and each site's wiring: the Shop's buy-state face, the Instant Hatch's words plus tag (no "R$"), the prompt's and the Wheel's tags, and the Wheel's off-sale pill.
+- **Mutants (7 of 7):** TagStretched, TagNoArt, TagPriceOnMark, ShopNoTag, InstantKeepsGlyph, PromptNoTag, WheelOffSaleTagged.
+- **Live (guarded Play, SeedTest_mistlook_20261011), desktop; nothing was bought or pressed to buy:**
+  - 01-03: the Shop's Speed, Cash and Spin Ticket cards with their tags. The owned pass shows OWNED, and the "???" pods show SOON.
+  - 04 / 05: a growing Mega pod's (admin-spawned) Bag menu: INSTANT HATCH with the tag at 39.
+  - 06: the Wheel's GET SPINS packs (8, 35, 75).
+  - 07: the Instant Hatch prompt, E · INSTANT HATCH · the tag at 39. Test-only on two counts: the prompt was a client-only stand-in made as PlantService makes one (Robux 99, RobuxProduct 3713212811), and MCP captures skip billboards, so its panel was copied into a ScreenGui at 2x. Both were removed afterwards.
+- **Look note for the owner's review (the peer's):** on the Wheel's green pack cards the green tag is green on green; it still reads, thanks to the plate's dark edge.
+- **Not seen:** phones and compact (the emulator was not switched); the tag fits by its own aspect inside whatever box a button gives it.
+- **Seen, not changed:** MenuKit logs "a picture did not load" for Shop card icons the panel had not shown yet; they drew once scrolled into view.
+- **Next (the queue the owner handed the peer):**
+  - 9, the six new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console (the log strip becomes a fading answer).
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## (b) THE DESKTOP SHOP FACE: THE GREEN ROBUX PLATE WITH OUR SHOP, 150 x 50 — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; HudLayoutSpec 1468/0, RailFallbackSpec 50/0 (4 new checks), InviteHudSpec 438/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (TutorialSpotlightSpec's timing check, 0.232 ms against its 0.2 ms budget under batch load, passed 51/0 alone twice); 6 OF 6 MUTANTS CAUGHT; captures in output/shop-face-2026-10-12)
 
 The owner's item (b) via the peer: on a desktop and a TV, the Shop button is the owner's green Robux plate with SHOP right of its mark, in a 150 x 50 slot.

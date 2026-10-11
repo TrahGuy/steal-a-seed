@@ -280,7 +280,9 @@ export type View = {
 export type MenuSpec = {
 	title: string,
 	lines: { InventoryModel.Line },
-	actions: { { id: string, label: string, hold: number?, icon: string? } },
+	-- `robux`: a Robux price for the action (the Instant Hatch's), drawn on the
+	-- green Robux tag at the button's right end (2026-10-12).
+	actions: { { id: string, label: string, hold: number?, icon: string?, robux: string? } },
 }
 
 export type Callbacks = {
@@ -1020,6 +1022,19 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			local mb = MenuKit.button(menuActions, "Action" .. action.id, 84, action.label, 15)
 			mb.style(MENU_FACE[action.id] or "go")
 			buttonIcon(mb, action.icon)
+			-- A Robux price (2026-10-12, the owner: every Robux buy button on the
+			-- green Robux art): the tag at the button's right end, the price right
+			-- of its mark, no glyph of ours; the words keep the rest of the face.
+			if action.robux then
+				local tagW = math.floor((MENU_BUTTON_H - 14) * (GameConfig.Rail :: any).StuddedShopDesktopAspect)
+				local tag = UIKit.priceTag(mb.plate, "RobuxTag", mb.label.ZIndex)
+				tag.frame.AnchorPoint = Vector2.new(1, 0.5)
+				tag.frame.Position = UDim2.new(1, -4, 0.5, -1)
+				tag.frame.Size = UDim2.new(0, tagW, 1, -6)
+				tag.price.Text = action.robux
+				local left = mb.label.Position.X.Offset
+				mb.label.Size = UDim2.new(1, -(left + tagW + 10), 1 - LOOK.FootShare, 0)
+			end
 			local b = mb.hit
 			b.Size = UDim2.new(1, 0, 0, MENU_BUTTON_H)
 			b.LayoutOrder = i

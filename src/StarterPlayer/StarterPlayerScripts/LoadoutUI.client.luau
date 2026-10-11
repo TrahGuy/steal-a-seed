@@ -1657,10 +1657,11 @@ openMenuFor = function(key: string?, slotIndex: number?, anchor: HudLayout.Rect)
 		else
 			local credits = tonumber(player:GetAttribute(HATCH_BAG.CreditsAttribute)) or 0
 			local price = podsNow.price
+			-- Its price on the green Robux tag (2026-10-12, the owner), right of the
+			-- tag's own mark; a saved one is free, so it has none.
 			table.insert(actions, 1, { id = "instant", icon = HATCH_BAG.Icons.InstantHatch,
-				label = if credits > 0 then HATCH_BAG.Words.SavedInstant
-					elseif price then string.format("%s  R$%s", HATCH_BAG.Words.Instant, RobuxPrice.format(price))
-					else HATCH_BAG.Words.Instant })
+				label = if credits > 0 then HATCH_BAG.Words.SavedInstant else HATCH_BAG.Words.Instant,
+				robux = if credits <= 0 and price then RobuxPrice.format(price) else nil })
 		end
 		-- Already in hand, the same press puts it away (holdTool), and says so.
 		table.insert(actions, { id = "hold",

@@ -811,37 +811,17 @@ do
 		local name = WheelDraw.words(b, "Name", 16, C.White, PAL.Ink, 2, 3)
 		-- Short on the tile: the artwork already says how many spins.
 		name.Text = string.format("×%d %s", product.spins, if product.spins == 1 then "TICKET" else "TICKETS")
-		local capsule = panel(b, "Capsule", C.White, 10, 3)
+		-- THE GREEN ROBUX TAG (2026-10-12, the owner: every Robux buy button on
+		-- the green Robux art, the price right of its mark, no glyph of ours).
+		-- Off sale it is no purchase: the white pill it was, the words in ink
+		-- (shop.watch). `token` is the tag's picture.
+		local tag = UIKit.priceTag(b, "Capsule", 3)
+		local capsule = tag.frame
 		capsule.AnchorPoint = Vector2.new(0.5, 0)
-		capsule.AutomaticSize = Enum.AutomaticSize.X
-		local pad = Instance.new("UIPadding")
-		pad.PaddingLeft = UDim.new(0, 8)
-		pad.PaddingRight = UDim.new(0, 8)
-		pad.Parent = capsule
-		local row = Instance.new("UIListLayout")
-		row.FillDirection = Enum.FillDirection.Horizontal
-		row.HorizontalAlignment = Enum.HorizontalAlignment.Center
-		row.VerticalAlignment = Enum.VerticalAlignment.Center
-		row.SortOrder = Enum.SortOrder.LayoutOrder
-		row.Padding = UDim.new(0, 4)
-		row.Parent = capsule
-		-- The Robux mark the client ships with (ShopUI's): no upload, no glyph.
-		local token = Instance.new("ImageLabel")
-		token.Name = "Token"
-		token.LayoutOrder = 1
-		token.Size = UDim2.fromOffset(14, 14)
-		token.BackgroundTransparency = 1
-		token.BorderSizePixel = 0
-		token.Image = "rbxasset://textures/ui/common/robux@3x.png"
-		token.ImageColor3 = PAL.Ink
-		token.ScaleType = Enum.ScaleType.Fit
-		token.Active = false
-		token.ZIndex = 4
-		token.Parent = capsule
-		local price = text(capsule, "Price", 15, PAL.Ink, Enum.Font.LuckiestGuy, 4)
-		price.LayoutOrder = 2
-		price.AutomaticSize = Enum.AutomaticSize.X
-		price.Size = UDim2.new(0, 0, 1, 0)
+		capsule.BackgroundColor3 = C.White
+		UIKit.corner(capsule, 10)
+		local token = tag.art
+		local price = tag.price
 		price.Text = "..."
 		local choice: ShopChoice = {
 			product = product,
@@ -877,8 +857,17 @@ shop.watch = function()
 				choice.price.Text = "OFF SALE"
 				choice.token.Visible = false
 			else
+				-- BUY still buys: on the green tag.
 				choice.price.Text = "BUY"
-				choice.token.Visible = false
+				choice.token.Visible = true
+			end
+			-- On the tag: white words outlined; off sale, the white pill in ink.
+			local tagged = choice.token.Visible
+			choice.capsule.BackgroundTransparency = if tagged then 1 else 0
+			choice.price.TextColor3 = if tagged then C.White else PAL.Ink
+			local line = choice.price:FindFirstChildOfClass("UIStroke")
+			if line then
+				line.Enabled = tagged
 			end
 			choice.button.Active = choice.onSale
 			choice.button.Selectable = choice.onSale
@@ -1795,7 +1784,9 @@ shop.layout = function(W: number, H: number, cx: number, cy: number, d: number, 
 		place(choice.name, 4, 60, each - 8, 18)
 		choice.name.TextSize = if each < 100 then 12 else 14
 		choice.capsule.Position = UDim2.new(0.5, 0, 0, 82)
-		choice.capsule.Size = UDim2.new(0, 0, 0, 24)
+		-- The green Robux tag, 24 tall at its own 3 : 1 (2026-10-12): 72 is 24 x
+		-- the art's 2000/669 rounded up (RobuxPriceSpec holds the two together).
+		choice.capsule.Size = UDim2.new(0, 72, 0, 24)
 	end
 	place(shop.note, 14, 40 + choiceH + 6, cw - 28, noteH)
 	local oddsW = math.floor((cw - 24 - 10) * 0.64)

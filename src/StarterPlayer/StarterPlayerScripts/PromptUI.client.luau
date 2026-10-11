@@ -57,6 +57,9 @@ local RobuxPrice = require(ReplicatedStorage:WaitForChild("SeedGame")
 -- Whether the screen is a TV, and how much bigger it draws (see TEN-FOOT below).
 local HudLayout = require(ReplicatedStorage:WaitForChild("SeedGame")
 	:WaitForChild("Shared"):WaitForChild("HudLayout"))
+-- The green Robux tag a prompt that sells something wears (UIKit.priceTag).
+local UIKit = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("UIKit"))
 local CARRYING = GameConfig.Attributes.CarryingSpecies
 -- Set by CarryService on a beginner's reserved pod, and by PlantService on an
 -- Instant Hatch prompt (the garden owner's id). Nothing else sets it.
@@ -167,9 +170,8 @@ local VERB_MIN = 80
 -- A UIStroke is drawn outside the glyphs, and TextBounds does not count it.
 local STROKE_ROOM = 4
 local CAPSULE_HEIGHT = 26
-local CAPSULE_PAD = 8
-local CAPSULE_GAP = 4
-local TOKEN = 16
+-- The green Robux tag at that height, at the art's own 3 : 1 (2026-10-12).
+local TAG_WIDTH = math.ceil(CAPSULE_HEIGHT * (GameConfig.Rail :: any).StuddedShopDesktopAspect)
 -- A finger that travels this far has started panning the camera rather than
 -- pressing a prompt.
 local TAP_SLOP = 34
@@ -654,11 +656,10 @@ local function build(prompt: ProximityPrompt): Panel?
 	--==========================================================================
 	-- A PROMPT THAT SELLS SOMETHING SAYS WHAT IT COSTS
 	--
-	-- Only when the server put a Robux attribute on the prompt. It is the shop's
-	-- capsule, so a price reads the same on a shelf and on a pod: white, the
-	-- client's own Robux texture tinted ink (the glyph is a blank box in most
-	-- faces -- see ShopUI), and the number in ink with no outline, because an
-	-- ink stroke round ink type only blurs it.
+	-- Only when the server put a Robux attribute on the prompt. Since 2026-10-12
+	-- it is the green Robux tag (UIKit.priceTag, the owner: every Robux buy
+	-- button on the green Robux art), so a price reads the same on a shelf and
+	-- on a pod: the number right of the tag's own mark, no glyph of ours.
 	--
 	-- THE NUMBER IS THIS PLAYER'S. Roblox prices developer products by region,
 	-- so the attribute's manifest price (99) is not what every player pays. The
@@ -671,49 +672,14 @@ local function build(prompt: ProximityPrompt): Panel?
 	local capsule: Frame? = nil
 	local amount: TextLabel? = nil
 	if robux and robux > 0 then
-		local made = Instance.new("Frame")
-		made.Name = "Price"
+		local tag = UIKit.priceTag(content, "Price", 3)
+		local made = tag.frame
 		made.LayoutOrder = 3
-		made.Size = UDim2.fromOffset(CAPSULE_PAD * 2 + TOKEN, CAPSULE_HEIGHT)
-		made.BackgroundColor3 = PROMPT.Capsule
-		made.BorderSizePixel = 0
-		made.ZIndex = 3
-		made.Parent = content
-		local round = Instance.new("UICorner")
-		round.CornerRadius = UDim.new(0.5, 0)
-		round.Parent = made
-		local inner = Instance.new("UIListLayout")
-		inner.FillDirection = Enum.FillDirection.Horizontal
-		inner.VerticalAlignment = Enum.VerticalAlignment.Center
-		inner.HorizontalAlignment = Enum.HorizontalAlignment.Center
-		inner.Padding = UDim.new(0, CAPSULE_GAP)
-		inner.SortOrder = Enum.SortOrder.LayoutOrder
-		inner.Parent = made
-
-		local token = Instance.new("ImageLabel")
-		token.Name = "Token"
-		token.LayoutOrder = 1
-		token.Size = UDim2.fromOffset(TOKEN, TOKEN)
-		token.BackgroundTransparency = 1
-		token.BorderSizePixel = 0
-		token.Image = "rbxasset://textures/ui/common/robux@3x.png"
-		token.ImageColor3 = INK
-		token.ScaleType = Enum.ScaleType.Fit
-		token.ZIndex = 4
-		token.Parent = made
-
-		local number = Instance.new("TextLabel")
+		made.Size = UDim2.fromOffset(TAG_WIDTH, CAPSULE_HEIGHT)
+		local number = tag.price
 		number.Name = "Amount"
-		number.LayoutOrder = 2
-		number.Size = UDim2.fromOffset(0, CAPSULE_HEIGHT)
-		number.BackgroundTransparency = 1
-		number.Font = PROMPT.PriceFont
-		number.TextSize = PROMPT.PriceSize
-		number.TextColor3 = INK
 		-- Until RobuxPrice answers (below): never the manifest's number.
 		number.Text = "..."
-		number.ZIndex = 4
-		number.Parent = made
 
 		capsule = made
 		amount = number
@@ -812,11 +778,9 @@ local function build(prompt: ProximityPrompt): Panel?
 		action.Size = UDim2.fromOffset(verbWidth, CAP)
 		local width = PAD_LEFT + CAP + ROW_GAP + verbWidth + PAD_RIGHT
 		if capsule and amount and capsule.Visible then
-			local numberWidth = math.ceil(measured(amount))
-			amount.Size = UDim2.fromOffset(numberWidth, CAPSULE_HEIGHT)
-			local capsuleWidth = CAPSULE_PAD * 2 + TOKEN + CAPSULE_GAP + numberWidth
-			capsule.Size = UDim2.fromOffset(capsuleWidth, CAPSULE_HEIGHT)
-			width += ROW_GAP + capsuleWidth
+			-- The tag is its own fixed 3 : 1; its number fits itself inside.
+			capsule.Size = UDim2.fromOffset(TAG_WIDTH, CAPSULE_HEIGHT)
+			width += ROW_GAP + TAG_WIDTH
 		end
 		local size = Vector2.new(math.max(PANEL_SIZE.X, width), PANEL_SIZE.Y)
 		entry.size = size

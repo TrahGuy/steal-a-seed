@@ -2685,6 +2685,57 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?, w
 end
 
 --==============================================================================
+-- THE ROBUX PRICE TAG (2026-10-12, the owner: every Robux buy button on the
+-- green Robux art, the price right of its mark, no separate Robux glyph)
+--
+-- The desktop Shop's green plate (GameConfig.Rail.StuddedShopDesktopArt) as a
+-- tag: a box held at the plate's own 3 : 1 -- fitted inside whatever size the
+-- caller gives it, never stretched -- the picture in it, and the price in the
+-- HUD's outlined white type where the plate leaves room right of its mark
+-- (StuddedShopDesktopWord's spot, where the Shop's own word stands). The
+-- caller writes `price.Text` and places `frame`. The Shop's buy buttons, the
+-- Bag's Instant Hatch, a prompt that sells something and the Wheel's ticket
+-- packs wear it; a state that is not a purchase keeps its own look.
+--==============================================================================
+export type PriceTag = { frame: Frame, art: ImageLabel, price: TextLabel }
+
+function UIKit.priceTag(parent: Instance, name: string, z: number): PriceTag
+	local rail: any = GameConfig.Rail
+	local spot: PictureWord = rail.StuddedShopDesktopWord
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Active = false
+	frame.ZIndex = z
+	frame.Parent = parent
+	local shape = Instance.new("UIAspectRatioConstraint")
+	shape.AspectRatio = rail.StuddedShopDesktopAspect
+	shape.Parent = frame
+	local art = Instance.new("ImageLabel")
+	art.Name = "Art"
+	art.Size = UDim2.fromScale(1, 1)
+	art.BackgroundTransparency = 1
+	art.BorderSizePixel = 0
+	art.Image = rail.StuddedShopDesktopArt
+	art.ScaleType = Enum.ScaleType.Fit
+	art.Active = false
+	art.ZIndex = z
+	art.Parent = frame
+	local price = UIKit.outlined(frame, "Price", 30, WHITE, 1.5)
+	price.Position = UDim2.fromScale(spot.Left, spot.Top)
+	price.Size = UDim2.fromScale(spot.Right - spot.Left, spot.Bottom - spot.Top)
+	price.TextScaled = true
+	price.Active = false
+	price.ZIndex = z + 1
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 30
+	fit.MinTextSize = 9
+	fit.Parent = price
+	return { frame = frame, art = art, price = price }
+end
+
+--==============================================================================
 -- THE BADGE, HANGING OR TUCKED
 --
 -- Half off the corner is the desktop look and stays it. The compact rows sit

@@ -301,7 +301,30 @@ type Price = {
 	token: ImageLabel,
 	price: TextLabel,
 	word: TextLabel,
+	tag: UIKit.PriceTag,
+	tagReady: { value: boolean },
 }
+
+-- THE GREEN ROBUX TAG (2026-10-12, the owner: every Robux buy button on the
+-- green Robux art, the price right of its mark, no glyph of ours). A buy state
+-- wears it as the button's whole face; the button's own plate goes clear under
+-- it once its picture has loaded -- until then the price still stands on the
+-- plate. SOON, OWNED, OPENING... and OFF SALE keep the button's own face.
+local function dressTag(p: Price, buying: boolean)
+	local tag = p.tag
+	tag.frame.Visible = buying
+	if buying then
+		tag.price.Text = p.price.Text
+		p.capsule.Visible = false
+	end
+	local clear = buying and p.tagReady.value
+	p.plate.BackgroundTransparency = if clear then 1 else 0
+	p.button.edge.Enabled = not clear
+	local studs = p.button.studs
+	if studs and clear then
+		studs.Visible = false
+	end
+end
 
 local function priceButton(parent: Instance, z: number): Price
 	local b = MenuKit.button(parent, "Buy", z, "", 15, { studs = true })
@@ -358,7 +381,20 @@ local function priceButton(parent: Instance, z: number): Price
 	-- to the face -- plain dark on gold and grey, white with a thin line on green.
 	local word = b.label
 	word.Visible = false
-	return { button = b, hit = b.hit, plate = plate, capsule = capsule, token = token, price = price, word = word }
+	local tag = UIKit.priceTag(plate, "RobuxTag", z + 3)
+	tag.frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	tag.frame.Position = UDim2.fromScale(0.5, 0.5)
+	tag.frame.Size = UDim2.fromScale(1, 1)
+	tag.frame.Visible = false
+	local p: Price = { button = b, hit = b.hit, plate = plate, capsule = capsule, token = token, price = price,
+		word = word, tag = tag, tagReady = { value = false } }
+	UIKit.whenPictureLoads(tag.art, function(loaded: boolean)
+		if loaded then
+			p.tagReady.value = true
+			dressTag(p, tag.frame.Visible)
+		end
+	end)
+	return p
 end
 
 --==============================================================================
@@ -397,12 +433,13 @@ end
 
 local function paintPrice(p: Price, card: Card)
 	local entry = card.entry
-	local plate, capsule, token, price, word = p.plate, p.capsule, p.token, p.price, p.word
+	local capsule, token, price, word = p.capsule, p.token, p.price, p.word
 	local function face(id: string)
 		p.button.style(id)
 	end
 	capsule.Visible = true
 	word.Visible = false
+	local buying = false
 	capsule.BackgroundColor3 = SHOP.Capsule
 	token.ImageColor3 = INK
 	price.TextColor3 = INK
@@ -435,6 +472,7 @@ local function paintPrice(p: Price, card: Card)
 		price.TextColor3 = SHOP.SoonText
 	else
 		face("go")
+		buying = true
 		local value = card.priceValue
 		if card.priceState == "ready" and value then
 			price.Text = RobuxPrice.format(value)
@@ -447,7 +485,7 @@ local function paintPrice(p: Price, card: Card)
 			token.Visible = true
 		end
 	end
-	plate.BackgroundTransparency = 0
+	dressTag(p, buying)
 end
 
 local detailBuy: Price
