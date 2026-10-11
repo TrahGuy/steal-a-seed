@@ -719,7 +719,9 @@ local function paintCard(c: Card, e: Entry, order: number)
 		RarityFX.setEdge(c.fxEdge, nil, false)
 		c.edge.Color = if spec then LOOK.Ink else LOOK.CardEdge
 		MenuKit.cardTint(c.tint, nil)
-		RarityFX.setShine(c.fxShine, nil)
+		-- The shell's card shines by its studs (the mist's, 2026-10-12), as in the
+		-- Bag; no pod's rarity ever lights it.
+		RarityFX.setShine(c.fxShine, if spec then spec.shine else nil)
 		c.words.Visible = spec ~= nil
 		c.words.BackgroundTransparency = if spec and spec.words then spec.words else STUD_LOOK.StudWordsTransparency
 		MenuKit.ink(c.name, if spec then WHITE else LOOK.Text)

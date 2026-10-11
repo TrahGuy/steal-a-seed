@@ -6,7 +6,9 @@
 -- Secret, by the ids GameConfig.Rarities already has. Since 2026-10-10 the
 -- other five have a STILL edge from here too (THE OTHER FIVE, below), on a
 -- grown plant's card only. Anything whose rarity is not yet the player's to
--- know (a sealed pod) gets nothing from here and keeps its plain look.
+-- know (a sealed pod) gets nothing from here and keeps its plain look -- but
+-- for a shine-only look (since 2026-10-12, the Mysterious Pod's mist card),
+-- which says nothing of what is inside.
 --
 --   text   the rarity WORD: its colours through a UIGradient on the label, a
 --          slow light crossing it; Secret's is the toast's silver italic with
@@ -91,6 +93,22 @@ local function key(t: number, c: Color3): ColorSequenceKeypoint
 	return ColorSequenceKeypoint.new(t, c)
 end
 
+-- The shine: three colours across a band 2 x Width wide at the middle of the
+-- gradient, strongest (`peak`) at its centre, clear outside.
+local function shineOf(across: { Color3 }, peak: number?): (ColorSequence, NumberSequence)
+	local w = FX.Shine.Width
+	return ColorSequence.new({
+		key(0, across[1]), key(0.5 - w, across[1]), key(0.5, across[2]), key(0.5 + w, across[3]),
+		key(1, across[3]),
+	}), NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5 - w, 1),
+		NumberSequenceKeypoint.new(0.5, peak or 0.4),
+		NumberSequenceKeypoint.new(0.5 + w, 1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+end
+
 for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
 	local s = FX[id]
 	if s then
@@ -116,23 +134,10 @@ for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
 			NumberSequenceKeypoint.new(span, 1),
 			NumberSequenceKeypoint.new(1, 1),
 		})
-		-- The shine: three colours across a band 2 x Width wide at the middle
-		-- of the gradient, strongest (ShinePeak) at its centre, clear outside.
+		-- The card's shine (shineOf), for a style with one.
 		local shine, shineFade = nil, nil
-		local across = s.Shine
-		if across then
-			local w = FX.Shine.Width
-			shine = ColorSequence.new({
-				key(0, across[1]), key(0.5 - w, across[1]), key(0.5, across[2]), key(0.5 + w, across[3]),
-				key(1, across[3]),
-			})
-			shineFade = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 1),
-				NumberSequenceKeypoint.new(0.5 - w, 1),
-				NumberSequenceKeypoint.new(0.5, s.ShinePeak or 0.4),
-				NumberSequenceKeypoint.new(0.5 + w, 1),
-				NumberSequenceKeypoint.new(1, 1),
-			})
+		if s.Shine then
+			shine, shineFade = shineOf(s.Shine, s.ShinePeak)
 		end
 		styles[id] = {
 			id = id,
@@ -149,6 +154,16 @@ for _, id in ipairs({ "Mythic", "Divine", "Secret" }) do
 			shineFade = shineFade,
 		}
 	end
+end
+
+-- THE SHINE-ONLY LOOKS (2026-10-12, GameConfig.RarityFX.ShineOnly): a shine for
+-- a card with no rarity of its own -- the Mysterious Pod's mist card. Kept
+-- apart from the styles, so `style` never answers one: no word, no edge light.
+local shineOnly: { [string]: { shine: ColorSequence, shineFade: NumberSequence } } = {}
+local SHINE_ONLY: { [string]: any } = FX.ShineOnly or {}
+for id, s in pairs(SHINE_ONLY) do
+	local shine, shineFade = shineOf(s.Shine, s.ShinePeak)
+	shineOnly[id] = { shine = shine, shineFade = shineFade }
 end
 
 -- The style for a rarity id, or nil: only the three, and only by their ids
@@ -433,16 +448,19 @@ function RarityFX.shine(face: GuiObject, radius: number, zIndex: number): Handle
 end
 
 -- `rarity` with a shine (and the card studded -- the caller's to say: pass nil
--- for a plain card) shows it; anything else, or reduced motion, hides it.
+-- for a plain card) shows it, as does a shine-only look's id (the mist card's
+-- "Mist"); anything else, or reduced motion, hides it.
 function RarityFX.setShine(h: Handle, rarity: string?)
 	local frame = h.frame :: Frame
 	local s = RarityFX.style(rarity)
-	h.rarity = if s then rarity else nil
-	local show = s ~= nil and (s :: Style).shine ~= nil and not RarityFX.still()
+	local only = if rarity and not s then shineOnly[rarity] else nil
+	h.rarity = if s or only then rarity else nil
+	local colours = if s then s.shine elseif only then only.shine else nil
+	local fade = if s then s.shineFade elseif only then only.shineFade else nil
+	local show = colours ~= nil and not RarityFX.still()
 	if show then
-		local style = s :: Style
-		h.gradient.Color = style.shine :: ColorSequence
-		h.gradient.Transparency = style.shineFade :: NumberSequence
+		h.gradient.Color = colours :: ColorSequence
+		h.gradient.Transparency = fade :: NumberSequence
 	end
 	h.gradient.Offset = SHINE_REST
 	frame.Visible = show

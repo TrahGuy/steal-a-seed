@@ -1,5 +1,36 @@
 # Steal a Seed — Session Handoff
 
+## THE MYSTERIOUS POD ON CODEX'S MIST STUDS, SHINING — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; RarityCardsSpec 60/0, InventorySpec 47/0, InventoryModelSpec 56/0, PlotShowcaseSpec 55/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES (TutorialSpotlightSpec's known timing flake, 50/1, passed 51/0 alone); 10 OF 10 MUTANTS CAUGHT; captures in output/mysterious-pod-mist-2026-10-12)
+
+The owner's ask via the peer: the Mysterious Pod's card on its own uploaded texture (Codex's studs-enchanted-mist-v1, rbxassetid 88002993641737), in place of the obsidian stand-in, and the card should SHINE. Codex's art folder and Codex's HANDOFF entry for it (below) are in this commit.
+- **The upload:** an Image in the group (744756221), named "studs-enchanted-mist-v1". In Studio it loads: Success, IsLoaded, stored 1024 x 1024.
+- **The wiring:**
+  - `GameConfig.BagLook.Studs.mist`: pitch 86.1 (it measures 85.6/85.4 stored px, as the stone and the pearl). Its fallback is the texture's own top (5,110,65) and bottom (49,28,131). No `words`/`light` override: the name and READY read on the usual ink band (captured).
+  - `StudsBySpecies.mysterypod = "mist"`. Obsidian is unused again.
+  - THE SHINE: a new shine-only look, `GameConfig.RarityFX.ShineOnly.Mist` (mint, near white, lilac). RarityFX keeps it apart from the rarity styles, so it never lights a rarity word or an edge, and the pod still hints at nothing inside. A card whose studs carry `shine = "Mist"` wears it with no rarity: the Bag tile (InventoryTile) and MY PLANTS' pod card (GardenUI). It is off under Reduced FX, like every shine. The hotbar slot stays plain glass.
+- **Look choice for the owner's review:** the shine's peak is 0.25, as strong as Divine's. At 0.4 it read faint on the dark card (both were captured).
+- **Specs (RarityCardsSpec):**
+  - The mist card's id, spacing, fallback and shine; the shell on it.
+  - The shine-only look: shown and running, in its own colours, never a style, off under reduced motion.
+  - A Bag tile: the mist card shines with no rarity; another card with no rarity (obsidian) never; a restoring one never.
+  - GardenUI's pod card shines by its studs.
+- **Mutants (10 of 10):** NoMistShine, ShellOnObsidian, MistWrongId, ShineOnlyIgnored, MistShineUnderReduced, MistIsAStyle, TileIgnoresCardShine, TileShinesAnyCard, TileShineWhileRestoring, GardenPodNoShine.
+- **Live (guarded Play, SeedTest_mistlook_20261011), the real path:**
+  - The test profile loaded new. So: an admin Mist, 10 Dewberries in two trips, and GIVE ALL to the Mosskeeper twice. No errors.
+  - 01_bag_mist_card.png: the whole Bag.
+  - 02_card_3x_band_mid_card.png: the band mid-card. Test-only flip: it was PINNED there at capture time (a RenderStepped write, unbound afterwards). The game sweeps it once every 3.6 s.
+  - 03_card_3x_natural_frame.png: an unpinned frame, the band entering.
+  - 04_hotbar_slot_3x.png: the plain glass slot.
+  - MY PLANTS is spec-pinned only: a pod planted in a bed is not reachable through MCP.
+- **Next (the queue the owner handed the peer):**
+  - The Mist odds cards: no black window behind the creature.
+  - (b) the Shop plate face, 150x50.
+  - (c) the Robux buy buttons.
+  - 9, the six new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console (the log strip becomes a fading answer).
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## HATCH ALL NEVER COUNTS A MYSTERIOUS POD — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK, NOT PUBLISHED; NO CAPTURE ASKED; InventoryModelSpec 56/0, HatchInBagSpec 43/0, MistAudioSpec 17/0 AND THE EIGHT SPECS THAT READ LoadoutUI, ALL GREEN; 5 OF 5 MUTANTS CAUGHT)
 
 The bug: the Bag said HATCH ALL (1) with only a READY Mysterious Pod in it. The server's HATCH ALL skips the shell (it opens by its own hold), so the button did nothing. The owner OK'd the fix via the peer, as its own commit.
@@ -52,6 +83,10 @@ The owner's ask via the peer: the Mysterious Pod gets ITS OWN card background, m
   - 10, admin announcements.
   - 11, the compact admin console.
   - 12, the Mist admin tools.
+
+## Enchanted Mist stud texture — 2026-10-12 (CODEX; ART ONLY)
+
+Created art/textures/mist-studs-2026-10-11/studs-enchanted-mist-v1.png (native 1254x1254 opaque 24-bit RGB), studs-enchanted-mist-v1-preview-512.png (512x512 RGB), compare.png (1536x300; six centred native256px crops: Mist/Purple/Sky/Holo/Lime/Stone), generation-prompts.md and checks.json. One built-in image_gen call using coral for stud geometry only; exact canonical pearl prompt preserved except Palette, equality checked. Master SHA-256 equals native source; all exported corners alpha255. Visual regular approximately12x12 square studs, forest-teal/mint to blue-violet, no text/icons/frame/large glare/drawn wisps; centred crop visibly distinct from compared rarity colours. Not intended/tested as seamless. In-game cream/green text overlays untested until owner upload/Claude wiring. Imagegen skill guided reference matching and native opaque exports. Stage only these five owned output files and this handoff hunk; preserve all peer lines. No upload/wiring/source/GameConfig/Studio/Play/publication or commit/push.
 
 ## COMMON CARDS ON CODEX'S STONE GREY STUDS — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH CODEX'S ART AND THE OWNER'S OK ON THE CAPTURE, NOT PUBLISHED; RarityCardsSpec 50/0, PlotShowcaseSpec 55/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES, NO FAILURE; 6 OF 6 MUTANTS CAUGHT; captures in output/common-stone-studs-2026-10-11)
 

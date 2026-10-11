@@ -1,0 +1,169 @@
+{
+  "MasterSHA256": "6BA6CBBBBC801C63FEB850C7A447FD4CB9991380702098B8B8B79752C04258E6",
+  "Comparands": [
+    {
+      "Name": "MIST",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        22.84,
+        76.67,
+        117.79
+      ]
+    },
+    {
+      "Name": "PURPLE",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        178.38,
+        33.96,
+        245.99
+      ]
+    },
+    {
+      "Name": "SKY",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        20.8,
+        188.23,
+        253.37
+      ]
+    },
+    {
+      "Name": "HOLO",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        54.19,
+        33.26,
+        120.1
+      ]
+    },
+    {
+      "Name": "LIME",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        72.66,
+        218.73,
+        35.71
+      ]
+    },
+    {
+      "Name": "STONE",
+      "Width": 1254,
+      "Crop": [
+        499,
+        499,
+        256,
+        256
+      ],
+      "Height": 1254,
+      "SampleCount": 400,
+      "PixelFormat": "Format24bppRgb",
+      "SampledAverageRGB": [
+        136.86,
+        136.4,
+        136.57
+      ]
+    }
+  ],
+  "Files": [
+    {
+      "Height": 1254,
+      "Path": "D:\\KAPE\\Steal an Artifact\\art\\textures\\mist-studs-2026-10-11\\studs-enchanted-mist-v1.png",
+      "PixelFormat": "Format24bppRgb",
+      "Width": 1254,
+      "CornerAlpha": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "Height": 512,
+      "Path": "D:\\KAPE\\Steal an Artifact\\art\\textures\\mist-studs-2026-10-11\\studs-enchanted-mist-v1-preview-512.png",
+      "PixelFormat": "Format24bppRgb",
+      "Width": 512,
+      "CornerAlpha": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "Height": 300,
+      "Path": "D:\\KAPE\\Steal an Artifact\\art\\textures\\mist-studs-2026-10-11\\compare.png",
+      "PixelFormat": "Format24bppRgb",
+      "Width": 1536,
+      "CornerAlpha": [
+        255,
+        255,
+        255,
+        255
+      ]
+    }
+  ],
+  "MechanicalExportsOnly": true,
+  "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-bdb6baa2-6918-4854-b4bb-3bef59a59a5e.png",
+  "MasterByteIdenticalToNative": true,
+  "GeneratedOn": "2026-10-12",
+  "BuiltInImageGenCalls": 1,
+  "OnlyPaletteChanged": true,
+  "VisualChecks": {
+    "RegularSquareStudGrid": "approximately 12 x 12",
+    "FullBleed": true,
+    "NoTextIconsBorderOrDrawnWispShapes": true,
+    "CentralCropDistinctFromComparands": true
+  },
+  "InGameLegibilityChecked": false,
+  "SeamlessRepeatRequested": false,
+  "SeamlessRepeatTested": false,
+  "GameCodeChanged": false,
+  "Uploaded": false,
+  "SampledAverageMethod": "400 regular point samples at x/y=32,96,...,1248; not a whole-image average"
+}

@@ -2542,6 +2542,19 @@ GameConfig.RarityFX = {
 		Shine = { Color3.fromRGB(150, 236, 255), Color3.fromRGB(255, 255, 255), Color3.fromRGB(222, 178, 255) },
 		ShinePeak = 0.45,
 	},
+	-- SHINE-ONLY LOOKS (2026-10-12, the owner wants the Mysterious Pod to SHINE):
+	-- the card's shine for a card with no rarity of its own -- never a word's
+	-- light or an edge's, so it hints at nothing inside. Worn by a card whose
+	-- studs name it (GameConfig.BagLook.Studs' `shine`); off under reduced
+	-- motion like every shine.
+	ShineOnly = {
+		-- on the teal-to-violet mist card: mint, near white, lilac, as strong
+		-- as Divine's (0.4 read faint on the dark card, captured 2026-10-12)
+		Mist = {
+			Shine = { Color3.fromRGB(150, 255, 214), Color3.fromRGB(236, 255, 248), Color3.fromRGB(210, 186, 255) },
+			ShinePeak = 0.25,
+		},
+	},
 }
 
 --==============================================================================
@@ -8807,6 +8820,14 @@ GameConfig.BagLook = {
 		-- as the pearl), its fallback the texture's own top and bottom.
 		stone = { image = "rbxassetid://93028419214378", pitch = 86.1,
 			top = Color3.fromRGB(156, 156, 155), bottom = Color3.fromRGB(116, 116, 117) },
+		-- THE MYSTERIOUS POD'S OWN (2026-10-12, Codex's art/textures/mist-studs-
+		-- 2026-10-11, the owner's upload): the Enchanted Mist's teal-to-violet
+		-- night, clear of every rarity's card, the same stud spacing as the rest
+		-- (measured 85.6 stored px), its fallback the texture's own top and
+		-- bottom. `shine`: the card shines with RarityFX's shine-only look of that
+		-- name though it has no rarity (the owner wants it to SHINE).
+		mist = { image = "rbxassetid://88002993641737", pitch = 86.1, shine = "Mist",
+			top = Color3.fromRGB(5, 110, 65), bottom = Color3.fromRGB(49, 28, 131) },
 	},
 	-- A card wears its RARITY's upload: Uncommon to Legendary the one nearest
 	-- the rarity's own colour (GameConfig.RarityColor); since 2026-10-10 the
@@ -8823,9 +8844,9 @@ GameConfig.BagLook = {
 	-- A pod kept by its SHELL, never by any rarity (2026-10-11, the owner): the
 	-- Mysterious Pod reads as an event item and never hints at what is inside,
 	-- in the Bag, on the hotbar and in MY PLANTS (where every other pod's card
-	-- stays plain). Obsidian until Codex's "mist" texture is uploaded
-	-- (art/textures/mist-studs-2026-10-11/CODEX-BRIEF.md): then a one-line swap.
-	StudsBySpecies = { mysterypod = "obsidian" },
+	-- stays plain). Codex's mist since 2026-10-12, shining (Studs.mist's
+	-- `shine`); obsidian stood in until the upload.
+	StudsBySpecies = { mysterypod = "mist" },
 	-- The Shop's featured pack: the only rainbow card in it.
 	StudsFeatured = { spin10 = true },
 	-- On a studded card the words stand on a quiet ink backing (StudWords,

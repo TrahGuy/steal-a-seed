@@ -516,7 +516,9 @@ function InventoryTile.paint(tile: Tile, T: any, p: Paint)
 	tile.words.Visible = studded
 	-- A white card's words stand on a denser band (its `words`, 2026-10-10).
 	tile.words.BackgroundTransparency = if spec and spec.words then spec.words else LOOK.StudWordsTransparency
-	RarityFX.setShine(tile.fxShine, if studded and not p.restoring then p.rarity else nil)
+	-- The three rarest shine; so does a card with no rarity whose studs carry a
+	-- shine of their own (the Mysterious Pod's mist, 2026-10-12).
+	RarityFX.setShine(tile.fxShine, if studded and not p.restoring then p.rarity or spec.shine else nil)
 	tile.ringTint.Enabled = p.held
 	-- A studded tile's plain edge is the ink keyline; held and rare keep theirs.
 	tile.plate.Color = if p.held then WHITE elseif rare then rare elseif studded then LOOK.Ink else T.Edge

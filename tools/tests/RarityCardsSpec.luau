@@ -9,17 +9,20 @@
 --   1. the cards: Codex's three uploads under the owner's ids at the coral's
 --      stud spacing; Mythic and Divine pearl, Secret holo, Uncommon to
 --      Legendary as before, Common its own stone grey (since 2026-10-11, the
---      plain card before); no kind's card for bats and traps
+--      plain card before); no kind's card for bats and traps; the Mysterious
+--      Pod's own mist (2026-10-12), by its shell
 --   2. bats and traps: each a Rarities id rising with price along its shelf,
 --      bats Common to Mythic, traps Uncommon to Mythic; looks only -- the
 --      face's word, card, edge and accent; the menu's Rarity and Type lines
---   3. the shine: the three rarest have one and nothing else does; a handle
+--   3. the shine: the three rarest have one and no other rarity does; a handle
 --      shows for them and hides for anything else, a plain card and reduced
 --      motion; runs only when switched on; crosses once a cycle and rests
---      clear; a card further right starts later; a step moves it
+--      clear; a card further right starts later; a step moves it; the mist
+--      card's shine-only look (2026-10-12), never a style
 --   4. a Bag tile: the shine over the studs and under the preview (made right
 --      after them, same ZIndex); the white card's denser band; shown for a
---      studded Mythic only, never a Rare, a restoring tile or a plain card
+--      studded Mythic, never a Rare, a restoring tile or a plain card; the
+--      Mysterious Pod's mist card shines with no rarity, another card never
 --   5. the wiring: MY PLANTS and the TOP CREATURES board make the shine right
 --      after their studs and switch it with their other lights; the strip and
 --      the Bag hand a bat's or trap's accent and edge on
@@ -92,6 +95,14 @@ local ok, err = pcall(function()
 			and S.stone.bottom ~= nil and S.stone.top.R > S.stone.bottom.R and math.abs(S.stone.top.R - S.stone.top.B) < 0.02,
 		"Common's stone grey under the owner's upload id: the coral's stud spacing, a centred window, the usual band "
 			.. "and selection line, a neutral grey fallback lighter at the top")
+	-- THE MYSTERIOUS POD'S OWN (2026-10-12, the owner): Codex's mist, shining
+	-- with RarityFX's shine-only "Mist" look (3).
+	check(S.mist and S.mist.image == "rbxassetid://88002993641737" and S.mist.pitch == S.coral.pitch
+			and not S.mist.wide and S.mist.words == nil and S.mist.light == nil and S.mist.shine == "Mist"
+			and S.mist.top ~= nil and S.mist.bottom ~= nil and S.mist.top.G > S.mist.top.B
+			and S.mist.bottom.B > S.mist.bottom.G,
+		"the Mysterious Pod's mist under the owner's upload id: the coral's stud spacing, a centred window, the usual "
+			.. "band and selection line, a teal-to-violet fallback, and its own shine")
 	local noFallback = {}
 	for key, spec in pairs(S) do
 		if not ((spec.top and spec.bottom) or spec.stops) then
@@ -192,17 +203,17 @@ local ok, err = pcall(function()
 			and tickets.studs == "purple",
 		"the trail and tickets: no rarity, their own cards")
 	-- THE MYSTERIOUS POD (2026-10-11, the owner): its own card, kept by its
-	-- shell and never by its placeholder rarity -- obsidian until the mist
-	-- upload -- in the Bag and on the hotbar (this face) and in MY PLANTS (5).
+	-- shell and never by its placeholder rarity -- Codex's mist since
+	-- 2026-10-12 -- in the Bag and on the hotbar (this face) and in MY PLANTS (5).
 	local shellId = require(Shared:WaitForChild("EnchantedMistData")).Shell.Id
 	local shellSpecies = require(Shared:WaitForChild("SeedData")).Get(shellId or "")
 	local shellKey = BAG.StudsBySpecies and BAG.StudsBySpecies[shellId]
 	local mystery = InventoryModel.face(item("pod", shellId, 1))
 	local ordinary = InventoryModel.face(item("pod", "nubkin", 1))
-	check(shellKey == "obsidian" and S[shellKey] ~= nil and mystery.studs == shellKey and mystery.rarity == nil
+	check(shellKey == "mist" and S[shellKey] ~= nil and mystery.studs == shellKey and mystery.rarity == nil
 			and shellSpecies ~= nil and shellKey ~= R[shellSpecies.Rarity] and ordinary.studs == nil,
-		"the Mysterious Pod: its own card by its shell (obsidian until the mist upload), never its placeholder "
-			.. "rarity's, and no rarity said; an ordinary pod's card stays plain", tostring(mystery.studs))
+		"the Mysterious Pod: its own card by its shell (the mist), never its placeholder rarity's, and no rarity "
+			.. "said; an ordinary pod's card stays plain", tostring(mystery.studs))
 
 	--==========================================================================
 	-- 3. THE SHINE
@@ -221,6 +232,11 @@ local ok, err = pcall(function()
 	end
 	check(not mythicWhite and FX.Divine.Shine[1] ~= white,
 		"neither white card's shine is plain white (it would vanish on the card)")
+	-- THE MYSTERIOUS POD'S (2026-10-12): a shine-only look, worn by the card
+	-- whose studs name it -- never a style, so no word's or edge's light.
+	local MIST = FX.ShineOnly and FX.ShineOnly.Mist
+	check(MIST and #MIST.Shine == 3 and RarityFX.style("Mist") == nil and FX.ShineOnly.Mythic == nil,
+		"the mist card's shine is a shine-only look: three colours, no style (no word, no edge light)")
 
 	RarityFX.still = function()
 		return false
@@ -241,11 +257,17 @@ local ok, err = pcall(function()
 	check(not h.frame.Visible and not RarityFX.isRunning(h), "a Rare: no shine, nothing runs")
 	RarityFX.setShine(h, nil)
 	check(not h.frame.Visible and not RarityFX.isRunning(h), "a plain card: none")
+	RarityFX.setShine(h, "Mist")
+	check(h.frame.Visible and RarityFX.isRunning(h) and h.rarity == "Mist"
+			and h.gradient.Color.Keypoints[3].Value == MIST.Shine[2],
+		"the mist card's shine-only look: shown and running, in its own colours")
 	RarityFX.still = function()
 		return true
 	end
 	RarityFX.setShine(h, "Secret")
 	check(not h.frame.Visible and not RarityFX.isRunning(h), "reduced motion: no shine at all")
+	RarityFX.setShine(h, "Mist")
+	check(not h.frame.Visible and not RarityFX.isRunning(h), "reduced motion: the mist card's shine is off too")
 	RarityFX.still = function()
 		return false
 	end
@@ -288,6 +310,9 @@ local ok, err = pcall(function()
 		if p.plain then
 			p.studs = nil
 		end
+		if p.noRarity then
+			p.rarity = nil
+		end
 		InventoryTile.paint(tile, HOT, p)
 	end
 	paint()
@@ -312,6 +337,15 @@ local ok, err = pcall(function()
 	check(not tile.fxShine.frame.Visible, "a tile still restoring: no shine")
 	paint({ plain = true })
 	check(not tile.fxShine.frame.Visible and not tile.words.Visible, "a plain card: no shine, no band")
+	-- The Mysterious Pod (2026-10-12): no rarity, yet its mist card shines; no
+	-- other card does without a rarity, nor a restoring one.
+	paint({ noRarity = true, variant = "", variantIsRarity = false, studs = "mist" })
+	check(tile.fxShine.frame.Visible and tile.fxShine.rarity == "Mist" and tile.words.Visible,
+		"the Mysterious Pod's mist card: it shines, with no rarity")
+	paint({ noRarity = true, variant = "", variantIsRarity = false, studs = "obsidian" })
+	check(not tile.fxShine.frame.Visible, "no rarity on another card (obsidian): no shine")
+	paint({ noRarity = true, variant = "", variantIsRarity = false, studs = "mist", restoring = true })
+	check(not tile.fxShine.frame.Visible, "the mist card while restoring: no shine")
 	paint({ rarity = "Secret", studs = "holo" })
 	InventoryTile.animate(tile, true)
 	check(tile.fxShine.frame.Visible and RarityFX.isRunning(tile.fxShine), "on screen, a Secret's shine runs")
@@ -350,6 +384,9 @@ local ok, err = pcall(function()
 			and string.find(garden, "c.words.Visible = spec ~= nil", 1, true)
 			and not string.find(garden, "c.studs.set(nil)", 1, true),
 		"MY PLANTS: a pod's card stays plain but for a shell's own card -- the Mysterious Pod's, as in the Bag")
+	check(string.find(garden, "RarityFX.setShine(c.fxShine, if spec then spec.shine else nil)", 1, true)
+			and not string.find(garden, "RarityFX.setShine(c.fxShine, nil)", 1, true),
+		"MY PLANTS: the Mysterious Pod's card shines by its studs, as in the Bag; no other pod's does")
 	local plot = src(Shared, "PlotShowcaseView")
 	check(order(plot, "local studs = UIKit.studCard(face, 10, Z + 1)", "local shineFX = RarityFX.shine(face, 10, Z + 1)",
 			"local words = MenuKit.frame(face, \"Words\"")
