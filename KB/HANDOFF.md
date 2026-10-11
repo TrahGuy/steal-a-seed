@@ -1,5 +1,20 @@
 # Steal a Seed — Session Handoff
 
+## THE WEATHER SCREEN WHERE THE OWNER PUT IT; THE FULL SUITE AND THE ROW'S MUTANTS — 2026-10-11 (CLAUDE, TERMINAL)  (COMMITTED AND PUSHED ON wip: 560e90f, 9e6ae99, a5c9df3; NOT PUBLISHED; FULL SUITE 141/141 GREEN AFTER ONE SPEC FIX; 10 OF 10 MUTANTS CAUGHT; NO PLAY)
+
+- **Weather screen** (`Shared/WeatherTeaser`, `Teaser.Placement()`): the owner moved it in Studio. The move was a Workspace edit only (probe: 0 scripts differed), and MapService rebuilds the screen from `Placement()` on every Play, so it is copied to disk.
+  - Where: (94.8, 0, -164.905), back to the front fence, facing north up the field (the Housing at (94.8, 12.1, -164.905), turned 180 degrees).
+  - The owner's rule: never move it back. A spec that disagrees with this spot changes, not the screen. A real clash goes to the owner.
+  - No clash found. The shop row is on the west side. Every max-level plot is 8+ studs clear. No field decor stands in it (new EventHubSpec check).
+  - The top trim's end is over the night shutter's end in X, about 0.15 studs north of it. WeatherTeaserSpec's rule "outside the shutter's width" is now "outside the road's width, and no overlap with the shutter's box".
+  - MiniEventSpec's known-ground probe read the old spot (-104, -148); it now reads `Placement()`.
+- **Full suite once** (lean rule): 141 of 141 specs, 661 s. The only failure was the MiniEventSpec probe above, fixed (90/0). WheelArtSpec 82/0, WeatherTeaserSpec 187/0, EventHubSpec 48/0, FloatingSignSpec 49/0, EnchantedMistSpec 37/0. EnchantedMistBerrySpec landed after the suite started; the Mist session ran it (64/0).
+- **Mutants** for the shop row, the front fence and the screen: 10 of 10 caught (FenceOneSide, FenceGapOpen, FenceBlockerLow, RebirthIntoPlots, SacrificeCrowdsRebirth, WheelIntoPlots, DecorOnRow, SacrificeFacesSouth, BatWordsUnderRoof, TeaserOverShutter).
+  - FenceGapOpen survived at first: the check counted the slot's filler but never measured it. EventHubSpec now requires, on each side, the boards, the filler and the invisible wall to cover GroundY..WallHeight with no slot.
+  - Every swap restored: probe 347 scripts, 0 differ, 0 ZZ, store marker absent.
+- **Not verified**: no Play this round (the screen's new spot is checked by specs only), and nothing on a phone.
+- **Queued, on the owner's cue only**: (a) a pod carried inside the rain biome is lost, not banked, if the carrier never went through the safe zone; (b) make the rain biome's safe-zone text look like the general biomes'.
+
 ## ENCHANTED MIST, STAGE 2 DONE: THE SHARED DEWBERRIES — 2026-10-11 (CLAUDE)  (COMMITTED ON wip; NOT PUBLISHED; THE EVENT STILL OFF: EnchantedMistConfig.Enabled = false, Mosskeeper/Pod/Look unbuilt; EnchantedMistBerrySpec 64/0, 11 OF 11 MUTANTS CAUGHT, EnchantedMistSpec 37/0; NO PLAY RUN)
 
 This finishes the "STAGE 2: THE DEWBERRIES" checkpoint entry below.
