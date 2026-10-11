@@ -448,7 +448,7 @@ local function buildCard(item: WeaponData.Item): Card
 	--==========================================================================
 	-- ITS RARITY'S CARD (2026-10-10, the owner: "yes do the marigold shop cards
 	-- too"): the studded card the same bat wears in the Bag (BagLook.
-	-- StudsByRarity; a Common keeps its own palette), the rarity's colour in
+	-- StudsByRarity; a Common on its stone grey), the rarity's colour in
 	-- the ring, and on the three rarest a shine across the studs and a light
 	-- round the edge. Made first in the fill, so under everything else in it;
 	-- the stage keeps the item's own colours.

@@ -1,0 +1,76 @@
+{
+  "Master": "D:\\KAPE\\Steal an Artifact\\art\\textures\\common-studs-2026-10-11\\studs-stone-grey-v1.png",
+  "MasterSize": [
+    1254,
+    1254
+  ],
+  "MasterFormat": "Format24bppRgb",
+  "CornerAlpha": [
+    255,
+    255,
+    255,
+    255
+  ],
+  "Preview": "D:\\KAPE\\Steal an Artifact\\art\\textures\\common-studs-2026-10-11\\studs-stone-grey-v1-preview-512.png",
+  "PreviewSize": [
+    512,
+    512
+  ],
+  "Comparison": "D:\\KAPE\\Steal an Artifact\\art\\textures\\common-studs-2026-10-11\\compare.png",
+  "ComparisonSize": [
+    1280,
+    300
+  ],
+  "OriginalCopyIdentical": true,
+  "PaletteSamples": [
+    {
+      "Name": "COMMON: STONE GREY",
+      "SampleCount": 400,
+      "MeanRGB": [
+        136.86,
+        136.4,
+        136.57
+      ]
+    },
+    {
+      "Name": "PEARL WHITE",
+      "SampleCount": 400,
+      "MeanRGB": [
+        228.39,
+        230.08,
+        232.68
+      ]
+    },
+    {
+      "Name": "OBSIDIAN",
+      "SampleCount": 400,
+      "MeanRGB": [
+        37.4,
+        41.56,
+        44.46
+      ]
+    },
+    {
+      "Name": "LIME",
+      "SampleCount": 400,
+      "MeanRGB": [
+        72.66,
+        218.73,
+        35.71
+      ]
+    },
+    {
+      "Name": "CORAL",
+      "SampleCount": 400,
+      "MeanRGB": [
+        227.43,
+        50.42,
+        51.66
+      ]
+    }
+  ],
+  "GenerationMethod": "built-in image_gen",
+  "GenerationCalls": 1,
+  "PaletteOnlyPromptChange": true,
+  "VisualCheck": "Regular approximately 12x12 square-stud grid; neutral mid-grey, visibly darker than pearl and lighter than obsidian; no border, text, icons, circular studs, broad gloss or white glare. Nonseamless centred-crop texture. In-game text overlays not tested; asset is not uploaded or wired."
+}

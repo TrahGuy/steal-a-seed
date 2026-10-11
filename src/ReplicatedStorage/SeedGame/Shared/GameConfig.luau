@@ -8801,14 +8801,21 @@ GameConfig.BagLook = {
 		-- Uploaded with them, worn by nothing yet: Secret's option A.
 		obsidian = { image = "rbxassetid://94572104024955", pitch = 86.1,
 			top = Color3.fromRGB(58, 64, 68), bottom = Color3.fromRGB(23, 26, 28) },
+		-- COMMON'S OWN (2026-10-11, Codex's art/textures/common-studs-2026-10-11,
+		-- the owner's upload): a neutral stone grey between the pearl and the
+		-- obsidian, the same stud spacing as the rest (measured 85.6 stored px,
+		-- as the pearl), its fallback the texture's own top and bottom.
+		stone = { image = "rbxassetid://93028419214378", pitch = 86.1,
+			top = Color3.fromRGB(156, 156, 155), bottom = Color3.fromRGB(116, 116, 117) },
 	},
 	-- A card wears its RARITY's upload: Uncommon to Legendary the one nearest
 	-- the rarity's own colour (GameConfig.RarityColor); since 2026-10-10 the
 	-- three rarest their own (the owner: Mythic white, Secret "the colorful
-	-- one", Divine white). Common's own colour is the plain card itself, so a
-	-- Common keeps it. Bats and traps too (WeaponData's `Rarity`).
-	StudsByRarity = { Uncommon = "lime", Rare = "sky", Epic = "purple", Legendary = "gold", Mythic = "pearl",
-		Secret = "holo", Divine = "pearl" },
+	-- one", Divine white); since 2026-10-11 Common its own stone grey (the
+	-- owner), where it kept the plain card before. Bats and traps too
+	-- (WeaponData's `Rarity`).
+	StudsByRarity = { Common = "stone", Uncommon = "lime", Rare = "sky", Epic = "purple", Legendary = "gold",
+		Mythic = "pearl", Secret = "holo", Divine = "pearl" },
 	-- The Bag's things that have no rarity: tickets the Shop's ticket violet,
 	-- the jackpot trail the rainbow. (Bats and traps were coral until
 	-- 2026-10-10; they wear their rarity's card now.)

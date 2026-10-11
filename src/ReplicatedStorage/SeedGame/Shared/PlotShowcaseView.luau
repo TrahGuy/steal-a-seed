@@ -20,8 +20,8 @@
 --                 white LuckiestGuy TOP CREATURES with a heavy ink line.
 --   TWO CARDS     MY PLANTS' card as GardenUI builds it: the plain cream face
 --                 under a dark keyline; the rarity's studded colour
---                 (UIKit.studCard, BagLook.StudsByRarity -- a Common keeps the
---                 plain card) with its words on the quiet ink backing; the
+--                 (UIKit.studCard, BagLook.StudsByRarity -- a Common on its
+--                 stone grey) with its words on the quiet ink backing; the
 --                 creature itself (ItemArt.builder + UIKit.itemPreview, MY
 --                 PLANTS' own picture key); its rarity word in its own colour
 --                 (RarityFX's light for Mythic, Divine and Secret, on the word

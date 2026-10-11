@@ -8,7 +8,8 @@
 --
 --   1. the cards: Codex's three uploads under the owner's ids at the coral's
 --      stud spacing; Mythic and Divine pearl, Secret holo, Uncommon to
---      Legendary as before, Common plain; no kind's card for bats and traps
+--      Legendary as before, Common its own stone grey (since 2026-10-11, the
+--      plain card before); no kind's card for bats and traps
 --   2. bats and traps: each a Rarities id rising with price along its shelf,
 --      bats Common to Mythic, traps Uncommon to Mythic; looks only -- the
 --      face's word, card, edge and accent; the menu's Rarity and Type lines
@@ -85,6 +86,12 @@ local ok, err = pcall(function()
 	check(S.pearl.light == true and type(S.pearl.words) == "number" and S.pearl.words < BAG.StudWordsTransparency
 			and S.holo.words == nil and S.holo.light == nil,
 		"the white card: a denser band under its words and a dark selection line; the holo neither")
+	-- COMMON'S OWN (2026-10-11, the owner): Codex's stone grey.
+	check(S.stone and S.stone.image == "rbxassetid://93028419214378" and S.stone.pitch == S.coral.pitch
+			and not S.stone.wide and S.stone.words == nil and S.stone.light == nil and S.stone.top ~= nil
+			and S.stone.bottom ~= nil and S.stone.top.R > S.stone.bottom.R and math.abs(S.stone.top.R - S.stone.top.B) < 0.02,
+		"Common's stone grey under the owner's upload id: the coral's stud spacing, a centred window, the usual band "
+			.. "and selection line, a neutral grey fallback lighter at the top")
 	local noFallback = {}
 	for key, spec in pairs(S) do
 		if not ((spec.top and spec.bottom) or spec.stops) then
@@ -97,8 +104,8 @@ local ok, err = pcall(function()
 	check(R.Mythic == "pearl" and R.Divine == "pearl" and R.Secret == "holo",
 		"Mythic and Divine on the white card, Secret on the colourful holo")
 	check(R.Uncommon == "lime" and R.Rare == "sky" and R.Epic == "purple" and R.Legendary == "gold"
-			and R.Common == nil,
-		"Uncommon to Legendary as before; a Common keeps the plain card")
+			and R.Common == "stone",
+		"Uncommon to Legendary as before; a Common on its stone grey (the plain card until 2026-10-11)")
 	local missing = {}
 	for rarity, key in pairs(R) do
 		if not S[key] or GameConfig.RarityTier[rarity] == nil then
@@ -169,8 +176,8 @@ local ok, err = pcall(function()
 			and RarityFX.edgeColour(comet.rarity) == FX.Mythic.Edge,
 		"Comet Bat and Starlock Anchor: Mythic, on the white card, with Mythic's own edge")
 	local rootwood = InventoryModel.face(item("weapon", nil, 1, { weaponId = "rootwood_bat" }))
-	check(rootwood.rarity == "Common" and rootwood.studs == nil and rootwood.edge == EDGE.Colours.Common,
-		"Rootwood Bat: Common, the plain card, the grey edge")
+	check(rootwood.rarity == "Common" and rootwood.studs == "stone" and rootwood.edge == EDGE.Colours.Common,
+		"Rootwood Bat: Common, the stone card, the grey edge")
 	local dunes = item("weapon", nil, 1, { weaponId = "dunesnap_trap" })
 	local seen = {}
 	for _, l in ipairs(InventoryModel.details(dunes, InventoryModel.face(dunes), nil, nil, false)) do

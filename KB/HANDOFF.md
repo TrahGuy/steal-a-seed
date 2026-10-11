@@ -1,5 +1,32 @@
 # Steal a Seed — Session Handoff
 
+## COMMON CARDS ON CODEX'S STONE GREY STUDS — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH CODEX'S ART AND THE OWNER'S OK ON THE CAPTURE, NOT PUBLISHED; RarityCardsSpec 50/0, PlotShowcaseSpec 55/0, THE FULL SUITE 150/150 IN FIVE SMALL BATCHES, NO FAILURE; 6 OF 6 MUTANTS CAUGHT; captures in output/common-stone-studs-2026-10-11)
+
+The owner's ask via the peer: Common cards get Codex's STONE GREY studs (Codex's entry below has the art), in place of the plain card.
+- **The upload:** rbxassetid 93028419214378 ("studs-stone-grey-v1"), an Image in the group (744756221). In Studio it loads: Success, IsLoaded, stored 1024 x 1024.
+- **The wiring:**
+  - `GameConfig.BagLook.Studs.stone`: pitch 86.1. It measures 85.6/85.4 stored px, the same as the pearl and coral (configured 86.1).
+  - Its fallback is the texture's own top (156,156,155) and bottom (116,116,117).
+  - `StudsByRarity.Common = "stone"`. Common's plain-card rule and its comments are gone, in GameConfig, PlotShowcaseView, MarigoldShopUI and IndexUI.
+  - Every Common card follows: the Bag, MY PLANTS, the plot's TOP CREATURES board, Marigold's shop, the Index and the Mist odds. Common bats and traps (the Rootwood Bat) too.
+  - No `words`/`light` override: the names and sizes read on the usual ink band (captured).
+- **The Mysterious Pod:** its placeholder rarity is Common, so this commit turns its Bag card stone grey too. The owner has since answered: it gets its own card, a "mist" texture Codex will make (art/textures/mist-studs-2026-10-11/CODEX-BRIEF.md), with obsidian in the meantime. That is the next commit.
+- **Specs:**
+  - RarityCardsSpec: the stone card's id, spacing and fallback; Common and the Rootwood Bat on stone.
+  - PlotShowcaseSpec: a Common's card on its stone.
+- **Mutants (6 of 6):** CommonPlain, CommonOnLime, WrongStoneId, StonePitch, NoStoneFallback, ShowcaseCommonPlain.
+- **Live (guarded Play, SeedTest_mistlook_20261011):**
+  - Petalpip, Nubkin, Spiretip, Toadcap and Gloomlotus were spawned from the admin console into the Bag.
+  - Commons on stone beside lime, sky and pearl (01_bag_commons_stone.png, 02_cards_zoom_2x.png). No errors.
+- **For the owner's eye:** the owner saw the capture and OK'd the push.
+- **Next (the owner's order):**
+  - The Mysterious Pod's own card (obsidian until the mist upload).
+  - (b) the Shop plate face.
+  - (c) the Robux buy buttons.
+  - 9, the new Robux items.
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools.
 ## THE RAIN BIOME'S BEACON: A COLUMN OF LIGHT OVER THE BRIDGE WHILE IT IS OPEN — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; RainBeaconSpec 18/0 (NEW); THE FULL SUITE 150/150 IN TWO HALVES -- a run stopped by low memory after 72 specs, then, on the owner's word, the 78 it had not reached in four batches -- with HatchInBagSpec, TutorialSpotlightSpec and HatchRollSpec's known timing flakes re-run alone (43/0, 51/0, 166/0); 19 OF 19 MUTANTS CAUGHT; captures in output/rain-beacon-2026-10-11, sheet 00_sheet.png)
 
 The owner's item 8 via the peer: "a tall soft rain-blue pillar from the rain biome's bridge ... visible from plots, the hub and the road", shown only while the biome is open. New: Shared/RainBeacon, RainBeacon.client, GameConfig.Weather.Beacon, tools/tests/RainBeaconSpec.
@@ -35,6 +62,10 @@ The owner's item 8 via the peer: "a tall soft rain-blue pillar from the rain bio
   - 10, admin announcements.
   - 11, the compact admin console.
   - 12, the Mist admin tools.
+## Common stone-grey stud texture — 2026-10-11 (CODEX; ART ONLY)
+
+Created art/textures/common-studs-2026-10-11/studs-stone-grey-v1.png (1254x1254 opaque RGB), studs-stone-grey-v1-preview-512.png (512x512), compare.png (1280x300; five centred256px crops), generation-prompts.md and checks.json. One built-in image_gen call; exact pearl prompt preserved except Palette, equality checked; coral reference for geometry only. Master copied byte-identically, 24-bit RGB/all corners alpha255; visual approximately12x12 square studs, restrained contrast/no glare/border/text. Stone mean sampledRGB136.86/136.40/136.57, clearly between pearl and obsidian; neutral, no visible colour cast. In-game text overlays untested until owner upload/Claude wiring. Imagegen skill guided reference matching and opaque workspace exports. No source/GameConfig, Studio/Play, saves, uploads or publication. Peer handoff lines preserved; no commit/push (root Git scope unresolved).
+
 ## THE EVENT HUB'S DETAIL: TUFTS, FLOWERS, PLANTS AND A SMALL POND — 2026-10-11 (CLAUDE, TERMINAL)  (PUSHED ON wip WITH THE OWNER'S OK ON THE CAPTURES, NOT PUBLISHED; MosskeeperSpec 69/0 (11 new checks), EventHubSpec 53/0, THE FULL SUITE 149/149 (HatchRollSpec's known wall-clock flake in the suite, 166/0 alone); 18 OF 18 MUTANTS CAUGHT; captures in output/hub-detail-2026-10-11)
 
 The owner's request via the peer ("MORE DETAIL ON THE EVENT HUB. Grass tufts, more flowers, a small POND, decorative plants, etc."), improvised in the grove, carpet and mushroom ring's family: studded Plastic, mint accents, woodland. One new `Detail` folder in the deck's dress (Shared/MistDeckModel), laid out by `EnchantedMistConfig.Deck.Detail`.

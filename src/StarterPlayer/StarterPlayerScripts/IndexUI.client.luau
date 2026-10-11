@@ -532,7 +532,7 @@ local function cardFor(species: any): Card
 	--==========================================================================
 	-- ITS RARITY'S STUDDED CARD (2026-10-10, the owner: "also apply them on
 	-- index, and their background too"): the card the same creature wears in
-	-- the Bag (BagLook.StudsByRarity; a Common keeps the plain card), found or
+	-- the Bag (BagLook.StudsByRarity; a Common its stone grey), found or
 	-- not -- the rarity is written on every card already. Under the window; a
 	-- found plant's window is clear on it, so the plant stands on its studs as
 	-- a Bag tile's does. The name and the rarity stand on the Bag's quiet ink

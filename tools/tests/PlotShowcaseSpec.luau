@@ -18,7 +18,7 @@
 --      card, at the owner's rate (GardenBoost x the rain) -- an ordinary plant,
 --      TITAN and COLOSSAL in the wheel's lettering, a Secret and an unsized
 --      event form with no size; RarityFX on Mythic / Divine / Secret only and
---      running only while near; the rarity's studded colour, a Common plain.
+--      running only while near; the rarity's studded colour, a Common's stone.
 --   5. THE STATES: two, one and a quiet EMPTY slot, none and NO CREATURES YET,
 --      hidden; the pictures built near and FREED far; the header, the canvas,
 --      LightInfluence 0; the face ADORNED to the plank from its holder (the
@@ -343,7 +343,7 @@ local ok, err = pcall(function()
 					bad_("no ink backing on a studded card")
 				end
 			elseif card.studs.image.Visible or card.words.Visible then
-				bad_("a Common not on the plain card")
+				bad_("a card with no studs of its own drawn studded")
 			end
 		end
 		check(#bad == 0, case[1] .. ": rarity, name, size and rate as PlantLabel.content says, at the owner's rate; "
