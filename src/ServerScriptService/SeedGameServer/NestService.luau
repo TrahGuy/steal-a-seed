@@ -409,7 +409,25 @@ local function placePod(nest: Nest, index: number, species: SeedData.Species, ti
 	nest.pods[index] = pod
 end
 
-local function growPod(nest: Nest, index: number)
+--==============================================================================
+-- SERVER LUCK (2026-10-12, the owner's item 9B): what a nest's species roll is
+-- worth right now (SeedData.Roll's `luck`) -- ServerBoostService's clock,
+-- handed in at its Start; 1 until then, and in a spec that never hands one in.
+-- NATURAL stocking only -- a nest built, and the restock -- which pass it to
+-- growPod. A Pod Rush's regrow keeps normal odds; the Rain's event batch, the
+-- Pod Rush's Titan, a nest's Secret, the Mist's pods and a spawn never roll
+-- through here at all.
+--==============================================================================
+local function noLuck(): number
+	return 1
+end
+local luckOf: () -> number = noLuck
+
+function NestService.useLuck(fn: (() -> number)?)
+	luckOf = fn or noLuck
+end
+
+local function growPod(nest: Nest, index: number, luck: number?)
 	if nest.pods[index] then
 		return
 	end
@@ -426,7 +444,7 @@ local function growPod(nest: Nest, index: number)
 	--==========================================================================
 	local rng = Random.new(
 		math.floor(nest.origin.X * 31 + nest.origin.Z * 17 + index * 7 + os.clock() * 1000))
-	local species = SeedData.Roll(nest.biome.Id, rng)
+	local species = SeedData.Roll(nest.biome.Id, rng, luck)
 	if not species then
 		return
 	end
@@ -731,7 +749,7 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		lastSeen = root.Position,
 	}
 	for i = 1, biome.PodsPerNest do
-		growPod(nest, i)
+		growPod(nest, i, luckOf())
 	end
 	pinToServer(nest)
 	-- The one roll of the initial stocking.
@@ -4013,7 +4031,7 @@ function NestService.StockAll(): (number, number)
 		for index = 1, nest.biome.PodsPerNest do
 			wanted += 1
 			if not nest.pods[index] then
-				growPod(nest, index)
+				growPod(nest, index, luckOf())
 			end
 			if nest.pods[index] then
 				built += 1

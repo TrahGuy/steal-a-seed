@@ -679,6 +679,42 @@ function PlayerDataService.AddInstantCredits(player: Player, delta: number): num
 	return balance
 end
 
+--==============================================================================
+-- THE STARTER PACK AND SUMMON RAIN (2026-10-12, the owner's item 9B)
+--
+-- AddStarterPack: one more Starter Pack given (StoreService, in its receipt's
+-- own step); answers the new count, or nil with no profile. AddRainOwed: +1
+-- for a Summon Rain bought (the receipt's step), -1 as one starts
+-- (ServerBoostService); whole, never below zero or past SAVE.MaxRainOwed -- a
+-- change that would break one of those is refused. Answers the new count, or
+-- nil. Synchronous, like every writer here.
+--==============================================================================
+function PlayerDataService.AddStarterPack(player: Player): number?
+	local entry = entries[player]
+	if not entry then
+		return nil
+	end
+	local count = math.min((entry.profile.StarterPacks or 0) + 1, SAVE.MaxStarterPacks)
+	entry.profile.StarterPacks = count
+	touch(player)
+	return count
+end
+
+function PlayerDataService.AddRainOwed(player: Player, delta: number): number?
+	local entry = entries[player]
+	if not entry or type(delta) ~= "number" or delta ~= delta or delta == 0
+		or delta ~= math.floor(delta) then
+		return nil
+	end
+	local owed = (entry.profile.RainOwed or 0) + delta
+	if owed < 0 or owed > SAVE.MaxRainOwed then
+		return nil
+	end
+	entry.profile.RainOwed = owed
+	touch(player)
+	return owed
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
@@ -1360,6 +1396,10 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		WheelBought = profile.WheelBought or 0,
 		-- Nor are Instant Hatches somebody bought and kept for later (2026-09-30).
 		InstantCredits = profile.InstantCredits or 0,
+		-- Nor Starter Packs given or Summon Rains still owed (2026-10-12): a
+		-- reset must not offer the pack again, nor drop a paid Rain.
+		StarterPacks = math.max(0, math.floor(tonumber(profile.StarterPacks) or 0)),
+		RainOwed = math.max(0, math.floor(tonumber(profile.RainOwed) or 0)),
 		-- The one-time hatch bonus stays claimed and its like reminder keeps its
 		-- state (2026-10-01): a reset must not make the bonus claimable again.
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,

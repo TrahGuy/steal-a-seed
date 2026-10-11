@@ -1143,8 +1143,10 @@ check(not wheelSource:find("PromptProductPurchaseFinished", 1, true)
 	"WheelService opens the prompt in one place, listens for no prompt ending, and never calls its own grant",
 	grantCalls)
 local storeSource = sourceOf(Server:FindFirstChild("StoreService"))
+-- Two calls, both a receipt's: a spin pack's, and the Starter Pack's five
+-- tickets (2026-10-12, item 9B; grantStarter, which ProcessReceipt reaches).
 check(storeSource ~= "" and not storeSource:find("PromptProductPurchaseFinished", 1, true)
-		and select(2, storeSource:gsub("WheelService%.GrantBought%(", "")) == 1
+		and select(2, storeSource:gsub("WheelService%.GrantBought%(", "")) == 2
 		and select(2, storeSource:gsub("MarketplaceService%.ProcessReceipt = ", "")) == 1,
 	"StoreService is the grant's only caller, from the experience's one ProcessReceipt")
 local otherGrants = {}

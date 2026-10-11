@@ -69,6 +69,7 @@ local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
+local ServerBoost = require(Shared:WaitForChild("ServerBoost"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -175,6 +176,33 @@ padFirst.Parent = modal.shell
 local PAID = WheelData.Attributes.PaidAllowed
 local function mayBuy(): boolean
 	return player:GetAttribute(PAID) == true
+end
+
+--==============================================================================
+-- THE ITEM 9B PRODUCTS (2026-10-12), off the server's own attributes
+--
+-- A card offered now: the Starter Pack only in its window, until one is given,
+-- and only while this player may hold a paid random item (its Spin Tickets);
+-- every other card always. SUMMON RAIN's words while it may not be bought --
+-- RAINING, MIST ON, POD RUSH, or the cooldown's WAIT m:ss -- or nil.
+--==============================================================================
+local BOOST = GameConfig.ServerBoost
+
+local function offered(entry: ShopCatalog.Entry): boolean
+	if entry.offer == "starter" then
+		local untilAt = player:GetAttribute(BOOST.Starter.Attribute)
+		return ServerBoost.starterOffered(if type(untilAt) == "number" then untilAt else 0,
+			workspace:GetServerTimeNow(), mayBuy())
+	end
+	return true
+end
+
+local function summonWord(): string?
+	local A = BOOST.Rain.Attributes
+	local clash = workspace:GetAttribute(A.Clash)
+	local readyAt = workspace:GetAttribute(A.ReadyAt)
+	return ServerBoost.summonWord(if type(clash) == "string" and clash ~= "" then clash else nil,
+		if type(readyAt) == "number" then readyAt else 0, workspace:GetServerTimeNow())
 end
 
 local categories = ShopCatalog.categories(mayBuy())
@@ -441,6 +469,7 @@ local function paintPrice(p: Price, card: Card)
 	capsule.Visible = true
 	word.Visible = false
 	local buying = false
+	local waitWord = if entry.summon then summonWord() else nil
 	capsule.BackgroundColor3 = SHOP.Capsule
 	token.ImageColor3 = INK
 	price.TextColor3 = INK
@@ -465,6 +494,12 @@ local function paintPrice(p: Price, card: Card)
 		capsule.Visible = false
 		word.Visible = true
 		word.Text = "OPENING..."
+	elseif waitWord then
+		-- SUMMON RAIN while it may not be bought (2026-10-12): grey, and why.
+		face("off")
+		capsule.Visible = false
+		word.Visible = true
+		word.Text = waitWord
 	elseif card.priceState == "offsale" then
 		face("off")
 		capsule.BackgroundColor3 = SHOP.SoonCapsule
@@ -583,6 +618,10 @@ local function buy(card: Card)
 		return
 	end
 	if entry.kind == "pass" and owned[entry.id] then
+		SoundKit.play("Denied")
+		return
+	end
+	if (entry.summon and summonWord() ~= nil) or not offered(entry) then
 		SoundKit.play("Denied")
 		return
 	end
@@ -893,7 +932,7 @@ paintDetail = function()
 	detailTitle.Text = twoTone(entry.title, entry.amount)
 	detailBenefit.Text = entry.benefit
 	detailWords.Text = entry.detail
-	detailOdds.hit.Visible = entry.kind == "spin"
+	detailOdds.hit.Visible = entry.kind == "spin" or entry.odds == true
 	paintPrice(detailBuy, card)
 end
 
@@ -973,9 +1012,10 @@ local function paintGrid()
 		shown[category.id] = true
 		for i, entry in ipairs(ShopCatalog.entries(category.id)) do
 			local card = cardFor(entry, section.shelf)
+			local shownNow = offered(entry)
 			card.holder.LayoutOrder = i
-			card.holder.Visible = true
-			if not first then
+			card.holder.Visible = shownNow
+			if shownNow and not first then
 				first = card
 			end
 			if entry.kind == "spin" and not card.priced and mayBuy() then
@@ -997,7 +1037,11 @@ end
 
 paint = function()
 	paintGrid()
-	if detailKey then
+	local key = detailKey
+	local card = if key then cards[key] else nil
+	if card and not offered(card.entry) then
+		closeDetail()
+	elseif key then
 		paintDetail()
 	end
 end
@@ -1030,7 +1074,13 @@ relayout = function()
 	local f = k / hudScale
 	local counts: { number } = {}
 	for _, category in ipairs(categories) do
-		table.insert(counts, #ShopCatalog.entries(category.id))
+		local n = 0
+		for _, entry in ipairs(ShopCatalog.entries(category.id)) do
+			if offered(entry) then
+				n += 1
+			end
+		end
+		table.insert(counts, n)
 	end
 	local p = MenuLayout.shopPanel({
 		safe = safe,
@@ -1114,6 +1164,41 @@ UIKit.onMenuSize(relayout)
 --==============================================================================
 player:GetAttributeChangedSignal(PAID):Connect(function()
 	paint()
+end)
+-- THE ITEM 9B PRODUCTS (2026-10-12): the Starter Pack's window on this player
+-- re-lays the page (a card comes or goes); SUMMON RAIN's clash and cooldown
+-- repaint its button; and while the Shop is open a 1 s tick keeps the WAIT
+-- m:ss true and closes the window on time.
+player:GetAttributeChangedSignal(BOOST.Starter.Attribute):Connect(function()
+	relayout()
+end)
+for _, name in pairs(BOOST.Rain.Attributes) do
+	workspace:GetAttributeChangedSignal(name):Connect(repaintPrices)
+end
+task.spawn(function()
+	local was: { [string]: boolean } = {}
+	while gui.Parent do
+		task.wait(1)
+		if open then
+			local moved = false
+			for key, card in pairs(cards) do
+				if card.entry.offer then
+					local now = offered(card.entry)
+					moved = moved or (was[key] ~= nil and was[key] ~= now)
+					was[key] = now
+				elseif card.entry.summon then
+					paintPrice(card.buy, card)
+				end
+			end
+			local key = detailKey
+			local shown = if key then cards[key] else nil
+			if moved then
+				relayout()
+			elseif shown and shown.entry.summon then
+				paintDetail()
+			end
+		end
+	end
 end)
 player:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribute):Connect(function()
 	for _, card in pairs(cards) do

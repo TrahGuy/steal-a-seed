@@ -1,5 +1,82 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 9B: THE THREE DEVELOPER PRODUCTS — STARTER PACK, SERVER LUCK, SUMMON RAIN — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; ServerBoostSpec 65/0 (NEW); CompactMenusSpec 46/0 and WheelSpec 163/0 (pins followed the new shelf and the Starter Pack's tickets); StoreSpec, SpinPurchaseSpec, HatchStorageSpec and StorageDoorsSpec (their StoreService sibling maps), BoostIconsSpec, HudLayoutSpec and the nest, Rain and Pod Rush specs green; THE FULL SUITE 152/152 IN FIVE SMALL BATCHES before the last small fixes, whose specs were re-run (TutorialSpotlightSpec's 0.2 ms timing check and HatchRollSpec's wall-clock check, each green alone); 25 OF 25 MUTANTS CAUGHT; TWO GUARDED PLAYS; captures in output/item9b-products-2026-10-12)
+
+The owner's item 9 via the peer, part B: the three Developer Products. The ids and prices are the owner's; the icons are the owner's uploads.
+- **The products (Store.Items.Boosts):** STARTER PACK 3717932975 (99 R$), SERVER LUCK 3717932858 (99 R$), SUMMON RAIN 3717932732 (199 R$). All three go through StoreService's one ProcessReceipt and its ledger, saved before Roblox is told.
+- **The Shop:** a BOOSTS shelf right under the passes, on the coral studs no other card wears. Each card has its own words and icon and the green price tag, priced at this player's own price (the owner's account reads 39 / 39 / 79). The product cards do not shine.
+- **STARTER PACK:** $800K, one Titan Petalpip pod (the store's own) and 5 Spin Tickets -- ALL THREE OR NONE.
+  - Everything that could refuse is asked first, in this order: the paid-spins policy (the one question that can wait on Roblox), the room for the tickets and for the pod, and a Backpack.
+  - Then the three are given in one step that never yields. If the pod still fails to land, its tickets are taken back (WheelService.TakeBackBought) and Roblox delivers the receipt again.
+  - Offered only in a profile's first 3 days (its CreatedAt), until one is given, and only to a player who may hold a paid random item (its tickets: WheelPaidAllowed). The card is hidden otherwise.
+  - One bought again (a duplicate receipt) is still given whole -- it is the player's Robux -- and logged.
+  - The profile counts them (StarterPacks; kept by a progress reset).
+  - Its details carry REWARDS & ODDS.
+- **SERVER LUCK:**
+  - 15 minutes for the whole server; another purchase adds 15.
+  - The buyer's name is said to everybody ("NAME bought SERVER LUCK: rarer pods x2 for 15 minutes!").
+  - A clover chip shows the time, the run and the buyer.
+  - While the Enchanted Mist is on, the clock STANDS STILL: worth nothing, the chip saying "Paused: m:ss left". It runs on with what it had after the Mist.
+  - It lives in its server: a server that closes takes what was left.
+- **THE LUCK RULE, for the owner's review (the peer's reading of "rarer pods x2 as often"):** in each biome, every species rarer than that biome's COMMONEST turns up exactly twice as often. The commonest give up the difference, and the pool's total weight is kept (SeedData.PoolWeights).
+  - Only Greenhollow has Commons: Dustbowl's commonest are Uncommon, and the three deeper biomes' are Rare. So "rarer than Common" alone would have done nothing past Greenhollow.
+
+  | Biome | Commonest | Commonest share, before -> with luck | Rarer share, before -> with luck |
+  | --- | --- | --- | --- |
+  | Greenhollow | Common | 86.1% -> 72.1% | 13.9% -> 27.9% |
+  | Dustbowl | Uncommon | 88.8% -> 77.7% | 11.2% -> 22.3% |
+  | Tanglemire | Rare | 91.2% -> 82.4% | 8.8% -> 17.6% |
+  | Emberroot | Rare | 91.2% -> 82.4% | 8.8% -> 17.6% |
+  | Starbloom | Rare | 91.2% -> 82.4% | 8.8% -> 17.6% |
+
+  - The edge: a pool whose rarer species already hold more than half its weight cannot pay for x2. Its commonest go to nothing, never below, and the rarer share the pool in their own proportions. No biome is near it; pinned.
+  - NATURAL stocking only: a nest built and the restock. A Pod Rush's regrow keeps normal odds.
+  - Nothing else sees the luck: the Rain's event batch, the Pod Rush's Titan, a nest's Secret roll, a spawn, the Mist's pods and the Mysterious Pod. Pinned: three SeedData.Roll calls in the server code, and only the nests' takes luck.
+- **SUMMON RAIN:**
+  - A purchase is OWED on the buyer's profile in the receipt's own step (RainOwed; kept by a progress reset). The next step starts the Rain the moment nothing clashes -- at once, normally.
+  - Clashes: weather in any state, the Enchanted Mist, a Pod Rush.
+  - A purchase that raced a clash waits, owed, in this server or the buyer's next, and is never lost; a Rain that would not start stays owed.
+  - Each summon starts a 30-minute cooldown. A summoned Rain lasts as long as a natural one (180 s). The buyer's name is said to everybody ("NAME summoned the RAIN!").
+  - The Shop's button is grey with its reason: RAINING, MIST ON, POD RUSH, or the cooldown's WAIT m:ss.
+  - The Rain lottery's weights are untouched.
+- **Specs:** ServerBoostSpec (new, 65 checks) covers:
+  - the manifest and the Shop's cards;
+  - the luck in the roll: every biome exactly x2 with its total kept, the per-biome shares in its output, the edge, no luck being the old roll draw for draw, and 40,000 lucky draws;
+  - the luck's clock and the Rain's rules;
+  - the Starter Pack's offer;
+  - ServerBoostService against stand-ins;
+  - StoreService's real receipt code against stand-ins (the Starter Pack all or none, the policy first, the tickets taken back, a duplicate given, luck and Rain);
+  - the profile, and the natural-only wiring.
+- **Pins followed:** CompactMenusSpec finds its shelves by id; WheelSpec counts the Starter Pack's grant as StoreService's second ticket call. Four specs' StoreService sibling maps got a ServerBoostService stand-in.
+- **Mutants (25 of 25):** LuckCommonOnly, LuckTotalGrows, NestNoLuck, RushRegrowLucky, CommonestBelowNothing, PausedSaysEnds, LuckInTheMist, LuckNotStacking, MistNoPause, ChipNoPause, RainIgnoresClash, RainNoCooldown, RainSpentOnRefusal, RainNeverOwed, ResetDropsRain, SummonBuyable, StarterNoPolicyAsk, StarterNoRoomCheck, StarterNoTakeBack, StarterDuplicateRefused, StarterOfferedAlways, StarterAfterBought, ShopShowsStarterAlways, LuckWrongSeconds, BoostsOnGold.
+- **Live (two guarded Plays, SeedTest_mistlook_20261011), desktop. NOTHING WAS BOUGHT.**
+  - Studio's test-purchase sheet ("This is a test purchase. Your account will not be charged.") is CoreGui, and MCP clicks are refused there ("VirtualInput::SendMousePosition ... hits CoreGUI").
+  - So the live grants came from a TEST-ONLY gated host, ZZBoostTest: Studio and the test-store marker only, deleted after the Play, never committed. It called the running ServerBoostService's GrantLuck and GrantRain, the Mist's AdminStart and AdminEnd, and set the Starter Pack's offer attribute to 0.
+  - The receipt path itself is pinned in ServerBoostSpec.
+  - 01: the BOOSTS shelf.
+  - 02: SERVER LUCK's button on OPENING... (the sheet itself is not captured).
+  - 03: the line and the chip.
+  - 04: the chip's popover.
+  - 05: luck standing still in the Mist.
+  - 06: SUMMON RAIN on "MIST ON".
+  - 07: a Rain bought in the Mist, owed, then started the moment the Mist ended, with the line.
+  - 08: RAINING.
+  - 09: the Starter Pack withdrawn; the row closes up.
+  - 10: the cooldown's "WAIT 26:52".
+  - 08_09_boosts_rows and 10_summon_cooldown_row are crops.
+- **Not seen live:** phones (the emulator was not switched); the Starter Pack's grant (the pod into the Bag; spec only); a Pod Rush clash (spec only); the paused popover's new "Paused: m:ss left" (spec only, made after the Play).
+- **Open for the owner (flagged defaults; each stands until the owner says otherwise):**
+  - The luck rule and the table above.
+  - SERVER LUCK lives in its server only. A Pod Rush's regrow keeps normal odds.
+  - The Starter Pack's Titan Petalpip.
+  - The Starter Pack is not offered where paid random items are restricted, because of its tickets. Should it be offered without the tickets there?
+  - A summoned Rain is 180 s, with its cooldown from its start.
+  - BOOSTS on coral as the second shelf.
+- **Next:**
+  - 10, admin announcements.
+  - 11, the compact admin console.
+  - 12, the Mist admin tools, plus refusing a raw SPAWN of any unlisted species.
+
 ## ITEM 9A: THE THREE GAME PASSES — +12 BAG SLOTS, FASTER HATCH, VIP — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; PassBenefitsSpec 31/0 (NEW), HotbarSpec 38/0, ActionRefusalSpec 74/0, NoticeSpec 100/0, RarityCardsSpec 60/0 and the 12 strict-map specs green, THE FULL SUITE 151/151 IN FIVE SMALL BATCHES (NoticeSpec's toast pin followed the new call, then 100/0; TutorialSpotlightSpec's 0.2 ms timing check 50/1 under batch load, 51/0 alone); 22 OF 22 MUTANTS CAUGHT; TWO GUARDED PLAYS; captures in output/item9-passes-2026-10-12)
 
 The owner's item 9 via the peer, part A: the three passes the owner re-made as Game Passes. Part B (the Starter Pack, Server Luck and Summon Rain products) comes next.

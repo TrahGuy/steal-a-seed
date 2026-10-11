@@ -2559,19 +2559,61 @@ end
 -- often something turns up; weight decides what it is worth. The two are
 -- deliberately independent, so a heavy Common stays findable and a light Epic
 -- stays rare.
+--
+-- SERVER LUCK (2026-10-12, the owner's item 9B; GameConfig.ServerBoost.Luck):
+-- PoolWeights is a pool's weights, in pool order. With `luck` above 1, every
+-- species rarer than the pool's COMMONEST -- its heaviest RarityWeight: Common
+-- in Greenhollow, Uncommon in Dustbowl, Rare further down the road -- is
+-- weighed `luck` times, and the commonest share what is left of the pool's own
+-- total. So each rarer species turns up exactly `luck` times as often, in every
+-- biome, and the total never moves. A pool whose rarer weights would take more
+-- than the whole (none today: ServerBoostSpec measures every biome) keeps its
+-- commonest at nothing; a pool of one rarity is unchanged.
 --==============================================================================
-function SeedData.Roll(biomeId: string, rng: Random): Species?
+function SeedData.PoolWeights(pool: { Species }, luck: number?): { number }
+	local out = table.create(#pool, 0)
+	local top = 0
+	for i, species in ipairs(pool) do
+		local w = SeedData.RarityWeight[species.Rarity]
+		out[i] = w
+		top = math.max(top, w)
+	end
+	local l = tonumber(luck) or 1
+	if not (l > 1) then
+		return out
+	end
+	local commonest, rarer = 0, 0
+	for _, w in ipairs(out) do
+		if w >= top then
+			commonest += w
+		else
+			rarer += w
+		end
+	end
+	if commonest <= 0 or rarer <= 0 then
+		return out
+	end
+	local keep = math.max(commonest + rarer - l * rarer, 0) / commonest
+	for i, w in ipairs(out) do
+		out[i] = if w >= top then w * keep else w * l
+	end
+	return out
+end
+
+-- With no `luck` (or 1) the roll is the one it always was, draw for draw.
+function SeedData.Roll(biomeId: string, rng: Random, luck: number?): Species?
 	local pool = byBiome[biomeId]
 	if not pool or #pool == 0 then
 		return nil
 	end
+	local weights = SeedData.PoolWeights(pool, luck)
 	local total = 0
-	for _, species in ipairs(pool) do
-		total += SeedData.RarityWeight[species.Rarity]
+	for _, w in ipairs(weights) do
+		total += w
 	end
 	local pick = rng:NextNumber() * total
-	for _, species in ipairs(pool) do
-		pick -= SeedData.RarityWeight[species.Rarity]
+	for i, species in ipairs(pool) do
+		pick -= weights[i]
 		if pick <= 0 then
 			return species
 		end

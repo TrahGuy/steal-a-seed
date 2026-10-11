@@ -228,6 +228,15 @@ local ok, err = pcall(function()
 	}, { __index = ShippedWheelData })
 	StoreService = loadWith(Server.StoreService, {
 		PlayerDataService = PlayerDataService,
+		ServerBoostService = {
+			GrantLuck = function()
+				return true
+			end,
+			GrantRain = function()
+				return true
+			end,
+			PublishStarter = function() end,
+		},
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,
@@ -476,6 +485,15 @@ if ok and receiptCallback then
 
 	local onOk, OnStore = pcall(loadWith, Server.StoreService, {
 		PlayerDataService = PlayerDataService,
+		ServerBoostService = {
+			GrantLuck = function()
+				return true
+			end,
+			GrantRain = function()
+				return true
+			end,
+			PublishStarter = function() end,
+		},
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,

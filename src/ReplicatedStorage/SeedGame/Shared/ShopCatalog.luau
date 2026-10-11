@@ -75,6 +75,13 @@ export type Entry = {
 	-- shelf's (`studs` on GameConfig.Store.Sections), a Spin Ticket pack the
 	-- premium violet, the featured pack (BagLook.StudsFeatured) the rainbow.
 	studs: string?,
+	-- The item 9B products (2026-10-12): the offer a card waits on ("starter":
+	-- shown only while ServerBoost.starterOffered), SUMMON RAIN's card (its
+	-- button waits out a clash and the cooldown), and a card whose details
+	-- carry REWARDS & ODDS (the Starter Pack's Spin Tickets).
+	offer: string?,
+	summon: boolean?,
+	odds: boolean?,
 }
 
 -- 150000 -> "150,000".
@@ -145,6 +152,10 @@ local function productEntry(item: any): Entry
 		local name = if species then species.Name else tostring(item.species)
 		benefit = string.format("A %s %s pod", size, name)
 		detail = string.format("Exactly one %s pod, %s size -- nothing about it is rolled.", name, size)
+	elseif item.kind == "starter" or item.kind == "luck" or item.kind == "rain" then
+		-- The item 9B products say their own words (GameConfig.Store.Items.Boosts).
+		benefit = if type(item.benefit) == "string" then item.benefit else ""
+		detail = if type(item.detail) == "string" then item.detail else ""
 	end
 	if kind == "soon" then
 		detail = if detail ~= "" then detail .. " Coming soon." else "Coming soon."
@@ -159,6 +170,9 @@ local function productEntry(item: any): Entry
 		detail = detail,
 		icon = icon,
 		fallback = fallback,
+		offer = if type(item.offer) == "string" then item.offer else nil,
+		summon = item.kind == "rain",
+		odds = item.kind == "starter" and (tonumber(item.spins) or 0) > 0,
 	}
 end
 

@@ -83,6 +83,18 @@ export type Profile = {
 	--==========================================================================
 	InstantCredits: number,
 	--==========================================================================
+	-- THE STARTER PACK AND SUMMON RAIN (2026-10-12, the owner's item 9B)
+	--
+	-- StarterPacks: how many Starter Packs this profile was given -- one,
+	-- almost always; a second is a duplicate receipt, still given. Non-zero,
+	-- the pack is never offered again. RainOwed: Summon Rains bought and not
+	-- yet started -- added in the same step as the receipt's entry in Receipts,
+	-- spent the moment its Rain starts (ServerBoostService), in whichever server
+	-- the buyer is in. Both kept by a progress reset. Old saves have neither: 0.
+	--==========================================================================
+	StarterPacks: number,
+	RainOwed: number,
+	--==========================================================================
 	-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01; GameConfig.HatchBonus)
 	--
 	-- HatchBonusClaimed: the one free wheel spin a successful hatch earns has
@@ -480,6 +492,8 @@ function ProfileSchema.Default(): Profile
 		Tutorial = TutorialData.Default(),
 		Receipts = {},
 		InstantCredits = 0,
+		StarterPacks = 0,
+		RainOwed = 0,
 		HatchBonusClaimed = false,
 		BatHintShown = false,
 		LikeReminder = "",
@@ -1191,6 +1205,8 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	end
 	-- Whole, never below zero, never past the cap; anything else reads 0.
 	p.InstantCredits = math.floor(number(raw.InstantCredits, 0, 0, SAVE.MaxInstantCredits))
+	p.StarterPacks = math.floor(number(raw.StarterPacks, 0, 0, SAVE.MaxStarterPacks))
+	p.RainOwed = math.floor(number(raw.RainOwed, 0, 0, SAVE.MaxRainOwed))
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.BatHintShown = raw.BatHintShown == true

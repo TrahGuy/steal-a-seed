@@ -665,6 +665,15 @@ local function makeWorld(rollOn)
 	end)
 	w.StoreService = loadWith(Server.StoreService, {
 		PlayerDataService = PlayerDataService,
+		ServerBoostService = {
+			GrantLuck = function()
+				return true
+			end,
+			GrantRain = function()
+				return true
+			end,
+			PublishStarter = function() end,
+		},
 		CarryService = w.CarryService,
 		TreadmillService = {
 			PayReward = function()

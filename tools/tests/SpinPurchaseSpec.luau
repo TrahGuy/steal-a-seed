@@ -390,6 +390,15 @@ local function boot(wheelData)
 	receiptCallback = nil
 	local S = loadWith(Server:WaitForChild("StoreService"), {
 		PlayerDataService = PlayerDataService,
+		ServerBoostService = {
+			GrantLuck = function()
+				return true
+			end,
+			GrantRain = function()
+				return true
+			end,
+			PublishStarter = function() end,
+		},
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,

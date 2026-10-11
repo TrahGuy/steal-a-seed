@@ -416,7 +416,17 @@ local ok, err = pcall(function()
 	for i, spec in ipairs(sections) do
 		headings[i] = cats[i].label .. "<" .. spec.heading
 	end
-	check(cats[4] and cats[4].label == "???", "the owner's ??? heading is kept as it is", table.concat(headings, ", "))
+	-- By id, not place: a shelf added above (BOOSTS, 2026-10-12) moves the rest down.
+	local function category(list, id)
+		for _, c in ipairs(list) do
+			if c.id == id then
+				return c
+			end
+		end
+		return nil
+	end
+	local pods = category(cats, "Pods")
+	check(pods and pods.label == "???", "the owner's ??? heading is kept as it is", table.concat(headings, ", "))
 	local seen, missingIds, kinds = {}, {}, true
 	for _, spec in ipairs(sections) do
 		local items = GameConfig.Store.Items[spec.id] or {}
@@ -455,7 +465,8 @@ local ok, err = pcall(function()
 	for _, e in ipairs(cash) do
 		icons = icons and e.icon == GameConfig.Store.Icons[e.key]
 	end
-	check(icons and catsPaid[2].icon == GameConfig.SourceIcons.speed,
+	local speedCategory = category(catsPaid, "Speed")
+	check(icons and speedCategory and speedCategory.icon == GameConfig.SourceIcons.speed,
 		"every Speed card and the category wear the catalogue's one speed icon; cash its own packs")
 	check(speed[1].benefit == "Adds 150,000 Speed" and cash[1].benefit == "Adds $24,000 cash"
 			and ShopCatalog.group(1e9) == "1,000,000,000",

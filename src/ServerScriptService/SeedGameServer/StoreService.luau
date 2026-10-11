@@ -60,6 +60,7 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
 local PlantService = require(script.Parent:WaitForChild("PlantService"))
 local WheelService = require(script.Parent:WaitForChild("WheelService"))
+local ServerBoostService = require(script.Parent:WaitForChild("ServerBoostService"))
 
 local StoreService = {}
 -- After PlayerDataService (20), CarryService (45), PlantService (50) and
@@ -179,6 +180,67 @@ local function indexProducts(): (number, number)
 end
 
 --==============================================================================
+-- THE STARTER PACK (2026-10-12, the owner's item 9B): `amount` cash, the
+-- `species` pod at `tier` and `spins` Spin Tickets -- ALL THREE OR NONE.
+--
+-- Everything that could refuse is asked FIRST: the paid-spins policy (the one
+-- question that can yield, so it is asked before anything is given), room for
+-- the tickets, room for the pod and a Backpack to hand it into. Then the three
+-- are given in one step that never yields, so no save can catch part of the
+-- pack: the tickets; the pod, the tickets taken back if it still does not
+-- land; and the cash, which cannot refuse. A pack that cannot be given whole
+-- now is not acknowledged, and Roblox delivers it again.
+--
+-- A player who had one already is given this one too -- a duplicate receipt
+-- is still their Robux -- and it is logged as one. The Shop stops offering it
+-- the moment one lands (ServerBoostService.PublishStarter).
+--==============================================================================
+local function grantStarter(player: Player, item: any): boolean
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return false
+	end
+	if not SeedData.Get(tostring(item.species)) then
+		warn(string.format("[Seed/StoreService] %q names an unknown species %q",
+			item.key, tostring(item.species)))
+		return false
+	end
+	local spins = math.max(0, math.floor(tonumber(item.spins) or 0))
+	if spins > 0 and not WheelService.PaidAllowed(player) then
+		WheelService.CheckPolicy(player)
+	end
+	-- From here nothing yields.
+	if spins > 0 and not (WheelService.PaidAllowed(player) and PlayerDataService.IsPersistent(player)
+		and (tonumber(profile.WheelBought) or 0) + spins <= WheelData.MaxBoughtHeld) then
+		warn(string.format("[Seed/StoreService] %s: a Starter Pack arrived, and its Spin Tickets cannot be "
+			.. "held (paid random items restricted, paid spins off, or no saving profile). Not granted; the "
+			.. "receipt stays open.", player.Name))
+		return false
+	end
+	local room, _, known = CarryService.PodRoom(player)
+	if not known or room < 1 or not player:FindFirstChildOfClass("Backpack") then
+		return false
+	end
+	if spins > 0 and not WheelService.GrantBought(player, spins) then
+		return false
+	end
+	if not (CarryService.GivePod(player, item.species, item.tier or 1)) then
+		if spins > 0 then
+			WheelService.TakeBackBought(player, spins)
+		end
+		return false
+	end
+	PlayerDataService.AddCash(player, item.amount or 0)
+	local count = PlayerDataService.AddStarterPack(player) or 0
+	if count > 1 then
+		warn(string.format("[Seed/StoreService] %s bought a Starter Pack again (%d now): given whole anyway "
+			.. "-- it is their Robux.", player.Name, count))
+	end
+	ServerBoostService.PublishStarter(player)
+	return true
+end
+
+--==============================================================================
 -- WHAT AN ITEM ACTUALLY DOES
 --
 -- Every branch returns whether the grant LANDED. A false here means the receipt
@@ -248,6 +310,18 @@ local function grant(player: Player, item: any): boolean
 		-- receipt is not acknowledged.
 		--======================================================================
 		return WheelService.GrantBought(player, item.amount or 0)
+	elseif item.kind == "starter" then
+		return grantStarter(player, item)
+	elseif item.kind == "luck" then
+		--======================================================================
+		-- SERVER LUCK and SUMMON RAIN (2026-10-12, item 9B): bought for the
+		-- whole server. ServerBoostService keeps the luck's clock, and owes the
+		-- Rain on the buyer's profile in this step, starting it the moment
+		-- nothing clashes.
+		--======================================================================
+		return ServerBoostService.GrantLuck(player, item.seconds or 0)
+	elseif item.kind == "rain" then
+		return ServerBoostService.GrantRain(player)
 	end
 	warn(string.format("[Seed/StoreService] %q has no grant for kind %q",
 		item.key, tostring(item.kind)))

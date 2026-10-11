@@ -44,6 +44,13 @@ export type Snapshot = {
 	miniId: string?,
 	podRushId: string?,
 	podRushCount: number?,
+	-- SERVER LUCK (2026-10-12, item 9B; GameConfig.ServerBoost.Luck): when it
+	-- ends while it runs, the seconds banked while it stands still for the
+	-- Mist, the whole run, and who bought the latest of it.
+	luckEndsAt: number?,
+	luckLeft: number?,
+	luckTotal: number?,
+	luckBy: string?,
 }
 
 export type Entry = {
@@ -63,6 +70,9 @@ export type Entry = {
 	endsAt: number,
 	-- The whole run, for the ring; 0 when it cannot be known.
 	total: number,
+	-- Standing still (SERVER LUCK in the Enchanted Mist, 2026-10-12): its time
+	-- reads as what is left, not as an end.
+	paused: boolean?,
 }
 
 local function num(value: any): number?
@@ -79,6 +89,7 @@ function BoostIcons.read(player: Player, workspace: Workspace, now: number): Sna
 	local M = GameConfig.MiniEvent.Attributes
 	local C = GameConfig.BonusChest.Attributes
 	local S = GameConfig.Sacrifice.Attributes
+	local L = GameConfig.ServerBoost.Luck.Attributes
 	return {
 		now = now,
 		rainState = str(workspace:GetAttribute(W.State)),
@@ -99,6 +110,10 @@ function BoostIcons.read(player: Player, workspace: Workspace, now: number): Sna
 		miniId = str(workspace:GetAttribute(M.EventId)),
 		podRushId = str(player:GetAttribute(GameConfig.PodRush.Attributes.Id)),
 		podRushCount = num(player:GetAttribute(GameConfig.PodRush.Attributes.Count)),
+		luckEndsAt = num(workspace:GetAttribute(L.EndsAt)),
+		luckLeft = num(workspace:GetAttribute(L.Left)),
+		luckTotal = num(workspace:GetAttribute(L.Total)),
+		luckBy = str(workspace:GetAttribute(L.By)),
 	}
 end
 
@@ -121,6 +136,9 @@ function BoostIcons.watched(): { { on: string, name: string } }
 	table.insert(list, { on = "player", name = GameConfig.SproutDash.Attributes.BoostEndsAt })
 	table.insert(list, { on = "player", name = GameConfig.PodRush.Attributes.Id })
 	table.insert(list, { on = "player", name = GameConfig.PodRush.Attributes.Count })
+	for _, name in pairs(GameConfig.ServerBoost.Luck.Attributes) do
+		table.insert(list, { on = "workspace", name = name })
+	end
 	return list
 end
 
@@ -152,6 +170,28 @@ function BoostIcons.entries(s: Snapshot): { Entry }
 			hint = if s.rainState == "active" then WORDS.WeatherOpen else WORDS.WeatherOpening,
 			endsAt = rainEnds,
 			total = span(s.rainStartedAt, rainEnds),
+		}
+	end
+
+	-- SERVER LUCK (2026-10-12, item 9B): bought for everybody here. While the
+	-- Enchanted Mist is on it stands still -- its time and its ring unmoving --
+	-- and says so.
+	local luckEnds, luckLeft = s.luckEndsAt, s.luckLeft
+	local luckRuns = luckEnds ~= nil and luckEnds > now
+	if luckRuns or (luckLeft ~= nil and luckLeft > 0) then
+		found.luck = {
+			id = "luck",
+			source = "luck",
+			glyph = "boost",
+			tint = CFG.Tints.luck,
+			title = WORDS.Luck,
+			effect = string.format(WORDS.LuckEffect, GameConfig.ServerBoost.Luck.Factor),
+			hint = if not luckRuns then WORDS.LuckPaused
+				elseif s.luckBy then string.format(WORDS.LuckBy, s.luckBy)
+				else nil,
+			endsAt = if luckRuns then luckEnds :: number else now + (luckLeft :: number),
+			total = s.luckTotal or 0,
+			paused = not luckRuns,
 		}
 	end
 
@@ -305,6 +345,9 @@ function BoostIcons.clock(seconds: number): string
 end
 
 function BoostIcons.timeLine(e: Entry, now: number): string
+	if e.paused then
+		return string.format(WORDS.PausedLeft, BoostIcons.clock(e.endsAt - now))
+	end
 	return string.format(WORDS.EndsIn, BoostIcons.clock(e.endsAt - now))
 end
 

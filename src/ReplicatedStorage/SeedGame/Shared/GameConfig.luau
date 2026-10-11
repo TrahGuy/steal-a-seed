@@ -7582,10 +7582,17 @@ export type StoreItem = {
 	label: string,
 	robux: number,
 	product: number,
-	kind: "speed" | "cash" | "pod" | "hatch",
+	kind: "speed" | "cash" | "pod" | "hatch" | "starter" | "luck" | "rain",
 	amount: number?,
 	species: string?,
 	tier: number?,
+	-- The item 9B products (2026-10-12): a Starter Pack's Spin Tickets, SERVER
+	-- LUCK's seconds, the offer a card waits on, and their own words.
+	spins: number?,
+	seconds: number?,
+	offer: string?,
+	benefit: string?,
+	detail: string?,
 }
 
 GameConfig.Store = {
@@ -7628,6 +7635,14 @@ GameConfig.Store = {
 		{ id = "Passes", heading = "PASSES", layout = "pass", studs = "obsidian",
 			colour = Color3.fromRGB(255, 214, 64),
 			top = Color3.fromRGB(255, 232, 117), bottom = Color3.fromRGB(202, 110, 8) },
+		--======================================================================
+		-- BOOSTS (2026-10-12, the owner's item 9B): the Starter Pack and the two
+		-- products bought for the whole server, under the passes, on the coral
+		-- upload no other card wears (bats and traps left it on 2026-10-10).
+		--======================================================================
+		{ id = "Boosts", heading = "BOOSTS", studs = "coral",
+			colour = Color3.fromRGB(255, 132, 102),
+			top = Color3.fromRGB(255, 168, 140), bottom = Color3.fromRGB(214, 74, 52) },
 		{ id = "Speed", heading = "SPEED", studs = "sky",
 			colour = Color3.fromRGB(64, 226, 250),
 			top = Color3.fromRGB(94, 231, 252), bottom = Color3.fromRGB(8, 126, 196) },
@@ -7710,6 +7725,9 @@ GameConfig.Store = {
 		bagslots = "rbxassetid://115691273223693",
 		fasterhatch = "rbxassetid://72267498407717",
 		vip = "rbxassetid://126152654716285",
+		starterpack = "rbxassetid://133935209044475",
+		serverluck = "rbxassetid://127834257988056",
+		summonrain = "rbxassetid://134495129410572",
 	},
 
 	--==========================================================================
@@ -7794,6 +7812,40 @@ GameConfig.Store = {
 				detail = "A Game Pass: yours for good. Your name shows in gold over your head, your chat "
 					.. "carries a [VIP] tag, and every grown plant earns 10% more -- on top of x2 Money." },
 		},
+		--======================================================================
+		-- THE OWNER'S THREE DEVELOPER PRODUCTS (2026-10-12, item 9B; ids and
+		-- prices the owner's). Granted by StoreService's one ProcessReceipt, on
+		-- the same ledger as every product:
+		--   starter  `amount` cash, the `species` pod at `tier` and `spins`
+		--            Spin Tickets -- all three or none. Offered (`offer`) in a
+		--            profile's first ServerBoost.Starter.Days, until one is
+		--            given, to a player who may hold a paid random item (the
+		--            tickets); one bought again is still given, and logged.
+		--   luck     SERVER LUCK: `seconds` more of rarer pods x
+		--            ServerBoost.Luck.Factor in every nest, for the whole
+		--            server, stacking; standing still in the Enchanted Mist.
+		--   rain     SUMMON RAIN: the Rain for the whole server, the moment
+		--            nothing clashes; ServerBoost.Rain.CooldownSeconds apart.
+		--======================================================================
+		Boosts = {
+			{ key = "starterpack", label = "STARTER PACK", robux = 99, product = 3717932975,
+				kind = "starter", amount = 800e3, species = "petalpip", tier = 6, spins = 5, offer = "starter",
+				benefit = "$800K, a Titan Petalpip pod and 5 Spin Tickets",
+				detail = "Once, in your first 3 days: $800,000 cash, one Titan Petalpip pod -- nothing about it "
+					.. "is rolled -- and 5 Spin Tickets for the Reward Wheel. Wheel prizes are random: see "
+					.. "REWARDS & ODDS for every prize's chance before you buy." },
+			{ key = "serverluck", label = "SERVER LUCK", robux = 99, product = 3717932858,
+				kind = "luck", seconds = 900,
+				benefit = "Rarer pods x2 for everyone, 15 min",
+				detail = "For 15 minutes every nest in this server rolls its rarer pods twice as often -- for "
+					.. "everybody here. Another adds 15 more. It stands still while the Enchanted Mist is on." },
+			{ key = "summonrain", label = "SUMMON RAIN", robux = 199, product = 3717932732,
+				kind = "rain",
+				benefit = "Start the Rain for the whole server",
+				detail = "Starts the Rain now, for everybody in this server: more plant income while it falls, "
+					.. "and the Rain biome opens over the bridge. Then 30 minutes before anyone can summon it "
+					.. "again." },
+		},
 		Speed = {
 			{ key = "speed1", label = "+150K SPEED", robux = 29, product = 3712094350, kind = "speed", amount = 150e3 },
 			{ key = "speed2", label = "+1M SPEED", robux = 79, product = 3712094432, kind = "speed", amount = 1e6 },
@@ -7847,6 +7899,48 @@ GameConfig.Store = {
 	InWorld = {
 		{ key = "instanthatch", label = "INSTANT HATCH", robux = 99, product = 3713212811,
 			kind = "hatch" },
+	},
+}
+
+--==============================================================================
+-- THE PRODUCTS BOUGHT FOR THE WHOLE SERVER, AND THE STARTER PACK'S OFFER
+-- (2026-10-12, the owner's item 9B; the rows are Store.Items.Boosts). The rules
+-- are ServerBoost's (Shared, pure); the clock and the starts are
+-- ServerBoostService's. Times are workspace:GetServerTimeNow(); the Starter
+-- Pack's are the server's os.time(), the same clock to the second.
+--==============================================================================
+GameConfig.ServerBoost = {
+	Luck = {
+		-- Every species rarer than its biome's commonest (Common in Greenhollow,
+		-- Uncommon in Dustbowl, Rare further down the road) turns up this many
+		-- times as often in a nest's roll; the commonest give up the difference
+		-- (SeedData.PoolWeights).
+		Factor = 2,
+		-- Workspace attributes: EndsAt while it runs; Left (seconds) while it
+		-- stands still for the Enchanted Mist; Total, the run so far, for the
+		-- chip's ring; By, who bought the latest of it. None while it is off.
+		Attributes = { EndsAt = "ServerLuckEndsAt", Left = "ServerLuckLeft", Total = "ServerLuckTotal",
+			By = "ServerLuckBy" },
+		-- The line to everybody: the buyer, the factor, the minutes.
+		Bought = "%s bought SERVER LUCK: rarer pods x%d for %d minutes!",
+		BoughtPaused = "%s bought SERVER LUCK: rarer pods x%d for %d minutes, once the Enchanted Mist ends!",
+	},
+	Rain = {
+		-- As long as a natural Rain; the next summon may start this long after.
+		Seconds = GameConfig.Weather.Auto.DurationSeconds,
+		CooldownSeconds = 1800,
+		-- Workspace attributes: when the cooldown ends (none once it is over),
+		-- and what a summon would clash with now ("rain", "mist", "rush").
+		Attributes = { ReadyAt = "SummonRainReadyAt", Clash = "SummonRainClash" },
+		Summoned = "%s summoned the RAIN!",
+		-- The Shop button's words while it may not be bought.
+		Words = { rain = "RAINING", mist = "MIST ON", rush = "POD RUSH", cooldown = "WAIT %s" },
+	},
+	Starter = {
+		-- Offered in a profile's first this-many days from its first join.
+		Days = 3,
+		-- On the player: until when (os.time) they are offered it; 0 once given.
+		Attribute = "StarterPackUntil",
 	},
 }
 
@@ -9359,6 +9453,8 @@ GameConfig.SourceIcons = {
 	-- The owner's POD RUSH icon (2026-10-09): its announcement, its boost icon
 	-- and its lines. Drawn by its crop (SourceIconCrops).
 	podrush = GameConfig.PodRush.Art.Icon,
+	-- SERVER LUCK's chip and line (2026-10-12, item 9B): the owner's icon.
+	luck = "rbxassetid://127834257988056",
 }
 
 -- A source picture uploaded with a clear margin round it is drawn by its crop
@@ -9435,7 +9531,7 @@ GameConfig.WheelPodArt = {
 --==============================================================================
 GameConfig.BoostIcons = {
 	-- Left to right.
-	Order = { "weather", "disco", "tickets", "podrush", "income", "training", "sprout", "sacrifice" },
+	Order = { "weather", "luck", "disco", "tickets", "podrush", "income", "training", "sprout", "sacrifice" },
 	-- The drawn icon (px, safe space) by HUD mode; never smaller than Min,
 	-- however many there are. Gap between two.
 	Size = { Desktop = 40, Compact = 34, Phone = 30, Min = 24 },
@@ -9466,6 +9562,8 @@ GameConfig.BoostIcons = {
 		-- Sprout Dash's own training boost (2026-10-08): its screen's orange.
 		sprout = Color3.fromRGB(255, 154, 34),
 		sacrifice = Color3.fromRGB(38, 255, 0),
+		-- SERVER LUCK (2026-10-12, item 9B): a clover green.
+		luck = Color3.fromRGB(96, 230, 120),
 	},
 	-- What each popover says. %d / %s are filled in from the configs the
 	-- servers pay by, never typed here.
@@ -9504,6 +9602,13 @@ GameConfig.BoostIcons = {
 		SproutEffect = "+%d%% treadmill training",
 		SproutHint = "Play Sprout Dash on your own mill for more.",
 		EndsIn = "Ends in %s",
+		-- SERVER LUCK (2026-10-12, item 9B): bought for everybody here.
+		Luck = "Server Luck",
+		LuckEffect = "Nests roll rarer pods x%d as often, for everybody here.",
+		LuckBy = "Bought by %s. More purchases add time.",
+		LuckPaused = "Standing still while the Enchanted Mist is on; it runs on after.",
+		-- A chip standing still says what it has left, not when it ends.
+		PausedLeft = "Paused: %s left",
 	},
 }
 
@@ -11548,6 +11653,10 @@ GameConfig.Save = {
 	-- open.
 	--==========================================================================
 	MaxInstantCredits = 1000,
+	-- The Starter Packs a profile was given and the Summon Rains it is still
+	-- owed (2026-10-12, item 9B; ProfileSchema): bounded like every number.
+	MaxStarterPacks = 100,
+	MaxRainOwed = 100,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================

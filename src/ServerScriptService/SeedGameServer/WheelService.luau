@@ -1259,6 +1259,25 @@ function WheelService.GrantBought(player: Player, quantity: number): boolean
 	return landed
 end
 
+-- A Starter Pack's tickets taken back in the very step they were given, when
+-- the rest of the pack could not land (StoreService, 2026-10-12): never below
+-- zero. True when they were.
+function WheelService.TakeBackBought(player: Player, quantity: number): boolean
+	local n = math.floor(tonumber(quantity) or 0)
+	if n <= 0 then
+		return false
+	end
+	local landed = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+		if p.WheelBought < n then
+			return false
+		end
+		p.WheelBought -= n
+		return true
+	end)
+	publish(player)
+	return landed
+end
+
 --==============================================================================
 -- FOR THE SPEC AND THE CONSOLE
 --==============================================================================
