@@ -2950,15 +2950,19 @@ check(#bandMissing == 0, "everything sharing the notices' band says how: under, 
 	table.concat(bandMissing, ", "))
 check(tutorialSrc:find("guide = layout.guide", 1, true) ~= nil
 		and tutorialSrc:find("words.Visible = player:GetAttribute(COVERS) ~= true", 1, true) ~= nil
-		and tutorialSrc:find("Notice.giveWay(words, guide and Notice.showing() > 0,", 1, true) ~= nil
+		and tutorialSrc:find("Notice.giveWay(words, (guide and Notice.showing() > 0) or RewardMoments.up(player, "
+			.. "RewardMoments.MysteryDraw),", 1, true) ~= nil
 		and tutorialSrc:find("local COVERS = Config.BoostIcons.CoversAttribute", 1, true) ~= nil
 		and tutorialSrc:find("player:GetAttributeChangedSignal(COVERS):Connect(coverWords)", 1, true) ~= nil
+		and tutorialSrc:find("player:GetAttributeChangedSignal(RewardMoments.Prefix .. RewardMoments.MysteryDraw):Connect("
+			.. "coverWords)", 1, true) ~= nil
 		and tutorialSrc:find("Notice.onShowing(coverWords)", 1, true) ~= nil
 		and tutorialSrc:find('Notice.band("guide-banner", "above", if guide then nil else banner)', 1, true) ~= nil
 		and tutorialSrc:find("if banner.Visible and not guide then", 1, true) ~= nil,
 	"TutorialUI stands the guide's words in the left column where HudLayout says guide; there they GIVE WAY to a "
-		.. "notice (2026-10-12) and stand down under a buff popover (2026-10-09); off a phone the notices stack under "
-		.. "the card; and it pushes nothing down from there")
+		.. "notice (2026-10-12) and stand down under a buff popover (2026-10-09); on every screen they give way while "
+		.. "the Mysterious Pod's draw runs (2026-10-12); off a phone the notices stack under the card; and it pushes "
+		.. "nothing down from there")
 for _, name in ipairs({ "BiomeGuideUI", "SellUI" }) do
 	local src = sourceOf(name) or ""
 	check(src:find("Notice.reach())", 1, true) ~= nil and src:find("Notice.onReach(function()", 1, true) ~= nil

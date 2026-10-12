@@ -339,15 +339,20 @@ table.insert(connections, subline:GetPropertyChangedSignal("Text"):Connect(layou
 -- BoostIconsUI's client-local BoostIcons.CoversAttribute, which the Pod Rush
 -- tracker steps aside for too. And on a phone, while a notice is up at the top
 -- centre beside them, the card GIVES WAY (2026-10-12, the owner): up a little
--- and fading, back the moment the last notice has gone (Notice.giveWay).
+-- and fading, back the moment the last notice has gone (Notice.giveWay). On
+-- every screen the words -- the banner, its step, Skip and GUIDE -- give way the
+-- same way while the Mysterious Pod's draw runs (2026-10-12, the owner: the
+-- moment wins; RewardMoments.MysteryDraw), back when it has closed.
 local COVERS = Config.BoostIcons.CoversAttribute
 local function coverWords()
 	words.Visible = player:GetAttribute(COVERS) ~= true
-	Notice.giveWay(words, guide and Notice.showing() > 0,
+	Notice.giveWay(words, (guide and Notice.showing() > 0) or RewardMoments.up(player, RewardMoments.MysteryDraw),
 		require(Shared:WaitForChild("StatusText")).reducedMotion())
 end
 table.insert(connections, Notice.onShowing(coverWords))
 table.insert(connections, player:GetAttributeChangedSignal(COVERS):Connect(coverWords))
+table.insert(connections,
+	player:GetAttributeChangedSignal(RewardMoments.Prefix .. RewardMoments.MysteryDraw):Connect(coverWords))
 
 local function placeBanner()
 	if gui.AbsoluteSize.X <= 0 then

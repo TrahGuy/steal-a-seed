@@ -288,7 +288,7 @@ local ok, err = pcall(function()
 			and string.find(reels, "local SKIP_AFTER = 0.5", 1, true) ~= nil
 			and string.find(reels, "end, false, 3000, Enum.KeyCode.ButtonB)", 1, true) ~= nil
 			and string.find(reels, "if not snap then\n\t\ttask.delay(SKIP_AFTER, function()", 1, true) ~= nil
-			and string.find(reels, "UDim2.fromOffset(96, 44)", 1, true) ~= nil
+			and string.find(reels, "then Vector2.new(96, 44) else Vector2.new(84, 34)", 1, true) ~= nil
 			and string.find(reels, "task.delay(SKIP_HOLD, finish, skipped)", 1, true) ~= nil
 			and string.find(reels, "local land = landNow\n\t\tif land then\n\t\t\tland()\n\t\tend", 1, true) ~= nil
 			and string.find(reels, "if sizing or not sized then", 1, true) ~= nil
@@ -307,9 +307,96 @@ local ok, err = pcall(function()
 		"THE LOOK (2026-10-12): no white panel -- the cards run over a slight dimmer covering the whole screen, notches "
 			.. "and the rail's buttons too (44: under the notices and the RUN alarm), with no CanvasGroup; about twice "
 			.. "the cards for the longer spin")
+	local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
+	-- WHERE THE DRAW STANDS (2026-10-12, the owner: "make the reel's cards BIGGER
+	-- and the strip CENTRED a bit LOWER on screen (not hugging the top row), on
+	-- desktop and phones. Keep the SKIP pill clear"). HudLayout's own answer for
+	-- HudLayoutSpec's screens: the cards at least 1.15x (a desktop's 1.3x),
+	-- centred at half the screen or lower, under the top row, inside the safe
+	-- width and above the belt's name line (a compact screen's belt middle); SKIP
+	-- at its own size clear of the top row, the belt and a phone's thumbs.
+	local HudLayout = require(Shared:WaitForChild("HudLayout"))
+	local TOPBAR = 58
+	local function screenOf(w, h, opts)
+		local left, right, bottom = opts.left or 0, opts.right or 0, opts.bottom or 0
+		return {
+			safe = Vector2.new(w - left - right, h - TOPBAR - bottom),
+			touch = opts.touch == true,
+			keyboard = opts.keyboard ~= false,
+			viewport = Vector2.new(w, h),
+			topbar = HudLayout.rect(208, 0, w - 208, TOPBAR),
+			insetTop = TOPBAR,
+		}, Vector2.new(left, TOPBAR)
+	end
+	local SCREENS = {
+		{ 1169, 716, {} }, { 1280, 720, {} }, { 1920, 1080, {} }, { 1000, 609, {} },
+		{ 705, 338, { touch = true } }, { 640, 360, { touch = true, keyboard = false } },
+		{ 772, 360, { touch = true, keyboard = false } }, { 801, 392, { touch = true } },
+		{ 844, 390, { touch = true, keyboard = false, left = 47, right = 47, bottom = 21 } },
+		{ 956, 440, { touch = true, keyboard = false, left = 62, right = 62, bottom = 21 } },
+	}
+	local placeBad = {}
+	local function overlaps(a, b)
+		return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
+	end
+	for _, c in ipairs(SCREENS) do
+		local input, shift = screenOf(c[1], c[2], c[3])
+		local L = HudLayout.solve(input)
+		local s, centre = MistOddsView.drawPlace(L, Vector2.new(c[1], c[2]), shift, 1)
+		local box = MistOddsView.DrawStage * s
+		local x0, y0 = centre.X - box.X / 2, centre.Y - box.Y / 2
+		local touch = c[3].touch == true
+		local pw, ph = if touch then 96 else 84, if touch then 44 else 34
+		local pill = { x = x0 + box.X - 8 * s - pw, y = y0 + 22 * s - ph / 2, w = pw, h = ph }
+		local topRow = shift.Y
+		for _, key in ipairs({ "biomes", "teleport", "returnPlot", "obby", "run" }) do
+			local r = L[key]
+			if r and r.w > 0 and r.h > 0 then
+				topRow = math.max(topRow, shift.Y + r.y + r.h)
+			end
+		end
+		local hot = L.hotbar
+		local floor = if L.compact then shift.Y + hot.y + hot.h / 2 else shift.Y + math.min(hot.y, L.namePopup.y)
+		local tag = string.format("%dx%d", c[1], c[2])
+		if s < 1.15 or (not L.compact and s < MistOddsView.DrawMax) then
+			table.insert(placeBad, string.format("%s cards at %.2fx", tag, s))
+		end
+		if centre.Y < 0.5 * c[2] - 0.5 or y0 < topRow or pill.y < topRow then
+			table.insert(placeBad, tag .. " up in the top row")
+		end
+		if x0 < shift.X or x0 + box.X > shift.X + L.safe.X or y0 + box.Y > floor + 0.5 then
+			table.insert(placeBad, tag .. " off the safe width or on the belt")
+		end
+		for _, key in ipairs({ "hotbar", "namePopup", "jump", "thumb" }) do
+			local r = L[key]
+			if r and r.w > 0 and overlaps(pill, { x = shift.X + r.x, y = shift.Y + r.y, w = r.w, h = r.h }) then
+				table.insert(placeBad, tag .. " SKIP on " .. key)
+			end
+		end
+	end
+	check(#placeBad == 0 and string.find(reels, "local scale, centre = MistOddsView.drawPlace(L, size, "
+				.. "measureGui.AbsolutePosition - gui.AbsolutePosition,", 1, true) ~= nil
+			and string.find(reels, "stageScale.Scale = scale", 1, true) ~= nil
+			and string.find(reels, "local TITLE_ROW = 44", 1, true) ~= nil
+			and string.find(reels, "skipButton.Position = UDim2.new(1, -8, 0, TITLE_ROW / 2)", 1, true) ~= nil
+			and string.find(reels, "skipButton.Size = UDim2.fromOffset(nominal.X / s, nominal.Y / s)", 1, true) ~= nil,
+		"WHERE THE DRAW STANDS (2026-10-12): on every listed desktop and phone the cards bigger (1.15x and up, a "
+			.. "desktop's 1.3x), centred lower, under the top row and above the belt; SKIP beside the title at its own "
+			.. "size, clear of the belt and the thumbs", table.concat(placeBad, "; "))
+	-- A DRAW IS A MOMENT (2026-10-12, the owner: the guide's banner, its step and
+	-- GUIDE hide while it runs, and come back after): begun as it starts, ended
+	-- as it closes, and a re-run leaves none standing; the guide's words give
+	-- way to it (TutorialUI's coverWords; HudLayoutSpec pins that side).
+	local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
+	local _, finishes = string.gsub(reels, "RewardMoments%.finish%(RewardMoments%.MysteryDraw%)", "")
+	check(type(RewardMoments.MysteryDraw) == "string"
+			and string.find(reels, "gui.Enabled = true\n\t\n\tRewardMoments.begin(RewardMoments.MysteryDraw)", 1, true)
+				~= nil
+			and string.find(reels, "gui.Enabled = false\n\tRewardMoments.finish(RewardMoments.MysteryDraw)", 1, true) ~= nil
+			and finishes == 2,
+		"a draw is a reward moment from its start to its close (RewardMoments.MysteryDraw); a re-run leaves none up")
 	-- A reel's card stands a creature that exists in its window, as the Odds
 	-- page does; one not made yet keeps the dark "???".
-	local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
 	local made, unmade
 	for _, e in ipairs(EnchantedMistData.Pool.Entries) do
 		if SeedData.Get(e.Id) then

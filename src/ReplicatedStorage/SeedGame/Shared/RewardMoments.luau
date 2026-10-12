@@ -3,7 +3,8 @@
 --
 -- The deliberate reward moments a new one must not stand over. A moment says
 -- when it began and when it ended here -- the hatch reveal of the player's own
--- plant (HatchFX), the offline earnings card (OfflineUI) -- as client-local
+-- plant (HatchFX), the offline earnings card (OfflineUI), the Mysterious Pod's
+-- draw (MysteryRevealUI) -- as client-local
 -- attributes on the local player, never replicated; a centre panel (the
 -- wheel's prize included) already says so through OpenPanel. The Invite a
 -- Friend reward popup (InviteRewardUI) waits while any is up.
@@ -13,6 +14,9 @@ local Players = game:GetService("Players")
 local RewardMoments = {}
 
 RewardMoments.Prefix = "SeedMoment_"
+-- The Mysterious Pod's card draw (MysteryRevealUI, 2026-10-12): up from its
+-- first card to its close; the guide's words stand down for it (TutorialUI).
+RewardMoments.MysteryDraw = "mysteryDraw"
 
 local tokens: { [string]: number } = {}
 
@@ -39,6 +43,11 @@ function RewardMoments.finish(name: string)
 	if me then
 		me:SetAttribute(RewardMoments.Prefix .. name, nil)
 	end
+end
+
+-- Whether the moment `name` is up on `player`.
+function RewardMoments.up(player: any, name: string): boolean
+	return player:GetAttribute(RewardMoments.Prefix .. name) == true
 end
 
 -- Whether any moment is up on `player`, or a centre panel is open (`openPanel`

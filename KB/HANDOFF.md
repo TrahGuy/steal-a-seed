@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK, with the twinkle commit 457f6a0; MysteryPodSpec 37/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY)
+## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip IN TWO COMMITS, NOT PUSHED: awaiting the owner's OK, with the twinkle commit 457f6a0; MysteryPodSpec 39/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0, TutorialSpotlightSpec 51/0, InvitePanelSpec 395/0, MistCreaturesSpec 11/0; MUTANTS 14/14 CAUGHT; TWO GUARDED PLAYS)
 
 The owner (via the peer):
 - "sometimes the draw doesn't run, it auto chooses";
@@ -43,8 +43,17 @@ The reels brake evenly (Quad). A Quint stood still for its last 1.5 s while CARD
 
 KNOWN LIMIT, not checked on a device. In Studio (unfocused, 10-15 fps), a card that has just come into view draws blank for a moment: a fresh ViewportFrame's first draw. In isolation, five made at once drew nothing at +0.1 s and all by +1.9 s. The old reel had the same delay. After a SKIP, the five landed cards appear together after that moment. At 60 fps expect a frame or two; the owner should eye a SKIP once on a phone.
 
-**Captures:** output/mystery-draw-2026-10-12/, with the sheet `16D_fixed_sheet.png`. Captures 10-30 run the fixed code, reloaded into the running Play. Captures 01-09 are from before the fixes.
-**Files:** EnchantedMistData, EnchantedMistConfig (comment), MysteryPodService, PlantService (both hatch paths), MysteryRevealUI. Specs: MysteryPodSpec, HudLayoutSpec (the band's needle).
+**The owner's two fixes after the first captures** (a second commit):
+- The guide's words hide during a draw. Players mid-tutorial can buy pods, and "WHAT'S INSIDE?" sat crammed under "TRAIN YOUR SPEED!" and "STEP 1/7 · Skip guide". The draw is now a reward moment (`RewardMoments.MysteryDraw`), begun at its start and ended at its close; a re-run leaves none up. TutorialUI's `coverWords` gives way to it on every screen: the banner, its step, Skip guide and GUIDE fade up and out, and come back after. The spotlight and the invite popup already wait for any moment (`RewardMoments.busy`).
+- Bigger cards, lower. The stage is 460x202 at 1: the title's row with SKIP at its right end, then the window. `MistOddsView.drawPlace` scales it to the band between the HUD's top row and the belt, up to 1.3x, and centres it there. It reads HudLayout's own answer through a measure gui.
+  - Desktops: 1.3x (cards 135x182), centred at 0.52 of the screen (was 0.40), 110 px under the top row.
+  - Listed phones: 1.17x-1.3x, centred at 0.50-0.53. A short phone's cards stand a little over the dimmed belt, whose taps still reach it.
+  - SKIP sits beside the title at its own size (96x44 on touch), clear of the belt, jump and the thumbstick on every listed screen. MysteryPodSpec checks each screen.
+- The Play: the words stayed at transparency 1 for the whole draw and came back after. The stage stood at 1.3x, 598x263, its top at y 243.
+- Not seen on a phone: Studio's emulator cannot be switched from here.
+
+**Captures:** output/mystery-draw-2026-10-12/. The sheet `16D_fixed_sheet.png` has captures 10-30, the fixed code reloaded into the running Play; 01-09 are from before those fixes. The sheet `16D_layout_fixed_sheet.png` has captures 40-46, the owner's two fixes.
+**Files:** EnchantedMistData, EnchantedMistConfig (comment), MysteryPodService, PlantService (both hatch paths), MysteryRevealUI, MistOddsView (drawPlace), RewardMoments (MysteryDraw), TutorialUI (coverWords). Specs: MysteryPodSpec, HudLayoutSpec (the band's needle; the words' give-way).
 
 ## THE BERRY TWINKLE, LOUDER AND WIDER — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MistAudioSpec 19/0, EnchantedMistBerrySpec 73/0, SoundLevelSpec 28/0; MUTANT 1/1 CAUGHT)
 

@@ -17,6 +17,10 @@
 -- 2026-10-12, the owner:
 --   THE LOOK      no panel: the cards run over a slight dimmer covering the
 --                 whole screen, notches too; the titles outlined over it.
+--   THE PLACE     the cards up to 1.3x, centred between the HUD's top row
+--                 and the belt (MistOddsView.drawPlace), SKIP beside the
+--                 title; a draw is a moment the guide's words stand down for
+--                 (RewardMoments.MysteryDraw).
 --   THE PACE      each reel spins EnchantedMistData.Shell.SpinSeconds (at
 --                 least 5 s), slowing onto its card the whole way, over about
 --                 twice the cards it had.
@@ -55,6 +59,8 @@ local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
 local PerformanceMode = require(Shared:WaitForChild("PerformanceMode"))
 local Notice = require(Shared:WaitForChild("Notice"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
+local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
 
 local CFG = EnchantedMistConfig.Mystery
 local W = CFG.Words
@@ -62,6 +68,8 @@ local INK = Color3.fromRGB(14, 10, 18)
 local WHITE = Color3.fromRGB(255, 255, 255)
 local CARD_W, CARD_H, GAP = 104, 140, 8
 local CHIP_W, CHIP_H = 96, 84
+-- The title's row (SKIP at its right end); the window under it.
+local TITLE_ROW = 44
 local Z = 4
 -- Each reel's cards and the one it lands on, filler after it filling the
 -- window's right side: about twice the cards since the reels spin 5.5 s.
@@ -74,10 +82,14 @@ local SKIP_AFTER = 0.5
 
 local channel = SeedGame:WaitForChild("Remotes"):WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
 
-local existing = playerGui:FindFirstChild("SeedMysteryReveal")
-if existing then
-	existing:Destroy()
+for _, name in ipairs({ "SeedMysteryReveal", "SeedMysteryRevealMeasure" }) do
+	local existing = playerGui:FindFirstChild(name)
+	if existing then
+		existing:Destroy()
+	end
 end
+-- A re-run mid-draw leaves no moment standing.
+RewardMoments.finish(RewardMoments.MysteryDraw)
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedMysteryReveal"
 gui.ResetOnSpawn = false
@@ -107,24 +119,27 @@ scrim.Parent = gui
 -- owner, 2026-10-12; Notice.band).
 Notice.band("mystery-draw", "over", scrim)
 
--- The cards' place: the upper middle, as wide as the old strip.
+-- THE STAGE (2026-10-12, the owner: the cards bigger, the strip lower, not
+-- hugging the top row): MistOddsView.DrawStage at 1 -- the title's row, then
+-- the window -- scaled and centred between the HUD's top row and the belt
+-- (MistOddsView.drawPlace; placeStage, below).
 local stage = Instance.new("Frame")
 stage.Name = "Stage"
 stage.AnchorPoint = Vector2.new(0.5, 0.5)
-stage.Position = UDim2.fromScale(0.5, 0.4)
-stage.Size = UDim2.new(0.92, 0, 0, 216)
+stage.Position = UDim2.fromScale(0.5, 0.5)
+stage.Size = UDim2.fromOffset(MistOddsView.DrawStage.X, MistOddsView.DrawStage.Y)
 stage.BackgroundTransparency = 1
 stage.ZIndex = Z
 stage.Parent = gui
-local stageMax = Instance.new("UISizeConstraint")
-stageMax.MaxSize = Vector2.new(460, 216)
-stageMax.Parent = stage
+local stageScale = Instance.new("UIScale")
+stageScale.Parent = stage
 
--- The title, outlined over the dimmer.
+-- The title, outlined over the dimmer, in its row's middle: SKIP's room on
+-- either side.
 local title = MenuKit.heading(stage, "Title", 26, WHITE, Z + 2)
-title.AnchorPoint = Vector2.new(0.5, 0)
-title.Position = UDim2.new(0.5, 0, 0, 2)
-title.Size = UDim2.new(1, -20, 0, 32)
+title.AnchorPoint = Vector2.new(0.5, 0.5)
+title.Position = UDim2.new(0.5, 0, 0, TITLE_ROW / 2)
+title.Size = UDim2.new(1, -2 * 112, 0, 32)
 local titleEdge = title:FindFirstChildOfClass("UIStroke") or UIKit.stroke(title, INK, 3)
 titleEdge.Color = INK
 titleEdge.Thickness = 3
@@ -132,7 +147,7 @@ titleEdge.Thickness = 3
 local window = Instance.new("Frame")
 window.Name = "Window"
 window.AnchorPoint = Vector2.new(0.5, 0)
-window.Position = UDim2.new(0.5, 0, 0, 42)
+window.Position = UDim2.new(0.5, 0, 0, TITLE_ROW + 6)
 window.Size = UDim2.new(1, -20, 0, CARD_H + 12)
 window.BackgroundTransparency = 1
 window.ClipsDescendants = true
@@ -163,13 +178,14 @@ strip.Size = UDim2.new(0, 0, 1, 0)
 strip.ZIndex = Z + 1
 strip.Parent = window
 
--- SKIP (2026-10-12, the owner): a small pill at the draw's bottom-right, under
--- the cards and clear of the title and the belt; a touch screen's at least 44
--- tall. Shown SKIP_AFTER into a draw that moves.
+-- SKIP (2026-10-12, the owner): a small pill at the right end of the title's
+-- row -- clear of the cards, the title, the belt and a phone's thumbs -- at its
+-- own size whatever the stage's scale (sizeSkip). Shown SKIP_AFTER into a draw
+-- that moves.
 local skipButton = Instance.new("TextButton")
 skipButton.Name = "Skip"
-skipButton.AnchorPoint = Vector2.new(1, 0)
-skipButton.Position = UDim2.new(1, -10, 0, 42 + CARD_H + 12 + 8)
+skipButton.AnchorPoint = Vector2.new(1, 0.5)
+skipButton.Position = UDim2.new(1, -8, 0, TITLE_ROW / 2)
 skipButton.BackgroundColor3 = Color3.fromRGB(24, 20, 34)
 skipButton.BackgroundTransparency = 0.15
 skipButton.AutoButtonColor = true
@@ -182,6 +198,41 @@ skipButton.ZIndex = Z + 6
 skipButton.Parent = stage
 UIKit.corner(skipButton, 14)
 UIKit.stroke(skipButton, Color3.fromRGB(150, 255, 196), 1.5)
+
+-- SKIP at its own size whatever the stage's scale: a touch screen's 96 x 44.
+local function sizeSkip()
+	local s = math.max(stageScale.Scale, 0.01)
+	local nominal = if UserInputService.TouchEnabled then Vector2.new(96, 44) else Vector2.new(84, 34)
+	skipButton.Size = UDim2.fromOffset(nominal.X / s, nominal.Y / s)
+	skipButton.TextSize = 16 / s
+end
+
+-- Where the stage stands: read off the HUD's own layout through an empty gui
+-- with the HUD's insets (MosskeeperUI's way), on every change of screen and at
+-- each draw's start.
+local measureGui = Instance.new("ScreenGui")
+measureGui.Name = "SeedMysteryRevealMeasure"
+measureGui.ResetOnSpawn = false
+measureGui.IgnoreGuiInset = false
+measureGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+UIKit.tenFoot(measureGui)
+measureGui.Parent = playerGui
+
+local function placeStage()
+	local size = gui.AbsoluteSize
+	if size.X <= 0 or measureGui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local L = HudLayout.solve(HudLayout.measure(measureGui))
+	local scale, centre = MistOddsView.drawPlace(L, size, measureGui.AbsolutePosition - gui.AbsolutePosition,
+		HudLayout.scaleOf(measureGui))
+	stageScale.Scale = scale
+	stage.Position = UDim2.fromOffset(centre.X, centre.Y)
+	sizeSkip()
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeStage)
+measureGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeStage)
+placeStage()
 
 local fx: { any } = {}
 local moving: { any } = {}
@@ -421,6 +472,7 @@ local function finish(mine: number)
 	ContextActionService:UnbindAction("SeedMysterySkip")
 	clear()
 	gui.Enabled = false
+	RewardMoments.finish(RewardMoments.MysteryDraw)
 	runNext()
 end
 
@@ -428,7 +480,10 @@ local function play(payload: any)
 	playing += 1
 	local mine = playing
 	clear()
+	placeStage()
 	gui.Enabled = true
+	-- A moment: the guide's words stand down until it closes (TutorialUI).
+	RewardMoments.begin(RewardMoments.MysteryDraw)
 	local sized = tonumber(payload.size) ~= nil and EnchantedMistData.isSized(tostring(payload.rarity))
 	local secret = payload.rarity == "Secret"
 	local snap = snapping()
@@ -495,7 +550,7 @@ local function play(payload: any)
 			if mine ~= playing then
 				return
 			end
-			skipButton.Size = if UserInputService.TouchEnabled then UDim2.fromOffset(96, 44) else UDim2.fromOffset(84, 34)
+			sizeSkip()
 			skipButton.Visible = true
 			ContextActionService:BindActionAtPriority("SeedMysterySkip", function(_, state)
 				if state == Enum.UserInputState.Begin and skipTo then

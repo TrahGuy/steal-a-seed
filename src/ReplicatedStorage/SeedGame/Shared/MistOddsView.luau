@@ -258,6 +258,55 @@ function MistOddsView.reelItems(count: number, land: number, answer: any, draw: 
 	return items
 end
 
+--==============================================================================
+-- WHERE THE DRAW STANDS (2026-10-12, the owner: the reel's cards bigger, the
+-- strip centred lower, not hugging the top row -- desktop and phones)
+--
+-- The Mysterious Pod's draw (MysteryRevealUI) is a stage DrawStage big at 1:
+-- its title's row, SKIP at that row's right end, then the window of 104 x 140
+-- cards. It is scaled to what the band between the HUD's top row and the belt
+-- holds, up to DrawMax, and centred in that band. The band runs from under the
+-- topbar -- or under the top row, where that stands below it (a desktop's
+-- BIOMES, TELEPORT and OBBY) -- down to the belt's name line; on a compact
+-- screen down to the belt's middle, so a short phone's cards stand a little
+-- over the dimmed belt, whose taps still reach it (the draw takes none but
+-- SKIP's, and SKIP stands at the top). `L` is HudLayout's answer for the
+-- screen, `size` the draw's whole-screen gui, `shift` where the HUD's safe
+-- area starts in it and `k` that area's units (a TV's). Returns the scale and
+-- the stage's centre, in the draw's own pixels.
+--==============================================================================
+MistOddsView.DrawStage = Vector2.new(460, 202)
+MistOddsView.DrawMax = 1.3
+
+function MistOddsView.drawPlace(L: any, size: Vector2, shift: Vector2, k: number): (number, Vector2)
+	local function edge(r: any, low: boolean): number?
+		if type(r) ~= "table" or (r.w or 0) <= 0 or (r.h or 0) <= 0 then
+			return nil
+		end
+		return shift.Y + (r.y + (if low then r.h else 0)) * k
+	end
+	local top = shift.Y
+	for _, key in ipairs({ "biomes", "teleport", "returnPlot", "obby", "run" }) do
+		top = math.max(top, edge(L[key], true) or top)
+	end
+	local bottom = size.Y
+	local hot = L.hotbar
+	if L.compact then
+		local hotTop = edge(hot, false)
+		if hotTop then
+			bottom = math.min(bottom, hotTop + hot.h * k / 2)
+		end
+	else
+		bottom = math.min(bottom, edge(L.namePopup, false) or bottom, edge(hot, false) or bottom)
+	end
+	local pad = if L.compact then 4 else 24
+	local stage = MistOddsView.DrawStage
+	local safeW = if typeof(L.safe) == "Vector2" then L.safe.X * k else size.X - 2 * shift.X
+	local scale = math.clamp(math.min((bottom - top - 2 * pad) / stage.Y, (safeW - 32) / stage.X), 0.6,
+		MistOddsView.DrawMax)
+	return scale, Vector2.new(shift.X + safeW / 2, (top + bottom) / 2)
+end
+
 -- Draws, once each, the creature in every window `card` listed in `views`.
 function MistOddsView.drawViews(views: { { view: ViewportFrame, species: any, built: boolean } })
 	for _, v in ipairs(views) do
