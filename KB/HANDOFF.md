@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 19: THE MIST REPLACES THE MUSIC — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED: the owner's republish pending; MistAudioSpec 19/0, MusicBedSpec 30/0 (1 new), RainAudioSpec 39/0, SfxWiringSpec 202/0, SoundLevelSpec 28/0, EnchantedMistBerrySpec 73/0, DiscoDancersSpec 59/0, MiniEventSpec 90/0, MistLookSpec 17/0, PodRushSpec 98/0, RainEventSpec 98/0, SproutDashSpec 49/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A TIMELINE)
+## ITEM 19: THE MIST REPLACES THE MUSIC — 2026-10-12 (CLAUDE, TERMINAL)  (LIVE as v1059; MistAudioSpec 19/0, MusicBedSpec 30/0 (1 new), RainAudioSpec 39/0, SfxWiringSpec 202/0, SoundLevelSpec 28/0, EnchantedMistBerrySpec 73/0, DiscoDancersSpec 59/0, MiniEventSpec 90/0, MistLookSpec 17/0, PodRushSpec 98/0, RainEventSpec 98/0, SproutDashSpec 49/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A TIMELINE)
 
 The owner on v1058: "the default background music is still overlapping when I trigger the mist event". Their pick (option 1): THE MIST REPLACES THE MUSIC.
 
@@ -25,7 +25,7 @@ The owner on v1058: "the default background music is still overlapping when I tr
 
 **Not seen:** a phone (the emulator stood on desktop), a Thunderstorm (the rain's own path), a disco or Pod Rush over the Mist (above it in the order, as the rain is).
 
-**Pushed** with the owner's OK: f014972. The owner republishes next.
+**Pushed** with the owner's OK: f014972. **LIVE as v1059:** the owner's publish at 16:01:14 UTC on 2026-10-12 (Studio's log), of the f0286da tree (= origin/wip, nothing uncommitted in src or tools; the pre-publish probe: 375 scripts = disk, 0 ZZ, the test-store marker absent). No Player log has joined v1059 yet.
 
 **Files:** GameConfig (Music.MistTrack, MistStart, MistFadeSeconds; the MistAmbience cue removed), Music.client (the Mist's bed, its holds, alignMist, its probe), Weather.client (no bed). Specs: MistAudioSpec, MusicBedSpec.
 
