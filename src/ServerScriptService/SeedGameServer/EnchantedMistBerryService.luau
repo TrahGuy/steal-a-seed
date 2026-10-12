@@ -8,7 +8,7 @@
 -- IntervalSeconds, MaxActive at most, each for LifetimeSeconds. Every player
 -- is told where each one appeared (one notice, said again in place).
 --
--- SHARED COMPETITION: one berry, one picker. Hold E (Collect Dewberry,
+-- SHARED COMPETITION: one berry, one picker. Hold E (Collect,
 -- HoldSeconds) within reach; the server checks the event, the berry, its
 -- expiry, a living body in range, the hold it saw begin, no pod in hand and
 -- room under the carry cap -- never a client's count, position or claimed
@@ -301,7 +301,11 @@ local function build(berry: Berry)
 	prompt.MaxActivationDistance = SPAWN.Reach
 	prompt.RequiresLineOfSight = false
 	prompt:SetAttribute(B.BerryAttribute, berry.id)
-	prompt.Parent = root:FindFirstChild("PickupAnchor") or root
+	-- ON THE PART (2026-10-12 hotfix): PromptUI draws a Custom prompt only on a
+	-- BasePart. On the PickupAnchor ATTACHMENT nothing showed -- E worked unseen on
+	-- a keyboard, and on a phone there was nothing to tap. PromptUI's panel stands
+	-- its LIFT over the part; the glint keeps the anchor (EnchantedMistBerries).
+	prompt.Parent = root
 	prompt.PromptButtonHoldBegan:Connect(function(player)
 		EnchantedMistBerryService._holdBegan(player, berry.id, Hooks.now())
 	end)

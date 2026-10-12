@@ -1,5 +1,19 @@
 # Steal a Seed — Session Handoff
 
+## HOTFIX, ITEM 16 A: THE BERRIES' COLLECT PROMPT — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip; the owner republishes; EnchantedMistBerrySpec 71/0, MistLookSpec 13/0; the mutant putting it back on the attachment CAUGHT; ONE GUARDED PLAY; captures in output/item16-berry-prompt-hotfix-2026-10-12)
+
+Seen live by the owner on a phone after the publish: no "Collect Dewberry" prompt on the berries, so no collecting.
+- **The cause, on every device:** the berry's ProximityPrompt (Style Custom) hung on the model's PickupAnchor ATTACHMENT. PromptUI draws a Custom prompt only on a BasePart (its build() gives up otherwise), so a berry showed NO prompt anywhere.
+  - On a keyboard, E still worked unseen. My item 14 Play picked a berry that way; its capture shows no prompt.
+  - On a phone the panel is the tap target, so there was nothing to tap.
+  - The old spec line pinned the attachment and called it "drawn by PromptUI".
+- **The fix:** the prompt hangs on the berry's Root PART. The glint stays on the PickupAnchor (EnchantedMistBerries.client).
+  - EnchantedMistBerrySpec pins it on a BasePart, coupled to PromptUI's own BasePart rule.
+  - Its text is one word, "Collect" (the owner): "Collect Dewberry" ran off a phone's panel.
+- **The live scan** (the owner's ask): every Style Custom ProximityPrompt in the Workspace during a Mist, 43 in all, now sits on a Part. Nothing else had this bug.
+- **LIVE**, on the owner's phone emulator (705 x 338): beside a berry, PromptUI drew "E | COLLECT" (hotfix_02_collect_on_a_phone; a real phone's cap reads TAP).
+  - Test-only, reported: the MCP's injected clicks no longer reached the game after the Studio restart, so a gated test host (deleted after) started the Mist through EnchantedMistService.AdminStart, and my test character was moved beside a berry from the server.
+  - Touch cannot be injected from Studio: the tap itself is the panel's existing touch path, unchanged.
 ## ITEM 15: THE EVENT BADGES — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the look OK'd by the owner via the peer; BoostIconsSpec 43/0, SourceIconsSpec 21/0, DiscoPartySpec 19/0, PodRushSpec 98/0, ServerBoostSpec 65/0, RebirthSpec 78/0, HudLayoutSpec 1468/0 and 13 more icon/HUD readers green (lean testing); 4 OF 4 MUTANTS CAUGHT; ONE SHORT GUARDED PLAY; captures in output/item15-event-badges-2026-10-12)
 
 The owner's item 15 via the peer, wired before the publish: Codex's studded round event badges (art/icons/event-badges-2026-10-12, committed with the wiring, and his tight copies in art/icons/tight/event-*.png).

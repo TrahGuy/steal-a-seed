@@ -272,11 +272,19 @@ local ok, err = pcall(function()
 	check(still, "every part anchored; nothing to bump, touch or hit")
 	check(#sounds == 1 and sounds[1].name == "MistBerryAppears" and model ~= nil and sounds[1].at == model.PrimaryPart,
 		"its own twinkle AT it (DEWBERRY APPEARS, a server one-shot heard near it only)", #sounds)
-	check(prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.ActionText == "Collect Dewberry"
+	check(prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.ActionText == "Collect"
 			and prompt.HoldDuration == SPAWN.HoldSeconds and prompt.MaxActivationDistance == SPAWN.Reach
 			and prompt.KeyboardKeyCode == Enum.KeyCode.E and prompt.Style == Enum.ProximityPromptStyle.Custom
-			and prompt:GetAttribute(B.BerryAttribute) == "spec-1-b1" and prompt.Parent.Name == "PickupAnchor",
-		"hold E -- Collect Dewberry, 0.75 s, 10 studs, drawn by PromptUI, on the berry's pickup point")
+			and prompt:GetAttribute(B.BerryAttribute) == "spec-1-b1",
+		"hold E -- Collect (one word, the owner's: the longer words ran off a phone's panel), 0.75 s, 10 studs, drawn by PromptUI")
+	-- THE 2026-10-12 HOTFIX: PromptUI draws a Custom prompt only on a BasePart (its build() gives up otherwise).
+	-- On the PickupAnchor attachment the berry showed no prompt at all: E worked unseen on a keyboard, and a
+	-- phone had nothing to tap.
+	local promptUi = game:GetService("StarterPlayer").StarterPlayerScripts:FindFirstChild("PromptUI")
+	check(prompt ~= nil and prompt.Parent ~= nil and prompt.Parent:IsA("BasePart") and prompt.Parent == model.PrimaryPart
+			and promptUi ~= nil and string.find(promptUi.Source, 'if not (adornee and adornee:IsA("BasePart")) then', 1, true) ~= nil,
+		"the berry's prompt sits on a PART -- PromptUI draws a Custom prompt only there -- so it shows, and a phone "
+			.. "has something to tap", prompt and prompt.Parent and prompt.Parent.ClassName)
 	local nA, lastA = sentTo(A, B.NoticeKeys.Appeared)
 	local nC = sentTo(C, B.NoticeKeys.Appeared)
 	local nD = sentTo(D, B.NoticeKeys.Appeared)

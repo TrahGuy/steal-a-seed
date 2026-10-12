@@ -50,7 +50,8 @@ EnchantedMistConfig.PlayerAttributes = {
 EnchantedMistConfig.Berries = {
 	FolderName = "SeedDewberries",
 	PromptName = "CollectDewberry",
-	ActionText = "Collect Dewberry",
+	-- One word (the owner, 2026-10-12: "Collect Dewberry" ran off a phone's panel).
+	ActionText = "Collect",
 	-- The client reads these to tell a berry prompt from any other.
 	BerryAttribute = "DewberryId",
 	Words = {

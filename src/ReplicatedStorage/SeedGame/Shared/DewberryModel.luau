@@ -9,7 +9,8 @@
 -- beads and a glint, a soft mint PointLight. Art only: no logic, no script.
 -- Everything anchored, nothing collides, touches or is found by a ray. The
 -- pivot sits at the floor; `Root` (the PrimaryPart) carries the
--- `PickupAnchor` attachment at mid-height, where a prompt hangs.
+-- `PickupAnchor` attachment at mid-height, where the glint sits. The prompt
+-- hangs on `Root` itself (PromptUI draws a prompt only on a part).
 --==============================================================================
 local DewberryModel = {}
 

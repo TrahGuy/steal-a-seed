@@ -4,7 +4,7 @@
 --
 -- A FULL PLAYER IS NOT OFFERED A BERRY. At CarryCap Dewberries carried (the
 -- DewberriesCarried player attribute PlayerDataService publishes) every berry's
--- Collect Dewberry prompt is put out of reach ON THIS CLIENT -- its reach set
+-- Collect prompt is put out of reach ON THIS CLIENT -- its reach set
 -- to 0, as PromptUI does for another player's plot -- so the key and the tap
 -- reach nothing, while every other player still sees and takes the berry. The
 -- reach comes back when a delivery drops the count under the cap. A reach
@@ -54,7 +54,13 @@ local function full(): boolean
 end
 
 local function addGlint(prompt: ProximityPrompt)
-	local at = prompt.Parent
+	-- At the berry's middle: its PickupAnchor, where the prompt hung until the
+	-- 2026-10-12 hotfix put the prompt on the part itself (PromptUI draws only that).
+	local at: Instance? = prompt.Parent
+	local anchor = at and at:FindFirstChild("PickupAnchor")
+	if anchor and anchor:IsA("Attachment") then
+		at = anchor
+	end
 	if glints[prompt] or not (at and (at:IsA("Attachment") or at:IsA("BasePart"))) then
 		return
 	end
