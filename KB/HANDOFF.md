@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip IN TWO COMMITS, NOT PUSHED: awaiting the owner's OK, with the twinkle commit 457f6a0; MysteryPodSpec 39/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0, TutorialSpotlightSpec 51/0, InvitePanelSpec 395/0, MistCreaturesSpec 11/0; MUTANTS 14/14 CAUGHT; TWO GUARDED PLAYS)
+## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip IN TWO COMMITS with the owner's OK, with the twinkle commit 457f6a0, NOT PUBLISHED; MysteryPodSpec 39/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0, TutorialSpotlightSpec 51/0, InvitePanelSpec 395/0, MistCreaturesSpec 11/0; MUTANTS 14/14 CAUGHT; TWO GUARDED PLAYS)
 
 The owner (via the peer):
 - "sometimes the draw doesn't run, it auto chooses";
@@ -55,7 +55,7 @@ KNOWN LIMIT, not checked on a device. In Studio (unfocused, 10-15 fps), a card t
 **Captures:** output/mystery-draw-2026-10-12/. The sheet `16D_fixed_sheet.png` has captures 10-30, the fixed code reloaded into the running Play; 01-09 are from before those fixes. The sheet `16D_layout_fixed_sheet.png` has captures 40-46, the owner's two fixes.
 **Files:** EnchantedMistData, EnchantedMistConfig (comment), MysteryPodService, PlantService (both hatch paths), MysteryRevealUI, MistOddsView (drawPlace), RewardMoments (MysteryDraw), TutorialUI (coverWords). Specs: MysteryPodSpec, HudLayoutSpec (the band's needle; the words' give-way).
 
-## THE BERRY TWINKLE, LOUDER AND WIDER — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MistAudioSpec 19/0, EnchantedMistBerrySpec 73/0, SoundLevelSpec 28/0; MUTANT 1/1 CAUGHT)
+## THE BERRY TWINKLE, LOUDER AND WIDER — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; MistAudioSpec 19/0, EnchantedMistBerrySpec 73/0, SoundLevelSpec 28/0; MUTANT 1/1 CAUGHT)
 
 The owner: the DEWBERRY APPEARS twinkle was "almost nothing to hear".
 - **Louder and wider:**
