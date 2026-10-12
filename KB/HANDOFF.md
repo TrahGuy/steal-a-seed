@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 18 A: THE HUD'S REBIRTH BUTTON — THE PANEL FROM ANYWHERE, A "!" WHEN YOU CAN — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; HudLayoutSpec 1497/0 (27 new), RebirthSpec 85/0 (7 new), MosskeeperTalkSpec 35/0, RebirthCelebrationSpec 92/0 and every other spec calling HudLayout green: InviteHudSpec 438/0, InvitePanelSpec 395/0, RailFallbackSpec 49/0, PhoneMenuSpec 29/0, BoostIconsSpec 43/0, AdminConsoleSpec 63/0, CompactMenusSpec 46/0, ContextSlotSpec 8/0, EnchantedMistSpec 62/0, HotbarSpec 38/0, MiniEventSpec 90/0, MysteryPodSpec 39/0, PodHatchSpec 22/0, PodRushSpec 98/0, SecretToastSpec 61/0, SortSpec 24/0, SpeedShoeSpec 19/0, TrapRemoveSpec 27/0, TreadmillFunSpec 116/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 18 A: THE HUD'S REBIRTH BUTTON — THE PANEL FROM ANYWHERE, A "!" WHEN YOU CAN — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; HudLayoutSpec 1497/0 (27 new), RebirthSpec 85/0 (7 new), MosskeeperTalkSpec 35/0, RebirthCelebrationSpec 92/0 and every other spec calling HudLayout green: InviteHudSpec 438/0, InvitePanelSpec 395/0, RailFallbackSpec 49/0, PhoneMenuSpec 29/0, BoostIconsSpec 43/0, AdminConsoleSpec 63/0, CompactMenusSpec 46/0, ContextSlotSpec 8/0, EnchantedMistSpec 62/0, HotbarSpec 38/0, MiniEventSpec 90/0, MysteryPodSpec 39/0, PodHatchSpec 22/0, PodRushSpec 98/0, SecretToastSpec 61/0, SortSpec 24/0, SpeedShoeSpec 19/0, TrapRemoveSpec 27/0, TreadmillFunSpec 116/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: a REBIRTH button (their art, 89518746657536) under Settings; a "!" like INVITE's while the player can rebirth; it opens the Rebirth panel from anywhere, no shrine walk. Item 18's second half, the "Skip Rebirth" product (3718117755, 249 R$), is its own commit after this one.
 
@@ -31,6 +31,8 @@ The owner: a REBIRTH button (their art, 89518746657536) under Settings; a "!" li
 **Not seen:** a phone and a compact window. The emulator stood on desktop and can't be switched from here; their places are HudLayoutSpec's numbers.
 
 **Also:** the desktop's top-corner band (`HudLayout.bag`, UIKit's modal header) now runs to REBIRTH's foot. The art loads in Edit (1024 px, "rebirth", group 744756221). It is Codex's `rebirth-studded-square-v2.png`; Codex's art folder is not committed here.
+
+**Pushed** with the owner's OK: bcf5695. Phones are spec-only (HudLayoutSpec's numbers); the owner took REBIRTH left of Index there.
 
 **Files:** GameConfig (Rebirth.Hud, Rail.Words.Rebirth), HudLayout (rebirth, rebirthBadge, groups, the TV shift, the corner band), Rebirth (readyNow), UIKit (the modal header's band), RebirthService (AskQuote, the `anywhere` quote), RebirthUI (the button, its "!", the walk-away close), MosskeeperUI (measureHud), AGENTS.md (RebirthUI's line). Specs: HudLayoutSpec, RebirthSpec, MosskeeperTalkSpec, RebirthCelebrationSpec.
 
