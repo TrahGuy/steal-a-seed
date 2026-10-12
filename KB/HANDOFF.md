@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 16 E: MORE MIST — ROLLING GROUND MIST, BIG PUFFS, THE HUB'S SWIRL — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK; MistLookSpec 17/0, MistAudioSpec 19/0, RainAudioSpec 39/0, RainEventSpec 98/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
+## ITEM 16 E: MORE MIST — ROLLING GROUND MIST, BIG PUFFS, THE HUB'S SWIRL — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; MistLookSpec 17/0, MistAudioSpec 19/0, RainAudioSpec 39/0, RainEventSpec 98/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
 
 The owner wanted "like a real mist moving around": a rolling ground fog, drifting mist puffs, and thicker mist at the hub. The rules:
 - client-side, while the Mist is active only;
