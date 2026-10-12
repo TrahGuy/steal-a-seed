@@ -242,9 +242,20 @@ local shownWisps, shownFireflies = -1, -1
 -- MUSIC does not), at the look's own level -- in and out with it, full at once
 -- for a late joiner -- and BEGINS and ENDS once for everyone, on the state's
 -- own change, never at a join.
+--
+-- ONE CLEAN MOMENT (2026-10-12, the owner: "when I trigger the enchanted mist,
+-- sfx is overlapping"): BEGINS sounds alone, once a Mist (its event id), and
+-- the bed waits for it to end and comes up over two seconds (BED_FADE); the server
+-- keeps the berries' twinkle quiet meanwhile (EnchantedMistBerryService), and
+-- an admin's start and end lines come without their ping (AdminAnnounce.quiet).
+-- ENDS already stood alone, the bed fading out under it.
 --==============================================================================
 local mistBedShown = -1
 local mistBed: Sound? = nil
+-- When the bed may start (os.clock): BEGINS' end at a start, 0 at a join.
+local mistBedAfter = 0
+local mistBegunId: any = nil
+local BED_FADE = 2
 
 local function stepMistBed()
 	local cue = SoundKit.cue("MistAmbience")
@@ -259,7 +270,12 @@ local function stepMistBed()
 		end
 		return
 	end
-	local want = (cue.volume or 0.5) * mistLevel
+	local clock = os.clock()
+	if clock < mistBedAfter then
+		return
+	end
+	local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)
+	local want = (cue.volume or 0.5) * mistLevel * ramp
 	if mistBedShown < 0 then
 		mistBedShown = want
 		mistBed = SoundKit.play("MistAmbience", { volume = want })
@@ -277,9 +293,13 @@ table.insert(connections, Workspace:GetAttributeChangedSignal(MIST_STATE):Connec
 	local now = Workspace:GetAttribute(MIST_STATE)
 	local active = EnchantedMistConfig.States.Active
 	local started = Workspace:GetAttribute(EnchantedMistConfig.Attributes.StartedAt)
+	local eventId = Workspace:GetAttribute(EnchantedMistConfig.Attributes.EventId)
 	if now == active and mistWas ~= active and type(started) == "number"
-		and Workspace:GetServerTimeNow() - started <= 5 then
+		and Workspace:GetServerTimeNow() - started <= 5 and eventId ~= mistBegunId then
+		mistBegunId = eventId
 		SoundKit.play("MistBegins")
+		local begins = SoundKit.cue("MistBegins")
+		mistBedAfter = os.clock() + (if begins and begins.clip then begins.clip else 3.5)
 	elseif now ~= active and mistWas == active then
 		SoundKit.play("MistEnds")
 	end

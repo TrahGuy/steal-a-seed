@@ -1,5 +1,24 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 C: THE MIST'S START AND END, ONE CLEAN SOUND EACH — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK on the timeline; EnchantedMistBerrySpec 73/0, MistAudioSpec 18/0, AdminMistSpec 69/0 and the other readers green; MUTANTS 4/4 CAUGHT; GUARDED PLAYS: a diagnosis timeline and a proof timeline through the console's own START and END)
+
+The owner: "when i trigger the enchanted mist, sfx is overlapping".
+- **The diagnosis.** A client log of every Sound, through the console's own START MIST NOW path:
+  - BEGINS played once (3.46 s). There was no second BEGINS and no Mosskeeper sound.
+  - The first berry's twinkle fired with BEGINS: the first berry spawns at once, and anyone within 40 studs hears it.
+  - The ambience bed faded in under BEGINS.
+  - The admin's line rang its ping. Item 16B2 already made the Mist's start and end lines quiet.
+  - The END was already clean: ENDS alone, the bed fading out under it.
+- **The fix:**
+  - BEGINS plays once per Mist (its event id).
+  - The bed waits for BEGINS to end (its own clip, 3.48 s) and comes up over 2 s. A late joiner, who never hears BEGINS, has it at once.
+  - The server keeps the berries' twinkle quiet for BEGINS' clip from the Mist's start. The berries still spawn and say so.
+- **The proof** (the same log, after the fix):
+  - BEGINS played alone at the start, and the bed came in the moment BEGINS stopped.
+  - The first twinkle came 3.67 s in.
+  - The admin's start and end lines were quiet.
+  - ENDS played alone at the end; the bed was out 6 s later.
+- **Files:** Weather.client, EnchantedMistBerryService. Specs: EnchantedMistBerrySpec, MistAudioSpec.
 ## ITEM 16 B2: EVERY NOTICE AT THE TOP CENTRE, AND WHO GIVES WAY — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK on the captures, NOT PUBLISHED; the 54 specs touching it green (HudLayoutSpec 1470/0, NoticeSpec 100/0, AdminAnnounceSpec 43/0, TreadmillFunSpec 116/0, BoostIconsSpec 43/0, ...; HatchRollSpec and TrafficLogSpec, the known wall-clock flakes, green alone); MUTANTS 6/6 CAUGHT; GUARDED PLAYS ON THE PHONE EMULATOR (705 x 338) AND A DESKTOP WINDOW (1169 x 716); captures in output/item16b2-2026-10-12)
 
 The owner, with a marked-up phone screenshot: "ALL NOTIFICATIONS go to the TOP CENTRE, just under BIOMES / PLOT / OBBY, on DESKTOP AND MOBILE. Stack them downward from there; never past the screen's middle." Then the rule for clashes: the one giving way slides up a little and fades in about 0.3 s; a new notice lifts and fades the older one; Reduced Motion gets a plain fade. The overlap list went to the owner first, who confirmed it item by item.

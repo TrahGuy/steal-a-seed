@@ -270,8 +270,9 @@ local ok, err = pcall(function()
 		end
 	end
 	check(still, "every part anchored; nothing to bump, touch or hit")
-	check(#sounds == 1 and sounds[1].name == "MistBerryAppears" and model ~= nil and sounds[1].at == model.PrimaryPart,
-		"its own twinkle AT it (DEWBERRY APPEARS, a server one-shot heard near it only)", #sounds)
+	-- BEGINS SOUNDS ALONE (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is overlapping"): no
+	-- twinkle for a berry while BEGINS plays, its clip's length from the Mist's start.
+	check(#sounds == 0, "no twinkle at the Mist's very start: BEGINS sounds alone", #sounds)
 	check(prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.ActionText == "Collect"
 			and prompt.HoldDuration == SPAWN.HoldSeconds and prompt.MaxActivationDistance == SPAWN.Reach
 			and prompt.KeyboardKeyCode == Enum.KeyCode.E and prompt.Style == Enum.ProximityPromptStyle.Custom
@@ -302,6 +303,15 @@ local ok, err = pcall(function()
 	check(#M.List() == 1, "a second short of the next chance: still one")
 	stepTo(1000 + I)
 	check(#M.List() == 2, "at the next chance: the second")
+	local quiet = (GameConfig.Sfx :: any).Cues.MistBegins.clip
+	check(#sounds == 0 and I < quiet and 2 * I >= quiet,
+		"still no twinkle 3 s in: BEGINS (3.48 s) is still sounding", #sounds)
+	stepTo(1000 + 2 * I)
+	local thirdModel = M.Model("spec-1-b3")
+	check(#sounds == 1 and sounds[1].name == "MistBerryAppears" and thirdModel ~= nil
+			and sounds[1].at == thirdModel.PrimaryPart,
+		"and once BEGINS is over, each berry's own twinkle AT it (DEWBERRY APPEARS, a server one-shot heard near it "
+			.. "only): the third, 6 s in", #sounds)
 	stepTo(1000 + 5 * I)
 	check(#M.List() == SPAWN.MaxActive, "then one a chance, up to six", #M.List())
 	stepTo(1059)

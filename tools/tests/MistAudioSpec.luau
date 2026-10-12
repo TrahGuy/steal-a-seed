@@ -173,9 +173,19 @@ local ok, err = pcall(function()
 			and has(weather, "\tend\n\tstepMistBed()\nend"),
 		"Weather.client: the bed at the Mist look's own level, in and out with it, stopped at nothing and at cleanup")
 	check(has(weather, "if now == active and mistWas ~= active and type(started) == \"number\"\n"
-				.. "\t\tand Workspace:GetServerTimeNow() - started <= 5 then\n\t\tSoundKit.play(\"MistBegins\")")
+				.. "\t\tand Workspace:GetServerTimeNow() - started <= 5 and eventId ~= mistBegunId then\n"
+				.. "\t\tmistBegunId = eventId\n\t\tSoundKit.play(\"MistBegins\")")
 			and has(weather, "elseif now ~= active and mistWas == active then\n\t\tSoundKit.play(\"MistEnds\")"),
-		"BEGINS once as the Mist starts (never for a state that arrives late), ENDS once as it leaves")
+		"BEGINS once a Mist as it starts -- never twice for one event id, never for a state that arrives late -- and "
+			.. "ENDS once as it leaves")
+	-- ONE CLEAN MOMENT (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is overlapping"): the bed
+	-- waits for BEGINS to end and comes up over two seconds; a late joiner, who never hears BEGINS, has it at once.
+	check(has(weather, "mistBedAfter = os.clock() + (if begins and begins.clip then begins.clip else 3.5)")
+			and has(weather, "local mistBedAfter = 0\n")
+			and has(weather, "if clock < mistBedAfter then\n\t\treturn\n\tend")
+			and has(weather, "local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)")
+			and has(weather, "local want = (cue.volume or 0.5) * mistLevel * ramp"),
+		"the bed comes up only as BEGINS ends, over two seconds; at once for a late joiner")
 	local berryServer = sourceOf(Server, "EnchantedMistBerryService")
 	check(has(berryServer, "\t\tHooks.sound(\"MistBerryAppears\", root)\n")
 			and has(berryServer, "\tsound = function(name: string, at: BasePart)\n\t\tSoundKit.emit(name, at)\n")

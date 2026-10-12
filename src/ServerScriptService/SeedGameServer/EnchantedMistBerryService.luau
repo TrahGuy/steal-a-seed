@@ -142,6 +142,8 @@ type Berry = {
 local berries: { [string]: Berry } = {}
 local run = {
 	eventId = nil :: string?,
+	-- When this Mist started: no twinkle while BEGINS sounds (place).
+	startedAt = 0,
 	endsAt = 0,
 	nextAt = 0,
 	serial = 0,
@@ -355,7 +357,11 @@ local function place(eventId: string, at: Vector3, where: string?, now: number):
 	end
 	run.spawned += 1
 	local root = berry.model and berry.model.PrimaryPart
-	if root then
+	-- BEGINS SOUNDS ALONE (2026-10-12, the owner: "when I trigger the enchanted
+	-- mist, sfx is overlapping"): no twinkle while it plays -- its own clip's
+	-- length from the Mist's start. The berry still comes, and says so.
+	local quiet = (GameConfig.Sfx :: any).Cues.MistBegins.clip or 3.5
+	if root and now - run.startedAt >= quiet then
 		Hooks.sound("MistBerryAppears", root)
 	end
 	announce(berry)
@@ -536,6 +542,7 @@ function EnchantedMistBerryService._begin(info: any, now: number)
 	end
 	EnchantedMistBerryService._stop("replaced")
 	run.eventId = info.eventId
+	run.startedAt = tonumber(info.startedAt) or now
 	run.endsAt = tonumber(info.endsAt) or now
 	run.nextAt = now
 	run.serial = 0
