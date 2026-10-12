@@ -1,0 +1,785 @@
+{
+  "Framing": "alpha>=16 visible bounds used only for crop measurement; 8 native pixels of antialias margin; no global alpha threshold erasing, painting or masks",
+  "TightCanvas": "512x512 RGBA, about2% padding per side",
+  "Icons": [
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-016ff267-ec08-41d7-99a2-8e4df2e2795a.png",
+      "Key": "x1",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\x1-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\mysterious_pod_x1.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 91,
+            "MinY": 53,
+            "MaxX": 419,
+            "MaxY": 458,
+            "BoundsWidth": 329,
+            "BoundsHeight": 406,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 153980,
+            "NonzeroAlphaPixels": 108164,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "27E56BCE2AD5909BCD1298C2D92D823C4D028F7D479004B7A4032143F18035B3"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\mysterious_pod_x1.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 58,
+            "MinY": 12,
+            "MaxX": 454,
+            "MaxY": 500,
+            "BoundsWidth": 397,
+            "BoundsHeight": 489,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 105894,
+            "NonzeroAlphaPixels": 156250,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "662BD0E5D15C724F3C0CE8D7899390E27BEBBBE68BAB3719E0C2A8DE5DB75CB4"
+        }
+      ],
+      "SquareSourceCrop": [
+        43,
+        47,
+        1167,
+        1167
+      ],
+      "NativeSHA256": "603B8EE000EFE4A4EF13A000C34AD2F846DA1E9F5FAD380D37703EC1AC196F02",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 157,
+        "MinY": 51,
+        "MaxX": 1095,
+        "MaxY": 1209,
+        "BoundsWidth": 939,
+        "BoundsHeight": 1159,
+        "MaximumEdgeAlpha": 1,
+        "TransparentPixels": 692030,
+        "NonzeroAlphaPixels": 880486,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "mysterious_pod_x1.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-632487b4-91b8-446b-bb1a-41ce8dd22a3b.png",
+      "Key": "x3",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\x3-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\mysterious_pod_x3.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 52,
+            "MinY": 85,
+            "MaxX": 459,
+            "MaxY": 426,
+            "BoundsWidth": 408,
+            "BoundsHeight": 342,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 150981,
+            "NonzeroAlphaPixels": 111163,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "F7685B0DD630ECD66BA3CE251E21514EBBD070A659FEBC92EBBF98B7E6B42C6E"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\mysterious_pod_x3.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 12,
+            "MinY": 50,
+            "MaxX": 500,
+            "MaxY": 461,
+            "BoundsWidth": 489,
+            "BoundsHeight": 412,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 101182,
+            "NonzeroAlphaPixels": 160962,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "0FDFC9CFC33A467680210D22837A5D97DC9AB2EA3DE3AFCDF762B9F21B25CA66"
+        }
+      ],
+      "SquareSourceCrop": [
+        2,
+        77.5,
+        1256,
+        1256
+      ],
+      "NativeSHA256": "C7FAF3181F8BA0B6C87C9A0AD818BCA87D309D34FE92E61A47DA60F03A01479A",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 6,
+        "MinY": 180,
+        "MaxX": 1253,
+        "MaxY": 1230,
+        "BoundsWidth": 1248,
+        "BoundsHeight": 1051,
+        "MaximumEdgeAlpha": 249,
+        "TransparentPixels": 521083,
+        "NonzeroAlphaPixels": 1051433,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "mysterious_pod_x3.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-32d746d1-17e1-4f82-b406-a16e11afc343.png",
+      "Key": "x10",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\x10-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\mysterious_pod_x10.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 52,
+            "MinY": 70,
+            "MaxX": 459,
+            "MaxY": 441,
+            "BoundsWidth": 408,
+            "BoundsHeight": 372,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 141555,
+            "NonzeroAlphaPixels": 120589,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "8395ECB985340F47139F7E80594861915FDC45FF0CEC6979E527AA7061FA5B73"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\mysterious_pod_x10.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 32,
+            "MaxX": 500,
+            "MaxY": 479,
+            "BoundsWidth": 490,
+            "BoundsHeight": 448,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 87622,
+            "NonzeroAlphaPixels": 174522,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "4D73C76FD9E7B7549700AC772E0AB454E6B513192E9CBD42D38DE4942CD2BE87"
+        }
+      ],
+      "SquareSourceCrop": [
+        -4,
+        11,
+        1262,
+        1262
+      ],
+      "NativeSHA256": "B342245844E78A50C6216B18A12C15FA57BC3FCE84D1E7D5520B626B90DF3862",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 0,
+        "MinY": 69,
+        "MaxX": 1253,
+        "MaxY": 1214,
+        "BoundsWidth": 1254,
+        "BoundsHeight": 1146,
+        "MaximumEdgeAlpha": 253,
+        "TransparentPixels": 419113,
+        "NonzeroAlphaPixels": 1153403,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "mysterious_pod_x10.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-152eadab-90e2-418b-9ee0-f9a69a903241.png",
+      "Key": "x50",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\x50-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\mysterious_pod_x50.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 64,
+            "MinY": 52,
+            "MaxX": 446,
+            "MaxY": 458,
+            "BoundsWidth": 383,
+            "BoundsHeight": 407,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 144905,
+            "NonzeroAlphaPixels": 117239,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "DEB22C10A6209F61A5382B110CF10F33B9E5E36BB3222F3932183C4256616F9A"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\mysterious_pod_x50.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 26,
+            "MinY": 11,
+            "MaxX": 486,
+            "MaxY": 500,
+            "BoundsWidth": 461,
+            "BoundsHeight": 490,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 92481,
+            "NonzeroAlphaPixels": 169663,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "7896DB2AAA634EFB913ED8A27A8A42818E02E9197FCDC9C5D5A7714345B25F0B"
+        }
+      ],
+      "SquareSourceCrop": [
+        17.5,
+        14,
+        1243,
+        1243
+      ],
+      "NativeSHA256": "02D56036FC7C28D5F5CC48205DFC79D675148A7B189082A8715DA0063D205299",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 57,
+        "MinY": 18,
+        "MaxX": 1220,
+        "MaxY": 1252,
+        "BoundsWidth": 1164,
+        "BoundsHeight": 1235,
+        "MaximumEdgeAlpha": 6,
+        "TransparentPixels": 483344,
+        "NonzeroAlphaPixels": 1089172,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "mysterious_pod_x50.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-664b4fdc-671c-4882-b7dc-d1bcfe097e05.png",
+      "Key": "gift_x1",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\gift_x1-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\gift_mysterious_pod_x1.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 83,
+            "MinY": 52,
+            "MaxX": 427,
+            "MaxY": 459,
+            "BoundsWidth": 345,
+            "BoundsHeight": 408,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 152844,
+            "NonzeroAlphaPixels": 109300,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "62EE15505475B4654F1C6B17D0D41B42DF5F1174512C0B3616D7232EFA073C36"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\gift_mysterious_pod_x1.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 49,
+            "MinY": 11,
+            "MaxX": 462,
+            "MaxY": 500,
+            "BoundsWidth": 414,
+            "BoundsHeight": 490,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 104133,
+            "NonzeroAlphaPixels": 158011,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "5CB29632E4D9070559EE9E9B434D0DD53FD906CF1DCB4FE79DAD7F8FFBFF9870"
+        }
+      ],
+      "SquareSourceCrop": [
+        36,
+        24,
+        1203,
+        1203
+      ],
+      "NativeSHA256": "A7A53B2EB4C87CD219FAE9A83E3CEBEB3C8631DA3B7F5F03DB65F8C04FA5FB43",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 132,
+        "MinY": 28,
+        "MaxX": 1142,
+        "MaxY": 1222,
+        "BoundsWidth": 1011,
+        "BoundsHeight": 1195,
+        "MaximumEdgeAlpha": 1,
+        "TransparentPixels": 622011,
+        "NonzeroAlphaPixels": 950505,
+        "CornerAlpha": [
+          0,
+          0,
+          1,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "gift_mysterious_pod_x1.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-dfed6978-b654-47a1-9850-7104b68f02f9.png",
+      "Key": "gift_x3",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\gift_x3-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\gift_mysterious_pod_x3.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 52,
+            "MinY": 83,
+            "MaxX": 458,
+            "MaxY": 428,
+            "BoundsWidth": 407,
+            "BoundsHeight": 346,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 153898,
+            "NonzeroAlphaPixels": 108246,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "2A4E4BFCB2C9C98BD33CAB8BD09303EEFBF609019D84D3EE0CAB6419369C9E65"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\gift_mysterious_pod_x3.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 12,
+            "MinY": 48,
+            "MaxX": 500,
+            "MaxY": 463,
+            "BoundsWidth": 489,
+            "BoundsHeight": 416,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 105417,
+            "NonzeroAlphaPixels": 156727,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "FDDD231A7F185DEB64CC49EDA84B85049649AF74037AD5BC6B6CBA2A74FB6172"
+        }
+      ],
+      "SquareSourceCrop": [
+        10,
+        46,
+        1247,
+        1247
+      ],
+      "NativeSHA256": "C3FB0E5DF94E0D126668431507AEBEF30B51A9217F1125D269E3AB85FF07BD55",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 14,
+        "MinY": 142,
+        "MaxX": 1252,
+        "MaxY": 1196,
+        "BoundsWidth": 1239,
+        "BoundsHeight": 1055,
+        "MaximumEdgeAlpha": 7,
+        "TransparentPixels": 556488,
+        "NonzeroAlphaPixels": 1016028,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "gift_mysterious_pod_x3.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-8c7f48ee-561e-4b6a-bf47-ebe4d85c595d.png",
+      "Key": "gift_x10",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\gift_x10-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\gift_mysterious_pod_x10.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 52,
+            "MinY": 68,
+            "MaxX": 459,
+            "MaxY": 443,
+            "BoundsWidth": 408,
+            "BoundsHeight": 376,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 144100,
+            "NonzeroAlphaPixels": 118044,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "4DA78005B73FFC5905691F05B31545D140A3D60AF2617AADEDA846BF9C588469"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\gift_mysterious_pod_x10.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 30,
+            "MaxX": 500,
+            "MaxY": 481,
+            "BoundsWidth": 490,
+            "BoundsHeight": 452,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 91538,
+            "NonzeroAlphaPixels": 170606,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "4531830B098179769A8F67D71E7126F85D853012576EDAC334EE76151BE70733"
+        }
+      ],
+      "SquareSourceCrop": [
+        3,
+        5.5,
+        1255,
+        1255
+      ],
+      "NativeSHA256": "08D059DD8DC615C000C7C034C6482E5913F6863D310A281274EF67924A6895F6",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 7,
+        "MinY": 58,
+        "MaxX": 1253,
+        "MaxY": 1207,
+        "BoundsWidth": 1247,
+        "BoundsHeight": 1150,
+        "MaximumEdgeAlpha": 248,
+        "TransparentPixels": 454948,
+        "NonzeroAlphaPixels": 1117568,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "gift_mysterious_pod_x10.png"
+    },
+    {
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-daca6df5-4935-4638-a5a6-b5c9768e3fa3.png",
+      "Key": "gift_x50",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\originals\\gift_x50-native.png",
+      "Variants": [
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\gift_mysterious_pod_x50.png",
+          "Variant": "master",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 57,
+            "MinY": 52,
+            "MaxX": 453,
+            "MaxY": 459,
+            "BoundsWidth": 397,
+            "BoundsHeight": 408,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 143584,
+            "NonzeroAlphaPixels": 118560,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "E1A47560AB896F22AC1EED27BBFCEACDA6F3FAC455053FD3971827A3D8FFC67C"
+        },
+        {
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\gift_mysterious_pod_x50.png",
+          "Variant": "tight",
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 18,
+            "MinY": 11,
+            "MaxX": 494,
+            "MaxY": 500,
+            "BoundsWidth": 477,
+            "BoundsHeight": 490,
+            "MaximumEdgeAlpha": 0,
+            "TransparentPixels": 90846,
+            "NonzeroAlphaPixels": 171298,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "PixelFormat": "Format32bppArgb"
+          },
+          "SHA256": "EF3019A55801B1C2B3208C8493C9E419A83C2FD0173644334A235DDBF957FB0A"
+        }
+      ],
+      "SquareSourceCrop": [
+        64,
+        46,
+        1184,
+        1184
+      ],
+      "NativeSHA256": "5158CCE130C89BEE99948A5CEA206D83FA5594C9C95167553AEBCE6AEA7651FF",
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 83,
+        "MinY": 50,
+        "MaxX": 1228,
+        "MaxY": 1225,
+        "BoundsWidth": 1146,
+        "BoundsHeight": 1176,
+        "MaximumEdgeAlpha": 1,
+        "TransparentPixels": 575472,
+        "NonzeroAlphaPixels": 997044,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "PixelFormat": "Format32bppArgb"
+      },
+      "File": "gift_mysterious_pod_x50.png"
+    }
+  ],
+  "Method": "built-in generation plus mechanical proportional alpha-preserving crop/resize only",
+  "Sheet": {
+    "Height": 1848,
+    "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\sheet.png",
+    "Sizes": [
+      512,
+      128,
+      64
+    ],
+    "Width": 5596
+  },
+  "MasterCanvas": "512x512 RGBA, object about80%",
+  "GeneratedOn": "2026-10-12",
+  "SmallSheet": {
+    "Height": 688,
+    "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\mysterious-pod-bundles-2026-10-12\\sheet-preview-128-64.png",
+    "Sizes": [
+      128,
+      64
+    ],
+    "Width": 1568
+  },
+  "BuiltInImageGenSuccessfulCalls": 8,
+  "VisualReadabilityScope": "Full renders and true128/64px comparison sheet inspected locally on light and Shop green #4BE015; no live UI/Studio test",
+  "VisualChecks": [
+    {
+      "key": "x1",
+      "count": "one pod",
+      "read": "single closed pod",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "x3",
+      "count": "exactly three pods",
+      "read": "one front pod, two behind",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "x10",
+      "count": "seven visible pods",
+      "read": "large heap, not a literal ten-pod drawing",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "x50",
+      "count": "six prominent visible pods in overflowing chest",
+      "read": "open chest of closed pods; symbolic bulk bundle, not fifty drawn pods",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "gift_x1",
+      "count": "one pod",
+      "read": "single pod plus red bow/ribbon and blank tag",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "gift_x3",
+      "count": "exactly three pods",
+      "read": "three pods plus shared gift wrapping",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "gift_x10",
+      "count": "seven visible pods",
+      "read": "heap plus shared gift wrapping",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    },
+    {
+      "key": "gift_x50",
+      "count": "six prominent visible pods in overflowing chest",
+      "read": "open wooden chest, red bow/ribbon, closed pods, blank tag",
+      "creature": false,
+      "ReadsAt64px": true,
+      "NoTextOrNumbersInArt": true,
+      "NoCreatureOrOpenPod": true
+    }
+  ],
+  "NativeCornerNote": "Gift-single original has one alpha=1 corner speck; original preserved unchanged. All sixteen final exports have exact corner/edge alpha0 after requested crop/resize, with no painting or alpha masks."
+}

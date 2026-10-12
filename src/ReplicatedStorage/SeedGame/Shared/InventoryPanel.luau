@@ -273,6 +273,8 @@ export type View = {
 	-- How many pods in the Bag are READY (2026-10-09): HATCH ALL shows while
 	-- there is one.
 	readyPods: number?,
+	-- READY Mysterious Pods (2026-10-12, item 17): OPEN ALL's count.
+	readyShells: number?,
 }
 
 -- `hold` (2026-10-09): seconds the action must be held (HATCH); `icon`: an
@@ -294,6 +296,8 @@ export type Callbacks = {
 	changed: () -> (),
 	-- HATCH ALL held to the end (2026-10-09).
 	hatchAll: (() -> ())?,
+	-- OPEN ALL held to the end (2026-10-12, item 17): every READY Mysterious Pod.
+	openAll: (() -> ())?,
 	-- The SORT button stepped (2026-10-10): the new option id, to be saved.
 	sorted: ((string) -> ())?,
 }
@@ -671,6 +675,35 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			fn()
 		end
 	end)
+	-- OPEN ALL (2026-10-12, the owner's item 17): while two or more Mysterious
+	-- Pods are READY -- a HATCH ALL leaves them to their own hold -- held to the
+	-- end, it opens them all at once in one grid (PlantService.OpenAllMystery).
+	-- Beside HATCH ALL, or over it where the grid is too narrow for both.
+	local openAll = MenuKit.button(body, "OpenAll", 30, BAG.Words.OpenAll, 15, { studs = true })
+	openAll.style("go")
+	buttonIcon(openAll, BAG.Icons.Hatch)
+	openAll.hit.AnchorPoint = Vector2.new(1, 1)
+	openAll.hit.Size = UDim2.fromOffset(150, 46)
+	openAll.hit.Visible = false
+	UIKit.clicks(openAll.hit)
+	local stopOpenAll = holdButton(openAll, GameConfig.Plant.HatchHoldSeconds, function()
+		local fn = cb.openAll
+		if fn then
+			fn()
+		end
+	end)
+	-- The grid's width at the last layout: side by side needs both buttons' room.
+	local gridWide = 0
+	local function placeOpenAll()
+		local both = hatchAll.hit.Visible and openAll.hit.Visible
+		local side = both and gridWide >= 2 * 150 + 8 + 16
+		openAll.hit.Position = hatchAll.hit.Position
+			- UDim2.fromOffset(if side then 158 else 0, if both and not side then 52 else 0)
+		local stacked = both and not side
+		local shown = hatchAll.hit.Visible or openAll.hit.Visible
+		gridPad.PaddingBottom = UDim.new(0, gridPad.PaddingTop.Offset
+			+ (if shown then HATCH_ALL_ROOM else 0) + (if stacked then HATCH_ALL_ROOM else 0))
+	end
 
 	-- Assign mode's dim: a sheet over the whole shell, not the modal's
 	-- GroupTransparency -- measured in Play, the Bag's CanvasGroup drew fully
@@ -1370,6 +1403,19 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		if showAll then
 			hatchAll.set(string.format("%s (%d)", BAG.Words.HatchAll, readyPods))
 		end
+		-- OPEN ALL, with the count of READY Mysterious Pods: two or more.
+		local readyShells = view.readyShells or 0
+		local showOpen = readyShells >= 2
+		if openAll.hit.Visible ~= showOpen then
+			if not showOpen then
+				stopOpenAll()
+			end
+			openAll.hit.Visible = showOpen
+		end
+		if showOpen then
+			openAll.set(string.format("%s (%d)", BAG.Words.OpenAll, readyShells))
+		end
+		placeOpenAll()
 		paintCategories(view.counts)
 		task.defer(buildVisible)
 	end
@@ -1445,6 +1491,8 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 		gridPad.PaddingTop = UDim.new(0, bag.pad)
 		gridPad.PaddingBottom = UDim.new(0, bag.pad + (if hatchAll.hit.Visible then HATCH_ALL_ROOM else 0))
 		hatchAll.hit.Position = UDim2.fromOffset(bag.grid.x + bag.grid.w - 8, bag.grid.y + bag.grid.h - 6)
+		gridWide = bag.grid.w
+		placeOpenAll()
 		gridLayout.CellSize = UDim2.fromOffset(bag.tile.X, bag.tile.Y)
 		gridLayout.CellPadding = UDim2.fromOffset(bag.gap, bag.gap)
 		gridLayout.FillDirectionMaxCells = if bag.horizontal then bag.rows else 0
@@ -1530,6 +1578,7 @@ function InventoryPanel.build(gui: ScreenGui, modal: any, T: any, cb: Callbacks)
 			ContextActionService:UnbindAction("SeedBagPad")
 			-- A HATCH ALL held as the Bag shuts goes nowhere (2026-10-09).
 			stopHatchAll()
+			stopOpenAll()
 		end
 		-- Closed, every tile's light stops now; open, buildVisible starts the
 		-- ones in view.

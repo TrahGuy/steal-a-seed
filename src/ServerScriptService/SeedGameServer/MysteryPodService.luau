@@ -43,6 +43,9 @@ MysteryPodService.Priority = 78
 local SHELL = EnchantedMistData.Shell
 local POOL = EnchantedMistData.Pool
 local SIZES = EnchantedMistData.Sizes
+-- OPEN ALL's grid and gaps (EnchantedMistConfig.Mystery.OpenAll), for
+-- PlantService, which reads no Mist config of its own.
+MysteryPodService.OpenAll = EnchantedMistConfig.Mystery.OpenAll
 
 local function log(message: string)
 	print("[Seed/MysteryPodService] " .. message)
@@ -259,7 +262,12 @@ local drawWas: { [any]: { ends: number, was: number? } } = setmetatable({} :: an
 
 function MysteryPodService.Reserve(player: any, outcome: Outcome, now: number, after: number?): (number, number)
 	local sized = outcome.size ~= nil and EnchantedMistData.isSized(tostring(outcome.species.Rarity))
-	local seconds = EnchantedMistData.drawSeconds(sized)
+	return MysteryPodService.ReserveSpan(player, now, EnchantedMistData.drawSeconds(sized), after)
+end
+
+-- Any span of this player's screen, booked the same way (OPEN ALL's grid,
+-- 2026-10-12): after their last draw, `seconds` long.
+function MysteryPodService.ReserveSpan(player: any, now: number, seconds: number, after: number?): (number, number)
 	local was = drawEnds[player]
 	local startAt = math.max(now + math.max(tonumber(after) or 0, 0), was or -math.huge)
 	drawEnds[player] = startAt + seconds
@@ -287,6 +295,23 @@ function MysteryPodService.TellHatch(player: any, outcome: Outcome, token: numbe
 		size = outcome.size,
 		startAt = startAt,
 		seconds = seconds or EnchantedMistData.drawSeconds(sized),
+	})
+	Hooks.saveSoon(player)
+end
+
+-- OPEN ALL's grid (2026-10-12, the owner's item 17): every pod it opened, at
+-- once, from `startAt` for `seconds` (ReserveSpan). Each its creature and size,
+-- as a single draw would land it.
+function MysteryPodService.TellOpenAll(player: any, outcomes: { Outcome }, startAt: number, seconds: number)
+	local list = {}
+	for _, outcome in ipairs(outcomes) do
+		table.insert(list, { species = outcome.species.Id, rarity = outcome.species.Rarity, size = outcome.size })
+	end
+	Hooks.tell(player, {
+		phase = EnchantedMistConfig.Mystery.OpenAll.Phase,
+		outcomes = list,
+		startAt = startAt,
+		seconds = seconds,
 	})
 	Hooks.saveSoon(player)
 end

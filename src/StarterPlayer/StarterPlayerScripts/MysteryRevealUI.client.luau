@@ -178,6 +178,18 @@ strip.Size = UDim2.new(0, 0, 1, 0)
 strip.ZIndex = Z + 1
 strip.Parent = window
 
+-- OPEN ALL's grid (2026-10-12, the owner's item 17): in the window's place, one
+-- tile per creature that came out; hidden otherwise (playGrid).
+local grid = Instance.new("Frame")
+grid.Name = "Grid"
+grid.AnchorPoint = Vector2.new(0.5, 0)
+grid.Position = UDim2.new(0.5, 0, 0, TITLE_ROW + 6)
+grid.Size = UDim2.new(1, -20, 0, CARD_H + 12)
+grid.BackgroundTransparency = 1
+grid.Visible = false
+grid.ZIndex = Z + 1
+grid.Parent = stage
+
 -- SKIP (2026-10-12, the owner): a small pill at the right end of the title's
 -- row -- clear of the cards, the title, the belt and a phone's thumbs -- at its
 -- own size whatever the stage's scale (sizeSkip). Shown SKIP_AFTER into a draw
@@ -262,6 +274,11 @@ local function clear()
 		c:Destroy()
 	end
 	strip.Position = UDim2.new()
+	for _, c in ipairs(grid:GetChildren()) do
+		c:Destroy()
+	end
+	grid.Visible = false
+	window.Visible = true
 end
 
 -- ONLY AN EXPLICIT REDUCED MOTION lands the cards at once: the player's own
@@ -455,7 +472,8 @@ end
 --
 -- Draws arrive as their pods hatch; each plays whole, from its own start: at
 -- the server's `startAt` (MysteryPodService.Reserve), or at once if that has
--- passed. Item 17's OPEN ALL is its own reveal and never waits here.
+-- passed. Item 17's OPEN ALL is its own reveal -- one grid, not a draw each --
+-- booked and queued the same way (playGrid).
 --==============================================================================
 local queue: { any } = {}
 local busy = false
@@ -568,6 +586,140 @@ skipButton.Activated:Connect(function()
 	end
 end)
 
+--==============================================================================
+-- OPEN ALL (2026-10-12, the owner's item 17): every ready Mysterious Pod opened
+-- at once (PlantService.OpenAllMystery) -- no draw each, ONE grid of what came
+-- out, held for the server's `seconds`: a tile per creature, rarest first, its
+-- count and its best size on it, the rarest edged in gold. It waits its turn
+-- like a draw (the server booked it after any still running); SKIP closes it.
+--==============================================================================
+local OPEN = CFG.OpenAll
+local GOLD = Color3.fromRGB(255, 214, 92)
+
+local function playGrid(payload: any)
+	playing += 1
+	local mine = playing
+	clear()
+	placeStage()
+	gui.Enabled = true
+	RewardMoments.begin(RewardMoments.MysteryDraw)
+	window.Visible = false
+	grid.Visible = true
+	-- Each creature once: how many, and the sizes they came at.
+	type Kind = { entry: any, count: number, best: number? }
+	local kinds: { [string]: Kind } = {}
+	local order: { Kind } = {}
+	local total, secret = 0, false
+	for _, o in ipairs(if type(payload.outcomes) == "table" then payload.outcomes else {}) do
+		local id = tostring(o.species)
+		local kind = kinds[id]
+		if not kind then
+			kind = { entry = entryFor(id, o.rarity), count = 0, best = nil }
+			kinds[id] = kind
+			table.insert(order, kind)
+		end
+		kind.count += 1
+		total += 1
+		local size = tonumber(o.size)
+		if size and (kind.best == nil or size > (kind.best :: number)) then
+			kind.best = size
+		end
+		secret = secret or o.rarity == "Secret"
+	end
+	-- Rarest first: the pool's own weights, the lightest the rarest.
+	local weight: { [string]: number } = {}
+	for _, e in ipairs(EnchantedMistData.Pool.Entries) do
+		weight[e.Id] = e.Weight
+	end
+	table.sort(order, function(a, b)
+		return (weight[a.entry.Id] or math.huge) < (weight[b.entry.Id] or math.huge)
+	end)
+	title.Text = string.format(W.Opened, total)
+	-- The tiles side by side, as wide as the window lets them be.
+	local n = math.max(#order, 1)
+	local room = (stage.Size.X.Offset - 20 - (n - 1) * GAP) / n
+	local scale = math.min(1, room / CARD_W)
+	local tileW = CARD_W * scale
+	local x0 = ((stage.Size.X.Offset - 20) - (n * tileW + (n - 1) * GAP)) / 2
+	local views = {}
+	for i, kind in ipairs(order) do
+		local slot = Instance.new("Frame")
+		slot.Name = "Tile" .. i
+		slot.BackgroundTransparency = 1
+		slot.Size = UDim2.fromOffset(CARD_W, CARD_H)
+		slot.Position = UDim2.fromOffset(x0 + (i - 1) * (tileW + GAP), (CARD_H + 12 - CARD_H * scale) / 2)
+		slot.ZIndex = Z + 2
+		slot.Parent = grid
+		local fit = Instance.new("UIScale")
+		fit.Scale = scale
+		fit.Parent = slot
+		local card = MistOddsView.card(slot, kind.entry, Z + 2, CARD_H, moving, fx, views)
+		card.Size = UDim2.fromScale(1, 1)
+		if kind.count > 1 then
+			local many = MenuKit.heading(slot, "Count", 22, WHITE, Z + 9)
+			many.AnchorPoint = Vector2.new(0, 0)
+			many.Position = UDim2.fromOffset(4, 22)
+			many.Size = UDim2.fromOffset(60, 24)
+			many.TextXAlignment = Enum.TextXAlignment.Left
+			many.Text = string.format("x%d", kind.count)
+		end
+		local best = kind.best
+		local tier = if best then SeedData.Tiers[best] else nil
+		if tier then
+			local chip = MenuKit.frame(slot, "Best", Z + 8, tier.color, 0, 6)
+			chip.AnchorPoint = Vector2.new(1, 0)
+			chip.Position = UDim2.new(1, -4, 0, 24)
+			chip.Size = UDim2.fromOffset(58, 20)
+			MenuKit.keyline(chip, INK, 1.5)
+			local word = MenuKit.text(chip, "Size", 13, WHITE, Z + 9)
+			word.Size = UDim2.fromScale(1, 1)
+			word.Text = tier.name
+		end
+		if i == 1 and #order > 1 then
+			local edge = Instance.new("UIStroke")
+			edge.Color = GOLD
+			edge.Thickness = 3
+			edge.Parent = card
+			local ribbon = MenuKit.heading(slot, "Rarest", 15, GOLD, Z + 9)
+			ribbon.AnchorPoint = Vector2.new(0.5, 1)
+			ribbon.Position = UDim2.new(0.5, 0, 0, -2)
+			ribbon.Size = UDim2.new(1, 0, 0, 18)
+			ribbon.Text = W.Rarest
+		end
+	end
+	MistOddsView.drawViews(views)
+	for _, h in ipairs(fx) do
+		RarityFX.setActive(h, true)
+	end
+	stopMoving = MistOddsView.animate(moving)
+	SoundKit.play("MistCardLands")
+	if secret then
+		SoundKit.play("MistSecret")
+	end
+	local hold = math.clamp(tonumber(payload.seconds) or OPEN.GridSeconds, 1, 10)
+	task.delay(hold, finish, mine)
+	-- SKIP closes the grid; everything in it is already the player's.
+	skipTo = function()
+		finish(mine)
+	end
+	skipButton.Visible = false
+	if not snapping() then
+		task.delay(SKIP_AFTER, function()
+			if mine ~= playing then
+				return
+			end
+			sizeSkip()
+			skipButton.Visible = true
+			ContextActionService:BindActionAtPriority("SeedMysterySkip", function(_, state)
+				if state == Enum.UserInputState.Begin and skipTo then
+					skipTo()
+				end
+				return Enum.ContextActionResult.Sink
+			end, false, 3000, Enum.KeyCode.ButtonB)
+		end)
+	end
+end
+
 runNext = function()
 	local payload = table.remove(queue, 1)
 	if not payload then
@@ -575,16 +727,17 @@ runNext = function()
 		return
 	end
 	busy = true
+	local run = if payload.phase == OPEN.Phase then playGrid else play
 	local wait = (tonumber(payload.startAt) or 0) - Workspace:GetServerTimeNow()
 	if wait > 0 then
-		task.delay(wait, play, payload)
+		task.delay(wait, run, payload)
 	else
-		play(payload)
+		run(payload)
 	end
 end
 
 channel.OnClientEvent:Connect(function(action: any, payload: any)
-	if action == CFG.Action and type(payload) == "table" and payload.phase == "hatch" then
+	if action == CFG.Action and type(payload) == "table" and (payload.phase == "hatch" or payload.phase == OPEN.Phase) then
 		table.insert(queue, payload)
 		if not busy then
 			runNext()

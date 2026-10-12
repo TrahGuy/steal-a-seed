@@ -430,6 +430,50 @@ EnchantedMistConfig.Mystery = {
 		Creature = "WHAT'S INSIDE?",
 		Size = "WHAT SIZE?",
 		Secret = "A SECRET!",
+		-- OPEN ALL's grid: "10 PODS OPENED!" (short: SKIP shares its row), the
+		-- rarest's ribbon.
+		Opened = "%d PODS OPENED!",
+		Rarest = "RAREST!",
+	},
+	-- OPEN ALL (2026-10-12, the owner's item 17): every ready Mysterious Pod at
+	-- once, with no draw each -- one grid of what came out (MysteryRevealUI,
+	-- this Phase), held GridSeconds; the plants' world reveals follow it, Gap
+	-- apart (PlantService.OpenAllMystery).
+	OpenAll = { Phase = "openall", GridSeconds = 4.5, Gap = 0.3 },
+	-- THE SHOP (2026-10-12, item 17; GameConfig.Store.MysteryPods). The client
+	-- flag WheelService publishes PolicyService's own answer on (true only when
+	-- paid random items are allowed; missing reads "no"), the gift's request
+	-- and reply on GameEvent, the banner's studs and its words.
+	Shop = {
+		PolicyAttribute = "PaidRandomAllowed",
+		GiftAction = "MysteryGift",
+		GiftReply = "MysteryGiftResult",
+		Studs = "rbxassetid://88002993641737",
+		Words = {
+			Badge = "NEW!",
+			Title = "MYSTERIOUS POD",
+			Tagline = "A creature from the Enchanted Mist inside -- even a Secret!",
+			Odds = "ODDS",
+			Gift = "GIFT",
+			GiftPick = "Who is it for?",
+			GiftNone = "Nobody else is in this server to gift to.",
+			Restricted = "Not available here.",
+			Was = "WAS %s",
+			-- The server's announcement to everyone, and its notices ("%s" pods:
+			-- "a Mysterious Pod" or "3 Mysterious Pods").
+			Gifted = "%s gifted %s %s!",
+			GiftLeft = "%s left before the gift arrived, so %s went to you.",
+			GiftUnsent = "The gift couldn't be delivered, so %s went to you.",
+			Delivered = "Your Bag now holds %s from your order.",
+			Owed = "Your Bag is full: %s will wait for room.",
+			-- A gift refused before any prompt, by the server's code.
+			Refused = {
+				NO_PLAYER = "That player isn't in this server any more.",
+				RESTRICTED = "Mysterious Pods can't be gifted to that player.",
+				NOT_SAVING = "That player's progress isn't saving right now.",
+				OFF = "Mysterious Pods aren't available right now.",
+			},
+		},
 	},
 }
 

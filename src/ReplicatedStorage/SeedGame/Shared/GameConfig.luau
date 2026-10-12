@@ -7565,7 +7565,10 @@ GameConfig.Panel = {
 -- them is obtained by stealing rather than by paying.
 --
 -- If these ever become random, the experience questionnaire has to change with
--- them. Do not make that change here alone.
+-- them. Do not make that change here alone. The one rolled pod sold is the
+-- Mysterious Pod (Store.MysteryPods, 2026-10-12, the owner's item 17): a paid
+-- random item on purpose, its odds shown before the buy and PolicyService's
+-- answer obeyed, like the wheel's paid spins.
 --
 --==============================================================================
 -- THE NUMBERS ARE A STARTING POINT
@@ -7585,8 +7588,13 @@ export type StoreItem = {
 	label: string,
 	robux: number,
 	product: number,
-	kind: "speed" | "cash" | "pod" | "hatch" | "starter" | "luck" | "rain",
+	kind: "speed" | "cash" | "pod" | "hatch" | "starter" | "luck" | "rain" | "mysterypod",
 	amount: number?,
+	-- The Mysterious Pod's bundles (2026-10-12, item 17): how many pods, whether
+	-- bought for another player, and the bundle's art.
+	count: number?,
+	gift: boolean?,
+	icon: string?,
 	species: string?,
 	tier: number?,
 	-- The item 9B products (2026-10-12): a Starter Pack's Spin Tickets, SERVER
@@ -7902,6 +7910,36 @@ GameConfig.Store = {
 	InWorld = {
 		{ key = "instanthatch", label = "INSTANT HATCH", robux = 99, product = 3713212811,
 			kind = "hatch" },
+	},
+	--==========================================================================
+	-- THE MYSTERIOUS POD, SOLD (2026-10-12, the owner's item 17): the Shop's
+	-- featured banner (MysteryShopBanner). Each a bundle of `count` of the
+	-- Enchanted Mist's Mysterious Pods -- the same pod a delivery earns, its
+	-- creature and size rolled by the server at the grant (MysteryPodService).
+	-- A PAID RANDOM ITEM, so unlike the fixed pods above: its odds stand on the
+	-- banner before any buy, and it is offered, prompted and granted only to a
+	-- player PolicyService allows (WheelService's fail-closed answer;
+	-- MysteryShopService). `gift`: bought for another player in the server, the
+	-- recipient noted before the prompt. The prices are the owner's; the tile
+	-- prints the live price, and "was" is the live x1 price times the count.
+	--==========================================================================
+	MysteryPods = {
+		{ key = "mysterypod1", label = "Mysterious Pod x1", robux = 39, product = 3718125668, kind = "mysterypod",
+			count = 1, icon = "rbxassetid://124362936985892" },
+		{ key = "mysterypod3", label = "Mysterious Pod x3", robux = 99, product = 3718125729, kind = "mysterypod",
+			count = 3, icon = "rbxassetid://112732002176388" },
+		{ key = "mysterypod10", label = "Mysterious Pod x10", robux = 299, product = 3718125835, kind = "mysterypod",
+			count = 10, icon = "rbxassetid://73832859089355" },
+		{ key = "mysterypod50", label = "Mysterious Pod x50", robux = 1299, product = 3718126039, kind = "mysterypod",
+			count = 50, icon = "rbxassetid://76699374080033" },
+		{ key = "giftmysterypod1", label = "Gift: Mysterious Pod x1", robux = 39, product = 3718126091,
+			kind = "mysterypod", count = 1, gift = true, icon = "rbxassetid://88851541577988" },
+		{ key = "giftmysterypod3", label = "Gift: Mysterious Pod x3", robux = 99, product = 3718126159,
+			kind = "mysterypod", count = 3, gift = true, icon = "rbxassetid://123182088890111" },
+		{ key = "giftmysterypod10", label = "Gift: Mysterious Pod x10", robux = 299, product = 3718126208,
+			kind = "mysterypod", count = 10, gift = true, icon = "rbxassetid://75994928904600" },
+		{ key = "giftmysterypod50", label = "Gift: Mysterious Pod x50", robux = 1299, product = 3718126289,
+			kind = "mysterypod", count = 50, gift = true, icon = "rbxassetid://74491754237004" },
 	},
 }
 
@@ -11766,6 +11804,9 @@ GameConfig.Save = {
 	-- owed (2026-10-12, item 9B; ProfileSchema): bounded like every number.
 	MaxStarterPacks = 100,
 	MaxRainOwed = 100,
+	-- Mysterious Pods bought with no Bag room to take them (2026-10-12, item 17):
+	-- owed, delivered as room comes (MysteryShopService).
+	MaxMysteryPodsOwed = 500,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================
@@ -11844,6 +11885,9 @@ GameConfig.HatchInBag = {
 	CreditsAttribute = "InstantCredits",
 	Hatch = "BagHatch",
 	HatchAll = "BagHatchAll",
+	-- OPEN ALL (2026-10-12, item 17): every READY Mysterious Pod at once, one
+	-- grid of what came out (PlantService.OpenAllMystery).
+	OpenAll = "BagOpenAllMystery",
 	Instant = "BagInstantHatch",
 	Reply = "BagHatchResult",
 	-- One request per player this often; a second inside it is not heard.
@@ -11882,6 +11926,7 @@ GameConfig.HatchInBag = {
 		Ready = "READY",
 		Hatch = "HATCH",
 		HatchAll = "HATCH ALL",
+		OpenAll = "OPEN ALL",
 		HoldHatch = "HOLD TO HATCH",
 		Instant = "INSTANT HATCH",
 		SavedInstant = "FREE INSTANT HATCH",

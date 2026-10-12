@@ -2892,8 +2892,12 @@ end
 -- Answers ok, a code (why not), whether the plant went into a bed, whether its
 -- moment played at that bed, and in how many seconds the plant has come up.
 --==============================================================================
+-- OPEN ALL's one booking (2026-10-12, the owner's item 17): the grid's start
+-- and length on the player's screen, and what each pod opened into.
+type OpenGroup = { startAt: number, seconds: number, outcomes: { MysteryPodService.Outcome } }
+
 local function hatchOneFromBag(player: Player, item: string, early: boolean?, slot: number?,
-	lead: number?): (boolean, string?, boolean, boolean, number)
+	lead: number?, group: OpenGroup?): (boolean, string?, boolean, boolean, number)
 	-- 1. The guards.
 	if not CarryService.IsHeldRestored(player) then
 		return false, "NOT_READY", false, false, 0
@@ -2941,9 +2945,17 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	local now = Workspace:GetServerTimeNow()
 	local drawAt, drawLen = now, 0
 	if mystery then
-		drawAt, drawLen = MysteryPodService.Reserve(player, mystery, now, lead)
+		if group then
+			-- OPEN ALL: no draw of its own -- the grid's booking, and this pod's
+			-- world reveal `lead` after the grid.
+			drawAt, drawLen = group.startAt, group.seconds
+		else
+			drawAt, drawLen = MysteryPodService.Reserve(player, mystery, now, lead)
+		end
 	end
-	local delay = if mystery then drawAt + drawLen - now else math.max(tonumber(lead) or 0, 0)
+	local delay = if mystery
+		then drawAt + drawLen - now + (if group then math.max(tonumber(lead) or 0, 0) else 0)
+		else math.max(tonumber(lead) or 0, 0)
 	local at = now + delay
 	if mystery then
 		s = mystery.species
@@ -2961,7 +2973,7 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	if plot and countIn(plot) < capacityOf(plot) then
 		local id = PlayerDataService.MintItem(player)
 		if not id then
-			if mystery then
+			if mystery and not group then
 				MysteryPodService.Unreserve(player, drawAt, drawLen)
 			end
 			return false, "NO_RECORD", false, false, 0
@@ -2972,7 +2984,7 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 		local given, why = CarryService.GiveHatched(player, s, tier, if slot ~= nil then -1 else risen,
 			if rolled > 0 then revealAt else nil, true)
 		if not given then
-			if mystery then
+			if mystery and not group then
 				MysteryPodService.Unreserve(player, drawAt, drawLen)
 			end
 			return false, why, false, false, 0
@@ -3016,8 +3028,13 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	end
 	revealToken += 1
 	if mystery then
-		-- The owner's card draw, from its reserved start; the world reveal follows it.
-		MysteryPodService.TellHatch(player, mystery, revealToken, drawAt, drawLen)
+		if group then
+			-- OPEN ALL tells the whole grid at once (OpenAllMystery).
+			table.insert(group.outcomes, mystery)
+		else
+			-- The owner's card draw, from its reserved start; the world reveal follows it.
+			MysteryPodService.TellHatch(player, mystery, revealToken, drawAt, drawLen)
+		end
 	end
 	local payload = {
 		token = revealToken,
@@ -3142,6 +3159,73 @@ function PlantService.HatchAllFromBag(player: Player): (boolean, string, number,
 		planted + bagged, #ready, planted, bagged, if left > 0 then string.format(", %d left ready", left) else ""))
 	local code = if stopped then "STORAGE_FULL" elseif left > 0 then "INCOMPLETE" else "HATCHED"
 	return planted + bagged > 0, code, planted, bagged, left
+end
+
+--==============================================================================
+-- OPEN ALL (2026-10-12, the owner's item 17): every READY Mysterious Pod in the
+-- Bag at once, with no card draw each. One booking of the player's screen
+-- (MysteryPodService.ReserveSpan: after any draw still running) for the grid of
+-- what came out (MysteryRevealUI, phase "openall"); each pod hatched exactly as
+-- a single hatch lands it -- its creature spent with its shell, once -- and the
+-- plants' world reveals follow the grid, OpenAll.Gap apart. A single pod keeps
+-- its own full draw (HatchFromBag). Answers ok, a code, and how many opened.
+--==============================================================================
+function PlantService.OpenAllMystery(player: Player): (boolean, string, number)
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY", 0
+	end
+	local profile = PlayerDataService.Get(player)
+	if not (profile and type(profile.Held) == "table") then
+		return false, "NOT_READY", 0
+	end
+	-- Gathered before any of them moves: each hatch writes the record anew.
+	local now = os.time()
+	local ready: { string } = {}
+	for _, row in ipairs(profile.Held) do
+		local due = if type(row) == "table" and row.Hatched ~= true then tonumber(row.HatchAt) else nil
+		if due and now >= due and type(row.Item) == "string" and MysteryPodService.IsShell(row.Id) then
+			table.insert(ready, row.Item)
+		end
+	end
+	if #ready == 0 then
+		return true, "NOTHING", 0
+	end
+	local OPEN = MysteryPodService.OpenAll
+	local startAt, seconds = MysteryPodService.ReserveSpan(player, Workspace:GetServerTimeNow(), OPEN.GridSeconds)
+	local group: OpenGroup = { startAt = startAt, seconds = seconds, outcomes = {} }
+	local planted, bagged, firstUp = 0, 0, 0
+	local stopped = false
+	for _, item in ipairs(ready) do
+		local shown = planted + bagged
+		local ok, why, bed, _, risen = hatchOneFromBag(player, item, false, shown, shown * OPEN.Gap, group)
+		if ok then
+			if shown == 0 then
+				firstUp = risen
+			end
+			if bed then
+				planted += 1
+			else
+				bagged += 1
+			end
+		elseif why == "STORAGE_FULL" then
+			stopped = true
+			break
+		end
+	end
+	local opened = #group.outcomes
+	if opened == 0 then
+		MysteryPodService.Unreserve(player, startAt, seconds)
+	else
+		MysteryPodService.TellOpenAll(player, group.outcomes, startAt, seconds)
+		tellBagHatch(player, planted, bagged, firstUp)
+	end
+	if stopped then
+		storageFull(player, "STORAGE_FULL", "OPEN ALL stopped")
+	end
+	log(string.format("%s: OPEN ALL opened %d of %d ready Mysterious Pod(s): %d planted, %d into the Bag.",
+		player.Name, opened, #ready, planted, bagged))
+	local code = if stopped then "STORAGE_FULL" elseif opened < #ready then "INCOMPLETE" else "OPENED"
+	return opened > 0, code, opened
 end
 
 -- INSTANT HATCH on a growing Bag pod: a saved credit is spent, else the purchase
@@ -3348,6 +3432,8 @@ local function onBagHatch(player: Player, action: string, payload: any)
 		end
 	elseif action == BAG.HatchAll then
 		reply.ok, reply.code, reply.planted, reply.bagged, reply.left = PlantService.HatchAllFromBag(player)
+	elseif action == BAG.OpenAll then
+		reply.ok, reply.code, reply.opened = PlantService.OpenAllMystery(player)
 	else
 		return
 	end
@@ -4261,7 +4347,8 @@ function PlantService.Start()
 				elseif action == MY_PLANTS.Plant or action == MY_PLANTS.Return or action == MY_PLANTS.Best
 					or action == MY_PLANTS.Clear then
 					onMyPlants(player, action, payload)
-				elseif action == BAG.Hatch or action == BAG.HatchAll or action == BAG.Instant then
+				elseif action == BAG.Hatch or action == BAG.HatchAll or action == BAG.Instant
+					or action == BAG.OpenAll then
 					-- Pods hatch in the Bag (2026-10-09): HATCH, HATCH ALL and
 					-- Instant Hatch on a Bag pod.
 					onBagHatch(player, action, payload)

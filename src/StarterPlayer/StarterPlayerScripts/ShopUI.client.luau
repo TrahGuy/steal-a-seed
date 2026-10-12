@@ -68,6 +68,8 @@ local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
+-- The Mysterious Pod's featured banner (2026-10-12, the owner's item 17).
+local MysteryShopBanner = require(Shared:WaitForChild("MysteryShopBanner"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
 local ServerBoost = require(Shared:WaitForChild("ServerBoost"))
 
@@ -261,6 +263,9 @@ local pageList = Instance.new("UIListLayout")
 pageList.SortOrder = Enum.SortOrder.LayoutOrder
 pageList.Padding = UDim.new(0, SH.SectionGap)
 pageList.Parent = grid
+-- THE MYSTERIOUS POD (2026-10-12, the owner's item 17): its featured banner,
+-- first on the page above every shelf; its odds and gift sheets over the body.
+local podBanner = MysteryShopBanner.build(grid, body, Z + 1, -1)
 
 type Section = { frame: Frame, label: TextLabel, shelf: Frame, cells: UIGridLayout }
 local sections: { [string]: Section } = {}
@@ -1291,6 +1296,7 @@ local function setOpen(want: boolean)
 	for _, h in ipairs(cardShines) do
 		RarityFX.setActive(h, want)
 	end
+	podBanner.setOpen(want)
 end
 
 button.Activated:Connect(function()

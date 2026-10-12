@@ -82,6 +82,8 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
+-- The Mysterious Pod's own flag (item 17): PolicyService's answer, published apart.
+local POD_POLICY = require(Shared:WaitForChild("EnchantedMistConfig")).Mystery.Shop.PolicyAttribute
 -- The invite prize's plant (2026-10-08).
 local SeedData = require(Shared:WaitForChild("SeedData"))
 -- The belt's golden-ticket window (TREADMILL FUN, 2026-10-08).
@@ -391,6 +393,9 @@ local function checkPolicy(player: Player): boolean
 		paidOk[player] = nil
 	end
 	publish(player)
+	-- The Mysterious Pod's flag (2026-10-12, the owner's item 17): the same
+	-- fail-closed answer, apart from the wheel's own switch (paidAllowed).
+	put(player, POD_POLICY, if paidOk[player] == true then true else nil)
 	return policyKnown[player] == true
 end
 
@@ -1301,6 +1306,13 @@ WheelService.PaidAllowed = paidAllowed
 -- Asked by `watch` on every join; exported so WheelSpec can drive it against a
 -- stand-in PolicyService. It only reads the policy and publishes.
 WheelService.CheckPolicy = checkPolicy
+-- PolicyService's answer ALONE (2026-10-12, the owner's item 17): true only
+-- when it said paid random items are allowed for this player; not asked yet,
+-- failed and refused all read false. For the Mysterious Pod's sale
+-- (MysteryShopService), which is not the wheel's to switch off.
+function WheelService.PolicyAllows(player: Player): boolean
+	return paidOk[player] == true
+end
 
 --==============================================================================
 -- LIFECYCLE

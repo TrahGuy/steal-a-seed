@@ -377,6 +377,13 @@ local panel = InventoryPanel.build(gui, modal, GameConfig.Hotbar, {
 			remote:FireServer(HATCH_BAG.HatchAll)
 		end
 	end,
+	-- OPEN ALL, held to the end (2026-10-12, item 17): every READY Mysterious Pod.
+	openAll = function()
+		local remote = channel
+		if remote then
+			remote:FireServer(HATCH_BAG.OpenAll)
+		end
+	end,
 	-- SORT stepped (2026-10-10): saved as the player's own (GameConfig.Sort.Bag).
 	sorted = function(id: string)
 		bagSortPending = id
@@ -1224,6 +1231,7 @@ local function refreshBag()
 			else nil,
 		compact = hud ~= nil and (hud :: HudLayout.Layout).compact,
 		readyPods = podsNow.ready,
+		readyShells = podsNow.shellsReady,
 	})
 end
 

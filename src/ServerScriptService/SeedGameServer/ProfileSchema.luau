@@ -94,6 +94,11 @@ export type Profile = {
 	--==========================================================================
 	StarterPacks: number,
 	RainOwed: number,
+	-- MysteryPodsOwed (2026-10-12, the owner's item 17): Mysterious Pods bought
+	-- -- or gifted -- with no Bag room for them, added in the receipt's own step
+	-- and handed over as room comes (MysteryShopService). Kept by a progress
+	-- reset like RainOwed: paid for and never delivered. Old saves: 0.
+	MysteryPodsOwed: number,
 	--==========================================================================
 	-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01; GameConfig.HatchBonus)
 	--
@@ -494,6 +499,7 @@ function ProfileSchema.Default(): Profile
 		InstantCredits = 0,
 		StarterPacks = 0,
 		RainOwed = 0,
+		MysteryPodsOwed = 0,
 		HatchBonusClaimed = false,
 		BatHintShown = false,
 		LikeReminder = "",
@@ -1207,6 +1213,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.InstantCredits = math.floor(number(raw.InstantCredits, 0, 0, SAVE.MaxInstantCredits))
 	p.StarterPacks = math.floor(number(raw.StarterPacks, 0, 0, SAVE.MaxStarterPacks))
 	p.RainOwed = math.floor(number(raw.RainOwed, 0, 0, SAVE.MaxRainOwed))
+	p.MysteryPodsOwed = math.floor(number(raw.MysteryPodsOwed, 0, 0, SAVE.MaxMysteryPodsOwed))
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.BatHintShown = raw.BatHintShown == true

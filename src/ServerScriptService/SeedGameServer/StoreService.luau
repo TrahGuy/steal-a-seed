@@ -99,7 +99,19 @@ local function allItems(): { any }
 	for _, item in ipairs(STORE.InWorld or {}) do
 		table.insert(list, item)
 	end
+	-- The Mysterious Pod's bundles, the buyer's and the gifts (2026-10-12, item 17).
+	for _, item in ipairs(STORE.MysteryPods or {}) do
+		table.insert(list, item)
+	end
 	return list
+end
+
+-- WHO GRANTS A MYSTERIOUS POD BUNDLE (2026-10-12, the owner's item 17):
+-- MysteryShopService, which sells them, hands its grant in as it starts -- so
+-- this file needs no new sibling. Until then such a receipt stays open.
+local mysteryGrant: ((Player, any, string) -> boolean)? = nil
+function StoreService.SetMysteryGrant(fn: (Player, any, string) -> boolean)
+	mysteryGrant = fn
 end
 
 local function indexProducts(): (number, number)
@@ -247,7 +259,7 @@ end
 -- is not acknowledged and Roblox tries again, which is the right answer for a
 -- player who is mid-respawn with no backpack to put a pod in.
 --==============================================================================
-local function grant(player: Player, item: any): boolean
+local function grant(player: Player, item: any, purchaseId: string): boolean
 	if item.kind == "speed" then
 		--======================================================================
 		-- THROUGH THE SPEED FAUCET, WHICH IS WHAT MAKES IT RUN FASTER NOW
@@ -322,6 +334,20 @@ local function grant(player: Player, item: any): boolean
 		return ServerBoostService.GrantLuck(player, item.seconds or 0)
 	elseif item.kind == "rain" then
 		return ServerBoostService.GrantRain(player)
+	elseif item.kind == "mysterypod" then
+		--======================================================================
+		-- THE MYSTERIOUS POD (2026-10-12, item 17): a paid random item, granted
+		-- by MysteryShopService -- PolicyService asked, a gift to its noted
+		-- recipient with this receipt's id in their own save, any pod with no
+		-- Bag room owed. False leaves the receipt open.
+		--======================================================================
+		local fn = mysteryGrant
+		if not fn then
+			warn(string.format("[Seed/StoreService] %q arrived before MysteryShopService started; will retry",
+				tostring(item.key)))
+			return false
+		end
+		return fn(player, item, purchaseId)
 	end
 	warn(string.format("[Seed/StoreService] %q has no grant for kind %q",
 		item.key, tostring(item.kind)))
@@ -421,7 +447,7 @@ local function decide(info: any, player: Player, profile: any, purchaseId: strin
 		return RETRY
 	end
 
-	if not grant(player, item) then
+	if not grant(player, item, purchaseId) then
 		warn(string.format("[Seed/StoreService] %s: %q could not be granted now; will retry",
 			player.Name, item.key))
 		return RETRY

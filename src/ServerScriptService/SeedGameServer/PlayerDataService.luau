@@ -717,6 +717,26 @@ function PlayerDataService.AddRainOwed(player: Player, delta: number): number?
 	return owed
 end
 
+-- MYSTERIOUS PODS OWED (2026-10-12, the owner's item 17): + the pods a receipt
+-- could not fit in the Bag (MysteryShopService, in the receipt's own step), -
+-- as they are handed over. The same rules as AddRainOwed: whole, never below
+-- zero or past SAVE.MaxMysteryPodsOwed -- a change that would break one is
+-- refused. Answers the new count, or nil.
+function PlayerDataService.AddMysteryPodsOwed(player: Player, delta: number): number?
+	local entry = entries[player]
+	if not entry or type(delta) ~= "number" or delta ~= delta or delta == 0
+		or delta ~= math.floor(delta) then
+		return nil
+	end
+	local owed = (entry.profile.MysteryPodsOwed or 0) + delta
+	if owed < 0 or owed > SAVE.MaxMysteryPodsOwed then
+		return nil
+	end
+	entry.profile.MysteryPodsOwed = owed
+	touch(player)
+	return owed
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
@@ -1402,6 +1422,10 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		-- reset must not offer the pack again, nor drop a paid Rain.
 		StarterPacks = math.max(0, math.floor(tonumber(profile.StarterPacks) or 0)),
 		RainOwed = math.max(0, math.floor(tonumber(profile.RainOwed) or 0)),
+		-- Nor Mysterious Pods bought and still owed (2026-10-12, item 17): paid
+		-- for and never delivered. (The pods IN the Bag go with the Bag, as every
+		-- pod does: the owner's call.)
+		MysteryPodsOwed = math.max(0, math.floor(tonumber(profile.MysteryPodsOwed) or 0)),
 		-- The one-time hatch bonus stays claimed and its like reminder keeps its
 		-- state (2026-10-01): a reset must not make the bonus claimable again.
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,

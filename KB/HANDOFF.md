@@ -1,5 +1,64 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 17: THE MYSTERIOUS POD IN THE SHOP — BUNDLES, GIFTS, OPEN ALL — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; MysteryShopSpec 14/0 (new) and the 24 touched specs green: StoreSpec 28/0, ServerBoostSpec 65/0, SpinPurchaseSpec 49/0, WheelSpec 163/0, CommunitySpec 25/0, WheelScaleSpec 22/0, MysteryPodSpec 39/0, HudLayoutSpec 1470/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, BagMenuSpec 13/0, HatchInBagSpec 43/0, HatchStorageSpec 208/0, InstantHatchSpec 57/0, HatchDeliverySpec 62/0, HatchRevealSpec 74/0, AdminSpec 129/0, AdminMistSpec 69/0, InstantCreditSpec 27/0, RebirthSpec 78/0, InventorySpec 47/0, SortSpec 24/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
+
+The owner wanted the Mysterious Pod sold in the Shop, in bundles, giftable. Their four answers (via the peer):
+1. "WAS": the live x1 price times the count, crossed out, shown only when the bundle costs less.
+2. The gate: the wheel's shared fail-closed PolicyService gate, unchanged, plus the pods' own client flag.
+3. Gifts: yes, on two saves. The recipient's save holds the pods and the receipt's id together.
+4. OPEN ALL on its own path with a grid reveal: yes. The owed counter: yes.
+   - An admin PROGRESS RESET wipes Mysterious Pods in the Bag like any pod (the owner's call).
+   - OWED pods are KEPT through a reset (`PlayerDataService.ResetProgress`): they were paid for and never delivered. This is the default; the owner can overrule it.
+
+**The products** (`GameConfig.Store.MysteryPods`, kind `mysterypod`). Every pod is the very pod a Mist delivery earns, its creature and size rolled at the grant (`MysteryPodService.Grant`).
+- For yourself: x1 3718125668 (39 R$), x3 3718125729 (99), x10 3718125835 (299), x50 3718126039 (1299).
+- Gifts: x1 3718126091, x3 3718126159, x10 3718126208, x50 3718126289, at the same prices.
+- Icons: Codex's bundle art (`art/icons/mysterious-pod-bundles-2026-10-12/`, committed here without its .zip), uploaded by the owner.
+- Studio shows regional prices (19 / 39 / 119 / 519); the tiles read each player's live price.
+
+**The banner** (`MysteryShopBanner`, at the top of the Shop's page, always there):
+- "NEW!", the pod's shell drawn live, its name and a line, and ODDS (the pod's own odds page, `MistOddsView`).
+- The six creatures inside on their Odds cards, each with its chance, so the odds stand before any buy.
+- Four bundle tiles: the art, the count, WAS crossed out, the green Robux tag, and GIFT.
+- On the Mist's studs, shining softly. Laid out at 640 x 446 and scaled to the page.
+
+**The gate.**
+- WheelService now publishes `PaidRandomAllowed` on the player: true only when PolicyService allows paid random items. Missing reads "no".
+- Without it, the bundles and GIFT are hidden and the banner says "Not available here."
+- The server checks again before a gift's prompt and at every receipt. A receipt for a buyer who isn't allowed stays open, and Roblox returns the Robux.
+
+**A gift.**
+1. GIFT opens a picker of the players here who are allowed.
+2. The server checks the request (one a second; refusals NO_BUNDLE, NO_PLAYER, OFF, NOT_SAVING, RESTRICTED), notes the recipient for 10 minutes, then opens the gift's prompt.
+3. At the receipt, the pods go into the recipient's profile with the receipt's id, then the recipient's save must succeed. If it fails, the receipt stays open. The retry finds the id, gives nothing more, and only saves again.
+4. Everybody here is told "X gifted Y 3 Mysterious Pods!".
+5. If the recipient has left (or there is no note), the buyer gets the pods, with a notice.
+
+**Bag room.**
+- Pods go into the Bag as far as it has room. The rest are OWED (`MysteryPodsOwed` on the profile, at most `Save.MaxMysteryPodsOwed` = 500).
+- Owed pods are handed over once a second as room comes, with a notice.
+- A grant that would pass the cap is refused whole, so the receipt stays open and nothing is half given.
+
+**OPEN ALL** (the Bag, with 2 or more ready Mysterious Pods; `PlantService.OpenAllMystery`):
+- One booking opens every ready Mysterious Pod. One grid shows what came out.
+- The grid: the kinds grouped, rarest first, a count badge, the best size, and a gold RAREST! ribbon. It holds 4.5 s; SKIP closes it.
+- The plants' world reveals follow, 0.3 s apart. The single draw is unchanged.
+
+**The Play** (guarded, throwaway store). Captures: `output/mystery-shop-2026-10-12/17_mystery_shop_sheet.png`:
+- 90 the banner; 91 ODDS; 92 the gift picker (a solo server: "Nobody else is in this server to gift to."); 93 PolicyService says no.
+- 95 the Bag's OPEN ALL (4); 96 the grid (Gnarlmaw RAREST! and three more); 97 after the grid, "4 HATCHED!".
+
+**Not tested live:**
+- A real receipt, and a gift between two players. ProcessReceipt can't be called from a host, and the purchase sheet is CoreGui (MCP clicks are refused). MysteryShopSpec covers them with the real service: self, owed, the cap, the policy, a gift whose first save fails and its retry, a recipient who left, the refusals, and owed delivery.
+- The WAS line's later polish (16 px, pale pink): compile-checked only.
+- A phone: the emulator can't be switched from here.
+
+**A rare edge, not handled:** a gift whose recipient's save fails, and who then leaves before the retry. The retry gives the buyer the pods too, and the recipient's leave save may already hold them. A double grant, never a loss.
+
+**For the owner:** declare paid random items in the experience questionnaire (paid spins are already live).
+
+**Files:** GameConfig (Store.MysteryPods, HatchInBag.OpenAll, Save.MaxMysteryPodsOwed), EnchantedMistConfig (Mystery.OpenAll, Mystery.Shop), MysteryShopBanner (new), MysteryShopService (new), StoreService (the grant hook), WheelService (PaidRandomAllowed, PolicyAllows), MysteryPodService (ReserveSpan, TellOpenAll), PlantService (OpenAllMystery), PlayerDataService (AddMysteryPodsOwed), ProfileSchema, InventoryPanel, LoadoutUI, ShopUI, MysteryRevealUI (the grid). Specs: MysteryShopSpec (new), MysteryPodSpec.
+
 ## ITEM 16 E: MORE MIST — ROLLING GROUND MIST, BIG PUFFS, THE HUB'S SWIRL — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; MistLookSpec 17/0, MistAudioSpec 19/0, RainAudioSpec 39/0, RainEventSpec 98/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
 
 The owner wanted "like a real mist moving around": a rolling ground fog, drifting mist puffs, and thicker mist at the hub. The rules:

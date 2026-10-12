@@ -585,8 +585,9 @@ local ok, err = pcall(function()
 			and colossal.Text == MistOddsView.percent(EnchantedMistData.sizeChance(7))
 			and tiny.Text == MistOddsView.percent(EnchantedMistData.sizeChance(1))
 			and string.find(reels, "MistOddsView.sizeWords(chip, \"Chance\", 18, tier, Z + 6, moving)", 1, true) ~= nil
-			and select(2, string.gsub(reels, "stopMoving = MistOddsView.animate%(moving%)", "")) == 2,
-		"the size cards' % at their top, Colossal's 0.52% shimmering visibly; both reels' words move",
+			and select(2, string.gsub(reels, "stopMoving = MistOddsView.animate%(moving%)", "")) == 3,
+		"the size cards' % at their top, Colossal's 0.52% shimmering visibly; both reels' words move, and OPEN "
+			.. "ALL's grid's (item 17)",
 		string.format("moving %d", #moving))
 	-- Mosskeeper's bar: the shell itself at its end (a live render, never the
 	-- stand-in picture) and a solid track (the owner's rule, 2026-10-10).
