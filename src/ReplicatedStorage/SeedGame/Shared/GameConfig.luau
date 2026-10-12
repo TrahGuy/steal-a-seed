@@ -10049,19 +10049,37 @@ GameConfig.Music = {
 	-- THE DISCO'S BED (2026-10-03; every mode with Disco: TICKET DISCO, DISCO +
 	-- MILL and, from 2026-10-04, the pure DISCO ONLY)
 	--
-	-- The owner's disco track (supplied 2026-10-03; an Audio asset uploaded by
-	-- CrazyCozy Games, the group that owns this place, 172.95 s). While a disco
-	-- mode runs (GameConfig.MiniEvent State "running" and a mode with Disco --
-	-- never TICKET SHOWER ONLY) it takes the bed's place the way the rain's
-	-- does -- ahead of the rain, night and day beds -- on the same one Sound and
-	-- Music bus (the player's music level), looping, faded in and out over
-	-- DiscoFadeSeconds, and started at the global event's own position so a
-	-- late joiner hears the same bar as everyone else. An id that does not load
-	-- is reported and skipped: the bed that was playing carries on. Never the
-	-- rain BGM.
+	-- The owner's disco songs (Audio assets uploaded by CrazyCozy Games, the
+	-- group that owns this place). While a disco mode runs (GameConfig.MiniEvent
+	-- State "running" and a mode with Disco -- never TICKET SHOWER ONLY) one of
+	-- them takes the bed's place the way the rain's does -- ahead of the rain,
+	-- night and day beds -- on the same one Sound and Music bus (the player's
+	-- music level), looping, faded in and out over DiscoFadeSeconds, and started
+	-- at the global event's own position so a late joiner hears the same bar as
+	-- everyone else. Never the rain BGM.
+	--
+	-- ONE SONG A DISCO (2026-10-12, the owner's item 13: the second song). The
+	-- list is not a playlist: each disco plays ONE song for the whole event,
+	-- picked from the event's own id (SoundKit.discoPick) -- in effect at random
+	-- per event, and the same song on every client, every server of a global
+	-- event and for every late joiner. A song that does not load is reported and
+	-- skipped for the other; none that loads keeps the bed that was playing.
+	-- Measured off sfx/ (ffmpeg, read only): the first 172.95 s, -16.8 LUFS,
+	-- peak -0.1 dBFS; the second 142.40 s, -14.5 LUFS (BGM1's level), peak
+	-- -0.3 dBFS, a 0.17 s lead-in left as it is.
 	--==========================================================================
 	DiscoTracks = {
 		"rbxassetid://118716691317783", -- disco event sfx (CrazyCozy Games upload)
+		"rbxassetid://72867304318133", -- DISCO, "Sprout disco!" (CrazyCozy Games upload, 2026-10-12)
+	},
+	-- Each song's own level, as its Sound's Volume (the Music bus carries the
+	-- rest; 1 when a song has none). The owner (2026-10-12): the first raised
+	-- to the second's loudness -- 1.3 is +2.28 dB, -16.8 to -14.5 LUFS. Its
+	-- peak is then +2.2 dBFS on its own Sound, -7.7 dBFS at most through the
+	-- Music bus (Volume 0.32, the player's level at most 1); Roblox mixes in
+	-- floating point, so nothing clips before the output.
+	DiscoVolumes = {
+		["rbxassetid://118716691317783"] = 1.3,
 	},
 	DiscoFadeSeconds = 3.0,
 

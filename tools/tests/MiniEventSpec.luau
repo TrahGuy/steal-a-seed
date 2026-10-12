@@ -975,13 +975,15 @@ local ok, err = pcall(function()
 		"WorldClock lays the disco over its own blend: still the ONE owner of Lighting")
 	local musicSrc = sourceOf(Scripts, "Music")
 	local discoIds = (GameConfig.Music :: any).DiscoTracks
-	check(#discoIds == 1 and discoIds[1] == "rbxassetid://118716691317783"
+	check(#discoIds == 2 and discoIds[1] == "rbxassetid://118716691317783" and discoIds[2] == "rbxassetid://72867304318133"
 			and discoIds[1] ~= ((GameConfig.Music :: any).RainTracks or {})[1]
+			and discoIds[2] ~= ((GameConfig.Music :: any).RainTracks or {})[1]
 			and string.find(musicSrc, "discoTracks", 1, true) ~= nil
 			and string.find(musicSrc, "Instance.new(\"Sound\")\nsound.Name = TRACK_NAME", 1, true) ~= nil
 			and string.find(musicSrc, "sound.TimePosition = math.max(0, Workspace:GetServerTimeNow() - started) % length", 1, true) ~= nil
 			and string.find(musicSrc, "return mode ~= nil and mode.Disco == true", 1, true) ~= nil,
-		"the disco bed is the owner's track on Music's one Sound (never the rain BGM), only for disco modes, on the event's clock")
+		"the disco bed is one of the owner's two songs on Music's one Sound (never the rain BGM), only for disco modes, "
+			.. "on the event's clock")
 	local fxSrc = sourceOf(Scripts, "MiniEventFX")
 	local danceSrc = sourceOf(Scripts, "DiscoDance")
 	check(string.find(fxSrc, "StatusText.reducedMotion()", 1, true) ~= nil

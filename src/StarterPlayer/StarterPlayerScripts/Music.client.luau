@@ -135,7 +135,7 @@ end
 --==============================================================================
 -- AND A FOURTH, WHILE THE DISCO PLAYS (2026-10-03)
 --
--- Music.DiscoTracks (the owner's disco track), while a disco mode of the global
+-- Music.DiscoTracks (the owner's disco songs), while a disco mode of the global
 -- mini event runs here (MiniEventState "running", a mode with Disco: Ticket
 -- Disco and Disco Only, never Ticket Shower Only) -- ahead of the rain, night
 -- and day beds, on this same one Sound, so never two beds at once; looping
@@ -163,6 +163,40 @@ local function discoPlaying(): boolean
 	end
 	local mode = MINI_MODES[Workspace:GetAttribute(MINI.Attributes.Mode) or ""]
 	return mode ~= nil and mode.Disco == true
+end
+
+--==============================================================================
+-- ONE SONG A DISCO (2026-10-12, the owner's item 13: a second song)
+--
+-- Music.DiscoTracks is not a playlist: each disco plays ONE song, looping, for
+-- the whole event -- SoundKit.discoPick, from the event's own id -- so every
+-- client, every server of a global event and every late joiner picks the same
+-- song, and alignDisco puts them all on the same bar (a joiner could never know
+-- where a playlist had got to). Each song is its own one-id list, so the engine
+-- loops it and the bed's swaps compare lists as before. A song that will not
+-- load here is skipped for the next; discoOk is false only when none loads.
+--==============================================================================
+local discoLists: { { string } } = {}
+for i, id in ipairs(discoTracks) do
+	discoLists[i] = { id }
+end
+local discoLoaded: { [string]: boolean } = {}
+
+local function isDisco(list: { string }): boolean
+	return table.find(discoLists, list) ~= nil
+end
+
+local function discoSong(): { string }
+	local n = #discoLists
+	local first = SoundKit.discoPick(Workspace:GetAttribute(MINI.Attributes.EventId),
+		Workspace:GetAttribute(MINI.Attributes.StartedAt), n)
+	for step = 0, n - 1 do
+		local list = discoLists[(first - 1 + step) % n + 1]
+		if discoLoaded[list[1]] ~= false then
+			return list
+		end
+	end
+	return discoLists[first]
 end
 
 --==============================================================================
@@ -305,9 +339,10 @@ local function listFor(): { string }
 	if #sproutTracks > 0 and sproutOk ~= false and sproutOpen() then
 		return sproutTracks
 	end
-	-- The disco next, once it has a track that loads (2026-10-03).
+	-- The disco next, once it has a song that loads (2026-10-03): this event's
+	-- one song (2026-10-12).
 	if #discoTracks > 0 and discoOk ~= false and discoPlaying() then
-		return discoTracks
+		return discoSong()
 	end
 	-- A Pod Rush in the disco's place (2026-10-09): never at the same time.
 	if #rushTracks > 0 and rushOk ~= false and rushPlaying() then
@@ -326,13 +361,20 @@ end
 
 -- The Sound's own level under a list: 1 for every bed but Sprout Dash's, whose
 -- Volume is on the beds' scale -- Music.Volume is what the bus carries, so its
--- own over that is what the Sound adds.
+-- own over that is what the Sound adds -- and a disco song with its own level
+-- (Music.DiscoVolumes, 2026-10-12: the first raised to the second's loudness).
 local function levelFor(list: { string }): number
 	if list == sproutTracks then
 		local base = tonumber(MUSIC.Volume) or 0
 		local own = tonumber(SPROUT_MUSIC.Volume)
 		if base > 0 and own then
 			return math.clamp(own / base, 0, 3)
+		end
+	end
+	if isDisco(list) then
+		local own = tonumber(((MUSIC :: any).DiscoVolumes or {})[list[1]])
+		if own then
+			return math.clamp(own, 0, 3)
 		end
 	end
 	return 1
@@ -411,7 +453,7 @@ local function applyPhase()
 	-- keep the sky's.
 	local seconds = if want == sproutTracks or current == sproutTracks
 		then tonumber(SPROUT_MUSIC.FadeSeconds) or 1.5
-		elseif want == discoTracks or current == discoTracks
+		elseif isDisco(want) or isDisco(current)
 		then tonumber((MUSIC :: any).DiscoFadeSeconds) or 3.0
 		elseif want == rushTracks or current == rushTracks
 		then tonumber((MUSIC :: any).PodRushFadeSeconds) or 3.0
@@ -444,7 +486,7 @@ Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(applyPhase)
 function alignDisco()
 	local started = Workspace:GetAttribute(MINI.Attributes.StartedAt)
 	local list = current
-	if type(started) ~= "number" or (list ~= discoTracks and list ~= rushTracks) then
+	if type(started) ~= "number" or (not isDisco(list) and list ~= rushTracks) then
 		return
 	end
 	local token = swap
@@ -514,22 +556,35 @@ Workspace:GetAttributeChangedSignal(WEATHER_STATE):Connect(function()
 end)
 probeRain()
 
--- The disco's probe, the rain's shape; it does nothing while the hook is empty.
+-- The disco's probe, the rain's shape, for every song (2026-10-12): discoOk is
+-- true once one loads, false only when none does; nothing while the list is
+-- empty.
 local probingDisco = false
 local function probeDisco()
 	if #discoTracks == 0 or probingDisco then
 		return
 	end
 	probingDisco = true
-	probeBed(discoTracks[1], DISCO_PROBE, function(loaded: boolean)
-		probingDisco = false
-		if not loaded and discoOk ~= false then
-			warn(string.format("[Seed/Music] The disco bed %s did not load, so the bed that was playing carries on "
-				.. "through the disco.", discoTracks[1]))
-		end
-		discoOk = loaded
-		applyPhase()
-	end)
+	local left = #discoTracks
+	for _, id in ipairs(discoTracks) do
+		probeBed(id, DISCO_PROBE, function(loaded: boolean)
+			if not loaded and discoLoaded[id] ~= false then
+				warn(string.format("[Seed/Music] The disco song %s did not load: a disco plays another, or the bed "
+					.. "that was playing carries on.", id))
+			end
+			discoLoaded[id] = loaded
+			left -= 1
+			if left == 0 then
+				probingDisco = false
+				local any = false
+				for _, other in ipairs(discoTracks) do
+					any = any or discoLoaded[other] == true
+				end
+				discoOk = any
+			end
+			applyPhase()
+		end)
+	end
 end
 -- The rush's probe, the same; nothing while Music.PodRushTrack is "".
 local probingRush = false
@@ -559,6 +614,8 @@ local function onDisco()
 end
 Workspace:GetAttributeChangedSignal(MINI.Attributes.State):Connect(onDisco)
 Workspace:GetAttributeChangedSignal(MINI.Attributes.Mode):Connect(onDisco)
+-- A new event's id picks its song (it is written before the State: a guard).
+Workspace:GetAttributeChangedSignal(MINI.Attributes.EventId):Connect(onDisco)
 probeDisco()
 probeRush()
 -- Sprout Dash's probe, the same; nothing while its Music.Id is "". Its screen

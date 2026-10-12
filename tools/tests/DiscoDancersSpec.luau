@@ -368,9 +368,48 @@ local ok, err = pcall(function()
 		"dancers and the disco bed for Ticket Disco, DISCO + MILL and the pure DISCO ONLY, never Ticket Shower Only")
 	local music = sourceOf(Scripts, "Music")
 	local ids2 = GameConfig.Music.DiscoTracks
-	check(#ids2 == 1 and ids2[1] == "rbxassetid://118716691317783" and ids2[1] ~= GameConfig.Music.RainTracks[1]
+	check(#ids2 == 2 and ids2[1] == "rbxassetid://118716691317783" and ids2[2] == "rbxassetid://72867304318133"
+			and ids2[1] ~= GameConfig.Music.RainTracks[1] and ids2[2] ~= GameConfig.Music.RainTracks[1]
 			and string.find(music, "sound.TimePosition = math.max(0, Workspace:GetServerTimeNow() - started) % length", 1, true) ~= nil,
-		"the disco bed is the owner's track on the one music Sound, started where the event is")
+		"the disco bed is one of the owner's two songs (2026-10-12: \"Sprout disco!\" joined the first) on the one "
+			.. "music Sound, started where the event is")
+	-- ONE SONG A DISCO (2026-10-12, the owner): picked from the event's id, the same everywhere.
+	local SoundKit = require(Shared.SoundKit)
+	local picks, same, inRange = { 0, 0 }, true, true
+	for i = 1, 400 do
+		local id = string.format("%08x%08x", (i * 2654435761) % 4294967296, (i * 40503) % 4294967296)
+		local p = SoundKit.discoPick(id, nil, 2)
+		inRange = inRange and (p == 1 or p == 2)
+		same = same and SoundKit.discoPick(id, 12345, 2) == p
+		if p == 1 or p == 2 then
+			picks[p] += 1
+		end
+	end
+	check(inRange and same and picks[1] >= 120 and picks[2] >= 120 and SoundKit.discoPick("a1b2c3d4e5f60718", nil, 1) == 1
+			and SoundKit.discoPick(nil, 1001, 2) == SoundKit.discoPick(nil, 1001, 2)
+			and SoundKit.discoPick(nil, 1001, 2) ~= SoundKit.discoPick(nil, 1002, 2),
+		"each disco picks ONE song from its own id -- the same on every client, every server and for a late joiner; "
+			.. "both songs come up across events (in effect at random); its start time when it has no id",
+		string.format("%d/%d", picks[1], picks[2]))
+	check(string.find(music, "discoLists[i] = { id }", 1, true) ~= nil
+			and string.find(music, "return discoSong()", 1, true) ~= nil
+			and string.find(music, "elseif isDisco(want) or isDisco(current)", 1, true) ~= nil
+			and string.find(music, "(not isDisco(list) and list ~= rushTracks)", 1, true) ~= nil
+			and string.find(music, "for _, id in ipairs(discoTracks) do\n\t\tprobeBed(id, DISCO_PROBE", 1, true) ~= nil
+			and string.find(music, "Workspace:GetAttributeChangedSignal(MINI.Attributes.EventId):Connect(onDisco)", 1, true) ~= nil,
+		"Music.client: one song a disco, looping (its own one-id list), never a playlist inside one event (a late "
+			.. "joiner could not follow it); every song probed, one that will not load skipped for the next")
+	-- THE LEVEL (2026-10-12, the owner): the first song raised to the second's loudness, never clipping the output.
+	local volumes = GameConfig.Music.DiscoVolumes
+	local raised = volumes and volumes["rbxassetid://118716691317783"]
+	local gainDb = if raised then 20 * math.log10(raised) else 0
+	local peakAtOutput = -0.1 + gainDb + 20 * math.log10(GameConfig.Music.Volume)
+	check(raised == 1.3 and volumes["rbxassetid://72867304318133"] == nil and math.abs(gainDb - 2.3) < 0.05
+			and peakAtOutput < 0
+			and string.find(music, "local own = tonumber(((MUSIC :: any).DiscoVolumes or {})[list[1]])", 1, true) ~= nil,
+		"the first song at 1.3 (+2.28 dB: -16.8 to -14.5 LUFS, the second's and BGM1's level), the second at 1; "
+			.. "the first's -0.1 dBFS peak lands under 0 dBFS through the Music bus",
+		string.format("%.2f dB, %.1f dBFS at the output", gainDb, peakAtOutput))
 	-- The swap calls alignDisco: it has to be declared before applyPhase, or the
 	-- call is a nil global (Play found the fade-in never ran: silence).
 	local declared = string.find(music, "local alignDisco: () -> ()", 1, true)

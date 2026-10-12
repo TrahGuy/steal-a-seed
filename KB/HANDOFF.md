@@ -1,5 +1,27 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 13: THE SECOND DISCO SONG — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the pick and the level the owner's, via the peer; DiscoDancersSpec 59/0, MiniEventSpec 90/0, PodRushSpec 98/0, SproutDashSpec 49/0, MusicBedSpec 28/0, SoundLevelSpec 28/0, RainAudioSpec 39/0 (the owner's lean testing: the specs it touches; one full suite at the end); 4 OF 4 MUTANTS CAUGHT; LIVE: in item 14's one guarded Play (the owner's call: one Play for both))
+
+The owner's item 13 via the peer: the new disco track rbxassetid://72867304318133 (the Suno prompt: silly upbeat novelty disco, "Sprout disco!"), added to GameConfig.Music.DiscoTracks beside the first.
+- **The asset:** "DISCO", AssetTypeId 3 (Audio), the CrazyCozy Games group (744756221), uploaded 2026-10-12 01:14Z; its file is sfx/DISCO.mp3. Studio Edit: loaded, 142.400 s (the first song 172.949 s).
+- **Measured** (ffmpeg, read only, off sfx/):
+
+  | Song | Length | Mean | Loudness | Peak | Lead-in |
+  |---|---|---|---|---|---|
+  | DISCO, 72867304318133 (new) | 142.40 s | -17.3 dB | -14.5 LUFS | -0.3 dBFS | 0.17 s |
+  | disco event sfx, 118716691317783 | 172.95 s | -19.4 dB | -16.8 LUFS | -0.1 dBFS | 0.25 s |
+  | BGM1 (the day bed) | 94.61 s | -16.6 dB | -14.4 LUFS | -0.4 dBFS | 0.63 s |
+
+  The lead-in (0.17 s) is under a beat: no TimePosition trim.
+- **ONE SONG A DISCO (the owner):** the list is not a playlist.
+  - Each disco plays ONE song, looping, for the whole event. It is picked from the event's own id (MiniEventId, the same on every server of a global event; its start time when there is none) by SoundKit.discoPick.
+  - In effect at random per event. Every client, every server and every late joiner picks the same song and lands on the same bar (alignDisco: the event's clock modulo that song's length).
+  - With two ids, the old code would have played them in turn, and a late joiner's alignment (modulo the first song's length) would have drifted from everyone else's.
+  - Every song is probed. One that will not load on a client is skipped for the other; none that loads keeps the bed that was playing.
+- **THE LEVEL (the owner):** the old song raised to the new one's level. Music.DiscoVolumes gives it 1.3 (+2.28 dB: -16.8 to -14.5 LUFS), so both songs sit at -14.5 LUFS, BGM1's level.
+  - The peak check: +2.2 dBFS at the old song's own Sound. Through the Music bus (GameConfig.Music.Volume 0.32 x the player's level, at most 1: -9.9 dB) it is at most -7.7 dBFS at the output.
+  - Roblox mixes in floating point, so nothing clips before the output (the owner's rule read as "no clipping at the output", confirmed via the peer).
+- **Files:** GameConfig (DiscoTracks, DiscoVolumes), SoundKit (discoPick), Music.client (one song a disco, the per-song level, every song probed); specs DiscoDancersSpec, MiniEventSpec.
 ## ITEM 12: THE ENCHANTED MIST'S ADMIN TOOLS — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the look OK'd by the owner via the peer (mist_01-15); AdminMistSpec 69/0 (NEW); AdminConsoleSpec 63/0, CompactMenusSpec 46/0, AdminAnnounceSpec 41/0, AdminSpec 129/0, MosskeeperSpec 69/0, MosskeeperTalkSpec 30/0, EventHubSpec 53/0, MysteryPodSpec 33/0, MistAudioSpec 17/0; THE FULL SUITE 154/154 IN SMALL BATCHES (Claude Code stopped the first batch for low memory; the owner OK'd the rerun. PlantRigsSpec 622/0 and PlantStreamingSpec 12/0 alone, after no verdict inside the runner's 580-s window while Studio stalled; TrafficLogSpec's shutdown timing 100/1 and TutorialSpotlightSpec's frame-time check 50/1 under batch load, 101/0 and 51/0 alone); 38 OF 39 MUTANTS CAUGHT (BerriesLoweringSays is equivalent: AdminAnnounce says nothing for an amount of 0 or less); TWO GUARDED PLAYS; captures in output/item12-mist-tools-2026-10-12)
 
 The owner's item 12 via the peer: the Mist's tools on the admin console, each through AdminService (the allowlist, the one-a-second wait, the audit record) and said to everybody per item 10 unless noted.

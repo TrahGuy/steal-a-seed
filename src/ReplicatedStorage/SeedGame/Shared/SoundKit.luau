@@ -296,6 +296,31 @@ function SoundKit.returnCueStep(old: string?, new: string, at: string): string?
 end
 
 --==============================================================================
+-- THE DISCO'S SONG (2026-10-12, the owner's item 13: a second disco song)
+--
+-- GameConfig.Music.DiscoTracks is not a playlist: a disco plays ONE song,
+-- looping, for the whole event. Which one, 1..count, comes from the event's
+-- own id (MiniEventId, the same on every server of a global event), or its
+-- start time when there is none -- so every client, every server and every
+-- late joiner picks the same song and lands on the same bar. In effect random
+-- per event. Pure, so DiscoDancersSpec drives it without an event.
+--==============================================================================
+function SoundKit.discoPick(eventId: any, startedAt: any, count: number): number
+	if count <= 1 then
+		return 1
+	end
+	local h = 0
+	if type(eventId) == "string" and eventId ~= "" then
+		for i = 1, #eventId do
+			h = (h * 31 + string.byte(eventId, i)) % 2147483647
+		end
+	else
+		h = math.floor(math.abs(tonumber(startedAt) or 0))
+	end
+	return h % count + 1
+end
+
+--==============================================================================
 -- MISSING IDS, SAID ONCE
 --
 -- Deliberately not an error and deliberately not silent about being silent --
