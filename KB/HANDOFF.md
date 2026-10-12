@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## THE QUEUE, ITEMS 1-14: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; THE FINAL FULL SUITE 154/154; the owner publishes)
+
+- **On origin/wip, unpublished:**
+  - 0576eb1 item 11 (the compact console); 50d16b0 (the old Shop button);
+  - e783a0b + 6993177 item 12 (the Mist's admin tools);
+  - cf61546 item 13 (the second disco song);
+  - 14d9b28 item 14 (the Mist switched on, "Next Mist in").
+- **The final full suite: 154/154 on the 14d9b28 tree.** Small foreground batches with pauses after the owner restarted Studio to free memory.
+  - Group 9 ran one spec at a time: PlantRigsSpec 622/0 alone in 64 s; it stalls inside a batch when memory is short.
+- **Before the owner's publish:**
+  - The reopened place holds no ZZ leftovers. Rojo is connected (a test file synced in and out).
+  - The prepublish probe: 373 scripts = disk, 0 ZZ, marker absent.
+  - TrafficLogConfig.Enabled is true (0aaa9dc, the split traffic feed), so the next publish sends it live.
+- **Open for the owner:**
+  - **The economy (item 14's Play):** a planted Tiny Mossbristle took cash from $394K to $2.34M in about two minutes. That is its income from stage 4's numbers; unchanged, for the owner's look.
+  - **Item 12:**
+    - a Dewberry raise says what was given, a lowering is silent;
+    - MIST scrolls on phones and small windows;
+    - the burst ring is 8-24 studs;
+    - the tabs' least width is 72;
+    - a right-drag (camera turn) skips an admin's line too ("a mouse button").
+  - **Item 11:** the ADMIN title on phones; headings as captions; the chip lengths; RESET behind a button; the 705x338 scroll.
+  - **From before** (their HANDOFF entries):
+    - the stale anim/ folder;
+    - the Starter Pack's Titan Petalpip and its restrictions;
+    - Faster Hatch leaving out the Mysterious Pod;
+    - Server Luck in-server only;
+    - the summoned Rain's length;
+    - display names in notices, "gave themselves" and names shown server-wide;
+    - the gear icon;
+    - FoldSeconds 30;
+    - the GUIDE pill over the hub sign.
 ## ITEM 14: THE ENCHANTED MIST SWITCHED ON — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; captures sent to the owner via the peer for the look OK; EnchantedMistSpec 59/0, EnchantedMistBerrySpec 70/0, MistLookSpec 13/0, MosskeeperSpec 69/0, MysteryPodSpec 33/0, AdminMistSpec 69/0, EventHubSpec 53/0 (the owner's lean testing: the specs it touches; one full suite at the end); 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY FOR ITEMS 13 AND 14; captures in output/item13-14-play-2026-10-12)
 
 The owner's item 14 via the peer: the event ON, an admin's start counting while the schedule runs, and one end-to-end Play where the SCHEDULE starts a Mist naturally.
