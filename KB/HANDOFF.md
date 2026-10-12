@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## HOTFIX, ITEM 16 A: THE BERRIES' COLLECT PROMPT — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip; the owner republishes; EnchantedMistBerrySpec 71/0, MistLookSpec 13/0; the mutant putting it back on the attachment CAUGHT; ONE GUARDED PLAY; captures in output/item16-berry-prompt-hotfix-2026-10-12)
+## HOTFIX, ITEM 16 A: THE BERRIES' COLLECT PROMPT — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK; LIVE as v1057, the owner's republish at 06:27 UTC (v1056, 06:01 UTC, had the bug); EnchantedMistBerrySpec 71/0, MistLookSpec 13/0; the mutant putting it back on the attachment CAUGHT; ONE GUARDED PLAY; captures in output/item16-berry-prompt-hotfix-2026-10-12)
 
 Seen live by the owner on a phone after the publish: no "Collect Dewberry" prompt on the berries, so no collecting.
 - **The cause, on every device:** the berry's ProximityPrompt (Style Custom) hung on the model's PickupAnchor ATTACHMENT. PromptUI draws a Custom prompt only on a BasePart (its build() gives up otherwise), so a berry showed NO prompt anywhere.
