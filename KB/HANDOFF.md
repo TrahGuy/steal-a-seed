@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 17: THE MYSTERIOUS POD IN THE SHOP — BUNDLES, GIFTS, OPEN ALL — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; MysteryShopSpec 14/0 (new) and the 24 touched specs green: StoreSpec 28/0, ServerBoostSpec 65/0, SpinPurchaseSpec 49/0, WheelSpec 163/0, CommunitySpec 25/0, WheelScaleSpec 22/0, MysteryPodSpec 39/0, HudLayoutSpec 1470/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, BagMenuSpec 13/0, HatchInBagSpec 43/0, HatchStorageSpec 208/0, InstantHatchSpec 57/0, HatchDeliverySpec 62/0, HatchRevealSpec 74/0, AdminSpec 129/0, AdminMistSpec 69/0, InstantCreditSpec 27/0, RebirthSpec 78/0, InventorySpec 47/0, SortSpec 24/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
+## ITEM 17: THE MYSTERIOUS POD IN THE SHOP — BUNDLES, GIFTS, OPEN ALL — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; MysteryShopSpec 14/0 (new) and the 24 touched specs green: StoreSpec 28/0, ServerBoostSpec 65/0, SpinPurchaseSpec 49/0, WheelSpec 163/0, CommunitySpec 25/0, WheelScaleSpec 22/0, MysteryPodSpec 39/0, HudLayoutSpec 1470/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, BagMenuSpec 13/0, HatchInBagSpec 43/0, HatchStorageSpec 208/0, InstantHatchSpec 57/0, HatchDeliverySpec 62/0, HatchRevealSpec 74/0, AdminSpec 129/0, AdminMistSpec 69/0, InstantCreditSpec 27/0, RebirthSpec 78/0, InventorySpec 47/0, SortSpec 24/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
 
 The owner wanted the Mysterious Pod sold in the Shop, in bundles, giftable. Their four answers (via the peer):
 1. "WAS": the live x1 price times the count, crossed out, shown only when the bundle costs less.
@@ -56,6 +56,8 @@ The owner wanted the Mysterious Pod sold in the Shop, in bundles, giftable. Thei
 **A rare edge, not handled:** a gift whose recipient's save fails, and who then leaves before the retry. The retry gives the buyer the pods too, and the recipient's leave save may already hold them. A double grant, never a loss.
 
 **For the owner:** declare paid random items in the experience questionnaire (paid spins are already live).
+
+**Pushed** with the owner's OK: d00f5a9, then Codex's eight tight copies (art/icons/tight/) in efce489. Still open: the questionnaire declaration and the rare double-grant edge above.
 
 **Files:** GameConfig (Store.MysteryPods, HatchInBag.OpenAll, Save.MaxMysteryPodsOwed), EnchantedMistConfig (Mystery.OpenAll, Mystery.Shop), MysteryShopBanner (new), MysteryShopService (new), StoreService (the grant hook), WheelService (PaidRandomAllowed, PolicyAllows), MysteryPodService (ReserveSpan, TellOpenAll), PlantService (OpenAllMystery), PlayerDataService (AddMysteryPodsOwed), ProfileSchema, InventoryPanel, LoadoutUI, ShopUI, MysteryRevealUI (the grid). Specs: MysteryShopSpec (new), MysteryPodSpec.
 
