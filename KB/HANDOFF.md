@@ -1,5 +1,36 @@
 # Steal a Seed — Session Handoff
 
+## THE QUEUE, ITEMS 16-18: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; THE FINAL FULL SUITE 155/155; the owner republishes)
+
+- **Live now: v1057** (the owner's publish at 06:27 UTC, the berry hotfix 4f4a6a5; Studio's log). Everything below came after it.
+- **On origin/wip, unpublished:**
+  - ec1535e item 16B (mobile sizing); e302794 item 16B2 (every notice at the top centre);
+  - 90faf19 item 16C (the Mist's start and end sounds); 24ccdde item 16C2 (one music bed at a time);
+  - 457f6a0 the berry twinkle; adc9101 + 3122b14 item 16D (the Mysterious Pod's draw); 53bc068 item 16E (more mist);
+  - d00f5a9 + efce489 item 17 (the Mysterious Pod in the Shop, OPEN ALL; Codex's bundle icons);
+  - bcf5695 item 18A (the HUD's REBIRTH button); 18daa7c item 18B (SKIP REBIRTH);
+  - 0a2ba5f MistAudioSpec's pin for item 17's grid (spec only; see the suite).
+- **The final full suite: 155/155** on the 18daa7c tree, in six small foreground batches with pauses (no run was stopped).
+  - 154 green on the first run.
+  - MistAudioSpec 18/1: its pin counted the reels' two MistCardLands, and item 17's OPEN ALL grid lands with a third, by design. Fixed in the spec only (0a2ba5f), then 19/0. Item 17 had missed running that spec.
+  - HatchRollSpec and HatchInBagSpec, the known wall-clock flakes, were green inside the suite this time.
+- **Before the owner's publish:** the prepublish probe after the last Play: 375 scripts = disk, 0 ZZ, marker absent. Studio is in Edit with no Play running; every test store was emptied.
+- **Open for the owner:**
+  - **Item 17:**
+    - declare paid random items in the experience questionnaire (paid spins are already live);
+    - owed Mysterious Pods are KEPT through a progress reset (the default; pods in the Bag go with it, as the owner chose);
+    - the rare double grant: a gift whose recipient's save fails and who then leaves before the retry;
+    - real receipts and a two-player gift: spec-only.
+  - **Item 18A:** phones are spec-only, with REBIRTH left of Index (the owner took that).
+    - On the 640 x 360 phone the beginner guide's words step aside while the buff popover is open (already so on 705 x 338).
+    - REBIRTH is hidden in the 700 x 400 desktop window that keeps Garden and the Bag top right (no room; the shrine still works).
+  - **Item 18B:** a real receipt is spec-only (the buy sheet is CoreGui); at most 100 SKIP REBIRTHs owed, then a receipt stays open.
+  - **Items 16D and 16E:** not seen on a phone. A touch screen gets about a third of 16E's ground mist and rings.
+  - **Item 16B2:** from the plots, the hub's world Mist sign stands right under the top row, so a notice draws over its words.
+  - **Art not in git:** Codex's `art/icons/rebirth-studded-2026-10-12/` (the REBIRTH art in use, 89518746657536, and the unused SKIP square v3). Say if it should be committed, as item 17's art was.
+  - **Left as found:** the owner's deletion of `game thumbnails/update 1` and Codex's own HANDOFF lines, both unstaged.
+  - **From before:** the items 1-14 ALL DONE entry's open list still stands.
+
 ## ITEM 18 B: "SKIP REBIRTH" — A REBIRTH BOUGHT, NO CASH OR MILL NEEDED — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; RebirthSpec 93/0 (8 new), StoreSpec 28/0, ServerBoostSpec 65/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, AdminSpec 129/0, InstantCreditSpec 27/0, MysteryShopSpec 14/0, SpinPurchaseSpec 49/0, RebirthCelebrationSpec 92/0, StorageDoorsSpec 128/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner's product: "Skip Rebirth", 3718117755, 249 R$ (the owner's id and price). The dashboard text says it is: an instant rebirth with no cash or mill needed; the permanent bonus (+50% training, +25% plant income), the next title and a fence upgrade; cash spent and the mill back to Compost Walk; Speed, plot, plants, pods and items kept; can be bought again. The game now does exactly that.
