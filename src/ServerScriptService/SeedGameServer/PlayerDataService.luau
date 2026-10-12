@@ -737,6 +737,25 @@ function PlayerDataService.AddMysteryPodsOwed(player: Player, delta: number): nu
 	return owed
 end
 
+-- SKIP REBIRTHS OWED (2026-10-12, the owner's item 18): + one a receipt
+-- (RebirthService.GrantSkip, in the receipt's own step), - one as it is done.
+-- The same rules: whole, never below zero or past SAVE.MaxSkipRebirthsOwed.
+-- Answers the new count, or nil.
+function PlayerDataService.AddSkipRebirthsOwed(player: Player, delta: number): number?
+	local entry = entries[player]
+	if not entry or type(delta) ~= "number" or delta ~= delta or delta == 0
+		or delta ~= math.floor(delta) then
+		return nil
+	end
+	local owed = ((entry.profile :: any).SkipRebirthsOwed or 0) + delta
+	if owed < 0 or owed > SAVE.MaxSkipRebirthsOwed then
+		return nil
+	end
+	(entry.profile :: any).SkipRebirthsOwed = owed
+	touch(player)
+	return owed
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
@@ -1426,6 +1445,8 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		-- for and never delivered. (The pods IN the Bag go with the Bag, as every
 		-- pod does: the owner's call.)
 		MysteryPodsOwed = math.max(0, math.floor(tonumber(profile.MysteryPodsOwed) or 0)),
+		-- Nor SKIP REBIRTHs bought and not yet done (2026-10-12, item 18).
+		SkipRebirthsOwed = math.max(0, math.floor(tonumber(profile.SkipRebirthsOwed) or 0)),
 		-- The one-time hatch bonus stays claimed and its like reminder keeps its
 		-- state (2026-10-01): a reset must not make the bonus claimable again.
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,

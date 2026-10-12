@@ -6293,6 +6293,15 @@ GameConfig.Rebirth = {
 	-- from anywhere, a "!" while a rebirth can be done now (RebirthUI); its art
 	-- (the owner's upload), and the least time between two of its quotes.
 	Hud = { Image = "rbxassetid://89518746657536", QuoteGap = 0.5 },
+	-- SKIP REBIRTH (2026-10-12, the owner's item 18): the Store row it is sold
+	-- by (Store.Items.Boosts), how often owed ones are tried, and its words --
+	-- the panel's button, and the line while one waits on something the player
+	-- can change (the reason is the panel's own refusal).
+	Skip = {
+		Key = "skiprebirth",
+		TrySeconds = 1,
+		Words = { Button = "SKIP REBIRTH", Waiting = "SKIP REBIRTH is waiting" },
+	},
 	BasePrice = 1e9,
 	PriceFactor = 4,
 	PriceCap = 5e14,
@@ -6899,7 +6908,8 @@ GameConfig.Rebirth = {
 			OFFLINE = "Claim your offline earnings first.",
 			MILL = "Your mill must reach %s first.",
 			CASH = "You need %s.",
-			QUOTE = "Open the shrine again.",
+			-- The shrine's quote or the HUD button's (2026-10-12): the panel either way.
+			QUOTE = "Open the panel again.",
 			FAR = "Walk back to the shrine.",
 		},
 	},
@@ -7594,7 +7604,7 @@ export type StoreItem = {
 	label: string,
 	robux: number,
 	product: number,
-	kind: "speed" | "cash" | "pod" | "hatch" | "starter" | "luck" | "rain" | "mysterypod",
+	kind: "speed" | "cash" | "pod" | "hatch" | "starter" | "luck" | "rain" | "mysterypod" | "rebirth",
 	amount: number?,
 	-- The Mysterious Pod's bundles (2026-10-12, item 17): how many pods, whether
 	-- bought for another player, and the bundle's art.
@@ -7745,6 +7755,8 @@ GameConfig.Store = {
 		starterpack = "rbxassetid://133935209044475",
 		serverluck = "rbxassetid://127834257988056",
 		summonrain = "rbxassetid://134495129410572",
+		-- SKIP REBIRTH (item 18): the owner's REBIRTH button art, as on the dashboard.
+		skiprebirth = "rbxassetid://89518746657536",
 	},
 
 	--==========================================================================
@@ -7843,6 +7855,11 @@ GameConfig.Store = {
 		--            server, stacking; standing still in the Enchanted Mist.
 		--   rain     SUMMON RAIN: the Rain for the whole server, the moment
 		--            nothing clashes; ServerBoost.Rain.CooldownSeconds apart.
+		--   rebirth  SKIP REBIRTH (2026-10-12, the owner's item 18): a rebirth
+		--            with no cash or mill needed, otherwise a rebirth like any
+		--            (RebirthService.GrantSkip): owed on the buyer's profile
+		--            in the receipt's step, done the moment nothing stops a
+		--            rebirth -- the cooldown between two included. No limit.
 		--======================================================================
 		Boosts = {
 			{ key = "starterpack", label = "STARTER PACK", robux = 99, product = 3717932975,
@@ -7862,6 +7879,14 @@ GameConfig.Store = {
 				detail = "Starts the Rain now, for everybody in this server: more plant income while it falls, "
 					.. "and the Rain biome opens over the bridge. Then 30 minutes before anyone can summon it "
 					.. "again." },
+			-- The owner's words for it on the dashboard, said here too.
+			{ key = "skiprebirth", label = "SKIP REBIRTH", robux = 249, product = 3718117755,
+				kind = "rebirth",
+				benefit = "Rebirth now: no cash or mill needed",
+				detail = "An instant rebirth with no cash or mill needed: the permanent bonus (+50% training, "
+					.. "+25% plant income), your next title and a fence upgrade. Your cash is spent and your mill "
+					.. "goes back to Compost Walk; your Speed, plot, plants, pods and items are kept. Can be "
+					.. "bought again." },
 		},
 		Speed = {
 			{ key = "speed1", label = "+150K SPEED", robux = 29, product = 3712094350, kind = "speed", amount = 150e3 },
@@ -11813,6 +11838,9 @@ GameConfig.Save = {
 	-- Mysterious Pods bought with no Bag room to take them (2026-10-12, item 17):
 	-- owed, delivered as room comes (MysteryShopService).
 	MaxMysteryPodsOwed = 500,
+	-- SKIP REBIRTHs bought and not yet done (2026-10-12, item 18): a receipt
+	-- that would pass this stays open.
+	MaxSkipRebirthsOwed = 100,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================

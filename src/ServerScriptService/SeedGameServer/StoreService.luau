@@ -114,6 +114,13 @@ function StoreService.SetMysteryGrant(fn: (Player, any, string) -> boolean)
 	mysteryGrant = fn
 end
 
+-- WHO GRANTS A SKIP REBIRTH (2026-10-12, the owner's item 18): RebirthService,
+-- which requires this file, hands its grant in as it starts.
+local rebirthGrant: ((Player) -> boolean)? = nil
+function StoreService.SetRebirthGrant(fn: (Player) -> boolean)
+	rebirthGrant = fn
+end
+
 local function indexProducts(): (number, number)
 	table.clear(byProduct)
 	local live, pending = 0, 0
@@ -348,6 +355,20 @@ local function grant(player: Player, item: any, purchaseId: string): boolean
 			return false
 		end
 		return fn(player, item, purchaseId)
+	elseif item.kind == "rebirth" then
+		--======================================================================
+		-- SKIP REBIRTH (2026-10-12, item 18): owed on the buyer's profile in
+		-- this step -- RebirthService does it the moment nothing stops a
+		-- rebirth, a cooldown included. False (rebirth off, too many owed, no
+		-- grant yet) leaves the receipt open.
+		--======================================================================
+		local fn = rebirthGrant
+		if not fn then
+			warn(string.format("[Seed/StoreService] %q arrived before RebirthService started; will retry",
+				tostring(item.key)))
+			return false
+		end
+		return fn(player)
 	end
 	warn(string.format("[Seed/StoreService] %q has no grant for kind %q",
 		item.key, tostring(item.kind)))

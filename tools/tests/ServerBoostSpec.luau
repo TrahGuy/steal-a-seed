@@ -157,10 +157,13 @@ local ok, err = pcall(function()
 	for _, c in ipairs(ShopCatalog.categories(false)) do
 		inCats = inCats or c.id == "Boosts"
 	end
-	local sp, lk, rn = byKey.starterpack, byKey.serverluck, byKey.summonrain
-	check(inCats and #entries == 3 and sp and lk and rn and sp.kind == "product" and sp.id == S.product
-			and lk.kind == "product" and lk.id == L.product and rn.kind == "product" and rn.id == R.product,
-		"the Shop draws the shelf for everybody: three live product cards", #entries)
+	-- And SKIP REBIRTH since 2026-10-12 (item 18; RebirthSpec has its grant).
+	local sp, lk, rn, sk = byKey.starterpack, byKey.serverluck, byKey.summonrain, byKey.skiprebirth
+	check(inCats and #entries == 4 and sp and lk and rn and sp.kind == "product" and sp.id == S.product
+			and lk.kind == "product" and lk.id == L.product and rn.kind == "product" and rn.id == R.product
+			and sk and sk.kind == "product" and sk.id == 3718117755 and sk.benefit ~= "" and sk.detail ~= "",
+		"the Shop draws the shelf for everybody: four live product cards, SKIP REBIRTH's with its own words",
+		#entries)
 	check(sp.benefit == S.benefit and sp.detail == S.detail and lk.benefit == L.benefit and rn.detail == R.detail
 			and sp.icon == STORE.Icons.starterpack and rn.icon == STORE.Icons.summonrain and sp.studs == "coral",
 		"each says its own words, under its own icon, on coral")

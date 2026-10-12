@@ -16,6 +16,9 @@
 --                (2026-10-12, the owner's item 18; AskQuote). Its quote is
 --                confirmed without the shrine's distance -- the only check it
 --                skips.
+--   SKIP REBIRTH the Developer Product (item 18): a rebirth bought, no cash or
+--                mill needed, owed until nothing else stops it (SKIP REBIRTH,
+--                below).
 --   THE CONFIRM  the panel's second press sends that token back. Checked
 --                again from scratch (the quote is only a promise of what was
 --                true), then, with no yield between the check and the last
@@ -90,6 +93,8 @@ local quotes: { [Player]: Quote } = {}
 -- When each player's HUD button last asked for a quote (AskQuote).
 local asked: { [Player]: number } = {}
 local busy: { [Player]: boolean } = {}
+-- Bumped by every Init: the owed SKIP REBIRTH loop of an older Start stops.
+local generation = 0
 local nextToken = 0
 local shrineTop: BasePart? = nil
 local connections: { RBXScriptConnection } = {}
@@ -359,6 +364,61 @@ local function refuse(player: Player, why: string, n: number)
 	RebirthService.Hooks.reply(player, { verb = "refused", why = why, words = Rebirth.refusal(why, n) })
 end
 
+-- THE REBIRTH ITSELF, once every check has passed: from here to the save
+-- nothing yields, so the check is still true. `paid`: a SKIP REBIRTH owed,
+-- taken off in the same step. Answers true.
+local function reborn(player: Player, paid: boolean): boolean
+	quotes[player] = nil
+	busy[player] = true
+	local profile = PlayerDataService.Get(player) :: any
+	local spent = tonumber(profile.Cash) or 0
+	-- Off the belt first, so the rebuilt mill never has a rider standing in it.
+	TreadmillService.Unmount(player)
+	PlayerDataService.AddCash(player, -spent)
+	PlayerDataService.SetMillTier(player, 1)
+	local plot = PlotService.PlotOf(player)
+	if plot and PlotService.OwnerOf(plot) == player then
+		TreadmillService.Rebuild(plot, 1)
+	end
+	local now = RebirthService.Hooks.now()
+	PlayerDataService.UpdateRebirth(player, function(p: any)
+		p.Rebirths = GameConfig.rebirthCount(p.Rebirths) + 1
+		p.RebirthAt = now
+		return true
+	end)
+	if paid then
+		PlayerDataService.AddSkipRebirthsOwed(player, -1)
+	end
+	local after = rebirthsOf(player)
+	dressOwnersFence(player)
+	local character = player.Character
+	if character then
+		RebirthService.ApplyTitle(player, character)
+	end
+	log(string.format("%s was reborn%s: rebirth %d, spent %s; training x%s, income x%s.", player.Name,
+		if paid then " (SKIP REBIRTH)" else "", after, GameConfig.compact(spent),
+		Rebirth.times(Rebirth.training(after)), Rebirth.times(Rebirth.income(after))))
+	-- Saved at once, and the busy flag holds through it.
+	local ok, saved = pcall(PlayerDataService.Save, player)
+	busy[player] = nil
+	RebirthService.Hooks.reply(player, {
+		verb = "done",
+		rebirths = after,
+		training = Rebirth.training(after),
+		income = Rebirth.income(after),
+		saved = ok and saved == true,
+	})
+	-- Then everybody else (after the save, and nothing here yields): the
+	-- celebration round this body for those near, one line for the server.
+	local sent, seen, told = pcall(RebirthService.Celebrate, player, after)
+	if sent then
+		log(string.format("%s's celebration: shown to %d nearby, the line to %d.", player.Name, seen, told))
+	else
+		warn("[Seed/RebirthService] the celebration was not sent: " .. tostring(seen))
+	end
+	return true
+end
+
 -- Answers true when the rebirth happened. The reply goes to the player either
 -- way.
 function RebirthService.Confirm(player: Player, payload: any): boolean
@@ -380,52 +440,64 @@ function RebirthService.Confirm(player: Player, payload: any): boolean
 		refuse(player, why, n)
 		return false
 	end
-	-- From here to the save nothing yields: the check above is still true.
-	quotes[player] = nil
-	busy[player] = true
+	return reborn(player, false)
+end
+
+--==============================================================================
+-- SKIP REBIRTH (2026-10-12, the owner's item 18): a rebirth bought, with no
+-- cash or mill needed -- otherwise a rebirth like any other: all the cash
+-- spent, the mill back to Compost Walk, the bonus, the title, the fence, the
+-- save, the celebration and the line for everybody. No limit; the cooldown
+-- between two stands.
+--
+--   THE RECEIPT  GrantSkip, through StoreService's ledger: one more owed on the
+--                buyer's profile, in the receipt's own step (StoreService
+--                saves it). False -- rebirth off, or SAVE.MaxSkipRebirthsOwed
+--                owed already -- leaves the receipt open.
+--   THE REBIRTH  SkipOwed, tried every Skip.TrySeconds for each player owed
+--                one: the moment Rebirth.check(state, true) finds nothing in
+--                the way -- a cooldown, a purchase in flight, a body, a carry,
+--                a chase, an offline claim -- it is done, one owed taken off in
+--                the same step. Never lost: a player who leaves keeps it owed.
+--                While it waits on something the player has to do, one line
+--                says what (once a reason).
+--==============================================================================
+function RebirthService.GrantSkip(player: Player): boolean
+	if not CFG.Enabled then
+		warn(string.format("[Seed/RebirthService] %s: SKIP REBIRTH while rebirth is off; the receipt stays open.",
+			player.Name))
+		return false
+	end
+	return PlayerDataService.AddSkipRebirthsOwed(player, 1) ~= nil
+end
+
+-- The reasons worth a line while one waits (the rest pass by themselves).
+local TELL = { CARRYING = true, CHASED = true, OFFLINE = true }
+local toldWhy: { [Player]: string } = {}
+
+-- Does one owed SKIP REBIRTH if nothing stops it now. Answers true when done.
+function RebirthService.SkipOwed(player: Player): boolean
 	local profile = PlayerDataService.Get(player) :: any
-	local spent = tonumber(profile.Cash) or 0
-	-- Off the belt first, so the rebuilt mill never has a rider standing in it.
-	TreadmillService.Unmount(player)
-	PlayerDataService.AddCash(player, -spent)
-	PlayerDataService.SetMillTier(player, 1)
-	local plot = PlotService.PlotOf(player)
-	if plot and PlotService.OwnerOf(plot) == player then
-		TreadmillService.Rebuild(plot, 1)
+	local owed = if profile then GameConfig.rebirthCount(profile.SkipRebirthsOwed) else 0
+	if owed <= 0 then
+		toldWhy[player] = nil
+		return false
 	end
-	local now = RebirthService.Hooks.now()
-	PlayerDataService.UpdateRebirth(player, function(p: any)
-		p.Rebirths = GameConfig.rebirthCount(p.Rebirths) + 1
-		p.RebirthAt = now
-		return true
-	end)
-	local after = rebirthsOf(player)
-	dressOwnersFence(player)
-	local character = player.Character
-	if character then
-		RebirthService.ApplyTitle(player, character)
+	local why = Rebirth.check(RebirthService.StateOf(player), true)
+	if why then
+		if TELL[why] and toldWhy[player] ~= why then
+			toldWhy[player] = why
+			RebirthService.Hooks.send(player, Notice.ServerNotice, {
+				title = CFG.Skip.Words.Waiting,
+				detail = Rebirth.refusal(why, rebirthsOf(player)),
+				key = "skiprebirth:" .. why,
+				icon = "rebirth",
+			})
+		end
+		return false
 	end
-	log(string.format("%s was reborn: rebirth %d, spent %s; training x%s, income x%s.", player.Name, after,
-		GameConfig.compact(spent), Rebirth.times(Rebirth.training(after)), Rebirth.times(Rebirth.income(after))))
-	-- Saved at once, and the busy flag holds through it.
-	local ok, saved = pcall(PlayerDataService.Save, player)
-	busy[player] = nil
-	RebirthService.Hooks.reply(player, {
-		verb = "done",
-		rebirths = after,
-		training = Rebirth.training(after),
-		income = Rebirth.income(after),
-		saved = ok and saved == true,
-	})
-	-- Then everybody else (after the save, and nothing here yields): the
-	-- celebration round this body for those near, one line for the server.
-	local sent, seen, told = pcall(RebirthService.Celebrate, player, after)
-	if sent then
-		log(string.format("%s's celebration: shown to %d nearby, the line to %d.", player.Name, seen, told))
-	else
-		warn("[Seed/RebirthService] the celebration was not sent: " .. tostring(seen))
-	end
-	return true
+	toldWhy[player] = nil
+	return reborn(player, true)
 end
 
 --==============================================================================
@@ -556,6 +628,7 @@ end
 local function forget(player: Player)
 	quotes[player] = nil
 	asked[player] = nil
+	toldWhy[player] = nil
 	busy[player] = nil
 	for _, c in ipairs(playerConnections[player] or {}) do
 		c:Disconnect()
@@ -580,7 +653,10 @@ function RebirthService.Init()
 	end
 	table.clear(quotes)
 	table.clear(asked)
+	table.clear(toldWhy)
 	table.clear(busy)
+	-- A re-run's loop is the only one trying owed SKIP REBIRTHs.
+	generation += 1
 	-- A re-run leaves no title behind.
 	for _, gui in ipairs(CollectionService:GetTagged(TITLE.Tag)) do
 		gui:Destroy()
@@ -640,6 +716,23 @@ function RebirthService.Start()
 	end
 	table.insert(connections, Players.PlayerAdded:Connect(watch))
 	table.insert(connections, Players.PlayerRemoving:Connect(forget))
+	-- SKIP REBIRTH (item 18): its receipts come here, and owed ones are tried.
+	StoreService.SetRebirthGrant(RebirthService.GrantSkip)
+	local mine = generation
+	task.spawn(function()
+		while generation == mine do
+			task.wait(CFG.Skip.TrySeconds)
+			for _, player in ipairs(RebirthService.Hooks.players()) do
+				if generation ~= mine then
+					break
+				end
+				local ok, err = pcall(RebirthService.SkipOwed, player)
+				if not ok then
+					warn("[Seed/RebirthService] an owed SKIP REBIRTH failed: " .. tostring(err))
+				end
+			end
+		end
+	end)
 	log(string.format("Ready. Rebirth 1 costs %s and needs the %s mill; +%d%% training and +%d%% income each.",
 		GameConfig.compact(Rebirth.priceFor(1)), select(2, Rebirth.millNeeded()), CFG.TrainingPer * 100,
 		CFG.IncomePer * 100))

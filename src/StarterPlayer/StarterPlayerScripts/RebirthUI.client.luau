@@ -29,6 +29,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ContextActionService = game:GetService("ContextActionService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -48,6 +49,7 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
 local Notice = require(Shared:WaitForChild("Notice"))
+local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local TitleFX = require(Shared:WaitForChild("TitleFX"))
@@ -438,6 +440,69 @@ local button = MenuKit.button(foot, "RebirthButton", 6, WORDS.Button, 24, { stud
 button.hit.AnchorPoint = Vector2.new(0.5, 0)
 button.hit.Position = UDim2.new(0.5, 0, 0, 26)
 button.hit.Size = UDim2.new(0.5, 0, 0, 56)
+
+-- SKIP REBIRTH (2026-10-12, the owner's item 18): beside REBIRTH while the
+-- cash or the mill is what stops it -- its words over the product's own live
+-- price on the green Robux tag (RobuxPrice), its prompt Roblox's. The rebirth
+-- itself is RebirthService's, the moment the receipt is in.
+local SKIP = Rebirth.skipItem()
+local skipButton = Instance.new("TextButton")
+skipButton.Name = "SkipRebirth"
+skipButton.Text = ""
+skipButton.BackgroundTransparency = 1
+skipButton.AutoButtonColor = false
+skipButton.AnchorPoint = Vector2.new(0.5, 0)
+skipButton.Position = UDim2.new(0.75, 0, 0, 26)
+skipButton.Size = UDim2.new(0.44, 0, 0, 56)
+skipButton.ZIndex = 6
+skipButton.Visible = false
+skipButton.Parent = foot
+UIKit.clicks(skipButton)
+local skipWord = words(skipButton, "Word", 14, WHITE, 7)
+skipWord.Size = UDim2.new(1, 0, 0, 16)
+skipWord.Text = CFG.Skip.Words.Button
+local skipTag = UIKit.priceTag(skipButton, "Tag", 7)
+skipTag.frame.AnchorPoint = Vector2.new(0.5, 1)
+skipTag.frame.Position = UDim2.new(0.5, 0, 1, 0)
+skipTag.frame.Size = UDim2.new(1, 0, 0, 38)
+skipTag.price.Text = "..."
+if SKIP and (tonumber(SKIP.product) or 0) > 0 then
+	RobuxPrice.watch("product", SKIP.product, function(state: RobuxPrice.State, price: number?)
+		skipTag.price.Text = if state == "ready" and price then RobuxPrice.format(price) else "..."
+	end)
+end
+skipButton.Activated:Connect(function()
+	if SKIP and (tonumber(SKIP.product) or 0) > 0 then
+		SoundKit.play("CardClick")
+		MarketplaceService:PromptProductPurchase(player, SKIP.product)
+	end
+end)
+-- The button's row in the foot (relayout, from Rebirth.layout): REBIRTH alone,
+-- or REBIRTH and SKIP REBIRTH in its two halves while the skip is offered.
+local footRow: { x: number, y: number, w: number, h: number }? = nil
+local skipOffered = false
+local SKIP_GAP = 8
+local function placeFootRow()
+	local r = footRow
+	skipButton.Visible = skipOffered and r ~= nil
+	if not r then
+		return
+	end
+	if skipOffered then
+		local w = math.floor((r.w - SKIP_GAP) / 2)
+		button.hit.Position = UDim2.fromOffset(r.x + w * 0.5, r.y)
+		button.hit.Size = UDim2.fromOffset(w, r.h)
+		skipButton.Position = UDim2.fromOffset(r.x + w + SKIP_GAP + w * 0.5, r.y)
+		skipButton.Size = UDim2.fromOffset(w, r.h)
+	else
+		button.hit.Position = UDim2.fromOffset(r.x + r.w * 0.5, r.y)
+		button.hit.Size = UDim2.fromOffset(r.w, r.h)
+	end
+end
+local function placeFoot(q: { [string]: any }?)
+	skipOffered = SKIP ~= nil and q ~= nil and (q.why == "MILL" or q.why == "CASH")
+	placeFootRow()
+end
 
 --==============================================================================
 -- THE "?" AND THE TITLES VIEW (2026-10-08, the owner: "i want players to see
@@ -876,6 +941,7 @@ local function fill(q: { [string]: any })
 	titleLine.Text = string.format(WORDS.TitleLine, nextText or "")
 	titleLine.TextColor3 = if nextTitle and not nextTitle.Rainbow then nextTitle.Colour else WHITE
 	status.Text = if type(q.words) == "string" then q.words else ""
+	placeFoot(q)
 	paintButton()
 end
 
@@ -1269,6 +1335,9 @@ relayout = function()
 	foot.Size = UDim2.fromOffset(L.foot.w, L.foot.h)
 	button.hit.Position = UDim2.fromOffset(L.button.x - L.foot.x + L.button.w * 0.5, L.button.y - L.foot.y)
 	button.hit.Size = UDim2.fromOffset(L.button.w, L.button.h)
+	-- SKIP REBIRTH beside REBIRTH while it is offered (item 18): the row's halves.
+	footRow = { x = L.button.x - L.foot.x, y = L.button.y - L.foot.y, w = L.button.w, h = L.button.h }
+	placeFootRow()
 	-- The TITLES view over the same body: BACK, its heading beside it, the list.
 	titlesView.Position = UDim2.new()
 	titlesView.Size = UDim2.fromScale(1, 1)

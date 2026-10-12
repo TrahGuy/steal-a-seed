@@ -99,6 +99,11 @@ export type Profile = {
 	-- and handed over as room comes (MysteryShopService). Kept by a progress
 	-- reset like RainOwed: paid for and never delivered. Old saves: 0.
 	MysteryPodsOwed: number,
+	-- SkipRebirthsOwed (2026-10-12, the owner's item 18): SKIP REBIRTHs bought
+	-- and not yet done, added in the receipt's own step and taken off in the
+	-- rebirth's (RebirthService.SkipOwed). Kept by a progress reset: paid for.
+	-- Old saves: 0.
+	SkipRebirthsOwed: number,
 	--==========================================================================
 	-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01; GameConfig.HatchBonus)
 	--
@@ -500,6 +505,7 @@ function ProfileSchema.Default(): Profile
 		StarterPacks = 0,
 		RainOwed = 0,
 		MysteryPodsOwed = 0,
+		SkipRebirthsOwed = 0,
 		HatchBonusClaimed = false,
 		BatHintShown = false,
 		LikeReminder = "",
@@ -1214,6 +1220,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.StarterPacks = math.floor(number(raw.StarterPacks, 0, 0, SAVE.MaxStarterPacks))
 	p.RainOwed = math.floor(number(raw.RainOwed, 0, 0, SAVE.MaxRainOwed))
 	p.MysteryPodsOwed = math.floor(number(raw.MysteryPodsOwed, 0, 0, SAVE.MaxMysteryPodsOwed))
+	p.SkipRebirthsOwed = math.floor(number(raw.SkipRebirthsOwed, 0, 0, SAVE.MaxSkipRebirthsOwed))
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.BatHintShown = raw.BatHintShown == true

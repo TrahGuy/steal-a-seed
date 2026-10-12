@@ -323,6 +323,15 @@ local ok, err = pcall(function()
 			end
 			return false
 		end,
+		-- SKIP REBIRTH's owed count (item 18): the real one's rules.
+		AddSkipRebirthsOwed = function(p, delta)
+			local owed = (profiles[p].SkipRebirthsOwed or 0) + delta
+			if owed < 0 or owed > GameConfig.Save.MaxSkipRebirthsOwed then
+				return nil
+			end
+			profiles[p].SkipRebirthsOwed = owed
+			return owed
+		end,
 		Save = function()
 			calls.save += 1
 			return true
@@ -514,41 +523,105 @@ local ok, err = pcall(function()
 		table.concat(reasons, ","))
 
 	-- THE HUD'S REBIRTH BUTTON (2026-10-12, item 18): a quote from anywhere.
-	local roamer = fakePlayer("Roamer", richProfile())
-	distance = 400
-	local sent = #replies
-	local asked = Service.AskQuote(roamer)
-	local hq = last()
-	check(asked == true and #replies == sent + 1 and hq.verb == "quote" and hq.ok == true and hq.anywhere == true,
-		"the HUD button's ask, far from the shrine: the same quote, marked good anywhere")
-	check(Service.AskQuote(roamer) == false and #replies == sent + 1,
-		"a second ask inside Hud.QuoteGap sends nothing")
-	check(Service.Confirm(roamer, { token = hq.token }) == true and last().verb == "done"
-		and profiles[roamer].Rebirths == 1 and profiles[roamer].Cash == 0,
-		"and its confirm, 400 studs away: reborn -- the shrine's distance is the one check it skips")
-	clock += CFG.Hud.QuoteGap
-	local poorRoamer = fakePlayer("PoorRoamer", { Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 })
-	Service.AskQuote(poorRoamer)
-	local pq = last()
-	check(pq.anywhere == true and pq.ok == false and Service.Confirm(poorRoamer, { token = pq.token }) == false
-		and last().why == "CASH" and profiles[poorRoamer].Rebirths == 0,
-		"every other check stands: short of the cash, the HUD's quote is refused like the shrine's")
-	local walker = fakePlayer("Walker", richProfile())
-	local sq = Service.Quote(walker)
-	check(sq.anywhere == false and Service.Confirm(walker, { token = sq.token }) == false and last().why == "FAR",
-		"and the shrine's own quote still needs the shrine")
-	distance = 5
+	-- (In a block of its own: the spec's function is at Luau's 200 locals.)
+	do
+		local roamer = fakePlayer("Roamer", richProfile())
+		distance = 400
+		local sent = #replies
+		local asked = Service.AskQuote(roamer)
+		local hq = last()
+		check(asked == true and #replies == sent + 1 and hq.verb == "quote" and hq.ok == true and hq.anywhere == true,
+			"the HUD button's ask, far from the shrine: the same quote, marked good anywhere")
+		check(Service.AskQuote(roamer) == false and #replies == sent + 1,
+			"a second ask inside Hud.QuoteGap sends nothing")
+		check(Service.Confirm(roamer, { token = hq.token }) == true and last().verb == "done"
+			and profiles[roamer].Rebirths == 1 and profiles[roamer].Cash == 0,
+			"and its confirm, 400 studs away: reborn -- the shrine's distance is the one check it skips")
+		clock += CFG.Hud.QuoteGap
+		local poorRoamer = fakePlayer("PoorRoamer", { Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 })
+		Service.AskQuote(poorRoamer)
+		local pq = last()
+		check(pq.anywhere == true and pq.ok == false and Service.Confirm(poorRoamer, { token = pq.token }) == false
+			and last().why == "CASH" and profiles[poorRoamer].Rebirths == 0,
+			"every other check stands: short of the cash, the HUD's quote is refused like the shrine's")
+		local walker = fakePlayer("Walker", richProfile())
+		local sq = Service.Quote(walker)
+		check(sq.anywhere == false and Service.Confirm(walker, { token = sq.token }) == false and last().why == "FAR",
+			"and the shrine's own quote still needs the shrine")
+		distance = 5
 
-	-- The "!" on the button (Rebirth.readyNow, the client's copy of the profile).
-	local okRich, waitRich = Rebirth.readyNow(richProfile(), now)
-	local okPoor = Rebirth.readyNow({ Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 }, now)
-	local okMill = Rebirth.readyNow({ Cash = 5e9, MillTier = 7, Rebirths = 0, RebirthAt = 0 }, now)
-	local okCool, waitCool = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 }, now)
-	local okLater = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 },
-		now + CFG.CooldownSeconds)
-	check(okRich == true and waitRich == 0 and okPoor == false and okMill == false and okCool == false
-		and waitCool == CFG.CooldownSeconds - 3 and okLater == true and (Rebirth.readyNow(nil, now)) == false,
-		"the button's \"!\": the cash and the mill for the next one, not cooling down (and when the cooldown ends)")
+		-- The "!" on the button (Rebirth.readyNow, the client's copy of the profile).
+		local okRich, waitRich = Rebirth.readyNow(richProfile(), now)
+		local okPoor = Rebirth.readyNow({ Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 }, now)
+		local okMill = Rebirth.readyNow({ Cash = 5e9, MillTier = 7, Rebirths = 0, RebirthAt = 0 }, now)
+		local okCool, waitCool = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 }, now)
+		local okLater = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 },
+			now + CFG.CooldownSeconds)
+		check(okRich == true and waitRich == 0 and okPoor == false and okMill == false and okCool == false
+			and waitCool == CFG.CooldownSeconds - 3 and okLater == true and (Rebirth.readyNow(nil, now)) == false,
+			"the button's \"!\": the cash and the mill for the next one, not cooling down (and when the cooldown ends)")
+
+		-- SKIP REBIRTH (2026-10-12, item 18): bought, owed, done with no cash or mill.
+		local skipBase = { enabled = true, ready = true, now = now, lastAt = 0, rebirths = 0, cash = 0, millTier = 1 }
+		local carryState = table.clone(skipBase)
+		carryState.carrying = true
+		local coolState = table.clone(skipBase)
+		coolState.lastAt = now - 1
+		check(Rebirth.check(skipBase) == "MILL" and Rebirth.check(skipBase, true) == nil
+				and Rebirth.check(carryState, true) == "CARRYING" and Rebirth.check(coolState, true) == "COOLDOWN",
+			"a SKIP REBIRTH asks no cash and no mill -- everything else, as any rebirth")
+		local buyer = fakePlayer("SkipBuyer", { Cash = 1234, MillTier = 3, Rebirths = 0, RebirthAt = 0, SkipRebirthsOwed = 0 })
+		local saves = calls.save
+		local granted = Service.GrantSkip(buyer)
+		local doneNow = Service.SkipOwed(buyer)
+		local pb = profiles[buyer]
+		check(granted == true and doneNow == true and pb.Rebirths == 1 and pb.Cash == 0 and pb.MillTier == 1
+				and pb.SkipRebirthsOwed == 0 and pb.RebirthAt == now and calls.save == saves + 1
+				and last().verb == "done" and last().rebirths == 1,
+			"the receipt owes one; the next try does it: $1,234 and Trellis Trot are enough -- the cash spent, the mill "
+				.. "back, counted, saved, celebrated, nothing owed")
+		Service.GrantSkip(buyer)
+		local waited = Service.SkipOwed(buyer)
+		now += CFG.CooldownSeconds
+		local after = Service.SkipOwed(buyer)
+		check(waited == false and after == true and pb.Rebirths == 2 and pb.SkipRebirthsOwed == 0,
+			"a second bought inside the cooldown waits for it, then is done: never lost", pb.Rebirths)
+		now += CFG.CooldownSeconds
+		local sentNotices = {}
+		local oldSend = Service.Hooks.send
+		Service.Hooks.send = function(_, action, payload)
+			table.insert(sentNotices, { action = action, payload = payload })
+		end
+		Service.GrantSkip(buyer)
+		carrying[buyer] = true
+		local first, second = Service.SkipOwed(buyer), Service.SkipOwed(buyer)
+		carrying[buyer] = nil
+		local third = Service.SkipOwed(buyer)
+		Service.Hooks.send = oldSend
+		local Notice = require(Shared.Notice)
+		check(first == false and second == false and third == true and #sentNotices == 1
+				and sentNotices[1].action == Notice.ServerNotice
+				and sentNotices[1].payload.title == CFG.Skip.Words.Waiting
+				and sentNotices[1].payload.detail == CFG.Words.Refused.CARRYING and pb.Rebirths == 3,
+			"carrying a pod it waits, says why once, and is done when the pod is down", #sentNotices)
+		pb.SkipRebirthsOwed = GameConfig.Save.MaxSkipRebirthsOwed
+		check(Service.GrantSkip(buyer) == false and pb.SkipRebirthsOwed == GameConfig.Save.MaxSkipRebirthsOwed,
+			"past the most owed, a receipt stays open")
+		pb.SkipRebirthsOwed = 0
+		check(Service.SkipOwed(buyer) == false and pb.Rebirths == 3, "nothing owed, nothing done")
+		local row = Rebirth.skipItem()
+		local storeSrc = sourceOf(Server, "StoreService")
+		check(row ~= nil and row.product == 3718117755 and row.robux == 249 and row.kind == "rebirth"
+				and GameConfig.Store.Icons.skiprebirth == CFG.Hud.Image
+				and has(storeSrc, 'elseif item.kind == "rebirth" then') and has(storeSrc, "return fn(player)")
+				and has(sourceOf(Server, "RebirthService"), "StoreService.SetRebirthGrant(RebirthService.GrantSkip)")
+				and has(sourceOf(Server, "PlayerDataService"),
+					"SkipRebirthsOwed = math.max(0, math.floor(tonumber(profile.SkipRebirthsOwed) or 0)),")
+				and ProfileSchema.Default().SkipRebirthsOwed == 0
+				and ProfileSchema.Sanitise({ SkipRebirthsOwed = 1e9 }).SkipRebirthsOwed == GameConfig.Save.MaxSkipRebirthsOwed,
+			"SKIP REBIRTH on the Boosts shelf (the owner's product and price, the button's art), granted through the "
+				.. "store's ledger into RebirthService, owed in the save, kept by a progress reset")
+	end
 
 	--==========================================================================
 	say("6. The title over the name, ADMIN on top")
@@ -743,6 +816,13 @@ local ok, err = pcall(function()
 			and GameConfig.Rebirth.Hud.Image == "rbxassetid://89518746657536",
 		"the HUD's REBIRTH button: the owner's art (REBIRTH on a plate until it loads), where HudLayout says, "
 			.. "INVITE's \"!\" while a rebirth can be done now, and a panel it opened stays open anywhere")
+	check(has(ui, "local SKIP = Rebirth.skipItem()") and has(ui, 'RobuxPrice.watch("product", SKIP.product,')
+			and has(ui, "MarketplaceService:PromptProductPurchase(player, SKIP.product)")
+			and has(ui, 'skipOffered = SKIP ~= nil and q ~= nil and (q.why == "MILL" or q.why == "CASH")')
+			and has(ui, "footRow = { x = L.button.x - L.foot.x, y = L.button.y - L.foot.y, w = L.button.w, h = L.button.h }")
+			and has(ui, "placeFoot(q)") and not has(ui, ".robux"),
+		"the panel offers SKIP REBIRTH beside REBIRTH while the cash or the mill stops it, at its live price on "
+			.. "the green Robux tag, Roblox's own prompt")
 
 	--==========================================================================
 	say("9. The shrine's ground")

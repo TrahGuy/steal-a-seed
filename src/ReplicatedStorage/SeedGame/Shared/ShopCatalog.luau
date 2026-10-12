@@ -152,8 +152,9 @@ local function productEntry(item: any): Entry
 		local name = if species then species.Name else tostring(item.species)
 		benefit = string.format("A %s %s pod", size, name)
 		detail = string.format("Exactly one %s pod, %s size -- nothing about it is rolled.", name, size)
-	elseif item.kind == "starter" or item.kind == "luck" or item.kind == "rain" then
-		-- The item 9B products say their own words (GameConfig.Store.Items.Boosts).
+	elseif item.kind == "starter" or item.kind == "luck" or item.kind == "rain" or item.kind == "rebirth" then
+		-- The item 9B products, and SKIP REBIRTH (item 18), say their own words
+		-- (GameConfig.Store.Items.Boosts).
 		benefit = if type(item.benefit) == "string" then item.benefit else ""
 		detail = if type(item.detail) == "string" then item.detail else ""
 	end

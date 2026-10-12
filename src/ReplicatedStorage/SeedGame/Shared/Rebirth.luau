@@ -264,8 +264,9 @@ export type State = {
 }
 
 -- Nil when a rebirth may go ahead; otherwise the first thing stopping it, in
--- the order a player can do something about it.
-function Rebirth.check(s: State): string?
+-- the order a player can do something about it. `skip`: a SKIP REBIRTH bought
+-- (2026-10-12, item 18) -- the mill and the cash are not asked; all else is.
+function Rebirth.check(s: State, skip: boolean?): string?
 	if s.enabled == false or not CFG.Enabled then
 		return "DISABLED"
 	end
@@ -290,11 +291,24 @@ function Rebirth.check(s: State): string?
 	if s.offline then
 		return "OFFLINE"
 	end
+	if skip then
+		return nil
+	end
 	if (s.millTier or 0) < CFG.MinMillTier then
 		return "MILL"
 	end
 	if (s.cash or 0) < Rebirth.nextPrice(s.rebirths) then
 		return "CASH"
+	end
+	return nil
+end
+
+-- SKIP REBIRTH's Store row (Store.Items.Boosts, by Rebirth.Skip.Key), or nil.
+function Rebirth.skipItem(): any
+	for _, item in ipairs(((GameConfig.Store :: any).Items or {}).Boosts or {}) do
+		if item.key == CFG.Skip.Key then
+			return item
+		end
 	end
 	return nil
 end
