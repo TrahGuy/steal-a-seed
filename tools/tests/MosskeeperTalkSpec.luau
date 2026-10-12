@@ -202,6 +202,16 @@ local ok, err = pcall(function()
 	check(near((beside - him):Dot(right), TALK.Beside, 1e-4) and near(beside.Y - him.Y, TALK.BesideUp, 1e-4)
 			and near((beside - him):Dot(forward), 0, 1e-4),
 		"the replies start Beside studs right of him (the camera's side), BesideUp over his pivot", tostring(beside))
+	-- What of him the replies keep clear of (the owner, 2026-10-12: "not over him").
+	local BAR = CFG.Bar
+	local pts = Talk.himPoints(CFrame.new(0, 4, 0), Vector3.new(2, 8, 2), Vector3.new(0, 1, 0), Vector3.xAxis, Vector3.yAxis)
+	local span = Talk.spanOf({ Vector2.new(3, 9), Vector2.new(-1, 4), Vector2.new(2, -2) })
+	check(#pts == 12 and near(pts[1].Y, 0, 1e-4) and near(pts[8].Y, 8, 1e-4)
+			and near(pts[12].X, BAR.Width / 2, 1e-4) and near(pts[12].Y, 1 + BAR.Above + BAR.Height / 2, 1e-4)
+			and near(pts[9].X, -BAR.Width / 2, 1e-4) and near(pts[9].Y, 1 + BAR.Above - BAR.Height / 2, 1e-4)
+			and span ~= nil and span.x == -1 and span.y == -2 and span.w == 4 and span.h == 11 and Talk.spanOf({}) == nil,
+		"him on screen: his body's eight corners and his bar's four (BAR.Width x BAR.Height facing the camera, "
+			.. "BAR.Above over his base), and the least rect round them")
 	-- The player and him apart on screen: him on the camera's axis, the player a
 	-- body's width or more to the left of it (the first Play: they overlapped).
 	local axis = cf.LookVector
@@ -226,13 +236,14 @@ local ok, err = pcall(function()
 		{ "1000x609 desktop", screen(1000, 609) },
 		{ "860x700 window", screen(860, 700) },
 		{ "640x360 phone", screen(640, 360, true) },
+		{ "705x338 phone (Studio's emulator)", screen(705, 338, true) },
 		{ "640x480 touch", screen(640, 480, true) },
 		{ "801x392 phone (the owner's)", screen(801, 392, true) },
 		{ "844x390 phone", screen(844, 390, true) },
 		{ "896x414 phone", screen(896, 414, true) },
 	}
 	local placeOk, placeNotes = true, {}
-	local tapOk, keptHis, putAway = true, 0, 0
+	local tapOk, keptHis, putAway, keptHim, overHim = true, 0, 0, 0, {}
 	for _, case in ipairs(screens) do
 		local tag, input = case[1], case[2]
 		local L = HudLayout.solve(input)
@@ -268,11 +279,16 @@ local ok, err = pcall(function()
 		end
 		-- His line over his bar: the top middle of the shot.
 		local his = { x = input.safe.X / 2 - 150, y = input.safe.Y * 0.1, w = 300, h = 56 }
+		-- HIM in the shot, his bar and his body (as the 705 x 338 Play measured
+		-- him, 2026-10-12): down the middle, from a quarter of the way down to
+		-- three quarters, a third of the height wide. Never under the replies.
+		local him = { x = input.safe.X / 2 - input.safe.Y * 0.175, y = input.safe.Y * 0.27, w = input.safe.Y * 0.35,
+			h = input.safe.Y * 0.46 }
 		-- Where a player's right side lands in the shot: a little right of the
-		-- middle; and the corners, to make it slide.
+		-- middle (on him); and the corners, to make it slide.
 		for _, anchor in ipairs({ Vector2.new(input.safe.X * 0.52, input.safe.Y * 0.55),
 			Vector2.new(input.safe.X, input.safe.Y), Vector2.new(0, 0) }) do
-			local block = Talk.place(anchor, bounds, input.touch, widths, blocked, soft, his, #options)
+			local block = Talk.place(anchor, bounds, input.touch, widths, blocked, soft, his, #options, him)
 			local bad = {}
 			local M = TALK.Margin
 			local widest = widths(block.look)
@@ -285,9 +301,9 @@ local ok, err = pcall(function()
 				if r.w < widest - 1e-6 then
 					table.insert(bad, "row " .. n .. " narrower than its words")
 				end
-				if input.touch and r.h < 44 then
+				if input.touch and r.h < 19 then
 					tapOk = false
-					table.insert(bad, "row " .. n .. " under 44 px on a touch screen")
+					table.insert(bad, "row " .. n .. " under 19 px on a touch screen")
 				end
 				if n > 1 and r.y < block.rows[n - 1].y + block.rows[n - 1].h - 1e-6 then
 					table.insert(bad, "rows overlap")
@@ -299,6 +315,14 @@ local ok, err = pcall(function()
 				keptHis += 1
 			else
 				putAway += 1
+			end
+			if block.keepsHim then
+				table.insert(against, him)
+				keptHim += 1
+			elseif input.touch then
+				table.insert(bad, "over him on a touch screen")
+			else
+				table.insert(overHim, tag)
 			end
 			if block.keepsSoft then
 				for _, r in ipairs(soft) do
@@ -327,12 +351,27 @@ local ok, err = pcall(function()
 		end
 	end
 	check(placeOk, "on every screen, from any anchor: four rows and the counts at the nearest spot 8 px clear of the "
-		.. "screen's edge, every part of the HUD and his line (or his line put away while they show), the passing "
-		.. "rows too but on a phone short of room, each row as wide as the widest reply, none over another -- the "
-		.. "640-px phone too", table.concat(placeNotes, "; "))
-	say(string.format("        his line kept on %d placements, put away on %d", keptHis, putAway))
-	check(tapOk and Talk.look(true).Row >= 44 and Talk.looks(true)[2].Row >= 44 and Talk.looks(true)[2].Type >= 20,
-		"a touch screen's rows 44 px or taller in both its looks, its type 20 px or more: big targets")
+		.. "screen's edge, every part of the HUD, HIM on every touch screen (his body and bar; the owner, 2026-10-12) "
+		.. "and his line (or his line put away while they show), the passing rows too but on a phone short of room, "
+		.. "each row as wide as the widest reply, none over another -- the 640-px phone and the emulator's 705 x 338 too",
+		table.concat(placeNotes, "; "))
+	say(string.format("        his line kept on %d placements, put away on %d; clear of him on %d, over him on %d "
+		.. "(a desktop window with no room clear of him: %s)", keptHis, putAway, keptHim, #overHim,
+		table.concat(overHim, ", ")))
+	-- THE OWNER'S REFERENCE (2026-10-12, a Grow a Garden phone): the replies' words about 4% of the screen's
+	-- height, a row every 5.8%, his line about 3%; each row its whole tap target, never overlapping the next
+	-- (the owner's call: exactly the reference, taps that small accepted; keys 1-4 and the D-pad still choose).
+	local touchLook, tightLook = Talk.look(true), Talk.looks(true)[2]
+	check(tapOk and touchLook.Row == 20 and tightLook.Row == 19 and touchLook.Type == 14 and tightLook.Type == 13
+			and touchLook.Gap == 0 and tightLook.Gap == 0 and touchLook.Bubble == 11 and touchLook.Counts == 11
+			and touchLook.Type / 360 >= 0.035 and touchLook.Type / 338 <= 0.045
+			and touchLook.Row / 360 >= 0.05 and touchLook.Row / 338 <= 0.065,
+		"a touch screen's replies exactly to the owner's reference: words about 4% of a phone's height (14 px), a "
+			.. "row every 5.8% (20 px; 19 tight), his line about 3% (11 px), each row its whole tap target, none overlapping",
+		string.format("type %d row %d bubble %d", touchLook.Type, touchLook.Row, touchLook.Bubble))
+	check(has(StarterPlayer.StarterPlayerScripts.MosskeeperUI.Source,
+			"reply.hit.Position = UDim2.fromOffset(r.x * k, r.y * k)\n\t\treply.hit.Size = UDim2.fromOffset(r.w * k, r.h * k)"),
+		"each reply's tap target is exactly its row: no padding into the next")
 	local cramped = Talk.place(Vector2.new(50, 50), { x = 0, y = 0, w = 200, h = 120 }, false, function()
 		return 300, 200
 	end, {}, {}, nil, 4)
@@ -347,6 +386,20 @@ local ok, err = pcall(function()
 			and has(ui, "camera:WorldToViewportPoint(MosskeeperTalk.besidePoint(")
 			and has(ui, "measureGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets"),
 		"the replies in a gui where a projected point is its own pixel, the HUD measured as the HUD's own guis are")
+	check(has(ui, "if view.X >= talkGui.AbsoluteSize.X - 1 and view.Y >= talkGui.AbsoluteSize.Y - 1 then")
+			and has(ui, "return Vector2.new(at.X, at.Y + measureGui.AbsoluteSize.Y - view.Y)")
+			and has(ui, "return { x = point.X + origin.X - w / 2, y = point.Y + origin.Y - h, w = w, h = h }")
+			and has(ui, "local him = himRect(camera, model, origin)")
+			and has(ui, "MosskeeperTalk.place((Vector2.new(point.X, point.Y) + origin) / k,")
+			and has(ui, "blocked, soft, if his then units(his) else nil, #OPTIONS, if him then units(him) else nil)"),
+		"a projected point mapped onto the talk's screen where the viewport is only the safe area (the emulator's "
+			.. "47 px, 2026-10-12), and the replies placed clear of him: his body and his bar")
+	check(has(ui, "for _, r in ipairs(drawnBlocked(h)) do")
+			and has(ui, "playerGui:GetGuiObjectsAtPosition(at.X + r.x + r.w * f.X, at.Y + r.y + r.h * f.Y)")
+			and has(ui, "if drawnFor ~= h or os.clock() - drawnAt >= 0.5 then")
+			and has(ui, "if o:IsDescendantOf(gui) or o:IsDescendantOf(talkGui) or o:IsDescendantOf(measureGui)"),
+		"the replies keep clear of the HUD that draws now, read every half second -- the talk's open panel puts a "
+			.. "phone's left column, panel row and Index away, and the replies may stand there (the 705 x 338 Play)")
 	check(has(ui, "hit.Selectable = false") and has(ui, "reply.hit.Activated:Connect(function()\n\t\tpick(i)")
 			and has(ui, "Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,")
 			and has(ui, "Enum.KeyCode.ButtonA)") and has(ui, "UserInputService.InputBegan:Connect(function(input: InputObject)")

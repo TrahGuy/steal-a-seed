@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 B: MOBILE SIZING — THE TALK, THE NOTICES, THE HUB SIGN — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK on the captures; MosskeeperTalkSpec 34/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0, AdminMistSpec 69/0, EventHubSpec 53/0, MistLookSpec 13/0, HudLayoutSpec 1468/0, SecretToastSpec 61/0, MistAudioSpec 17/0, and the other notice and title readers green; MUTANTS 12/12 CAUGHT; TWO GUARDED PLAYS ON THE PHONE EMULATOR, 705 x 338; captures in output/item16b-2026-10-12)
+
+The owner on a phone: "notification looks so large in mobile, specially the npc dialogue", with a Grow a Garden phone screenshot for the size.
+- **The talk's replies match the reference exactly** (the owner's call) on a touch screen:
+  - words 14 px (about 4% of a 338-360 px phone), a row every 20 px (5.8%), the counts 11 px, his line 11 px;
+  - the tight look is 13 px words on 19-px rows.
+  - Each reply's tap target is exactly its row, and no two overlap. The owner accepts taps that small. Keys 1-4 and the pad's D-pad still choose.
+- **The replies are never over him.** They keep 8 px clear of his body and his bar: MosskeeperTalk.himPoints and spanOf, and a new `him` argument to MosskeeperTalk.place.
+  - Every touch screen in the spec keeps clear of him. Only an 860 x 700 desktop window has no room, and it keeps the place it had.
+  - The emulator showed a mapping bug. Its camera viewport is the 705 x 338 safe area inside a 799 x 359 screen, so every projected point landed 47 px left of its part. MosskeeperUI.viewOrigin now maps a projected point onto the talk's screen.
+  - The talk is an open panel; on a phone that puts the left column, the panel row and Index away. The replies keep clear only of the HUD that draws at the moment (PlayerGui:GetGuiObjectsAtPosition, read every half second).
+  - LIVE (08, 09, side_talk_beside_vs_reference): the four replies and the counts stand left of the player at head height, 70 px clear of him. His bar shows, and his line clears them.
+- **Out of the way while talking:** his TAP TALK prompt, your own titles (ADMIN, the rebirth title, the name), your VIP name and the hub's Mist sign. Each comes back when the talk closes. LIVE: all were off during the talk and all came back after.
+- **Phone notices:** a 14-px headline and an 11-px detail, down from 18 / 12. These are the PHONE metrics, which every touch screen uses.
+  - The owner first kept their spot over the icon row (answer (a)). The move to the top centre (below) replaces that.
+- **The hub sign up close:** its header never draws taller than 6% of the screen's height (Sign.MaxHeaderShare). A short screen keeps the old floor (MinHeaderUnits). LIVE at the plaza: about 5%.
+- **A stale pin fixed:** MistAudioSpec pinned the berry notice's payload without item 15's `icon = "mist"`. Item 15's run had not included that spec.
+- **Not captured:** his line is an AlwaysOnTop billboard, which Studio's capture never draws. Its rect was read instead.
+- **Next (asked, not built):** ALL notices move to the top centre, under BIOMES / PLOT / OBBY, on desktop and phone.
+  - They stack down from there and never go past the middle.
+  - Where anything clashes, the one giving way slides up and fades in about 0.3 s. Reduced Motion gets a plain fade.
+  - The overlap list went to the owner first.
+- **Files:** EnchantedMistConfig (Sign.MaxHeaderShare, Talk.Look Touch / TouchTight), EnchantedMistStatus (signScale), MosskeeperTalk, MosskeeperUI, EnchantedMistSign.client, OwnerTitleUI, ActionToastUI. Specs: MosskeeperTalkSpec, EnchantedMistSpec, SecretToastSpec, MistAudioSpec.
 ## HOTFIX, ITEM 16 A: THE BERRIES' COLLECT PROMPT — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK; LIVE as v1057, the owner's republish at 06:27 UTC (v1056, 06:01 UTC, had the bug); EnchantedMistBerrySpec 71/0, MistLookSpec 13/0; the mutant putting it back on the attachment CAUGHT; ONE GUARDED PLAY; captures in output/item16-berry-prompt-hotfix-2026-10-12)
 
 Seen live by the owner on a phone after the publish: no "Collect Dewberry" prompt on the berries, so no collecting.

@@ -32,6 +32,7 @@
 -- once. Reduced Motion cuts the camera and types nothing: each line whole.
 -- Nothing forced: only a Talk the player chose opens it.
 --==============================================================================
+local CollectionService = game:GetService("CollectionService")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local HttpService = game:GetService("HttpService")
@@ -404,9 +405,25 @@ local function paintReplies()
 	end
 end
 
+-- WHERE THE CAMERA'S VIEWPORT STANDS IN talkGui (2026-10-12). A projected
+-- point is the viewport's own pixel. Where the viewport fills the screen that
+-- is talkGui's pixel too; where it is only the device's safe area (Studio's
+-- phone emulator: a 705 x 338 viewport in a 799 x 359 screen, every projected
+-- point 47 px left of its part) it starts at the safe area's left edge,
+-- measureGui's, and its bottom is measureGui's bottom.
+local function viewOrigin(camera: Camera): Vector2
+	local view = camera.ViewportSize
+	if view.X >= talkGui.AbsoluteSize.X - 1 and view.Y >= talkGui.AbsoluteSize.Y - 1 then
+		return Vector2.zero
+	end
+	local at = measureGui.AbsolutePosition - talkGui.AbsolutePosition
+	return Vector2.new(at.X, at.Y + measureGui.AbsoluteSize.Y - view.Y)
+end
+
 -- His line's rect on screen, in talkGui's pixels: its words wrapped to the
 -- bubble's widest, standing on the point over his bar.
-local function hisRect(camera: Camera, model: Model, k: number, look: MosskeeperTalk.Look): MosskeeperTalk.Rect?
+local function hisRect(camera: Camera, model: Model, k: number, look: MosskeeperTalk.Look,
+	origin: Vector2): MosskeeperTalk.Rect?
 	local line = hisLine
 	local base = model.PrimaryPart
 	if not (line and base and hisBoard.Enabled) then
@@ -419,7 +436,27 @@ local function hisRect(camera: Camera, model: Model, k: number, look: Mosskeeper
 	local size = TextService:GetTextSize(line.text, look.Bubble * k, Enum.Font.LuckiestGuy,
 		Vector2.new(look.BubbleWidth * k, 4000))
 	local w, h = size.X + TALK.Look.Stroke * 2 * k, size.Y + TALK.Look.Stroke * 2 * k
-	return { x = point.X - w / 2, y = point.Y - h, w = w, h = h }
+	return { x = point.X + origin.X - w / 2, y = point.Y + origin.Y - h, w = w, h = h }
+end
+
+-- Him on screen, in talkGui's pixels: his body and the bar over him
+-- (MosskeeperTalk.himPoints), what the replies keep clear of. nil while no
+-- part of him is in front of the camera.
+local function himRect(camera: Camera, model: Model, origin: Vector2): MosskeeperTalk.Rect?
+	local base = model.PrimaryPart
+	if not base then
+		return nil
+	end
+	local box, size = model:GetBoundingBox()
+	local onScreen: { Vector2 } = {}
+	for _, p in ipairs(MosskeeperTalk.himPoints(box, size, base.Position, camera.CFrame.RightVector,
+		camera.CFrame.UpVector)) do
+		local point, inFront = camera:WorldToViewportPoint(p)
+		if inFront then
+			table.insert(onScreen, Vector2.new(point.X, point.Y) + origin)
+		end
+	end
+	return MosskeeperTalk.spanOf(onScreen)
 end
 
 -- The widest reply and the counts line at a look's type, the outline and room
@@ -439,6 +476,59 @@ end
 -- laid out in the HUD's units, drawn k times larger (a TV).
 local laidOutAt = -math.huge
 
+-- WHAT OF THE HUD IS ON SCREEN NOW (2026-10-12). The talk is an open panel,
+-- and an open panel puts some of the HUD away -- on a phone the left column,
+-- the panel row and Index. The replies may stand where those stood: a HUD rect
+-- still counts only while something of the HUD draws at its middle or a
+-- quarter in from a corner (PlayerGui:GetGuiObjectsAtPosition, in the same
+-- space as AbsolutePosition), read again every half second.
+local SAMPLES = { Vector2.new(0.5, 0.5), Vector2.new(0.25, 0.25), Vector2.new(0.75, 0.25), Vector2.new(0.25, 0.75),
+	Vector2.new(0.75, 0.75) }
+local drawnFor: any = nil
+local drawnAt = -math.huge
+local drawn: { MosskeeperTalk.Rect } = {}
+
+local function drawsHere(o: GuiObject): boolean
+	if o:IsDescendantOf(gui) or o:IsDescendantOf(talkGui) or o:IsDescendantOf(measureGui)
+		or o.AbsoluteSize.X >= talkGui.AbsoluteSize.X * 0.9 then
+		return false
+	end
+	local any = o :: any
+	if o.BackgroundTransparency < 0.95 or o:IsA("ViewportFrame") then
+		return true
+	elseif o:IsA("ImageLabel") or o:IsA("ImageButton") then
+		return any.Image ~= "" and any.ImageTransparency < 0.95
+	elseif o:IsA("TextLabel") or o:IsA("TextButton") then
+		return any.Text ~= "" and any.TextTransparency < 0.95
+	end
+	return false
+end
+
+local function drawnIn(r: MosskeeperTalk.Rect): boolean
+	local at = talkGui.AbsolutePosition
+	for _, f in ipairs(SAMPLES) do
+		for _, o in ipairs(playerGui:GetGuiObjectsAtPosition(at.X + r.x + r.w * f.X, at.Y + r.y + r.h * f.Y)) do
+			if drawsHere(o) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function drawnBlocked(h: any): { MosskeeperTalk.Rect }
+	if drawnFor ~= h or os.clock() - drawnAt >= 0.5 then
+		drawnFor, drawnAt = h, os.clock()
+		drawn = {}
+		for _, r in ipairs(h.blocked) do
+			if drawnIn(r) then
+				table.insert(drawn, r)
+			end
+		end
+	end
+	return drawn
+end
+
 local function layoutReplies()
 	local camera = Workspace.CurrentCamera
 	local model = npcModel()
@@ -453,17 +543,19 @@ local function layoutReplies()
 		return { x = r.x / k, y = r.y / k, w = r.w / k, h = r.h / k }
 	end
 	local blocked: { MosskeeperTalk.Rect } = {}
-	for _, r in ipairs(h.blocked) do
+	for _, r in ipairs(drawnBlocked(h)) do
 		table.insert(blocked, units(r))
 	end
 	local soft: { MosskeeperTalk.Rect } = {}
 	for _, r in ipairs(h.soft) do
 		table.insert(soft, units(r))
 	end
-	local his = if hisPutAway then nil else hisRect(camera, model, k, MosskeeperTalk.look(h.touch))
+	local origin = viewOrigin(camera)
+	local his = if hisPutAway then nil else hisRect(camera, model, k, MosskeeperTalk.look(h.touch), origin)
+	local him = himRect(camera, model, origin)
 	local point = camera:WorldToViewportPoint(MosskeeperTalk.besidePoint(root.Position, model:GetPivot().Position))
-	local block = MosskeeperTalk.place(Vector2.new(point.X, point.Y) / k, units(h.bounds), h.touch, widths, blocked,
-		soft, if his then units(his) else nil, #OPTIONS)
+	local block = MosskeeperTalk.place((Vector2.new(point.X, point.Y) + origin) / k, units(h.bounds), h.touch, widths,
+		blocked, soft, if his then units(his) else nil, #OPTIONS, if him then units(him) else nil)
 	if not block.keepsHis and hisLine then
 		hisPutAway = true
 		hisBoard.Enabled = false
@@ -904,6 +996,42 @@ local function onFrame()
 	end
 end
 
+-- OUT OF THE WAY WHILE TALKING (2026-10-12, the owner on a phone): his TAP TALK
+-- prompt -- the talk is already open -- and this player's own VIP name, which
+-- the talk's camera looks past at his bar; on this screen only, each given back
+-- as it was when the talk closes. (The ADMIN and REBIRTH titles step aside by
+-- themselves, OwnerTitleUI reading TalkingAttribute; so does the hub's sign.)
+local VIP_TAG = GameConfig.Pass.VipName.Tag
+local putAway: { [Instance]: boolean } = {}
+
+local function putAwayForTalk(on: boolean)
+	if not on then
+		for thing in pairs(putAway) do
+			if thing.Parent then
+				(thing :: any).Enabled = true
+			end
+		end
+		table.clear(putAway)
+		return
+	end
+	local model = npcModel()
+	local talk = model and model:FindFirstChild(CFG.PromptName, true)
+	if talk and talk:IsA("ProximityPrompt") and talk.Enabled then
+		talk.Enabled = false
+		putAway[talk] = true
+	end
+	local character = player.Character
+	if character then
+		for _, gui in ipairs(CollectionService:GetTagged(VIP_TAG)) do
+			if gui:IsA("BillboardGui") and gui.Enabled and (gui:IsDescendantOf(character)
+				or (gui.Adornee ~= nil and gui.Adornee:IsDescendantOf(character))) then
+				gui.Enabled = false
+				putAway[gui] = true
+			end
+		end
+	end
+end
+
 setOpen = function(want: boolean, now: boolean?)
 	if want == isOpen then
 		return
@@ -917,6 +1045,7 @@ setOpen = function(want: boolean, now: boolean?)
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL)
 		player:SetAttribute(CFG.TalkingAttribute, true)
+		putAwayForTalk(true)
 		answer = nil
 		asked = nil
 		selected = 1
@@ -1009,6 +1138,7 @@ setOpen = function(want: boolean, now: boolean?)
 		end
 		releaseCamera(now == true)
 		player:SetAttribute(CFG.TalkingAttribute, nil)
+		putAwayForTalk(false)
 		if player:GetAttribute(ATTR.OpenPanel) == PANEL then
 			player:SetAttribute(ATTR.OpenPanel, nil)
 		end

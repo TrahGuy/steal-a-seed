@@ -98,7 +98,18 @@ for _, name in ipairs({ ATTR.State, ATTR.EligibleAt, ATTR.EndsAt, GameConfig.Att
 	Workspace:GetAttributeChangedSignal(name):Connect(paint)
 end
 paint()
-sign.setShown(true)
+-- Out of the way on this screen while this player talks to the Mosskeeper
+-- (2026-10-12, the owner on a phone): his talk's camera looks into the hub,
+-- where the sign stands over him.
+local localPlayer = game:GetService("Players").LocalPlayer
+local TALKING = EnchantedMistConfig.Mosskeeper.TalkingAttribute
+local function showFor()
+	sign.setShown(localPlayer == nil or localPlayer:GetAttribute(TALKING) ~= true)
+end
+if localPlayer then
+	localPlayer:GetAttributeChangedSignal(TALKING):Connect(showFor)
+end
+showFor()
 
 -- Its smallest size, after the camera has moved: a write only when the scale
 -- moves (PlotOwnerLabels' clamp), none while the camera is near.

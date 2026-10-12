@@ -135,8 +135,13 @@ local SMALL: Metrics = { head = 21, headMin = 16, detail = 13, detailMin = 11, i
 -- toast rect over the icon row and keeps this size -- one notice at a time on
 -- a short phone, so it never climbs over the character (noticeStack's middle
 -- band).
+--
+-- SMALLER AGAIN (2026-10-12, the owner on a phone: "notification looks so large
+-- in mobile", with a Grow a Garden phone for the size): a phone's headline
+-- about 4% of its screen's height (14 px on a 338-360 px phone). Every touch
+-- screen draws these (place, below: HudLayout gives each one its sidebars).
 --==============================================================================
-local PHONE: Metrics = { head = 18, headMin = 14, detail = 12, detailMin = 11, icon = 17, gap = 1, between = 4 }
+local PHONE: Metrics = { head = 14, headMin = 12, detail = 11, detailMin = 10, icon = 14, gap = 1, between = 3 }
 -- What the stack keeps between its foot and the middle of the screen.
 local CONFIG_GAP = HudLayout.Config.Gap
 

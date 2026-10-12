@@ -623,7 +623,7 @@ local ok, err = pcall(function()
 	check(string.find(toastSrc, "if id == GameConfig.Weather.Biome.Id then\n\t\treturn GameConfig.Weather.Biome.Label", 1, true) ~= nil
 		and string.find(toastSrc, "local FULL: Metrics = { head = 26, headMin = 18, detail = 15, detailMin = 12, icon = 24,", 1, true) ~= nil
 		and string.find(toastSrc, "local SMALL: Metrics = { head = 21, headMin = 16, detail = 13, detailMin = 11, icon = 20,", 1, true) ~= nil
-		and string.find(toastSrc, "local PHONE: Metrics = { head = 18, headMin = 14, detail = 12, detailMin = 11, icon = 17,", 1, true) ~= nil,
+		and string.find(toastSrc, "local PHONE: Metrics = { head = 14, headMin = 12, detail = 11, detailMin = 10, icon = 14,", 1, true) ~= nil,
 		"(this spec's names and sizes are the renderer's own)")
 end)
 

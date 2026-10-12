@@ -182,7 +182,7 @@ local ok, err = pcall(function()
 			and has(berryServer, "\t\tquiet = true,\n\t\tfull = full,\n"),
 		"the berries' server: the twinkle AT each new berry (a server one-shot); a pick's notice quiet, saying full")
 	check(has(berryServer, "local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared, "
-			.. "quiet = true }"),
+			.. "quiet = true,\n\t\ticon = \"mist\" }"),
 		"the owner (2026-10-11): \"A Dewberry appeared!\" SILENT, every berry -- updating in place, the twinkle the "
 			.. "spawn's only sound")
 	local berries = sourceOf(Scripts, "EnchantedMistBerries")

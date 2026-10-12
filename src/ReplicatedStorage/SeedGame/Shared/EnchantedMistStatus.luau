@@ -80,15 +80,19 @@ end
 
 -- How many times its built studs the sign draws for a camera `distance` studs
 -- from its middle, on a viewport `viewportHeight` screen units tall with a
--- vertical FieldOfView of `fieldOfView` degrees: 1 near, and past the distance
--- where its header's box would draw under MinHeaderUnits, just enough to hold
--- that. A viewport not yet measured leaves it as built.
+-- vertical FieldOfView of `fieldOfView` degrees: 1 at a middle distance; past
+-- the distance where its header's box would draw under MinHeaderUnits, just
+-- enough to hold that; and up close (2026-10-12) never more than MaxHeaderShare
+-- of the screen's height (nor under MinHeaderUnits). A viewport not yet
+-- measured leaves it as built.
 function EnchantedMistStatus.signScale(distance: number, viewportHeight: number, fieldOfView: number): number
 	if viewportHeight <= 0 or fieldOfView <= 0 then
 		return 1
 	end
 	local perStud = (viewportHeight / 2) / math.tan(math.rad(fieldOfView / 2)) / math.max(distance, 1e-3)
-	return math.max(1, SIGN.MinHeaderUnits / (SIGN.Height * perStud))
+	local header = SIGN.Height * perStud
+	local most = math.max(SIGN.MinHeaderUnits, SIGN.MaxHeaderShare * viewportHeight)
+	return math.min(math.max(1, SIGN.MinHeaderUnits / header), most / header)
 end
 
 -- The sign's width and height in studs at `scale`, and how far its middle

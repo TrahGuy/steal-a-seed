@@ -49,6 +49,7 @@ local RebirthCelebration = require(Shared:WaitForChild("RebirthCelebration"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local TitleFX = require(Shared:WaitForChild("TitleFX"))
 local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 
 local TITLE = GameConfig.OwnerTitle
 local REBIRTH = GameConfig.Rebirth.Title
@@ -64,6 +65,17 @@ local function trapped(gui: BillboardGui): boolean
 	local owner = character and Players:GetPlayerFromCharacter(character)
 	local endsAt = owner and tonumber(owner:GetAttribute(TRAPPED_UNTIL))
 	return endsAt ~= nil and Workspace:GetServerTimeNow() < endsAt
+end
+
+-- Whether this title is over THIS player while they talk to the Mosskeeper
+-- (2026-10-12, the owner on a phone: the talk's camera looks past their head at
+-- his bar, and their own titles stood over it). Only on this screen.
+local TALKING = EnchantedMistConfig.Mosskeeper.TalkingAttribute
+local function talkingSelf(gui: BillboardGui): boolean
+	local me = Players.LocalPlayer
+	local head = gui.Adornee
+	local character = head and head.Parent
+	return me ~= nil and character ~= nil and character == me.Character and me:GetAttribute(TALKING) == true
 end
 
 -- Each title this client has, and the two rainbows in it.
@@ -239,7 +251,7 @@ task.spawn(function()
 				titles[gui] = nil
 			else
 				pulsing = place(gui, scale, adminScale) or pulsing
-				local clear = not trapped(gui)
+				local clear = not trapped(gui) and not talkingSelf(gui)
 				if gui.Enabled ~= clear then
 					gui.Enabled = clear
 				end

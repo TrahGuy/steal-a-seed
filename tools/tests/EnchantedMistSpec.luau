@@ -34,6 +34,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local EnchantedMistStatus = require(Shared:WaitForChild("EnchantedMistStatus"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local STATES = EnchantedMistConfig.States
 local WORDS = EnchantedMistConfig.Sign.Words
@@ -138,9 +139,16 @@ local ok, err = pcall(function()
 		return SIGN.Height * EnchantedMistStatus.signScale(distance, screen, 70) * (screen / 2)
 			/ math.tan(math.rad(35)) / distance
 	end
-	check(EnchantedMistStatus.signScale(20, 367, 70) == 1 and EnchantedMistStatus.signScale(112.6, 1022, 70) == 1
-			and headerUnits(112.6, 1022) > SIGN.MinHeaderUnits,
-		"near, or a computer's camera at a plot's gate (112.6 away): the studs it is built at")
+	-- UP CLOSE (2026-10-12, the owner on a phone: at the hub it drew HUGE behind the top buttons): never more
+	-- than MaxHeaderShare of the screen's height, nor under MinHeaderUnits.
+	local near = EnchantedMistStatus.signScale(20, 367, 70)
+	check(near < 1 and math.abs(headerUnits(20, 367) - SIGN.MaxHeaderShare * 367) < 1e-6
+			and headerUnits(20, 1022) <= SIGN.MaxHeaderShare * 1022 + 1e-6
+			and math.abs(headerUnits(10, 300) - SIGN.MinHeaderUnits) < 1e-6,
+		"up close (20 studs, at the hub) its header draws no bigger than 6% of the screen's height -- nor, on a "
+			.. "screen too short for that, under MinHeaderUnits", string.format("x%.2f near on a phone", near))
+	check(EnchantedMistStatus.signScale(112.6, 1022, 70) == 1 and headerUnits(112.6, 1022) > SIGN.MinHeaderUnits,
+		"a computer's camera at a plot's gate (112.6 away): the studs it is built at")
 	local phone = EnchantedMistStatus.signScale(112.6, 367, 70)
 	check(phone > 1.5 and math.abs(headerUnits(112.6, 367) - SIGN.MinHeaderUnits) < 1e-6
 			and math.abs(headerUnits(257, 367) - SIGN.MinHeaderUnits) < 1e-6
@@ -478,6 +486,25 @@ local ok, err = pcall(function()
 			and string.find(signSrc, "sign.gui.Size = UDim2.fromScale(width, tall)\n", 1, true)
 			and string.find(signSrc, "sign.gui.StudsOffsetWorldSpace = Vector3.new(0, lift, 0)\n", 1, true),
 		"the sign: over the plaza's middle, drawn to MaxDistance, held at its smallest size after the camera moves")
+	-- Item 16B (the owner, 2026-10-12, phones): while Mosskeeper's talk is open the
+	-- hub sign, your own titles, your VIP name and his TAP TALK prompt step aside.
+	local scripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
+	local talkSrc = scripts:WaitForChild("MosskeeperUI").Source
+	local titleSrc = scripts:WaitForChild("OwnerTitleUI").Source
+	check(string.find(signSrc, "sign.setShown(localPlayer == nil or localPlayer:GetAttribute(TALKING) ~= true)", 1, true)
+			and string.find(signSrc, "localPlayer:GetAttributeChangedSignal(TALKING):Connect(showFor)", 1, true)
+			and string.find(titleSrc, "local clear = not trapped(gui) and not talkingSelf(gui)", 1, true)
+			and string.find(titleSrc, "character == me.Character and me:GetAttribute(TALKING) == true", 1, true)
+			and string.find(talkSrc, "player:SetAttribute(CFG.TalkingAttribute, true)\n\t\tputAwayForTalk(true)\n", 1, true)
+			and string.find(talkSrc, "player:SetAttribute(CFG.TalkingAttribute, nil)\n\t\tputAwayForTalk(false)\n", 1, true)
+			and string.find(talkSrc, "if talk and talk:IsA(\"ProximityPrompt\") and talk.Enabled then", 1, true)
+			and string.find(talkSrc, "for _, gui in ipairs(CollectionService:GetTagged(VIP_TAG)) do", 1, true),
+		"the talk open: the hub sign, your own titles, your VIP name and his TAP TALK prompt step aside; given back after")
+	local toastSrc = scripts:WaitForChild("ActionToastUI").Source
+	check(string.find(toastSrc, "metrics = if fromTop or layout.sidebar then PHONE elseif small", 1, true)
+			and string.find(toastSrc, "local PHONE: Metrics = { head = 14, headMin = 12, detail = 11,", 1, true)
+			and HudLayout.solve({ safe = Vector2.new(705, 302), touch = true, keyboard = false }).sidebar == true,
+		"notices on every touch screen (HudLayout's sidebars): the PHONE size, a 14-px head (the owner's reference)")
 	local wcs = wcsScript.Source
 	check(string.find(wcs, "tellDawn(built, wanted, source or \"cycle\")", 1, true)
 			and string.find(wcs, "transition(false, \"admin\")", 1, true)

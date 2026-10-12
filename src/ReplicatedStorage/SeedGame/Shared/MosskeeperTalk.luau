@@ -25,6 +25,7 @@ local SpeedMilestones = require(Shared:WaitForChild("SpeedMilestones"))
 
 local CFG = EnchantedMistConfig.Mosskeeper
 local TALK = CFG.Talk
+local BAR = CFG.Bar
 local CAP = EnchantedMistData.CarryCap
 local PER_POD = EnchantedMistData.BerriesPerPod
 
@@ -33,7 +34,8 @@ local MosskeeperTalk = {}
 export type Rect = { x: number, y: number, w: number, h: number }
 export type Option = { id: string, key: number, text: string }
 export type Look = { Type: number, Row: number, Gap: number, Bubble: number, BubbleWidth: number, Counts: number }
-export type Block = { rows: { Rect }, counts: Rect, look: Look, clear: boolean, keepsHis: boolean, keepsSoft: boolean }
+export type Block = { rows: { Rect }, counts: Rect, look: Look, clear: boolean, keepsHis: boolean, keepsSoft: boolean,
+	keepsHim: boolean }
 
 local function rect(x: number, y: number, w: number, h: number): Rect
 	return { x = x, y = y, w = w, h = h }
@@ -225,6 +227,42 @@ function MosskeeperTalk.besidePoint(root: Vector3, target: Vector3): Vector3
 	return target + forward:Cross(Vector3.yAxis) * TALK.Beside + Vector3.yAxis * TALK.BesideUp
 end
 
+-- What of him the replies keep clear of (the owner, 2026-10-12: "not over
+-- him"): his body's eight corners -- `box` and `size`, his model's bounding
+-- box -- and his bar's four, BAR.Width x BAR.Height studs facing the camera
+-- (`right` and `up`, its axes) and BAR.Above over his base, as MosskeeperView
+-- draws it.
+function MosskeeperTalk.himPoints(box: CFrame, size: Vector3, base: Vector3, right: Vector3, up: Vector3): { Vector3 }
+	local points: { Vector3 } = {}
+	for _, x in ipairs({ -0.5, 0.5 }) do
+		for _, y in ipairs({ -0.5, 0.5 }) do
+			for _, z in ipairs({ -0.5, 0.5 }) do
+				table.insert(points, box:PointToWorldSpace(size * Vector3.new(x, y, z)))
+			end
+		end
+	end
+	local bar = base + Vector3.yAxis * BAR.Above
+	for _, x in ipairs({ -1, 1 }) do
+		for _, y in ipairs({ -1, 1 }) do
+			table.insert(points, bar + right * (x * BAR.Width / 2) + up * (y * BAR.Height / 2))
+		end
+	end
+	return points
+end
+
+-- The least rect round some points on screen; nil for none.
+function MosskeeperTalk.spanOf(points: { Vector2 }): Rect?
+	if #points == 0 then
+		return nil
+	end
+	local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+	for _, p in ipairs(points) do
+		x0, y0 = math.min(x0, p.X), math.min(y0, p.Y)
+		x1, y1 = math.max(x1, p.X), math.max(y1, p.Y)
+	end
+	return rect(x0, y0, x1 - x0, y1 - y0)
+end
+
 function MosskeeperTalk.ease(u: number): number
 	local t = math.clamp(u, 0, 1)
 	return t * t * (3 - 2 * t)
@@ -238,7 +276,7 @@ end
 -- buttons, bands and touch controls there, `soft` what comes and goes (the
 -- notices' line, the biome name, the chase warning, the running boosts) and
 -- `his` his line's rect (nil while he says nothing). The rows stand one under another, each as wide as the widest reply
--- and the look's Row tall (a touch screen's 44 px), the counts line under
+-- and the look's Row tall (a touch screen's 20 px), the counts line under
 -- them; the block goes to the nearest place Margin clear of the screen's edge
 -- and of what it must clear (SpeedMilestones.clearOf: up costs double) -- all
 -- of it, then the HUD and his line, then everything with his line put away
@@ -246,6 +284,12 @@ end
 -- false too) -- each in the first look, else the tight one. Nowhere clear at
 -- all: the tight look inside the screen (`clear` false). `widths(look)`
 -- measures the widest reply and the counts line at that look's type.
+--
+-- `him` is HIM on screen, his body and his bar (himPoints; the owner,
+-- 2026-10-12: the replies "not over him"): every one of those places keeps
+-- clear of him too, and only a screen with none clear of him tries them all
+-- again over him (`keepsHim` false) before the fallback -- the place it had
+-- before him.
 --==============================================================================
 function MosskeeperTalk.look(touch: boolean): Look
 	return if touch then TALK.Look.Touch else TALK.Look.Desktop
@@ -262,7 +306,7 @@ local function blockSize(look: Look, widths: (Look) -> (number, number), count: 
 end
 
 local function blockAt(x: number, y: number, look: Look, widths: (Look) -> (number, number), count: number,
-	clear: boolean, keepsHis: boolean, keepsSoft: boolean): Block
+	clear: boolean, keepsHis: boolean, keepsSoft: boolean, keepsHim: boolean): Block
 	local w, h, rowsH = blockSize(look, widths, count)
 	local rows: { Rect } = {}
 	for i = 1, count do
@@ -275,14 +319,15 @@ local function blockAt(x: number, y: number, look: Look, widths: (Look) -> (numb
 		clear = clear,
 		keepsHis = keepsHis,
 		keepsSoft = keepsSoft,
+		keepsHim = keepsHim,
 	}
 end
 
 function MosskeeperTalk.place(anchor: Vector2, bounds: Rect, touch: boolean, widths: (Look) -> (number, number),
-	blocked: { Rect }, soft: { Rect }, his: Rect?, count: number): Block
+	blocked: { Rect }, soft: { Rect }, his: Rect?, count: number, him: Rect?): Block
 	local M = TALK.Margin
 	local inner = rect(bounds.x + M, bounds.y + M, math.max(0, bounds.w - 2 * M), math.max(0, bounds.h - 2 * M))
-	local function joined(withSoft: boolean, withHis: boolean): { Rect }
+	local function joined(withSoft: boolean, withHis: boolean, withHim: boolean): { Rect }
 		local out = table.clone(blocked)
 		if withSoft then
 			for _, r in ipairs(soft) do
@@ -292,16 +337,22 @@ function MosskeeperTalk.place(anchor: Vector2, bounds: Rect, touch: boolean, wid
 		if withHis and his then
 			table.insert(out, his)
 		end
+		if withHim and him then
+			table.insert(out, him)
+		end
 		return out
 	end
 	local looks = MosskeeperTalk.looks(touch)
-	for _, pass in ipairs({ { true, true }, { false, true }, { true, false }, { false, false } }) do
-		local against = joined(pass[1], pass[2])
-		for _, look in ipairs(looks) do
-			local w, h = blockSize(look, widths, count)
-			local spot = SpeedMilestones.clearOf(rect(anchor.X, anchor.Y - h / 2, w, h), against, inner, M)
-			if spot then
-				return blockAt(spot.x, spot.y, look, widths, count, true, pass[2] or his == nil, pass[1] or #soft == 0)
+	for _, withHim in ipairs(if him then { true, false } else { false }) do
+		for _, pass in ipairs({ { true, true }, { false, true }, { true, false }, { false, false } }) do
+			local against = joined(pass[1], pass[2], withHim)
+			for _, look in ipairs(looks) do
+				local w, h = blockSize(look, widths, count)
+				local spot = SpeedMilestones.clearOf(rect(anchor.X, anchor.Y - h / 2, w, h), against, inner, M)
+				if spot then
+					return blockAt(spot.x, spot.y, look, widths, count, true, pass[2] or his == nil,
+						pass[1] or #soft == 0, withHim or him == nil)
+				end
 			end
 		end
 	end
@@ -310,7 +361,7 @@ function MosskeeperTalk.place(anchor: Vector2, bounds: Rect, touch: boolean, wid
 	local hiX, hiY = inner.x + inner.w - w, inner.y + inner.h - h
 	local x = if hiX < inner.x then inner.x else math.clamp(anchor.X, inner.x, hiX)
 	local y = if hiY < inner.y then inner.y else math.clamp(anchor.Y - h / 2, inner.y, hiY)
-	return blockAt(x, y, look, widths, count, false, his == nil, #soft == 0)
+	return blockAt(x, y, look, widths, count, false, his == nil, #soft == 0, him == nil)
 end
 
 return MosskeeperTalk

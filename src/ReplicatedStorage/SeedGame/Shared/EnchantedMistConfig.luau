@@ -270,15 +270,21 @@ EnchantedMistConfig.Mosskeeper = {
 		Beside = 3.2,
 		BesideUp = 3.5,
 		Margin = 8,
-		-- The look: px type, a reply's row and the gap between rows (a touch
-		-- screen's rows tall enough to tap), the bubbles' type and widest. The
-		-- tight looks are for where the first will not stand clear (a 640 x 360
-		-- phone): a touch screen's rows stay 44 px.
+		-- The look: px type, a reply's row and the gap between rows, the bubbles'
+		-- type and widest. The tight looks are for where the first will not stand
+		-- clear (a 640 x 360 phone).
+		--
+		-- A TOUCH SCREEN'S, EXACTLY THE OWNER'S REFERENCE (2026-10-12: a Grow a
+		-- Garden phone, 2000 x 900): the replies' words about 4% of the screen's
+		-- height and a row every 5.8%, his line about 2.5-3% -- on a 338-360 px
+		-- phone 14 px words, 20 px rows and an 11 px line. Each reply's row is its
+		-- whole tap target, never overlapping the next; the owner accepts taps
+		-- that small, and the number keys and the pad's D-pad still choose.
 		Look = {
 			Desktop = { Type = 26, Row = 34, Gap = 2, Bubble = 24, BubbleWidth = 380, Counts = 18 },
 			DesktopTight = { Type = 22, Row = 30, Gap = 0, Bubble = 22, BubbleWidth = 340, Counts = 16 },
-			Touch = { Type = 22, Row = 44, Gap = 2, Bubble = 20, BubbleWidth = 300, Counts = 16 },
-			TouchTight = { Type = 20, Row = 44, Gap = 0, Bubble = 18, BubbleWidth = 260, Counts = 14 },
+			Touch = { Type = 14, Row = 20, Gap = 0, Bubble = 11, BubbleWidth = 230, Counts = 11 },
+			TouchTight = { Type = 13, Row = 19, Gap = 0, Bubble = 10, BubbleWidth = 200, Counts = 10 },
 			Number = Color3.fromRGB(255, 214, 64),
 			Text = Color3.fromRGB(255, 255, 255),
 			Chosen = Color3.fromRGB(150, 255, 196),
@@ -527,6 +533,10 @@ EnchantedMistConfig.Sign = {
 	Above = 19,
 	MaxDistance = 300,
 	MinHeaderUnits = 19,
+	-- And never above this share of the screen's height up close (2026-10-12, the
+	-- owner on a phone: at the hub it drew HUGE behind the top buttons), nor under
+	-- MinHeaderUnits: a near sign shrinks to it (EnchantedMistStatus.signScale).
+	MaxHeaderShare = 0.06,
 	Width = 22,
 	Height = 3.4,
 	SubHeight = 1.7,
