@@ -1,5 +1,27 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 C2: THE SOUND AUDIT — ONE MUSIC BED AT A TIME — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK; MusicBedSpec 29/0, MistAudioSpec 19/0, RainAudioSpec 39/0, SoundLevelSpec 28/0, DiscoDancersSpec 59/0, PodRushSpec 98/0, SproutDashSpec 49/0; MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY FOR THE AUDIT AND ONE FOR THE PROOF)
+
+The owner: "check the other sounds too, sometimes rain bgm is overlapping too". The rules:
+- one music bed at a time, with clean crossfades;
+- Disco = Pod Rush > Rain/Thunderstorm > night > day;
+- Rain over the Mist: the rain's music only, and the Mist's bed pauses.
+**The audit.** A client log of every Sound and every world attribute through: day to night to day, Rain over the day and over the night, a Thunderstorm, Rain + Disco, Rain + Pod Rush, Rain + the Mist, a quick start/end/start, and a respawn.
+- One music Sound plays at a time everywhere, and the order was already right: Disco and Pod Rush over Rain, Rain over night, night over day. The next one down came back each time.
+- OVERLAP 1, Rain over the Mist: the Mist's ambience bed kept playing under the rain's music and its rain sounds.
+- OVERLAP 2: a rain started and ended inside the music's half-fade (about 2 s) made the music switch TO the rain's track after the rain had gone, and play it 8.5 s with no rain. The swap compared a change only with the list playing, not the one it was heading to.
+- Respawn: no duplicate. Thunder, disco and Pod Rush were clean.
+- Not run:
+  - a late join: Studio solo cannot make a second client;
+  - an owed Summon Rain: it needs a purchase.
+  Both go through the same choice of list.
+**The fixes:**
+- Music.client measures a change against where the music is heading (`heading`). A swap that lands back on the list still playing just fades it back up.
+- Weather.client fades the Mist's bed out while a Rain or a Thunderstorm falls (opening or active, the music's own test) and back after, if the Mist is still on.
+**The proof:**
+- The bed went 0.090 -> 0.001 under the rain and back to 0.090 after.
+- A rain started and ended within 1.6 s left the day's music playing, untouched.
+**Files:** Music.client, Weather.client. Specs: MusicBedSpec, MistAudioSpec.
 ## ITEM 16 C: THE MIST'S START AND END, ONE CLEAN SOUND EACH — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK on the timeline; EnchantedMistBerrySpec 73/0, MistAudioSpec 18/0, AdminMistSpec 69/0 and the other readers green; MUTANTS 4/4 CAUGHT; GUARDED PLAYS: a diagnosis timeline and a proof timeline through the console's own START and END)
 
 The owner: "when i trigger the enchanted mist, sfx is overlapping".

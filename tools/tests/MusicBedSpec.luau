@@ -179,6 +179,13 @@ check(src ~= nil and src:find("sound.Ended:Connect", 1, true) ~= nil
 check(src ~= nil and src:find("sound:Stop()", 1, true) ~= nil
 		and src:find("sound.TimePosition = 0", 1, true) ~= nil,
 	"and a swap still goes stop, change, rewind, play")
+-- THE OWNER'S SOUND AUDIT (2026-10-12): a rain started and ended inside one half-fade left the rain's music
+-- playing 8.5 s with no rain. A change is measured against where the music is HEADING, and a swap that lands back
+-- on the list still playing just brings it back up.
+check(src ~= nil and src:find("if want == (heading or current) then", 1, true) ~= nil
+		and src:find("\t\theading = nil\n", 1, true) ~= nil
+		and src:find("if want == current then\n\t\t\tfadeSound(levelFor(current), half)\n\t\t\treturn", 1, true) ~= nil,
+	"one bed at a time: a change undone inside a fade never lands on the stale list")
 
 if #fails > 0 then
 	return ("MusicBedSpec: %d passed, %d FAILED\n  %s"):format(pass, #fails,

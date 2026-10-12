@@ -256,12 +256,23 @@ local mistBed: Sound? = nil
 local mistBedAfter = 0
 local mistBegunId: any = nil
 local BED_FADE = 2
+-- RAIN OVER THE MIST (2026-10-12, the owner's sound audit: "RAIN MUSIC ONLY"):
+-- while a Rain or a Thunderstorm falls -- the music's own test, opening or
+-- active -- the bed fades out over BED_FADE and comes back the same way after,
+-- if the Mist is still on. 0 is the bed at its level, 1 all the way out.
+local mistBedRained = 0
+local mistBedRainedAt = os.clock()
 
 local function stepMistBed()
 	local cue = SoundKit.cue("MistAmbience")
 	if not cue then
 		return
 	end
+	local clock = os.clock()
+	local rainState = Workspace:GetAttribute(GameConfig.Weather.Attributes.State)
+	local raining = rainState == "opening" or rainState == "active"
+	mistBedRained = math.clamp(mistBedRained + (if raining then 1 else -1) * (clock - mistBedRainedAt) / BED_FADE, 0, 1)
+	mistBedRainedAt = clock
 	if mistLevel <= 0 then
 		if mistBedShown >= 0 then
 			mistBedShown = -1
@@ -270,12 +281,11 @@ local function stepMistBed()
 		end
 		return
 	end
-	local clock = os.clock()
 	if clock < mistBedAfter then
 		return
 	end
 	local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)
-	local want = (cue.volume or 0.5) * mistLevel * ramp
+	local want = (cue.volume or 0.5) * mistLevel * ramp * (1 - mistBedRained)
 	if mistBedShown < 0 then
 		mistBedShown = want
 		mistBed = SoundKit.play("MistAmbience", { volume = want })

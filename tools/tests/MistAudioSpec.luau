@@ -186,6 +186,12 @@ local ok, err = pcall(function()
 			and has(weather, "local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)")
 			and has(weather, "local want = (cue.volume or 0.5) * mistLevel * ramp"),
 		"the bed comes up only as BEGINS ends, over two seconds; at once for a late joiner")
+	-- RAIN OVER THE MIST (2026-10-12, the owner's sound audit: "RAIN MUSIC ONLY"): the bed fades out while a Rain
+	-- or a Thunderstorm falls -- the music's own test -- and comes back after, if the Mist is still on.
+	check(has(weather, "local raining = rainState == \"opening\" or rainState == \"active\"")
+			and has(weather, "* (clock - mistBedRainedAt) / BED_FADE, 0, 1)")
+			and has(weather, "local want = (cue.volume or 0.5) * mistLevel * ramp * (1 - mistBedRained)"),
+		"the bed steps out under a Rain or a Thunderstorm and comes back after it")
 	local berryServer = sourceOf(Server, "EnchantedMistBerryService")
 	check(has(berryServer, "\t\tHooks.sound(\"MistBerryAppears\", root)\n")
 			and has(berryServer, "\tsound = function(name: string, at: BasePart)\n\t\tSoundKit.emit(name, at)\n")

@@ -442,13 +442,22 @@ local function fadeSound(to: number, seconds: number)
 	}):Play()
 end
 
+-- The list a swap still fading out is heading to. Measured in a Play
+-- (2026-10-12, the owner's sound audit): a rain started and ended inside one
+-- half-fade asked for the day's list again while `current` still WAS the day's,
+-- so nothing changed, the pending swap landed on the rain's after the rain had
+-- gone, and its music played 8.5 s with no rain. A change is now measured
+-- against where the music is heading.
+local heading: { string }? = nil
+
 local function applyPhase()
 	local want = listFor()
-	if want == current then
+	if want == (heading or current) then
 		return
 	end
 	swap += 1
 	local token = swap
+	heading = want
 	-- The rain's bed comes and goes over its own, gentler fade; dusk and dawn
 	-- keep the sky's.
 	local seconds = if want == sproutTracks or current == sproutTracks
@@ -464,6 +473,13 @@ local function applyPhase()
 	fadeSound(0, half)
 	task.delay(half, function()
 		if swap ~= token or not sound.Parent then
+			return
+		end
+		heading = nil
+		-- Back to the list still playing (a change undone inside the fade): it
+		-- simply comes back up, from where it was.
+		if want == current then
+			fadeSound(levelFor(current), half)
 			return
 		end
 		playTrack(want, 1)
