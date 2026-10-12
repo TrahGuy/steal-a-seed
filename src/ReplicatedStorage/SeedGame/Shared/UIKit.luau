@@ -2581,14 +2581,11 @@ end
 --==============================================================================
 local PICTURE_Z = 5
 
--- A WORD ON THE PICTURE (2026-10-12, the owner's desktop Shop face): a picture
--- with no word of its own gets ours, in the HUD's outlined type, at its spot
--- on the picture (shares of the picture's own box) -- shown only once the
--- picture has loaded, as the picture itself covers ours only then. A call
--- without one hides it.
+-- A WORD'S SPOT ON A PICTURE: shares of the picture's own box -- where the
+-- Robux price tag writes its price (UIKit.priceTag).
 export type PictureWord = { Text: string, Left: number, Right: number, Top: number, Bottom: number }
 
-function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?, word: PictureWord?)
+function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
 	local box = button:FindFirstChild("PictureBox")
 	if not image then
 		if box and box:IsA("GuiObject") then
@@ -2633,27 +2630,6 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?, w
 	if shape then
 		shape.AspectRatio = aspect or 1
 	end
-	local said = frame:FindFirstChild("PictureWord")
-	if word and not said then
-		local made = UIKit.outlined(frame, "PictureWord", 40, WHITE, 2)
-		made.TextScaled = true
-		made.Active = false
-		made.Visible = false
-		made.ZIndex = PICTURE_Z + 1
-		local fit = Instance.new("UITextSizeConstraint")
-		fit.MaxTextSize = 40
-		fit.MinTextSize = 10
-		fit.Parent = made
-		said = made
-	end
-	if said and said:IsA("TextLabel") then
-		if word then
-			said.Text = word.Text
-			said.Position = UDim2.fromScale(word.Left, word.Top)
-			said.Size = UDim2.fromScale(word.Right - word.Left, word.Bottom - word.Top)
-		end
-		said.Visible = false
-	end
 	-- Everything of ours under the picture, once it has loaded and while it is
 	-- still the button's picture.
 	local function hideOurs()
@@ -2665,11 +2641,6 @@ function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?, w
 			if child and child:IsA("GuiObject") then
 				child.Visible = false
 			end
-		end
-		-- Ours on the picture, for the picture this call gave it a word for.
-		local shown = frame:FindFirstChild("Picture")
-		if word and said and said:IsA("GuiObject") and shown and shown:IsA("ImageLabel") and shown.Image == image then
-			said.Visible = true
 		end
 		refreshFallback(button)
 	end
@@ -2688,11 +2659,12 @@ end
 -- THE ROBUX PRICE TAG (2026-10-12, the owner: every Robux buy button on the
 -- green Robux art, the price right of its mark, no separate Robux glyph)
 --
--- The desktop Shop's green plate (GameConfig.Rail.StuddedShopDesktopArt) as a
--- tag: a box held at the plate's own 3 : 1 -- fitted inside whatever size the
--- caller gives it, never stretched -- the picture in it, and the price in the
--- HUD's outlined white type where the plate leaves room right of its mark
--- (StuddedShopDesktopWord's spot, where the Shop's own word stands). The
+-- The owner's green Robux plate (GameConfig.Rail.StuddedShopDesktopArt -- for a
+-- day the desktop Shop's face too, until the owner wanted the old Shop button
+-- back) as a tag: a box held at the plate's own 3 : 1 -- fitted inside whatever
+-- size the caller gives it, never stretched -- the picture in it, and the price
+-- in the HUD's outlined white type where the plate leaves room right of its
+-- mark (StuddedShopDesktopWord's spot). The
 -- caller writes `price.Text` and places `frame`. The Shop's buy buttons, the
 -- Bag's Instant Hatch, a prompt that sells something and the Wheel's ticket
 -- packs wear it; a state that is not a purchase keeps its own look.

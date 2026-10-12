@@ -576,10 +576,11 @@ local CONFIG = {
 	-- (the dock's MinTile) where only that fits. See Layout for where it stands.
 	Updates = { Size = RAIL.SquareSize.X, Tight = 44 },
 	-- SHOP ON A DESKTOP AND A TV (the owner, 2026-10-11: "slightly bigger"): the
-	-- rail's 130 x 50 slot times about 1.15, at the top of the closed-up rail
-	-- (desktop()). 150 x 50 since 2026-10-12 (58 tall before): the green Robux
-	-- plate's own 3 : 1 (GameConfig.Rail.StuddedShopDesktopArt).
-	ShopDesktop = Vector2.new(150, 50),
+	-- rail's 130 x 50 slot times about 1.15, near the slot's own 2.6 : 1, at the
+	-- top of the closed-up rail (desktop()). 150 x 50 for a day under the green
+	-- Robux plate (2026-10-12), then 150 x 58 again with the old picture, at the
+	-- owner's word.
+	ShopDesktop = Vector2.new(150, 58),
 	-- The cash block's two faces (see THE CASH BLOCK'S TWO FACES), and the
 	-- desktop one's three placing numbers under the names they always had.
 	CashStyle = { Desktop = CASH_DESKTOP, Compact = CASH_COMPACT, Phone = CASH_PHONE },

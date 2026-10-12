@@ -7201,14 +7201,17 @@ GameConfig.Rail = {
 	StuddedShopArt = "rbxassetid://82894505272456",
 	StuddedShopAspect = 2094 / 751,
 	--==========================================================================
-	-- THE DESKTOP AND TV SHOP FACE (2026-10-12, the owner via the peer): the
-	-- owner's upload 113135959052678 (economy details: Image, CrazyCozy Games;
-	-- 2000 x 669), a green studded plate with the white Robux mark at its left
-	-- and no word, so the word is ours (UIKit.railPicture's `word`): SHOP in
-	-- the HUD's outlined LuckiestGuy, right of the mark, as shares of the
-	-- picture -- measured on the upload, the mark spans 11-31% of its width
-	-- and 15-78% of its height, the green plate 2-98% by 6-92%. A desktop's
-	-- and a TV's rail only: a phone keeps StuddedShopArt, a small window ShopArt.
+	-- THE GREEN ROBUX PLATE (2026-10-12, the owner via the peer): the owner's
+	-- upload 113135959052678 (economy details: Image, CrazyCozy Games; 2000 x
+	-- 669), a green studded plate with the white Robux mark at its left and no
+	-- word. EVERY ROBUX BUY BUTTON wears it, the price ours right of the mark
+	-- in the HUD's outlined type (UIKit.priceTag, at StuddedShopDesktopWord's
+	-- spot, as shares of the picture -- measured on the upload, the mark spans
+	-- 11-31% of its width and 15-78% of its height, the green plate 2-98% by
+	-- 6-92%). For a day it was the desktop's and a TV's Shop face too; the
+	-- owner wanted the old Shop button back (2026-10-12), so the Shop wears
+	-- StuddedShopArt on every wide slot again. The names stay as the price
+	-- tags know them.
 	--==========================================================================
 	StuddedShopDesktopArt = "rbxassetid://113135959052678",
 	StuddedShopDesktopAspect = 2000 / 669,

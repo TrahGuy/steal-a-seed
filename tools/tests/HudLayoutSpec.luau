@@ -190,12 +190,13 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 		tag .. ": the shipped faces -- GameConfig.Hotbar itself, the 750 x 64 strip (ten slots, 2026-10-03), the 316 x 108 cash block",
 		r2s(L.hotbar) .. " " .. r2s(L.cashRoot))
 	check(L.index.w == S.X and L.index.h == S.Y and L.shop.w == SHOP.X and L.shop.h == SHOP.Y
-			and SHOP.X == 150 and SHOP.Y == 50
+			and SHOP.X == 150 and SHOP.Y == 58
 			and L.walk.w == W.X and L.walk.h == 46 and L.others.w == W.X and L.others.h == 46
 			and L.settings.w == S.X and L.events.w == S.X and L.invite.w == S.X and L.invite.h == S.Y
 			and L.banner.w == 560 and L.equipment == nil and L.chooser == nil,
 		tag .. ": the sizes too -- Index the owner's 50x50 square (2026-09-24), FRIENDS Index's size, Shop a "
-			.. "little bigger than the rail's 130x50 for its wide picture, 150x50 (2026-10-12; 150x58 the day before), two 130x46 "
+			.. "little bigger than the rail's 130x50 for its wide picture, 150x58 (2026-10-11; 150x50 for a day under the green "
+			.. "Robux plate, then the old picture again at the owner's word, 2026-10-12), two 130x46 "
 			.. "switches, a 560 banner -- and no BAT/TRAP column (2026-10-03)")
 	check(L.clock and math.abs((L.clock.x + L.clock.w / 2) - size.X / 2) < 0.01
 			and math.abs(L.clock.w - math.clamp(size.X * 0.44, 190, 360)) < 0.01,
@@ -1362,17 +1363,16 @@ do
 	local settingsSrc = sourceOf("SettingsUI") or ""
 	check(indexSrc:find("UIKit.railPicture(button, RAIL.StuddedIndexArt, 1)", 1, true) ~= nil
 			and shopSrc:find("UIKit.railPicture(button, if layout.shop.w > layout.shop.h then RAIL.StuddedShopArt else nil,\n"
-				.. "\t\t\tRAIL.StuddedShopAspect)", 1, true) ~= nil
-			-- (b) A desktop's and a TV's Shop face (2026-10-12): the green Robux
-			-- plate at its own 3 : 1, our SHOP on it; a phone and compact as before.
-			and shopSrc:find("local desk = not layout.compact and not layout.sidebar\n\tif desk then\n"
-				.. "\t\tUIKit.railPicture(button, RAIL.StuddedShopDesktopArt, RAIL.StuddedShopDesktopAspect,\n"
-				.. "\t\t\tRAIL.StuddedShopDesktopWord)", 1, true) ~= nil
-			and RAIL.StuddedShopDesktopArt == "rbxassetid://113135959052678"
-			and math.abs((RAIL.StuddedShopDesktopAspect or 0) - 2000 / 669) < 1e-9
-			and math.abs(CFG.ShopDesktop.X / CFG.ShopDesktop.Y - RAIL.StuddedShopDesktopAspect) < 0.02
-			and RAIL.StuddedShopDesktopWord.Text == "SHOP" and RAIL.StuddedShopDesktopWord.Left > 0.31
-			and RAIL.StuddedShopDesktopWord.Right < 0.98
+				.. "\t\tRAIL.StuddedShopAspect)", 1, true) ~= nil
+			-- THE OLD PICTURE AGAIN (2026-10-12, the owner: "i want the old shop
+			-- button"): the desktop's and a TV's Shop wear the studded Shop picture
+			-- like every wide slot, at 150 x 58; the green Robux plate is the buy
+			-- buttons' alone (RobuxPriceSpec).
+			and select(2, string.gsub(shopSrc, "UIKit%.railPicture%(", "")) == 1
+			and not shopSrc:find("UIKit.railPicture(button, RAIL.StuddedShopDesktopArt", 1, true)
+			and not shopSrc:find("StuddedShopDesktopWord", 1, true)
+			and not shopSrc:find("local desk = not layout.compact", 1, true)
+			and CFG.ShopDesktop.X == 150 and CFG.ShopDesktop.Y == 58
 			and settingsSrc:find("UIKit.railPicture(button, if layout.sidebar then RAIL.StuddedSettingsArt else nil, 1)",
 				1, true) ~= nil
 			and indexSrc:find("if layout.sidebar then\n\t\tUIKit.railBadge(badge, true, \"right\", true, true)\n\telse\n"

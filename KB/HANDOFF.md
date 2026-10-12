@@ -1,5 +1,21 @@
 # Steal a Seed — Session Handoff
 
+## THE OLD SHOP BUTTON AGAIN (desktop and TV HUD) — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by the owner via the peer; HudLayoutSpec 1468/0, RailFallbackSpec 49/0, RobuxPriceSpec 22/0, InviteHudSpec 438/0; THE FULL SUITE 153/153 IN SMALL BATCHES WITH ITEM 11; 5 OF 5 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/shop-revert-2026-10-12)
+
+The owner: "the old shop icon was changed, i want the old shop button."
+- **Reverted fed7838's desktop Shop face:**
+  - The desktop's and a TV's HUD Shop wear the studded Shop picture again (StuddedShopArt 82894505272456, its own red basket and "Shop"), at 150x58 (HudLayout ShopDesktop, item 6's size), with the rail closed up under it as before.
+  - ShopUI's placeButton is the pre-fed7838 code (plus a comment).
+  - UIKit.railPicture is exactly as before fed7838: its "word on the picture" went with the green face.
+- **Kept, untouched:** 7a63889's green Robux price tags on every Robux buy button (Shop cards, Instant Hatch, prompts, wheel). The owner confirmed the green art belongs on the Robux buy buttons only.
+  - GameConfig's green plate (113135959052678) and its word spot stay under their old names, since UIKit.priceTag reads them.
+  - Only their comments changed: the plate is now the price tags' alone.
+- **Pins:**
+  - HudLayoutSpec: the old single railPicture call with StuddedShopArt; no green plate or SHOP word in ShopUI; the desktop slot 150x58.
+  - RailFallbackSpec: the desktop Shop's picture is the old studded one at its own 2094:751, with no word of ours on it.
+- **Live (one short guarded Play, SeedTest_mistlook_20261011):**
+  - The button at 150x58, picture 82894505272456 loaded.
+  - Captures: the HUD and a 2x crop, plus the Shop opened with its prices still on the green plate.
 ## ITEM 11: THE COMPACT ADMIN CONSOLE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by the owner via the peer; AdminConsoleSpec 61/0; AdminSpec 129/0, CompactMenusSpec 46/0, MiniEventSpec 90/0, RainEventSpec 98/0, PodRushSpec 98/0, AnnouncementSpec 62/0, ControllerSpec 64/0, RainPodsSpec 67/0, HudLayoutSpec 1468/0; THE FULL SUITE 153/153 IN SMALL BATCHES (PlotReleaseSpec 40/2 and TutorialSpotlightSpec's frame-time check 50/1 under batch load, 42/0 and 51/0 alone); 26 OF 26 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/item11-compact-console-2026-10-12)
 
 The owner's item 11 via the peer: less scrolling, above all on a phone; smaller buttons; each tab inside 640x360 where it can be; the log strip replaced by an answer that fades by itself.

@@ -219,31 +219,30 @@ local ok, err = pcall(function()
 	check(back.PictureBox.Visible and not back.ArtBox.Visible and not backPlate.Visible,
 		"shown again, it hides ours at once")
 
-	-- A WORD ON THE PICTURE (2026-10-12, the desktop Shop face): the green Robux
-	-- plate has no word, so SHOP is ours, in the HUD's outlined type, right of
-	-- the mark -- only once the picture has loaded; another picture, even
-	-- loaded, or none hides it.
+	-- THE DESKTOP SHOP IS THE OLD PICTURE AGAIN (2026-10-12, the owner: "i want
+	-- the old shop button"): the studded Shop picture with its own SHOP on it,
+	-- at its own 2094 : 751, our plate under it until it loads -- and no word of
+	-- ours anywhere on it (the green plate's word went with the green face).
 	local desk = UIKit.railButton(root, { name = "SpecDeskShop", art = RAIL.ShopArt, rim = true,
 		fallback = RAIL.Words.Shop })
 	local deskPlate = word(desk)
-	local DW = RAIL.StuddedShopDesktopWord
-	UIKit.railPicture(desk, RAIL.StuddedShopDesktopArt, RAIL.StuddedShopDesktopAspect, DW)
-	local deskBox = desk.PictureBox
-	local deskWord = deskBox:FindFirstChild("PictureWord")
-	check(deskWord ~= nil and not deskWord.Visible and deskPlate.Visible and deskWord.Text == "SHOP"
-			and deskWord.Font == Enum.Font.LuckiestGuy and deskWord:FindFirstChildOfClass("UIStroke") ~= nil
-			and deskWord.ZIndex > deskBox.Picture.ZIndex,
-		"the desktop Shop's word: made in the HUD's outlined type, over the picture, and waiting for it")
-	answer(deskBox.Picture, true, RAIL.StuddedShopDesktopArt)
-	check(deskWord.Visible and not deskPlate.Visible and math.abs(deskWord.Position.X.Scale - DW.Left) < 1e-6
-			and math.abs(deskWord.Size.X.Scale - (DW.Right - DW.Left)) < 1e-6
-			and math.abs(deskWord.Position.Y.Scale - DW.Top) < 1e-6,
-		"loaded: SHOP shows right of the mark, where the plate leaves room for it")
 	UIKit.railPicture(desk, RAIL.StuddedShopArt, RAIL.StuddedShopAspect)
+	local deskBox = desk.PictureBox
+	local deskShape = deskBox:FindFirstChildOfClass("UIAspectRatioConstraint")
+	check(deskPlate.Visible and deskBox.Picture.Image == RAIL.StuddedShopArt and deskShape ~= nil
+			and math.abs(deskShape.AspectRatio - 2094 / 751) < 1e-6,
+		"the desktop Shop's picture is the old studded one, at its own shape, our plate under it till it loads")
 	answer(deskBox.Picture, true, RAIL.StuddedShopArt)
-	check(not deskWord.Visible and deskBox.Visible, "another picture (with its own word), even loaded: ours hidden")
+	local ours = {}
+	for _, d in ipairs(desk:GetDescendants()) do
+		if d:IsA("TextLabel") and d.Visible and d:FindFirstAncestor("PictureBox") then
+			table.insert(ours, d.Name)
+		end
+	end
+	check(not deskPlate.Visible and #ours == 0 and deskBox:FindFirstChild("PictureWord") == nil,
+		"loaded: the picture alone -- its own SHOP, no word of ours over it", table.concat(ours, ", "))
 	UIKit.railPicture(desk, nil)
-	check(not deskBox.Visible, "no picture: the box and the word with it gone")
+	check(not deskBox.Visible, "no picture: the box gone")
 
 	-- THE SETTLE (seen in Play 2026-10-09): right after an id is set IsLoaded
 	-- still answers for the old picture, so the first question waits.
