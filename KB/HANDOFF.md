@@ -1,5 +1,39 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 18 A: THE HUD'S REBIRTH BUTTON — THE PANEL FROM ANYWHERE, A "!" WHEN YOU CAN — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; HudLayoutSpec 1497/0 (27 new), RebirthSpec 85/0 (7 new), MosskeeperTalkSpec 35/0, RebirthCelebrationSpec 92/0 and every other spec calling HudLayout green: InviteHudSpec 438/0, InvitePanelSpec 395/0, RailFallbackSpec 49/0, PhoneMenuSpec 29/0, BoostIconsSpec 43/0, AdminConsoleSpec 63/0, CompactMenusSpec 46/0, ContextSlotSpec 8/0, EnchantedMistSpec 62/0, HotbarSpec 38/0, MiniEventSpec 90/0, MysteryPodSpec 39/0, PodHatchSpec 22/0, PodRushSpec 98/0, SecretToastSpec 61/0, SortSpec 24/0, SpeedShoeSpec 19/0, TrapRemoveSpec 27/0, TreadmillFunSpec 116/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: a REBIRTH button (their art, 89518746657536) under Settings; a "!" like INVITE's while the player can rebirth; it opens the Rebirth panel from anywhere, no shrine walk. Item 18's second half, the "Skip Rebirth" product (3718117755, 249 R$), is its own commit after this one.
+
+**Where it stands** (`HudLayout`, the new `rebirth` rect):
+- DESKTOP and TV: under Settings in the top-right corner. It sits as far under Settings as FRIENDS used to, so its "!" is 8 px off Settings. FRIENDS' column (FRIENDS, Index, Garden, the Bag) now starts under REBIRTH instead. A desktop's least height for that column goes up by 62 px; every listed desktop still fits.
+- COMPACT (a small desktop window): the right edge under WHAT'S NEW, else under INVITE or the top row; 50 px, or 44 where only that fits. It is hidden where nothing clears, as INVITE and WHAT'S NEW are. That is only the 700 x 400 window that keeps Garden and the Bag top right: WHAT'S NEW, INVITE and the cash block fill its left, the belt's band its right.
+- PHONES: left of Index, at the column's size, 8 px off it.
+  - A fourth square DOWN the column would shrink all four under the touch floor on the short phones (705 x 338: 25 px), so it stands beside the column instead.
+  - It lives in the phone's dock frame with Index, so it hides while any centre panel is open, the Mosskeeper's talk included. The talk's reply rows therefore ignore its square (MosskeeperUI.measureHud). Without that, the replies had no room clear of him on the 705 x 338 emulator.
+  - On the 640 x 360 phone, its square stands where the buff popover used to clear the beginner guide. There the guide's words now step aside while the popover is open, as they already did on 705 x 338.
+- Its "!" (`HudLayout.rebirthBadge`) is INVITE's: the same gold glyph, ink, wiggle and pop (Rail.InviteBadge), on the corner toward the middle.
+
+**What it does** (RebirthUI, RebirthService):
+- A press asks the server for a quote (the client's new "quote" verb, `RebirthService.AskQuote`, at most one every `Rebirth.Hud.QuoteGap` = 0.5 s), and the panel opens as the shrine's does.
+- That quote is marked `anywhere`. Its confirm skips the shrine's distance (FAR) and nothing else: cash, mill, cooldown, carrying, chased, dead, the offline claim and a purchase in flight are all still checked at the confirm.
+- A panel the button opened stays open as the player walks. The shrine's own quote still needs the shrine.
+- The "!": `Rebirth.readyNow` on this client's copy of the profile (ProfileReady and ProfileUpdated). It shows when rebirth is on, the cash covers the next price, the mill is Inferno Forge or better, and the cooldown is over; it is asked again when the cooldown ends.
+  - A body, a carry, a chase and an offline claim are left to the panel to explain.
+  - The pop plays once per rebirth level, and never in the first 10 s after joining.
+
+**The Play** (guarded, throwaway store; desktop 1065 x 716; captures `output/rebirth-button-2026-10-12/18A_rebirth_button_sheet.png`):
+- a1: REBIRTH under Settings, no "!".
+- a2: the console's own AddMoney ($1.1B) and the mill set to Inferno Forge by the test host: the "!" shows.
+- a3: the button pressed 175 studs from the shrine: the panel opens.
+- a4 and a5: the panel's REBIRTH confirmed from there. The server logged the rebirth (count 1, cash spent, mill 1). REBORN! with Rebirth 1 · Sprout, and the fence redone.
+- a6: the "!" gone.
+
+**Not seen:** a phone and a compact window. The emulator stood on desktop and can't be switched from here; their places are HudLayoutSpec's numbers.
+
+**Also:** the desktop's top-corner band (`HudLayout.bag`, UIKit's modal header) now runs to REBIRTH's foot. The art loads in Edit (1024 px, "rebirth", group 744756221). It is Codex's `rebirth-studded-square-v2.png`; Codex's art folder is not committed here.
+
+**Files:** GameConfig (Rebirth.Hud, Rail.Words.Rebirth), HudLayout (rebirth, rebirthBadge, groups, the TV shift, the corner band), Rebirth (readyNow), UIKit (the modal header's band), RebirthService (AskQuote, the `anywhere` quote), RebirthUI (the button, its "!", the walk-away close), MosskeeperUI (measureHud), AGENTS.md (RebirthUI's line). Specs: HudLayoutSpec, RebirthSpec, MosskeeperTalkSpec, RebirthCelebrationSpec.
+
 ## ITEM 17: THE MYSTERIOUS POD IN THE SHOP — BUNDLES, GIFTS, OPEN ALL — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; MysteryShopSpec 14/0 (new) and the 24 touched specs green: StoreSpec 28/0, ServerBoostSpec 65/0, SpinPurchaseSpec 49/0, WheelSpec 163/0, CommunitySpec 25/0, WheelScaleSpec 22/0, MysteryPodSpec 39/0, HudLayoutSpec 1470/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, BagMenuSpec 13/0, HatchInBagSpec 43/0, HatchStorageSpec 208/0, InstantHatchSpec 57/0, HatchDeliverySpec 62/0, HatchRevealSpec 74/0, AdminSpec 129/0, AdminMistSpec 69/0, InstantCreditSpec 27/0, RebirthSpec 78/0, InventorySpec 47/0, SortSpec 24/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
 
 The owner wanted the Mysterious Pod sold in the Shop, in bundles, giftable. Their four answers (via the peer):

@@ -513,6 +513,43 @@ local ok, err = pcall(function()
 		"carrying a pod, chased, an offline claim waiting, a purchase in flight, dead: each refused by name",
 		table.concat(reasons, ","))
 
+	-- THE HUD'S REBIRTH BUTTON (2026-10-12, item 18): a quote from anywhere.
+	local roamer = fakePlayer("Roamer", richProfile())
+	distance = 400
+	local sent = #replies
+	local asked = Service.AskQuote(roamer)
+	local hq = last()
+	check(asked == true and #replies == sent + 1 and hq.verb == "quote" and hq.ok == true and hq.anywhere == true,
+		"the HUD button's ask, far from the shrine: the same quote, marked good anywhere")
+	check(Service.AskQuote(roamer) == false and #replies == sent + 1,
+		"a second ask inside Hud.QuoteGap sends nothing")
+	check(Service.Confirm(roamer, { token = hq.token }) == true and last().verb == "done"
+		and profiles[roamer].Rebirths == 1 and profiles[roamer].Cash == 0,
+		"and its confirm, 400 studs away: reborn -- the shrine's distance is the one check it skips")
+	clock += CFG.Hud.QuoteGap
+	local poorRoamer = fakePlayer("PoorRoamer", { Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 })
+	Service.AskQuote(poorRoamer)
+	local pq = last()
+	check(pq.anywhere == true and pq.ok == false and Service.Confirm(poorRoamer, { token = pq.token }) == false
+		and last().why == "CASH" and profiles[poorRoamer].Rebirths == 0,
+		"every other check stands: short of the cash, the HUD's quote is refused like the shrine's")
+	local walker = fakePlayer("Walker", richProfile())
+	local sq = Service.Quote(walker)
+	check(sq.anywhere == false and Service.Confirm(walker, { token = sq.token }) == false and last().why == "FAR",
+		"and the shrine's own quote still needs the shrine")
+	distance = 5
+
+	-- The "!" on the button (Rebirth.readyNow, the client's copy of the profile).
+	local okRich, waitRich = Rebirth.readyNow(richProfile(), now)
+	local okPoor = Rebirth.readyNow({ Cash = 5e8, MillTier = 9, Rebirths = 0, RebirthAt = 0 }, now)
+	local okMill = Rebirth.readyNow({ Cash = 5e9, MillTier = 7, Rebirths = 0, RebirthAt = 0 }, now)
+	local okCool, waitCool = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 }, now)
+	local okLater = Rebirth.readyNow({ Cash = 5e9, MillTier = 9, Rebirths = 1, RebirthAt = now - 3 },
+		now + CFG.CooldownSeconds)
+	check(okRich == true and waitRich == 0 and okPoor == false and okMill == false and okCool == false
+		and waitCool == CFG.CooldownSeconds - 3 and okLater == true and (Rebirth.readyNow(nil, now)) == false,
+		"the button's \"!\": the cash and the mill for the next one, not cooling down (and when the cooldown ends)")
+
 	--==========================================================================
 	say("6. The title over the name, ADMIN on top")
 	--==========================================================================
@@ -692,9 +729,20 @@ local ok, err = pcall(function()
 	check(has(ui, 'r:FireServer(CFG.Action, "confirm", { token = q.token })') and has(ui, "button.set(WORDS.Confirm)")
 			and has(ui, "MenuKit.studdedTheme(CFG.Look)") and has(ui, "FloatingSign.new({")
 			and not has(ui, "AddCash") and not has(ui, "SetMillTier")
-			and select(2, string.gsub(ui, "FireServer%(", "")) == 1,
+			and has(ui, 'r:FireServer(CFG.Action, "quote")')
+			and select(2, string.gsub(ui, "FireServer%(", "")) == 2,
 		"the panel: the Rebirth band, ARE YOU SURE? before the token goes back, the words over the shrine; it sends "
-			.. "nothing else")
+			.. "nothing else but the HUD button's ask for a quote (2026-10-12)")
+	-- THE HUD'S REBIRTH BUTTON (2026-10-12, item 18): the owner's art with REBIRTH
+	-- under it until it loads, placed by HudLayout, INVITE's "!" from readyNow.
+	check(has(ui, 'UIKit.railButton(playerGui, { name = "RebirthHudButton", art = CFG.Hud.Image,')
+			and has(ui, "fallback = RAIL.Words.Rebirth })") and has(ui, "local r = layout.rebirth")
+			and has(ui, "local b = HudLayout.rebirthBadge(layout)")
+			and has(ui, "Rebirth.readyNow(profileView, Workspace:GetServerTimeNow())")
+			and has(ui, "if open and not (q and q.anywhere == true) then")
+			and GameConfig.Rebirth.Hud.Image == "rbxassetid://89518746657536",
+		"the HUD's REBIRTH button: the owner's art (REBIRTH on a plate until it loads), where HudLayout says, "
+			.. "INVITE's \"!\" while a rebirth can be done now, and a panel it opened stays open anywhere")
 
 	--==========================================================================
 	say("9. The shrine's ground")

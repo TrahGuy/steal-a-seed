@@ -251,6 +251,10 @@ local ok, err = pcall(function()
 		-- recipe): HudLayout.occupiedButToast, the clock and ADMIN (less the
 		-- inset: they stand in an inset-ignoring gui); and, soft, what comes and
 		-- goes: the notices' line, the biome name, the chase warning, the boosts.
+		-- Not a phone's REBIRTH: its dock is hidden while the talk is open.
+		if L.sidebar then
+			L.rebirth = HudLayout.rect(0, 0, 0, 0)
+		end
 		local blocked, soft = {}, {}
 		local function add(list, r, lift)
 			if r and r.w > 0 and r.h > 0 then
@@ -382,6 +386,16 @@ local ok, err = pcall(function()
 	say("6. The wiring")
 	--==========================================================================
 	local ui = StarterPlayer.StarterPlayerScripts.MosskeeperUI.Source
+	-- REBIRTH (2026-10-12, item 18): a phone's stands in the dock RailDrawerUI
+	-- hides while this talk's panel is open, so the replies may take its room.
+	local drawer = StarterPlayer.StarterPlayerScripts.RailDrawerUI.Source
+	local rebirthUI = StarterPlayer.StarterPlayerScripts.RebirthUI.Source
+	check(has(ui, "if L.sidebar then\n\t\tL.rebirth = HudLayout.rect(0, 0, 0, 0)\n\tend")
+			and has(ui, "player:SetAttribute(ATTR.OpenPanel, PANEL)")
+			and has(drawer, "dock.Visible = player:GetAttribute(ATTR.OpenPanel) == nil")
+			and has(rebirthUI, "hudButton.Parent = if layout.sidebar then UIKit.railDock(playerGui) else"),
+		"a phone's REBIRTH is no room taken while the replies show: it stands in the dock, hidden while the talk "
+			.. "is open")
 	check(has(ui, "talkGui.IgnoreGuiInset = true") and has(ui, "talkGui.ScreenInsets = Enum.ScreenInsets.None")
 			and has(ui, "camera:WorldToViewportPoint(MosskeeperTalk.besidePoint(")
 			and has(ui, "measureGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets"),

@@ -301,6 +301,11 @@ local function measureHud()
 	local insetTop = input.insetTop or 0
 	local blocked: { MosskeeperTalk.Rect } = {}
 	local soft: { MosskeeperTalk.Rect } = {}
+	-- A phone's REBIRTH stands in the dock RailDrawerUI hides while this talk's
+	-- panel is open (OpenPanel; 2026-10-12, item 18): no room taken then.
+	if L.sidebar then
+		L.rebirth = HudLayout.rect(0, 0, 0, 0)
+	end
 	local function add(list: { MosskeeperTalk.Rect }, r: HudLayout.Rect?, lift: number?)
 		if r and r.w > 0 and r.h > 0 then
 			table.insert(list, {

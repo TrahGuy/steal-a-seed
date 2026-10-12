@@ -693,7 +693,8 @@ src/StarterPlayer/StarterPlayerScripts/
     SproutDashUI.client.luau    PLAY MINIGAME on the own mill, and Sprout Dash's screen (the
                                 jump held, the run drawn, the server's count shown); its open
                                 screen switches the music bed (Music.client)
-    RebirthUI.client.luau       the shrine's REBIRTH panel and its words; plays RebirthFX
+    RebirthUI.client.luau       the REBIRTH panel (the shrine's, and the HUD's REBIRTH button
+                                with its "!", 2026-10-12) and the shrine's words; plays RebirthFX
     PodGuideUI.client.luau      the Pod Guide's stands, built on this client (2026-10-09)
     PodMotion.client.luau       plays the pods' idles over every pod this screen should see move
     MarigoldSign.client.luau    "BAT SHOP!" over Marigold's stall (2026-10-08)

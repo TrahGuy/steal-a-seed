@@ -6,8 +6,10 @@
 -- It decides nothing: the panel shows the SERVER's quote (RebirthService), the
 -- REBIRTH button asks twice -- "ARE YOU SURE?" -- and its second press sends
 -- the quote's token back, and what happened is the server's answer. In the
--- studded kit's Rebirth band (GameConfig.Rebirth.Look). No HUD button: the
--- phone's HUD is full; the shrine is the way in.
+-- studded kit's Rebirth band (GameConfig.Rebirth.Look). The shrine opens it,
+-- and since 2026-10-12 (the owner's item 18) the HUD's REBIRTH button does,
+-- from anywhere, with a "!" while a rebirth can be done (THE HUD'S REBIRTH
+-- BUTTON, below).
 --
 -- THE BODY (reworked 2026-10-08, the owner: "add more detail on the rebirth
 -- info, we will add how the required mill look"):
@@ -30,6 +32,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
@@ -958,6 +961,143 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	end
 end)
 
+--==============================================================================
+-- THE HUD'S REBIRTH BUTTON (2026-10-12, the owner's item 18)
+--
+-- The panel from anywhere: a press asks the server for a quote (the "quote"
+-- verb, RebirthService.AskQuote), which opens it as the shrine's does, good
+-- anywhere; a press while it is open shuts it. Placed by HudLayout (rebirth):
+-- under Settings on a desktop and a TV, at compact's right edge (hidden there
+-- while a centre panel is open, as INVITE is), left of Index on a phone. With
+-- INVITE's "!" -- its glyph, ink, wiggle and pop (Rail.InviteBadge) -- while a
+-- rebirth can be done now: Rebirth.readyNow on this client's copy of the
+-- profile, asked again whenever the profile comes and when a cooldown ends.
+--==============================================================================
+local BANG = RAIL.InviteBadge
+-- Named apart from the panel's own REBIRTH button.
+local hudButton = UIKit.railButton(playerGui, { name = "RebirthHudButton", art = CFG.Hud.Image,
+	fallback = RAIL.Words.Rebirth })
+hudButton.Visible = false
+
+local bang = Instance.new("TextLabel")
+bang.Name = "RebirthBadge"
+bang.AnchorPoint = Vector2.new(0.5, 0.5)
+bang.BackgroundTransparency = 1
+bang.BorderSizePixel = 0
+bang.Font = BANG.Font
+bang.Text = BANG.Glyph
+bang.TextColor3 = BANG.Fill
+bang.TextScaled = true
+bang.Active = false
+bang.ZIndex = 8
+bang.Visible = false
+bang.Parent = hudButton
+do
+	local ink = Instance.new("UIStroke")
+	ink.Name = "Ink"
+	ink.Color = BANG.Ink
+	ink.Thickness = BANG.Stroke
+	ink.LineJoinMode = Enum.LineJoinMode.Round
+	ink.Parent = bang
+end
+
+local function placeHud()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	local r = layout.rebirth
+	local away = layout.compact and player:GetAttribute(ATTR.OpenPanel) ~= nil
+	if r.w <= 0 or r.h <= 0 or away then
+		hudButton.Visible = false
+		return
+	end
+	UIKit.railShape(hudButton, Vector2.new(r.w, r.h))
+	UIKit.railPicture(hudButton, CFG.Hud.Image, 1)
+	hudButton.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
+	hudButton.Position = HudLayout.place(r, Vector2.zero, layout.safe)
+	local b = HudLayout.rebirthBadge(layout)
+	bang.Position = UDim2.fromOffset(b.x - r.x + b.w / 2, b.y - r.y + b.h / 2)
+	bang.Size = UDim2.fromOffset(b.w, math.floor(b.h * BANG.Scale))
+	hudButton.Visible = true
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeHud)
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(placeHud)
+placeHud()
+
+hudButton.Activated:Connect(function()
+	if open then
+		setOpen(false)
+		return
+	end
+	local r = remote
+	if r then
+		r:FireServer(CFG.Action, "quote")
+	end
+end)
+
+-- The "!": this client's copy of the profile (ProfileReady, ProfileUpdated),
+-- when it first came (no pop for a player who joins able to rebirth), and the
+-- count a pop was last played for (one a rebirth).
+local profileView: any = nil
+local profileAt: number? = nil
+local poppedFor = -1
+local recheckToken = 0
+local function refreshBang()
+	local ready, wait = Rebirth.readyNow(profileView, Workspace:GetServerTimeNow())
+	local n = Rebirth.count(if type(profileView) == "table" then profileView.Rebirths else 0)
+	if ready and not bang.Visible and profileAt and os.clock() - profileAt > BANG.QuietAfterJoin and poppedFor ~= n then
+		SoundKit.play("InviteBadgePop")
+	end
+	if ready then
+		poppedFor = n
+	end
+	bang.Visible = ready
+	if not ready then
+		bang.Rotation = 0
+	end
+	-- Cooling down and otherwise able: asked again the moment it ends.
+	recheckToken += 1
+	if wait > 0 then
+		local token = recheckToken
+		task.delay(wait + 0.1, function()
+			if token == recheckToken then
+				refreshBang()
+			end
+		end)
+	end
+end
+local function onProfile(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	profileView = profile
+	profileAt = profileAt or os.clock()
+	refreshBang()
+end
+
+-- The wiggle: decoration, every PulseEvery seconds while it shows (INVITE's).
+local function wiggle()
+	local each = BANG.PulseSeconds / 4
+	local info = TweenInfo.new(each, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	for _, k in ipairs({ 1, -0.7, 0.35, 0 }) do
+		if not bang.Visible then
+			break
+		end
+		TweenService:Create(bang, info, { Rotation = BANG.PulseDegrees * k }):Play()
+		task.wait(each)
+	end
+	bang.Rotation = 0
+end
+task.spawn(function()
+	while gui.Parent do
+		task.wait(BANG.PulseEvery)
+		if bang.Visible and hudButton.Visible and not StatusText.reducedMotion() then
+			wiggle()
+		end
+	end
+end)
+
 local function onAnswer(payload: { [string]: any })
 	local verb = payload.verb
 	if verb == "quote" then
@@ -1035,16 +1175,31 @@ task.spawn(function()
 			end
 		end)
 	end
+	-- The profile, for the HUD button's "!".
+	local updated = folder and folder:WaitForChild(GameConfig.Remotes.ProfileUpdated, 30)
+	if updated and updated:IsA("RemoteEvent") then
+		updated.OnClientEvent:Connect(onProfile)
+	end
+	local ready = folder and folder:WaitForChild(GameConfig.Remotes.ProfileReady, 30)
+	if ready and ready:IsA("RemoteEvent") then
+		ready.OnClientEvent:Connect(function(ok: any, profile: any)
+			if ok == true then
+				onProfile(profile)
+			end
+		end)
+	end
 end)
 
 -- The faint aura round every body with Celebration.Aura.From rebirths or more,
 -- on this screen (RebirthFX; off for REDUCED FX).
 RebirthFX.watchAuras()
 
--- Walked away: the panel shuts (the server would refuse from there anyway).
+-- Walked away: the panel shuts (the server would refuse from there anyway) --
+-- one the shrine opened. The HUD button's quote is good anywhere (item 18).
 task.spawn(function()
 	while gui.Parent do
-		if open then
+		local q = quote
+		if open and not (q and q.anywhere == true) then
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			if not (root and root:IsA("BasePart"))

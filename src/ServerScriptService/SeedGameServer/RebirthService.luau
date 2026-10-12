@@ -12,6 +12,10 @@
 --   THE SHRINE   built here, off the deck's north-east rim, Persistent. Its
 --                prompt asks for a QUOTE -- the numbers RebirthUI's panel
 --                shows, with a one-use token -- and nothing else.
+--   THE BUTTON   the HUD's REBIRTH button asks for one from anywhere
+--                (2026-10-12, the owner's item 18; AskQuote). Its quote is
+--                confirmed without the shrine's distance -- the only check it
+--                skips.
 --   THE CONFIRM  the panel's second press sends that token back. Checked
 --                again from scratch (the quote is only a promise of what was
 --                true), then, with no yield between the check and the last
@@ -80,8 +84,11 @@ RebirthService.Hooks = {
 	end,
 }
 
-type Quote = { token: number, at: number }
+-- `anywhere`: the HUD button's quote, confirmed without the shrine's distance.
+type Quote = { token: number, at: number, anywhere: boolean }
 local quotes: { [Player]: Quote } = {}
+-- When each player's HUD button last asked for a quote (AskQuote).
+local asked: { [Player]: number } = {}
 local busy: { [Player]: boolean } = {}
 local nextToken = 0
 local shrineTop: BasePart? = nil
@@ -126,16 +133,17 @@ end
 --==============================================================================
 -- THE QUOTE: what the panel shows, and a token to confirm it with
 --==============================================================================
-function RebirthService.Quote(player: Player): { [string]: any }
+function RebirthService.Quote(player: Player, anywhere: boolean?): { [string]: any }
 	local state = RebirthService.StateOf(player)
 	local why = Rebirth.check(state)
 	nextToken += 1
-	quotes[player] = { token = nextToken, at = RebirthService.Hooks.clock() }
+	quotes[player] = { token = nextToken, at = RebirthService.Hooks.clock(), anywhere = anywhere == true }
 	local n = state.rebirths
 	local minTier, minName = Rebirth.millNeeded()
 	return {
 		verb = "quote",
 		token = nextToken,
+		anywhere = anywhere == true,
 		ok = why == nil,
 		why = why,
 		words = if why then Rebirth.refusal(why, n) else nil,
@@ -151,6 +159,20 @@ function RebirthService.Quote(player: Player): { [string]: any }
 		nextTraining = Rebirth.training(n + 1),
 		nextIncome = Rebirth.income(n + 1),
 	}
+end
+
+-- THE HUD'S REBIRTH BUTTON (2026-10-12, the owner's item 18): the panel from
+-- anywhere, no shrine walk. A quote like the shrine's, but `anywhere`: the
+-- confirm skips the shrine's distance and every other check stands. One a
+-- Hud.QuoteGap. Answers whether a quote went.
+function RebirthService.AskQuote(player: Player): boolean
+	local at = RebirthService.Hooks.clock()
+	if at - (asked[player] or -math.huge) < CFG.Hud.QuoteGap then
+		return false
+	end
+	asked[player] = at
+	RebirthService.Hooks.reply(player, RebirthService.Quote(player, true))
+	return true
 end
 
 --==============================================================================
@@ -347,7 +369,8 @@ function RebirthService.Confirm(player: Player, payload: any): boolean
 		refuse(player, "QUOTE", n)
 		return false
 	end
-	if RebirthService.Hooks.distance(player) > CFG.CloseDistance then
+	-- The HUD button's quote is confirmed from anywhere (AskQuote).
+	if not quote.anywhere and RebirthService.Hooks.distance(player) > CFG.CloseDistance then
 		refuse(player, "FAR", n)
 		return false
 	end
@@ -532,6 +555,7 @@ end
 
 local function forget(player: Player)
 	quotes[player] = nil
+	asked[player] = nil
 	busy[player] = nil
 	for _, c in ipairs(playerConnections[player] or {}) do
 		c:Disconnect()
@@ -555,6 +579,7 @@ function RebirthService.Init()
 		forget(player)
 	end
 	table.clear(quotes)
+	table.clear(asked)
 	table.clear(busy)
 	-- A re-run leaves no title behind.
 	for _, gui in ipairs(CollectionService:GetTagged(TITLE.Tag)) do
@@ -581,6 +606,8 @@ function RebirthService.Start()
 			payload: any)
 			if action == CFG.Action and verb == "confirm" then
 				RebirthService.Confirm(player, payload)
+			elseif action == CFG.Action and verb == "quote" then
+				RebirthService.AskQuote(player)
 			end
 		end))
 	else

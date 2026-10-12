@@ -21,6 +21,8 @@
 --                                              TO PLOT
 --   AdminConsoleUI                             the ADMIN button, for the two
 --                                              accounts AdminService allows
+--   RebirthUI                                  the REBIRTH button and its "!"
+--                                              (2026-10-12)
 --
 -- They have to agree to the pixel without talking to each other, so each asks
 -- this module the same question with the same facts -- how big the safe area
@@ -224,6 +226,17 @@ export type Layout = {
 	-- FIRST square of the panel under the Bag (the owner, 2026-10-06), at its
 	-- place in the panel's canvas with the canvas scrolled to the top.
 	invite: Rect,
+	-- THE REBIRTH BUTTON (RebirthUI, 2026-10-12, the owner's item 18): the
+	-- Rebirth panel from anywhere, a "!" while a rebirth can be done. On a
+	-- desktop (and a TV) under Settings in the top-right corner, as far under
+	-- it as FRIENDS stood (its "!" 8 px off Settings), FRIENDS' column moving
+	-- down by it; in compact the first spot that clears everything at the
+	-- right edge under WHAT'S NEW, else under INVITE or the row (EMPTY, and
+	-- hidden, where none does); on a phone left of Index, at the top of the
+	-- column, 8 px off it -- a fourth square down the column would shrink all
+	-- four under the touch floor on the short phones. Its "!" on the corner
+	-- toward the middle (HudLayout.rebirthBadge).
+	rebirth: Rect,
 	-- THE PANEL UNDER THE BAG SCROLLS AND SHUTS (the owner, 2026-10-06; a phone
 	-- only, nil elsewhere). `dockView` is its scroll viewport and `dockCanvas`
 	-- the squares' whole height -- more than the viewport where the squares
@@ -1596,6 +1609,10 @@ local function desktop(input: Input): Layout
 	-- (2026-10-11): one corner group.
 	local events = rect(updates.x, updates.y + updates.h + RAIL.Gap, square.X, square.Y)
 	local settings = rect(updates.x, events.y + events.h + RAIL.Gap, square.X, square.Y)
+	-- REBIRTH under Settings (2026-10-12, the owner's item 18): 8 px under it
+	-- and its "!" (tucked into its top-left corner, as the column's badges
+	-- are), where FRIENDS stood -- the column under it comes down by as much.
+	local rebirth = rect(updates.x, settings.y + settings.h + G + CONFIG.BadgeHang + 2.5, square.X, square.Y)
 
 	-- Ten shortcuts, keyboard or not: a console reaches them with LB and RB.
 	local slots = CONFIG.DesktopSlots
@@ -1633,10 +1650,11 @@ local function desktop(input: Input): Layout
 	-- groups does.
 	--==========================================================================
 	-- FRIENDS on top since 2026-10-11, under the corner's Settings by 8 px and
-	-- its "!" (tucked into its top-left corner, as the column's badges are).
+	-- its "!" (tucked into its top-left corner, as the column's badges are) --
+	-- under REBIRTH since 2026-10-12, by as much.
 	local stackH = square.Y * 4 + RAIL.Gap * 3
 	local stackX = sw - I - square.X
-	local highest = settings.y + settings.h + G + CONFIG.BadgeHang + 2.5
+	local highest = rebirth.y + rebirth.h + G + CONFIG.BadgeHang + 2.5
 	local lowest = sh - CONFIG.Margin
 	local worst = HudLayout.hotbarBand(hotbar, HudLayout.removeRowHeight(input.touch) + HOT.RemoveGap)
 	if worst.x + worst.w + G > stackX then
@@ -1667,6 +1685,7 @@ local function desktop(input: Input): Layout
 		events = events,
 		updates = updates,
 		invite = invite,
+		rebirth = rebirth,
 		garden = garden,
 		bag = bag,
 		pairRow = false,
@@ -1732,7 +1751,7 @@ local function desktop(input: Input): Layout
 	L.teleport = teleportUnder(input, L.clock, {
 		HudLayout.union(shop, HudLayout.union(walk, others)),
 		HudLayout.union(invite, bag),
-		HudLayout.union(updates, settings),
+		HudLayout.union(updates, rebirth),
 	})
 	L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, nil)
 	-- ON A TV ONLY: the notice band and TELEPORT TO PLOT under it came down
@@ -2132,14 +2151,47 @@ local function compact(input: Input, keepRight: boolean?): Layout
 		end,
 	}), inviteKeep, input.safe)
 
+	--==========================================================================
+	-- REBIRTH (2026-10-12, the owner's item 18): THE RIGHT EDGE UNDER WHAT'S
+	-- NEW, ELSE UNDER INVITE OR THE ROW
+	--
+	-- With the right edge's squares first, its "!" hanging over its top like
+	-- INVITE's, so as far under; else under INVITE, else under the row's cells
+	-- INVITE left -- 50 x 50, or the touch floor's 44 x 44; EMPTY, and hidden,
+	-- where none clears (the shrine is the way in there).
+	--==========================================================================
+	local rebirthKeep: { Rect } = table.clone(inviteKeep)
+	local rebirthSpots: { (number) -> Rect } = {}
+	if updates.w > 0 then
+		table.insert(rebirthSpots, function(s: number): Rect
+			return rect(updates.x + updates.w - s, updates.y + updates.h + hangBelow, s, s)
+		end)
+	end
+	if invite.w > 0 then
+		table.insert(rebirthKeep, invite)
+		table.insert(rebirthSpots, function(s: number): Rect
+			return rect(invite.x, invite.y + invite.h + hangBelow, s, s)
+		end)
+	end
+	for _, cell in ipairs({ index, shop, settings }) do
+		table.insert(rebirthSpots, function(s: number): Rect
+			return rect(cell.x, cell.y + cell.h + hangBelow, s, s)
+		end)
+	end
+	local rebirth = firstFree(sizedSpots(rebirthSpots), rebirthKeep, input.safe)
+
 	-- THE TUTORIAL BANNER: see bannerIn. Round Walk Mode's switch too, which
-	-- stands under the row, and OTHER PLANTS by it -- and WHAT'S NEW and INVITE.
+	-- stands under the row, and OTHER PLANTS by it -- and WHAT'S NEW, INVITE
+	-- and REBIRTH.
 	local beside: { Rect } = { cash, walk, others }
 	if updates.w > 0 then
 		table.insert(beside, updates)
 	end
 	if invite.w > 0 then
 		table.insert(beside, invite)
+	end
+	if rebirth.w > 0 then
+		table.insert(beside, rebirth)
 	end
 	if thumb then
 		table.insert(beside, thumb)
@@ -2163,6 +2215,7 @@ local function compact(input: Input, keepRight: boolean?): Layout
 		events = events,
 		updates = updates,
 		invite = invite,
+		rebirth = rebirth,
 		garden = garden,
 		bag = bag,
 		pairRow = false,
@@ -2233,6 +2286,9 @@ local function compact(input: Input, keepRight: boolean?): Layout
 	}
 	if updates.w > 0 then
 		table.insert(rows, updates)
+	end
+	if rebirth.w > 0 then
+		table.insert(rows, rebirth)
 	end
 	L.teleport = teleportUnder(input, L.clock, rows)
 	-- The tutorial banner keeps 8 px under the teleport button as well as the rows.
@@ -2656,6 +2712,10 @@ local function sidebars(input: Input): Layout
 	local garden = rect(index.x, stackTop + size + C.Gap, size, size)
 	local bag = rect(index.x, stackTop + (size + C.Gap) * 2, size, size)
 	local stack = HudLayout.union(index, bag)
+	-- REBIRTH (2026-10-12, the owner's item 18): left of Index at the column's
+	-- size, 8 px off it -- a group of its own. Down the column, four squares
+	-- would shrink under the touch floor on the short phones (705 x 338: 25).
+	local rebirth = rect(index.x - G - size, stackTop, size, size)
 
 	--==========================================================================
 	-- THE PHONE'S CENTRE COLUMN, AND THE GUIDE'S WORDS BESIDE IT (2026-09-29)
@@ -2716,7 +2776,7 @@ local function sidebars(input: Input): Layout
 		-- The panel's row and the column under it (2026-10-09; the panel ran down
 		-- the right edge from 2026-10-06): on a narrow phone the words stop 8 px
 		-- short of them, or take the banner instead (which steps round them, below).
-		for _, right in ipairs({ dock, stack }) do
+		for _, right in ipairs({ dock, stack, rebirth }) do
 			if right.x > gx and HudLayout.gap(rect(gx, math.max(railBottom, (columnTop or 0) + P.NoticeTop
 					+ CONFIG.NoticeHeight) + G, gw, P.Guide.Height), right) < G then
 				gw = math.min(gw, math.floor(right.x - G - gx))
@@ -2737,7 +2797,7 @@ local function sidebars(input: Input): Layout
 				then columnTop + P.NoticeTop + CONFIG.NoticeHeight
 				else teleport.y + teleport.h + G + CONFIG.NoticeHeight
 			banner, skip = bannerIn(sw, math.max(railBottom, noticeBottom),
-				{ cash, thumb, jump, dock, stack, shop, walk, others }, CONFIG.TutorialPhoneScale)
+				{ cash, thumb, jump, dock, stack, rebirth, shop, walk, others }, CONFIG.TutorialPhoneScale)
 		end
 	end
 
@@ -2794,6 +2854,7 @@ local function sidebars(input: Input): Layout
 		dockCanvas = canvas,
 		dockShut = shut,
 		invite = invite,
+		rebirth = rebirth,
 		-- The x2 card is no longer a row button on a phone (2026-10-05).
 		boost = nil,
 		-- The notices' first slot, under the row (toastUnderRow, at the end).
@@ -2849,6 +2910,7 @@ local function sidebars(input: Input): Layout
 			table.insert(around, L.dock)
 		end
 		table.insert(around, stack)
+		table.insert(around, rebirth)
 		L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, around)
 	end
 	L.fits = L.fits and #HudLayout.problems(L) == 0
@@ -2975,6 +3037,34 @@ function HudLayout.inviteBadge(L: Layout): Rect
 	return rect(r.x + r.w - size / 2, r.y - size / 2, size, size)
 end
 
+-- REBIRTH'S "!" (2026-10-12, the owner's item 18): INVITE's "!" in INVITE's
+-- box sizes, on the corner toward the middle. A desktop and a TV: tucked into
+-- its top-left corner, BadgeHang past it, as FRIENDS' is. Compact: tucked into
+-- the top corner on the middle's side. A phone: the panel's small box on its
+-- top-LEFT corner, level enough with its top that the glyph's ink reaches no
+-- higher than INVITE's does over its square -- the column stands 8 px under
+-- the panel's row. Empty with no button.
+function HudLayout.rebirthBadge(L: Layout): Rect
+	local r = L.rebirth
+	if r.w <= 0 then
+		return rect(0, 0, 0, 0)
+	end
+	local stroke = 2.5
+	local size = 26 + stroke * 2
+	if L.sidebar then
+		local PP = CONFIG.Phone.Panel
+		local BANG = RAIL.InviteBadge
+		local small = PP.HandleH
+		local reach = math.ceil(small * (BANG.Scale - 1) / 2 + BANG.Stroke)
+		return rect(r.x - PP.Pad, r.y - PP.Pad + reach, small, small)
+	end
+	local hang = CONFIG.BadgeHang + stroke
+	if L.column or r.x + r.w / 2 > L.safe.X / 2 then
+		return rect(r.x - hang, r.y - hang, size, size)
+	end
+	return rect(r.x + r.w + hang - size, r.y - hang, size, size)
+end
+
 -- The phone panel's handle wears a smaller badge while the panel is shut and a
 -- square inside has one (2026-10-06): on its top-right corner, tucked in, as
 -- wide as the handle -- which stands upright at the row's end since the panel
@@ -3038,6 +3128,14 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 			{ name = "hotbar", rect = L.hotbar },
 			{ name = "cash", rect = L.cash },
 		}
+		-- REBIRTH left of Index (2026-10-12), with its "!".
+		if L.rebirth.w > 0 then
+			local r = L.rebirth
+			if withBadges then
+				r = HudLayout.union(r, HudLayout.rebirthBadge(L))
+			end
+			table.insert(phoneList, { name = "rebirth", rect = r })
+		end
 		if L.icons then
 			table.insert(phoneList, { name = "icons", rect = L.icons })
 		end
@@ -3062,6 +3160,13 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 	-- (under the Bag until 2026-10-09), a group of its own there.
 	local events = L.events.w > 0 and L.compact
 	local corner = if L.column then HudLayout.union(HudLayout.union(L.updates, L.events), L.settings) else nil
+	-- REBIRTH under Settings in that corner (2026-10-12), its "!" with it.
+	if corner and L.rebirth.w > 0 then
+		corner = HudLayout.union(corner, L.rebirth)
+		if withBadges then
+			corner = HudLayout.union(corner, HudLayout.rebirthBadge(L))
+		end
+	end
 	-- Garden and the Bag: with Index in the right edge's column on a desktop and
 	-- a TV (2026-10-09), its badges as they are drawn there -- tucked, which the
 	-- half-off desktop badges were never counted as; at the left edge in compact.
@@ -3112,6 +3217,14 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 			r = HudLayout.union(r, HudLayout.inviteBadge(L))
 		end
 		table.insert(list, { name = "invite", rect = r })
+	end
+	-- REBIRTH in compact (2026-10-12), likewise.
+	if L.compact and L.rebirth.w > 0 then
+		local r = L.rebirth
+		if withBadges then
+			r = HudLayout.union(r, HudLayout.rebirthBadge(L))
+		end
+		table.insert(list, { name = "rebirth", rect = r })
 	end
 	-- The icon row, while one stands: a group of its own, so the notice stack
 	-- (noticeStack) and every clearance check keep off it.
@@ -3258,6 +3371,9 @@ local function tenFoot(input: Input, tv: TenFootInput): Layout
 	end
 	if L.invite.w > 0 then
 		L.invite = shifted(L.invite, dx, dy)
+	end
+	if L.rebirth.w > 0 then
+		L.rebirth = shifted(L.rebirth, dx, dy)
 	end
 	L.dockView = shiftedMaybe(L.dockView, dx, dy)
 	L.garden = shifted(L.garden, dx, dy)
@@ -3478,8 +3594,11 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	-- and stepped round like them. EVENTS and Walk Mode's switch too, by the
 	-- Bag in compact, and OTHER PLANTS under EVENTS (2026-10-05) -- and WHAT'S
 	-- NEW, by them or under Index (2026-10-05).
+	-- REBIRTH where it can share the rows (compact, 2026-10-12); in a desktop's
+	-- corner it is right of rightLeft, which the band already keeps short of.
+	local rebirthRow = if L.column then rect(0, 0, 0, 0) else L.rebirth
 	local inRows: { Rect } = {}
-	for _, b in ipairs({ L.obby, L.biomes, L.events, L.walk, L.others, L.updates }) do
+	for _, b in ipairs({ L.obby, L.biomes, L.events, L.walk, L.others, L.updates, rebirthRow }) do
 		if b.w > 0 and top < b.y + b.h + G and top + height + G > b.y then
 			table.insert(inRows, b)
 		end
@@ -3522,7 +3641,7 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	-- Dropped under the rows, and under the teleport, OBBY and BIOMES buttons
 	-- where lower.
 	local lowest = math.max(L.railBottom, L.teleport.y + L.teleport.h)
-	for _, b in ipairs({ L.obby, L.biomes, L.events, L.walk, L.others, L.updates }) do
+	for _, b in ipairs({ L.obby, L.biomes, L.events, L.walk, L.others, L.updates, rebirthRow }) do
 		if b.w > 0 then
 			lowest = math.max(lowest, b.y + b.h)
 		end
@@ -3779,8 +3898,10 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 	end
 	-- The band the top corners' buttons take since the owner's re-layout
 	-- (2026-10-11): the rail down to PERFORMANCE MODE, and WHAT'S NEW, EVENTS
-	-- and Settings in the right-hand corner.
-	local railBottom = math.max(L.others.y + L.others.h, L.settings.y + L.settings.h) - oy
+	-- and Settings in the right-hand corner -- and REBIRTH under Settings
+	-- (2026-10-12).
+	local railBottom = math.max(L.others.y + L.others.h, L.settings.y + L.settings.h,
+		if L.rebirth.w > 0 then L.rebirth.y + L.rebirth.h else 0) - oy
 	-- Right of the rail at its widest (railRight): the bigger Shop on a desktop.
 	local leftEdge = L.railRight - ox + B.EdgeGap
 	-- Short of the right edge's column (rightLeft), 8 px off it. Garden and the

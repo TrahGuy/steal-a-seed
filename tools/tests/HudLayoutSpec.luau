@@ -137,10 +137,19 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 	-- (2026-10-09, the owner: "do not put sidebar on desktop, just on phone";
 	-- FRIENDS on top at Index's size since 2026-10-11): in WHAT'S NEW's column,
 	-- the rail's squares 6 px apart, on the safe area's middle -- or stepped 8 px
-	-- under Settings and FRIENDS' tucked "!".
+	-- under Settings and FRIENDS' tucked "!" -- under REBIRTH and its "!" since
+	-- REBIRTH took that place under Settings (2026-10-12, item 18).
 	do
+		local rb = HudLayout.rebirthBadge(L)
+		check(L.rebirth.x == L.updates.x and L.rebirth.w == S.X and L.rebirth.h == S.Y
+				and L.rebirth.y == L.settings.y + L.settings.h + CFG.Gap + 4.5
+				and rb.w == 31 and rb.h == 31 and rb.x == L.rebirth.x - 4.5 and rb.y == L.rebirth.y - 4.5
+				and rb.y == L.settings.y + L.settings.h + CFG.Gap,
+			tag .. ": REBIRTH (2026-10-12) a square under Settings in WHAT'S NEW's column, its \"!\" -- the round "
+				.. "31-px one, tucked into its top-LEFT corner -- 8 px under Settings",
+			r2s(L.rebirth) .. " " .. r2s(rb))
 		local stackH = S.Y * 4 + G6 * 3
-		local highest = L.settings.y + L.settings.h + CFG.Gap + 4.5
+		local highest = L.rebirth.y + L.rebirth.h + CFG.Gap + 4.5
 		local columnOk = L.column == true and L.pairRow ~= true and L.gardenRight ~= true
 			and L.invite.x == L.updates.x and L.index.x == L.updates.x and L.garden.x == L.index.x
 			and L.bag.x == L.index.x and L.index.x + L.index.w == L.safe.X - I
@@ -152,7 +161,7 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 			and (L.invite.y == math.floor(L.safe.Y / 2 - stackH / 2) or math.abs(L.invite.y - highest) < 1e-6)
 			and L.rightLeft == L.updates.x
 		check(columnOk, tag .. ": FRIENDS (Index's size, 2026-10-11), Index, Garden and the Bag one over another "
-			.. "at the right edge, in WHAT'S NEW's column, on the middle or stepped 8 px under Settings and "
+			.. "at the right edge, in WHAT'S NEW's column, on the middle or stepped 8 px under REBIRTH and "
 			.. "FRIENDS' \"!\"",
 			r2s(L.invite) .. " " .. r2s(L.index) .. " " .. r2s(L.garden) .. " " .. r2s(L.bag))
 		-- The desktop's badges keep their size (the owner shrank a phone's only):
@@ -164,9 +173,9 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 		check(ib.w == 31 and ib.h == 31 and gb.w == 31 and gb.h == 31 and ib.x == L.index.x - 4.5
 				and ib.y == L.index.y - 4.5 and gb.x == L.garden.x - 4.5 and gb.y == L.garden.y - 4.5
 				and fb.w == 31 and fb.h == 31 and fb.x == L.invite.x - 4.5 and fb.y == L.invite.y - 4.5
-				and fb.y >= L.settings.y + L.settings.h + CFG.Gap - 1e-6 and ib.y >= L.invite.y + L.invite.h,
+				and fb.y >= L.rebirth.y + L.rebirth.h + CFG.Gap - 1e-6 and ib.y >= L.invite.y + L.invite.h,
 			tag .. ": the desktop's badges are the round 31-px ones, tucked into the top-LEFT corners -- FRIENDS' "
-				.. "\"!\" 8 px under Settings, Index's never over FRIENDS",
+				.. "\"!\" 8 px under REBIRTH, Index's never over FRIENDS",
 			r2s(ib) .. " " .. r2s(gb) .. " " .. r2s(fb))
 		-- FRIENDS and its "!" inside the column's group, so everything placed round
 		-- the groups keeps its 8 px off them too.
@@ -428,6 +437,23 @@ for _, case in ipairs(cases) do
 				.. "Column.Size shrinking to stand 8 px over the jump button, never under MinSize",
 			r2s(L.index) .. " " .. r2s(L.garden) .. " " .. r2s(L.bag) .. string.format(" floor %.0f", floorY))
 		columnSizes[tag] = s
+		-- REBIRTH (2026-10-12, item 18): left of Index at the column's size, 8 px
+		-- off it -- a group of its own -- its "!" INVITE's phone box on its
+		-- top-LEFT corner, the glyph's ink no higher than the square's top less
+		-- the panel's padding, so 8 px under the row holds.
+		local rb = HudLayout.rebirthBadge(L)
+		local BANG = RAIL.InviteBadge
+		local glyphTop = rb.y + rb.h / 2 - math.floor(rb.h * BANG.Scale) / 2 - BANG.Stroke
+		local own = false
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			own = own or (g.name == "rebirth" and g.rect.x <= L.rebirth.x and g.rect.y <= L.rebirth.y)
+		end
+		check(L.rebirth.w == s and L.rebirth.h == s and L.rebirth.y == L.index.y
+				and L.rebirth.x == L.index.x - CFG.Gap - s and own and rb.w == CFG.Phone.Panel.HandleH
+				and rb.x == L.rebirth.x - CFG.Phone.Panel.Pad and glyphTop >= L.rebirth.y - CFG.Phone.Panel.Pad,
+			tag .. ": REBIRTH left of Index at the column's size, 8 px off it, a group of its own; its \"!\" on "
+				.. "its top-left corner",
+			r2s(L.rebirth) .. " " .. r2s(rb))
 	end
 	-- THE OWNER'S SMALL PILLS (2026-10-09: "shrink the badges"): 22 px tall, two
 	-- digits' width reserved, on the top-RIGHT corners Over past them so the
@@ -2713,12 +2739,15 @@ do
 		end
 		table.sort(list)
 		say("  (the guide card's words step aside for the popover on: " .. table.concat(list, ", ") .. ")")
+		-- And the 640 x 360 phone since REBIRTH stood left of Index (2026-10-12,
+		-- item 18): its square is in the one place the popover cleared the card.
 		local only = #list > 0
 		for _, tag in ipairs(list) do
-			only = only and (string.find(tag, "^705x338") ~= nil or tag == "700x400 window")
+			only = only and (string.find(tag, "^705x338") ~= nil or string.find(tag, "^640x360") ~= nil
+				or tag == "700x400 window")
 		end
-		check(only, "only the 705 x 338 phone and the 700 x 400 window send the guide card's words aside for the "
-			.. "popover", table.concat(list, ", "))
+		check(only, "only the 705 x 338 and 640 x 360 phones and the 700 x 400 window send the guide card's words "
+			.. "aside for the popover", table.concat(list, ", "))
 	end
 	say(string.format("  (the popover stood elsewhere than over its icon in %d of the %d cases)", moved,
 		#everyScreen * 4))
@@ -3495,10 +3524,12 @@ do
 		-- 6 px apart, the three one group: the top-right corner's.
 		local under = e.x == u.x and e.y == u.y + u.h + G6 and e.w == S.X and e.h == S.Y
 			and st.x == u.x and st.y == e.y + e.h + G6 and st.w == S.X and st.h == S.Y
+		-- And REBIRTH under Settings with its "!" (2026-10-12, item 18).
 		local grouped = false
 		for _, g in ipairs(HudLayout.groups(L, true)) do
 			if g.name == "updates" then
-				grouped = sameRect(g.rect, HudLayout.union(HudLayout.union(u, e), st))
+				grouped = sameRect(g.rect, HudLayout.union(HudLayout.union(HudLayout.union(u, e), st),
+					HudLayout.union(L.rebirth, HudLayout.rebirthBadge(L))))
 			end
 		end
 		-- The rail closed up (the owner: "close the gap"): Shop at the top, WALK
@@ -3513,8 +3544,34 @@ do
 				size.X, size.Y, r2s(e), r2s(st), r2s(L.shop), r2s(L.walk), r2s(L.others)))
 		end
 	end
+	-- REBIRTH IN COMPACT (2026-10-12, item 18): the right edge under WHAT'S NEW,
+	-- else under INVITE or the row -- 50 or 44 px, a group of its own with its
+	-- "!". Hidden only in the 700 x 400 window that keeps Garden and the Bag top
+	-- right: WHAT'S NEW and INVITE fill the room under the row there, the cash
+	-- block under them, the belt's band under the right edge.
+	do
+		local compactOk, compactNotes = true, {}
+		for _, case in ipairs({ { 560, 320, true }, { 700, 400, false }, { 860, 700, true }, { 899, 700, true } }) do
+			local L = HudLayout.solve(screen(case[1], case[2]))
+			local r = L.rebirth
+			local own = false
+			for _, g in ipairs(HudLayout.groups(L, true)) do
+				own = own or (g.name == "rebirth" and g.rect.x <= r.x and g.rect.y <= r.y)
+			end
+			local sized = r.w == r.h and (r.w == CFG.Updates.Size or r.w == CFG.Updates.Tight)
+			local rightEdge = L.updates.w > 0 and r.x + r.w == L.updates.x + L.updates.w
+				and r.y == L.updates.y + L.updates.h + CFG.Gap + 4.5
+			table.insert(compactNotes, string.format("%dx%d %s", case[1], case[2], r2s(r)))
+			local ok = if case[3] then sized and own and rightEdge else r.w == 0 and not own
+			if not (L.compact and ok and #HudLayout.problems(L) == 0) then
+				compactOk = false
+			end
+		end
+		check(compactOk, "compact: REBIRTH 50 or 44 px under WHAT'S NEW at the right edge, a group of its own with "
+			.. "its \"!\"; hidden only in the 700 x 400 window, nothing in the way", table.concat(compactNotes, "; "))
+	end
 	check(deskOk, "desktop: EVENTS a 50 x 50 square under WHAT'S NEW and Settings under EVENTS, the top-right "
-		.. "corner's one group; the rail closed up -- Shop at the top, WALK MODE and PERFORMANCE MODE right under "
+		.. "corner's one group with REBIRTH; the rail closed up -- Shop at the top, WALK MODE and PERFORMANCE MODE right under "
 		.. "it -- the rail's 6 px apart, no empty row (2026-10-11)", table.concat(deskNotes, "; "))
 
 	local offOk, offNotes = true, {}
@@ -4071,8 +4128,10 @@ do
 		local listed = false
 		for _, g in ipairs(HudLayout.groups(L, true)) do
 			if g.name == home then
+				-- The corner's with REBIRTH and its "!" under Settings (2026-10-12).
 				listed = if inPanel then holds(g.rect, seen)
-					elseif inCorner then same(g.rect, HudLayout.union(HudLayout.union(u, L.events), L.settings))
+					elseif inCorner then same(g.rect, HudLayout.union(HudLayout.union(HudLayout.union(u, L.events),
+						L.settings), HudLayout.union(L.rebirth, HudLayout.rebirthBadge(L))))
 					else same(g.rect, u)
 			end
 		end

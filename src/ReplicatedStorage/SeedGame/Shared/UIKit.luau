@@ -5191,7 +5191,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			-- (2026-10-11): the closed-up rail, the bigger Shop at its top, down to
 			-- PERFORMANCE MODE, and WHAT'S NEW, EVENTS and Settings on the right.
 			if not layout.compact then
-				railBottom = math.max(layout.others.y + layout.others.h, layout.settings.y + layout.settings.h)
+				-- And REBIRTH under Settings (2026-10-12).
+				railBottom = math.max(layout.others.y + layout.others.h, layout.settings.y + layout.settings.h,
+					if layout.rebirth.w > 0 then layout.rebirth.y + layout.rebirth.h else 0)
 				railLeftEdge = layout.railRight
 			end
 		end

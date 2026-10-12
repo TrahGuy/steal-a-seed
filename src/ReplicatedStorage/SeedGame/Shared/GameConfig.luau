@@ -6286,9 +6286,13 @@ end
 --==============================================================================
 GameConfig.Rebirth = {
 	Enabled = true,
-	-- The GameEvent action; the verbs are "confirm" (client) and "quote",
-	-- "done", "refused" (server).
+	-- The GameEvent action; the verbs are "confirm" and "quote" (client: the
+	-- HUD button's ask) and "quote", "done", "refused" (server).
 	Action = "Rebirth",
+	-- THE HUD'S REBIRTH BUTTON (2026-10-12, the owner's item 18): the panel
+	-- from anywhere, a "!" while a rebirth can be done now (RebirthUI); its art
+	-- (the owner's upload), and the least time between two of its quotes.
+	Hud = { Image = "rbxassetid://89518746657536", QuoteGap = 0.5 },
 	BasePrice = 1e9,
 	PriceFactor = 4,
 	PriceCap = 5e14,
@@ -6315,7 +6319,8 @@ GameConfig.Rebirth = {
 	FacingDegrees = 180,
 	PromptDistance = 10,
 	PromptHoldSeconds = 0.5,
-	-- The panel shuts when the player walks further than this from the shrine.
+	-- The panel shuts when the player walks further than this from the shrine
+	-- (one the shrine opened: the HUD button's stays open anywhere).
 	CloseDistance = 24,
 	-- The kit's Rebirth band (MenuKit.studdedTheme).
 	Look = { Band = Color3.fromRGB(255, 53, 93), Edge = Color3.fromRGB(120, 19, 41) },
@@ -7372,6 +7377,7 @@ GameConfig.Rail = {
 		Shop = "SHOP",
 		Invite = "INVITE",
 		Events = "EVENTS",
+		Rebirth = "REBIRTH",
 	},
 	FallbackOutline = 2,
 	FallbackTextMax = 14,

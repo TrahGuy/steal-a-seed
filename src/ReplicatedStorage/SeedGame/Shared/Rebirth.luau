@@ -299,6 +299,29 @@ function Rebirth.check(s: State): string?
 	return nil
 end
 
+-- THE HUD BUTTON'S "!" (2026-10-12, the owner's item 18): whether the player
+-- whose profile this is (the client's copy) could rebirth at `now` (the
+-- server's os.time) -- rebirth on, the cash for the next one, the mill, the
+-- cooldown over -- and, while the cooldown stops it, the seconds left of it
+-- (0 otherwise), to ask again then. A body, a carry, a chase and an offline
+-- claim are the panel's to say.
+function Rebirth.readyNow(profile: any, now: number): (boolean, number)
+	if type(profile) ~= "table" then
+		return false, 0
+	end
+	local lastAt = Rebirth.count(profile.RebirthAt)
+	local why = Rebirth.check({
+		enabled = CFG.Enabled,
+		ready = true,
+		now = now,
+		lastAt = lastAt,
+		rebirths = Rebirth.count(profile.Rebirths),
+		cash = tonumber(profile.Cash) or 0,
+		millTier = tonumber(profile.MillTier) or 1,
+	})
+	return why == nil, if why == "COOLDOWN" then math.max(0, lastAt + CFG.CooldownSeconds - now) else 0
+end
+
 -- Every step of the title ladder for a count: "reached", "next" (the first
 -- not reached) or "locked"; with the index of the highest reached (0 before
 -- the first) and of the next (0 past the last).

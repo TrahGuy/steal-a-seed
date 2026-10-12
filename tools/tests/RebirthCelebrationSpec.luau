@@ -1042,9 +1042,9 @@ local ok, err = pcall(function()
 			and has(ui, "RebirthFX.watchAuras()")
 			and has(ui, "if RebirthFX.celebrating(player.Character) then")
 			and has(ui, "if not shown then\n\t\t\tSoundKit.play(\"NoticeSuccess\")")
-			and select(2, string.gsub(ui, "FireServer%(", "")) == 1,
+			and select(2, string.gsub(ui, "FireServer%(", "")) == 2 and has(ui, 'r:FireServer(CFG.Action, "quote")'),
 		"RebirthUI: the celebration on \"done\" (the notice only with no body), another's on \"celebrate\", the "
-			.. "auras, no quote over it; still one thing sent")
+			.. "auras, no quote over it; still only the confirm sent, and the HUD button's ask (2026-10-12)")
 	local service = sourceOf(Server, "RebirthService")
 	local a = string.find(service, "pcall(PlayerDataService.Save, player)", 1, true)
 	local b = string.find(service, 'verb = "done"', 1, true)
