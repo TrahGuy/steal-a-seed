@@ -34,6 +34,7 @@
 --==============================================================================
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -754,6 +755,135 @@ local function pick(i: number)
 end
 
 --==============================================================================
+-- AN ADMIN'S LINE (2026-10-12, the owner's item 12: MOSSKEEPER SAYS)
+--
+-- The server's words -- already filtered for everyone -- whole in his bubble
+-- over his head, as long as an admin announcement or its reading time if that
+-- is longer (MosskeeperTalk.sayTime). They come on the Workspace
+-- (Mosskeeper.SaidAttribute), so a late joiner reads the rest of a line already
+-- up, and one not streamed in yet (him far off) shows once he is, while its
+-- time lasts. Never over a talk: a player talking to him sees it once the talk
+-- closes, if its time is not up yet. Each line counts (n), so the same words
+-- said again keep their own full time.
+--
+-- SKIPPED (the owner, 2026-10-12) by a click or a tap anywhere -- a mouse
+-- button, a touch, the pad's A or R2 -- once it has stood SaySkipAfter: on this
+-- screen only, and for good (a talk's close does not bring it back). Heard on
+-- UserInputService, never bound or sunk, so the press still does its own job.
+-- A touch that starts on the move stick never skips it, so walking never does
+-- (MosskeeperTalk.skipsSaid); his talk's own lines are never skipped here.
+--==============================================================================
+local said: { text: string?, untilAt: number, n: number, shownAt: number? } =
+	{ text = nil, untilAt = 0, n = 0, shownAt = nil }
+
+local function hideSaid()
+	said.text = nil
+	said.shownAt = nil
+	setHis(nil)
+end
+
+local function showSaid()
+	local text = said.text
+	if not text or isOpen or os.clock() >= said.untilAt then
+		return
+	end
+	local mine = said.n
+	if not npcModel() then
+		-- Not streamed in yet: again shortly, while its time lasts.
+		task.delay(0.5, function()
+			if said.n == mine and said.shownAt == nil then
+				showSaid()
+			end
+		end)
+		return
+	end
+	if not hud then
+		measureHud()
+	end
+	sizeBubbles()
+	setHis(text)
+	hisLabel.MaxVisibleGraphemes = -1
+	said.shownAt = os.clock()
+	task.delay(said.untilAt - os.clock(), function()
+		if said.n == mine and not isOpen then
+			hideSaid()
+		end
+	end)
+end
+
+-- The line on the Workspace, read now and whenever it changes.
+local function readSaid()
+	local raw = Workspace:GetAttribute(CFG.SaidAttribute)
+	if type(raw) ~= "string" then
+		return
+	end
+	local ok, line = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	local n, text, left = MosskeeperTalk.saidLeft(if ok then line else nil, Workspace:GetServerTimeNow())
+	if n == nil or text == nil or left == nil or n == said.n then
+		return
+	end
+	said.n = n
+	said.text = text
+	said.untilAt = os.clock() + left
+	said.shownAt = nil
+	showSaid()
+end
+
+-- The move stick's area, whichever the player uses (the PlayerModule's
+-- TouchGui: the dynamic stick's whole area or the classic stick's frame,
+-- while showing), in the press's pixels.
+local STICKS = { "DynamicThumbstickFrame", "ThumbstickFrame" }
+
+local function stickRects(): { MosskeeperTalk.Rect }
+	local rects: { MosskeeperTalk.Rect } = {}
+	local touchGui = playerGui:FindFirstChild("TouchGui")
+	local controls = if touchGui and touchGui:IsA("ScreenGui") and touchGui.Enabled
+		then touchGui:FindFirstChild("TouchControlFrame")
+		else nil
+	if controls then
+		for _, name in ipairs(STICKS) do
+			local frame = controls:FindFirstChild(name)
+			if frame and frame:IsA("GuiObject") and frame.Visible then
+				table.insert(rects, { x = frame.AbsolutePosition.X, y = frame.AbsolutePosition.Y,
+					w = frame.AbsoluteSize.X, h = frame.AbsoluteSize.Y })
+			end
+		end
+	end
+	return rects
+end
+
+-- One of the game's own buttons under a touch (never the Roblox controls').
+local function onGameButton(x: number, y: number): boolean
+	local touchGui = playerGui:FindFirstChild("TouchGui")
+	for _, object in ipairs(playerGui:GetGuiObjectsAtPosition(x, y)) do
+		if object:IsA("GuiButton") and object.Active and not (touchGui and object:IsDescendantOf(touchGui)) then
+			return true
+		end
+	end
+	return false
+end
+
+UserInputService.InputBegan:Connect(function(input: InputObject)
+	local shownAt = said.shownAt
+	if not said.text or not shownAt or isOpen or os.clock() >= said.untilAt then
+		return
+	end
+	local touch = input.UserInputType == Enum.UserInputType.Touch
+	local press: MosskeeperTalk.Press = {
+		kind = input.UserInputType,
+		key = input.KeyCode,
+		x = input.Position.X,
+		y = input.Position.Y,
+		onButton = touch and onGameButton(input.Position.X, input.Position.Y),
+	}
+	if MosskeeperTalk.skipsSaid(press, os.clock() - shownAt, if touch then stickRects() else {}) then
+		hideSaid()
+	end
+end)
+
+--==============================================================================
 -- OPEN AND CLOSE
 --==============================================================================
 local closers: { RBXScriptConnection } = {}
@@ -882,6 +1012,8 @@ setOpen = function(want: boolean, now: boolean?)
 		if player:GetAttribute(ATTR.OpenPanel) == PANEL then
 			player:SetAttribute(ATTR.OpenPanel, nil)
 		end
+		-- An admin's line said while this talk ran, if its time is not up.
+		showSaid()
 	end
 end
 
@@ -941,6 +1073,11 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 		end
 	end
 end)
+
+-- An admin's line (MosskeeperService.Say): everybody's, talking or not -- and
+-- the rest of one already up when this player joined.
+Workspace:GetAttributeChangedSignal(CFG.SaidAttribute):Connect(readSaid)
+readSaid()
 
 -- A reload mid-talk never leaves the camera borrowed.
 script.Destroying:Connect(function()

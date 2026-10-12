@@ -31,6 +31,7 @@
 -- (PlayerDataService.UpdateDewberries), with nothing that yields inside it; the
 -- client's numbers are never read.
 --==============================================================================
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -44,6 +45,7 @@ local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local MosskeeperModel = require(Shared:WaitForChild("MosskeeperModel"))
 local MistSurroundModel = require(Shared:WaitForChild("MistSurroundModel"))
 local MistDeckModel = require(Shared:WaitForChild("MistDeckModel"))
+local MosskeeperTalk = require(Shared:WaitForChild("MosskeeperTalk"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
@@ -119,6 +121,13 @@ MosskeeperService.Hooks = {
 	-- Start points these at the GameEvent remote.
 	send = function(_player: any, _payload: { [string]: any }) end,
 	notify = function(_player: any, _payload: { [string]: any }) end,
+	-- An admin's line goes up for everybody, late joiners too, in server time.
+	serverNow = function(): number
+		return Workspace:GetServerTimeNow()
+	end,
+	publish = function(value: string)
+		Workspace:SetAttribute(CFG.SaidAttribute, value)
+	end,
 	parent = function(): Instance
 		local folder = Workspace:FindFirstChild(CFG.FolderName)
 		if not folder then
@@ -353,6 +362,32 @@ function MosskeeperService.Give(player: any): { [string]: any }
 		})
 	end
 	return result
+end
+
+--==============================================================================
+-- AN ADMIN'S LINE (2026-10-12, the owner's item 12: MOSSKEEPER SAYS)
+--
+-- In his bubble over his head, for everybody in this server, as long as an
+-- admin announcement or its reading time if longer (MosskeeperUI,
+-- MosskeeperTalk.sayTime). The words come already filtered for everyone and
+-- cut to Talk.SayMaxChars (AdminService, the broadcast filter); the bubble is
+-- the whole announcement. Refused while he is not shown.
+--
+-- It goes up on the Workspace (Mosskeeper.SaidAttribute: its count, words and
+-- end in server time), not to the players here now: a late joiner, or a player
+-- who walks up to him while it stands, shows the rest. A player who skips it
+-- hides it on their own screen only; the line here stays.
+--==============================================================================
+local saidCount = 0
+
+function MosskeeperService.Say(text: string): boolean
+	if not Hooks.shown() or type(text) ~= "string" or text == "" then
+		return false
+	end
+	saidCount += 1
+	Hooks.publish(HttpService:JSONEncode(MosskeeperTalk.said(saidCount, text, Hooks.serverNow())))
+	log("said an admin's line over his head: " .. text)
+	return true
 end
 
 --==============================================================================

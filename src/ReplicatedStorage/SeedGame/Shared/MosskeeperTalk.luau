@@ -138,6 +138,68 @@ function MosskeeperTalk.readTime(text: string): number
 end
 
 --==============================================================================
+-- AN ADMIN'S LINE (MOSSKEEPER SAYS, 2026-10-12)
+--
+-- The server puts it on the Workspace for everybody (Mosskeeper.SaidAttribute)
+-- as { n = its count, t = its words, e = the server time it ends }, so a late
+-- joiner -- or a player who walks up to him while it stands -- shows the rest.
+-- It stands SaySeconds, or its reading time if longer. A player may skip it on
+-- their own screen (skipsSaid); nobody else's changes.
+--==============================================================================
+export type Said = { n: number, t: string, e: number }
+-- One press as UserInputService.InputBegan saw it; onButton: a touch that
+-- landed on one of the game's own buttons.
+export type Press = { kind: Enum.UserInputType, key: Enum.KeyCode, x: number, y: number, onButton: boolean }
+
+function MosskeeperTalk.sayTime(text: string): number
+	return math.max(TALK.SaySeconds, MosskeeperTalk.readTime(text))
+end
+
+function MosskeeperTalk.said(n: number, text: string, serverNow: number): Said
+	return { n = n, t = text, e = serverNow + MosskeeperTalk.sayTime(text) }
+end
+
+-- A line read back at serverNow: its count, its words and the seconds it has
+-- left (never more than its own time); nil while it is not one or its time is up.
+function MosskeeperTalk.saidLeft(line: any, serverNow: number): (number?, string?, number?)
+	if type(line) ~= "table" or type(line.n) ~= "number" or type(line.t) ~= "string" or line.t == ""
+		or type(line.e) ~= "number" then
+		return nil, nil, nil
+	end
+	local left = line.e - serverNow
+	if left <= 0 then
+		return nil, nil, nil
+	end
+	return line.n, line.t, math.min(left, MosskeeperTalk.sayTime(line.t))
+end
+
+-- THE SKIP (the owner, 2026-10-12): a mouse button, a touch, or a gamepad's A
+-- or R2, once the line has stood SaySkipAfter seconds -- so a press already on
+-- its way never skips it at once. Never a touch that starts on the move stick
+-- (sticks: the stick areas showing, in the press's pixels), so walking never
+-- skips it -- unless that touch landed on one of the game's buttons over the
+-- stick's area, which is a tap on the button.
+function MosskeeperTalk.skipsSaid(press: Press, shownFor: number, sticks: { Rect }): boolean
+	if shownFor < TALK.SaySkipAfter then
+		return false
+	end
+	if press.kind == Enum.UserInputType.Touch then
+		if press.onButton then
+			return true
+		end
+		for _, r in ipairs(sticks) do
+			if press.x >= r.x and press.x < r.x + r.w and press.y >= r.y and press.y < r.y + r.h then
+				return false
+			end
+		end
+		return true
+	end
+	return press.kind == Enum.UserInputType.MouseButton1 or press.kind == Enum.UserInputType.MouseButton2
+		or press.kind == Enum.UserInputType.MouseButton3 or press.key == Enum.KeyCode.ButtonA
+		or press.key == Enum.KeyCode.ButtonR2
+end
+
+--==============================================================================
 -- THE CAMERA
 --
 -- Behind the player's right shoulder, on the line from the player to him: Back

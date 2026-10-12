@@ -578,9 +578,9 @@ local ok, err = pcall(function()
 		"no UIScale shrinks it: it is laid out in the safe area itself, and above the keyboard")
 	-- Its tabs, in the owner's order.
 	check(has(model, '{ id = "player", label = "PLAYER" },\n\t{ id = "spawn", label = "SPAWN" },\n'
-			.. '\t{ id = "world", label = "WORLD" },\n\t{ id = "events", label = "EVENTS" },\n'
-			.. '\t{ id = "announce", label = "ANNOUNCE" },'),
-		"five tabs in order -- PLAYER, SPAWN, WORLD, EVENTS (its own since the compact console, 2026-10-12), ANNOUNCE")
+			.. '\t{ id = "world", label = "WORLD" },\n\t{ id = "mist", label = "MIST" },\n'
+			.. '\t{ id = "events", label = "EVENTS" },\n\t{ id = "announce", label = "ANNOUNCE" },'),
+		"six tabs in order -- PLAYER, SPAWN, WORLD, MIST (the Mist's tools, 2026-10-12), EVENTS, ANNOUNCE")
 	-- Every command the server takes, still asked for: nothing dropped.
 	local actionBlock = string.match(service, "local ACTIONS: { %[string%]: boolean } = {(.-)\n}") or ""
 	local actions = {}
@@ -589,7 +589,8 @@ local ok, err = pcall(function()
 	end
 	local BUILDER = { AddMoney = "addMoney", AddSpeed = "addSpeed", ResetPlayerProgress = "reset",
 		StartNight = "startNight", StartDay = "startDay", Announce = "announce", Spawn = "spawn",
-		Weather = "weather", MiniEvent = "miniEvent", Mist = "mist" }
+		Weather = "weather", MiniEvent = "miniEvent", Mist = "mist", MistBerries = "mistBerries",
+		MistProgress = "mistProgress", MistPod = "mistPod", MistReady = "mistReady" }
 	local missing = {}
 	for _, action in ipairs(actions) do
 		local builder = BUILDER[action]
@@ -599,8 +600,8 @@ local ok, err = pcall(function()
 			table.insert(missing, action)
 		end
 	end
-	check(#actions == 10 and #missing == 0, "every one of the server's ten actions is reachable from the console (the "
-			.. "Enchanted Mist's since 2026-10-11)",
+	check(#actions == 14 and #missing == 0, "every one of the server's fourteen actions is reachable from the console "
+		.. "(the Enchanted Mist's since 2026-10-11, its tools for a player since 2026-10-12)",
 		table.concat(actions, ",") .. " | missing: " .. table.concat(missing, ","))
 	-- One handler per control: no duplicate connections.
 	local doubled = {}

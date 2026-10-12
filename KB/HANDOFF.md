@@ -1,5 +1,72 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 12: THE ENCHANTED MIST'S ADMIN TOOLS — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the look OK'd by the owner via the peer (mist_01-15); AdminMistSpec 69/0 (NEW); AdminConsoleSpec 63/0, CompactMenusSpec 46/0, AdminAnnounceSpec 41/0, AdminSpec 129/0, MosskeeperSpec 69/0, MosskeeperTalkSpec 30/0, EventHubSpec 53/0, MysteryPodSpec 33/0, MistAudioSpec 17/0; THE FULL SUITE PARTIAL: 99 of 154 run, 97 green; PlantRigsSpec and PlantStreamingSpec gave no verdict inside the runner's 580-s window; Claude Code stopped the batch for low memory before groups 11-19 (55 specs); 38 OF 39 MUTANTS CAUGHT (BerriesLoweringSays is equivalent: AdminAnnounce says nothing for an amount of 0 or less); TWO GUARDED PLAYS; captures in output/item12-mist-tools-2026-10-12)
+
+The owner's item 12 via the peer: the Mist's tools on the admin console, each through AdminService (the allowlist, the one-a-second wait, the audit record) and said to everybody per item 10 unless noted.
+- **A sixth tab, MIST (the owner's pick):**
+  - WORLD keeps day/night and the weather.
+  - MIST has the Mist card (state, START / END MIST NOW), AROUND YOU, and FOR THE TARGET. It shows the target bar.
+  - Six tabs fit every listed screen (the tabs' least width is now 72).
+  - MIST may scroll on a phone and on a window shorter than 1280x720 (the owner's call); every other tab still fits 640x360.
+- **The tools:**
+  - START MIST NOW for 2 / 5 / 10 MIN: EnchantedMistData.Schedule.AdminSeconds, default 5. Any other length is refused.
+  - MAKE ELIGIBLE NOW: only while the schedule runs and cools down. It never starts a Mist itself; the next completed natural reset does. Greyed out while the schedule is off (read off the published EligibleAt, as the server publishes it only while the schedule runs).
+  - MIST STATUS: time left, berries on the map, appeared, picked. On the admin's console once a second; not announced.
+  - BERRY BURST: 5 berries around the admin.
+    - 8-24 studs out, on a floor at their own height, keeping Spacing and PodClear.
+    - It may pass MaxActive; the natural spawner then waits under the cap.
+    - Refused with no running Mist.
+- **MOSSKEEPER SAYS:**
+  - At most 90 characters, whitespace folded, through the broadcast filter (AdminService.FilterBroadcast, AnnouncementService's own call). It asks in place: "Say this as the Mosskeeper to everyone here?" The bubble is its own announcement.
+  - In his bubble for everybody for 12 s, as long as an admin announcement (Talk.SaySeconds; GameConfig.Announce.ShowSeconds), or its reading time if longer. The first Play showed the reading time alone (3.7 s) was too short to read.
+  - On the Workspace, not sent to the players present: Mosskeeper.SaidAttribute ("SeedMosskeeperSaid", JSON: its count, words and end in server time; MosskeeperTalk.said / saidLeft).
+    - A late joiner, or a player who walks up to him while it stands (his model streams in), shows the rest.
+    - The same words said again keep their own full time.
+    - Never over a talk: it shows after the talk closes, if its time is not up.
+  - SKIP (the owner): a click or a tap anywhere hides it on that player's screen only, and for good: a mouse button (any), a touch, or the pad's A or R2.
+    - Not in its first 0.5 s (Talk.SaySkipAfter), so a press already on its way never skips it.
+    - Heard on UserInputService.InputBegan, never bound or sunk, so the press still does its own job.
+    - Only the admin's line; his talk's own lines keep their flow.
+  - THE MOVE STICK never skips it (the owner): a touch that starts in the stick's LIVE frame bounds does not count.
+    - The frames are the PlayerModule's TouchGui DynamicThumbstickFrame (the dynamic stick's whole area) or ThumbstickFrame (classic), whichever is Visible.
+    - Why bounds and not gameProcessedEvent: every UI button and the jump button are game-processed too, so the flag cannot single out the stick.
+    - A touch on one of the game's own buttons over the stick's area still skips it (an Active GuiButton outside TouchGui, by GetGuiObjectsAtPosition).
+- **For the target:**
+  - DEWBERRIES 0..5. A raise says "...gave Rin 3 Dewberries!" (what was given); a lowering is silent (the owner).
+  - PROGRESS 0..9: "...set Rin's Dewberry progress to 7/10". A reset to 0 is silent (the owner).
+  - A MYSTERIOUS POD, RANDOM or a pool creature with RANDOM or a size (Legendary, Mythic and Divine only). It goes through stage 4's own grant (MysteryPodService.Grant with a choice): the hidden record, 30 s ready, the Bag's room.
+    - Anybody else needs their username, like SPAWN.
+    - "...gave Rin a Mysterious Pod!": neither the line nor the admin's answer says what is inside; only the server log does.
+  - READY NOW: both the hidden record's time and the Bag row's own (CarryService.SetPodDeadline). "...made Rin's Mysterious Pods ready!"
+- **SPAWN refuses anything SpawnCatalog does not list.** That closes the raw mysterypod shell, which would sit in a Bag with NO_OUTCOME; its door is GIVE A MYSTERIOUS POD.
+- **Specs:** AdminMistSpec (new) covers:
+  - the words;
+  - AdminService against stand-ins, with a copy of the real MysteryPodService: every tool and its refusals (off the allowlist, a bad target, out of range, no running Mist for a burst, a full Bag for a pod, no username, the filter);
+  - the services' own parts: the burst, the stats, MakeEligible, MakeReady, the line on the Workspace, a late joiner's rest, the skip and the stick.
+- **LIVE (two guarded Plays on the throwaway store):**
+  - **Play 1, the tools:**
+    - START MIST 2 MIN ran (01:54 LEFT). BURST: "5 Dewberries dropped around you.", 7 on the map / 7 appeared.
+    - SAY asked in place.
+    - DEWBERRIES 5: "nicnicniccoal now carries 5/5 Dewberries." PROGRESS 9: 9/10.
+    - GIVE POD (random, me): "Gave yourself a Mysterious Pod. It is ready to hatch in 30 s.", the hotbar 0:28. The world notice read "nicnicniccoal gave themselves a Mysterious Pod!"; the log alone named it (mossbristle, Tiny).
+    - READY NOW: the hotbar pod went READY.
+    - Found live and fixed: ELIGIBLE NOW was not greyed during an admin's Mist with the schedule off.
+  - **Play 2, the bubble:**
+    - The line in his bubble (mist_08).
+    - Still up at +10.7 s (1.6 s left on the server), gone after its end.
+    - A click on ADMIN skipped it on my screen while the server's line still had 4.4 s left for everybody else. The same click opened the console: the press did its job (mist_14).
+    - A late joiner (this client's MosskeeperUI run afresh mid-line) showed the rest, 7.3 s left (mist_15).
+  - **Test-only, at capture time:**
+    - His bubble's AlwaysOnTop was set off (captures never show AlwaysOnTop billboards).
+    - The console was shut by another panel's name on OpenPanel (the one-panel rule), so no click would skip the line.
+    - In Play 1, a dead duplicate ADMIN button from my own hot reload of the console was removed in that Play.
+  - **Spec-only:** a touch (the stick, a tap: touch cannot be injected in Studio); a second client (an MCP Play has one: the server's line staying up after the skip is what every other client reads).
+- **Open for the owner:**
+  - Lowering Dewberries is silent; a raise says what was given (2 -> 5 says "3").
+  - MIST scrolls on phones and small windows.
+  - The burst's 8-24 stud ring.
+  - The tabs' least width is 72.
+  - A right-drag to turn the camera on a desktop skips the line too ("a mouse button", as asked).
 ## THE OLD SHOP BUTTON AGAIN (desktop and TV HUD) — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by the owner via the peer; HudLayoutSpec 1468/0, RailFallbackSpec 49/0, RobuxPriceSpec 22/0, InviteHudSpec 438/0; THE FULL SUITE 153/153 IN SMALL BATCHES WITH ITEM 11; 5 OF 5 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/shop-revert-2026-10-12)
 
 The owner: "the old shop icon was changed, i want the old shop button."

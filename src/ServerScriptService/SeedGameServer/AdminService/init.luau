@@ -8,7 +8,10 @@
 -- game has to anybody in this server; the weather for this server (every
 -- admin account since 2026-10-07); (2026-10-03, MINI EVENTS) start or end
 -- a Ticket Disco for this server; and (2026-10-11) START or END an Enchanted
--- Mist for this server.
+-- Mist for this server -- and (2026-10-12, the owner's item 12) the Mist's
+-- tools: its length, MAKE ELIGIBLE NOW, a BERRY BURST, MOSSKEEPER SAYS, and
+-- for a player their Dewberries, their Dewberry progress, a Mysterious Pod and
+-- MAKE READY NOW.
 -- Nothing else, and nobody else.
 --
 --==============================================================================
@@ -67,9 +70,15 @@
 --      MiniEventService, each for any allowlisted account (the weather was
 --      the owner's alone until 2026-10-07), with its verb and whole-seconds
 --      duration checked here; Mist (2026-10-11) to EnchantedMistService, any
---      allowlisted account, "start" or "end"
+--      allowlisted account, "start" (its length one of 2, 5 or 10 minutes
+--      since 2026-10-12) or "end" -- and "eligible", "burst" (the Mist's
+--      berries, EnchantedMistBerryService) or "say" (the Mosskeeper, the words
+--      through the broadcast filter first), each since 2026-10-12
 --   5. otherwise the target is a UserId of a player in THIS server, now
---   6. the target's profile has loaded
+--   6. the target's profile has loaded (the Mist's tools for a player since
+--      2026-10-12 check theirs after this: a count or a progress in range, a
+--      pod from the pool with room in the Bag and -- for anybody but the
+--      sender -- their username, a pod waiting to be made ready)
 --   7. for cash and Speed, a finite whole number from 1 to the limit -- the
 --      save's own (2026-10-07: GameConfig.Save.MaxCash and MaxSpeedScore); for
 --      a reset, the target's username typed back, and a profile that is saving
@@ -85,6 +94,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -106,6 +116,12 @@ local AnnouncementService = require(script.Parent:WaitForChild("AnnouncementServ
 local WeatherService = require(script.Parent:WaitForChild("WeatherService"))
 local MiniEventService = require(script.Parent:WaitForChild("MiniEventService"))
 local EnchantedMistService = require(script.Parent:WaitForChild("EnchantedMistService"))
+-- The Mist's tools (2026-10-12, the owner's item 12).
+local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
+local EnchantedMistBerryService = require(script.Parent:WaitForChild("EnchantedMistBerryService"))
+local MysteryPodService = require(script.Parent:WaitForChild("MysteryPodService"))
+local MosskeeperService = require(script.Parent:WaitForChild("MosskeeperService"))
 
 local SAVE = GameConfig.Save
 
@@ -188,8 +204,21 @@ local ACTIONS: { [string]: boolean } = {
 	MiniEvent = true,
 	-- 2026-10-11: an Enchanted Mist for THIS server, by ANY allowlisted account
 	-- (EnchantedMistService), even with its schedule switched off. The second
-	-- word is "start" (START MIST NOW: the normal 300 s) or "end".
+	-- word is "start" (START MIST NOW, the third word its length since
+	-- 2026-10-12: 120, 300 or 600 s, 300 without one) or "end"; and since
+	-- 2026-10-12 "eligible" (MAKE ELIGIBLE NOW), "burst" (a BERRY BURST around
+	-- the admin) or "say" (MOSSKEEPER SAYS, the third word his line).
 	Mist = true,
+	-- 2026-10-12, the Mist's tools for a player in this server (the owner's
+	-- item 12), by ANY allowlisted account: their carried Dewberries set
+	-- (0 .. CarryCap), their Dewberry progress set (0 .. BerriesPerPod - 1), a
+	-- Mysterious Pod given ("random", or { species, size? } from the pool; the
+	-- fourth word their username for anybody but the admin), and their
+	-- Mysterious Pods made ready to hatch now.
+	MistBerries = true,
+	MistProgress = true,
+	MistPod = true,
+	MistReady = true,
 }
 
 -- The mini event's verbs: each start verb names its mode, and "end".
@@ -875,6 +904,13 @@ local function spawn(admin: any, targetId: any, request: any, confirmName: any):
 	if not species then
 		return refuse("No species has that id. Nothing was spawned.")
 	end
+	-- Only what SpawnCatalog lists (2026-10-12, the owner's item 12): SeedData
+	-- also holds things no console offers -- the Mysterious Pod's shell above
+	-- all, which with no hidden record would sit in a Bag that can never hatch
+	-- it (NO_OUTCOME). Its own door is GIVE A MYSTERIOUS POD (MistPod).
+	if SpawnCatalog.groupOf(species.Id) == nil then
+		return refuse(string.format("%s cannot be spawned from the console. Nothing was spawned.", species.Name))
+	end
 	if not SpawnCatalog.isForm(form) then
 		return refuse("Choose POD or GROWN PLANT. Nothing was spawned.")
 	end
@@ -1063,23 +1099,128 @@ local MIST_REFUSALS: { [string]: string } = {
 	NOT_BUILT = "The Enchanted Mist is missing a binding; the server log names it. Nothing changed.",
 	NIGHT = "It is night: the road is shut. Start the Mist after dawn. Nothing changed.",
 	NOT_ACTIVE = "No Enchanted Mist is running here. Nothing changed.",
+	BAD_LENGTH = "A Mist lasts 2, 5 or 10 minutes. Nothing changed.",
+	-- MAKE ELIGIBLE NOW (2026-10-12).
+	OFF = "The Mist's schedule is off on this server (EnchantedMistConfig.Enabled). Nothing changed.",
+	ACTIVE = "An Enchanted Mist is running now. Nothing changed.",
+	ALREADY_ELIGIBLE = "The Enchanted Mist is already eligible: the next completed reset starts one. Nothing changed.",
 }
 
-local function mist(admin: any, verb: any): Reply
-	if verb ~= "start" and verb ~= "end" then
-		return refuse("Unknown Enchanted Mist request. Nothing changed.")
+-- The words everybody may read (2026-10-12, MOSSKEEPER SAYS): TextService's
+-- broadcast filter, AnnouncementService's own. (true, the words) or (false,
+-- nil) when it could not be asked. A seam, like TellPlayer: a spec answers it.
+function AdminService.FilterBroadcast(text: string, userId: number): (boolean, string?)
+	local ok, result = pcall(function()
+		local filtered = TextService:FilterStringAsync(text, userId, Enum.TextFilterContext.PublicChat)
+		return filtered:GetNonChatStringForBroadcastAsync()
+	end)
+	if ok and type(result) == "string" then
+		return true, result
 	end
+	return false, nil
+end
+
+-- A living body's root position, or nil (an admin's BERRY BURST stands round it).
+local function rootOf(player: any): Vector3?
+	local ok, at = pcall(function(): Vector3?
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if humanoid and humanoid.Health > 0 and root and root:IsA("BasePart") then
+			return root.Position
+		end
+		return nil
+	end)
+	return if ok then at else nil
+end
+
+-- MOSSKEEPER SAYS: one line, its whitespace folded, at most Talk.SayMaxChars.
+local function sayWords(text: any): (string?, string?)
+	if type(text) ~= "string" then
+		return nil, "Type what he should say. Nothing was said."
+	end
+	local words = string.gsub(string.gsub(text, "%s+", " "), "^ ", "")
+	words = string.gsub(words, " $", "")
+	local length = utf8.len(words)
+	if not length then
+		return nil, "Those words are not valid text. Nothing was said."
+	end
+	if length == 0 then
+		return nil, "Type what he should say. Nothing was said."
+	end
+	local most = EnchantedMistConfig.Mosskeeper.Talk.SayMaxChars
+	if length > most then
+		return nil, string.format("He says at most %d characters (this is %d). Nothing was said.", most, length)
+	end
+	return words, nil
+end
+
+local function mist(admin: any, verb: any, extra: any): Reply
 	local now = EnchantedMistService.Hooks.now()
 	local ok, why
 	if verb == "start" then
-		ok, why = EnchantedMistService.AdminStart(now, nameOf(admin))
-	else
+		-- The length (2026-10-12): 2, 5 or 10 minutes; the normal 5 without one.
+		if extra ~= nil and (type(extra) ~= "number" or table.find(EnchantedMistData.Schedule.AdminSeconds, extra) == nil) then
+			return refuse(MIST_REFUSALS.BAD_LENGTH)
+		end
+		ok, why = EnchantedMistService.AdminStart(now, nameOf(admin), extra)
+	elseif verb == "end" then
 		ok, why = EnchantedMistService.AdminEnd(now, nameOf(admin))
+	elseif verb == "eligible" then
+		-- MAKE ELIGIBLE NOW (2026-10-12): the cooldown cut short, while the
+		-- schedule runs; the next completed natural reset starts the Mist.
+		ok, why = EnchantedMistService.MakeEligible(now, nameOf(admin))
+		if not ok then
+			return refuse(MIST_REFUSALS[why] or "The Mist's schedule did not change; the server log says why.")
+		end
+		record(admin, nil, "Mist:eligible", nil, nil)
+		announce(admin, { kind = "misteligible" })
+		return { ok = true, message = "The Enchanted Mist is eligible: the next completed reset starts one." }
+	elseif verb == "burst" then
+		-- A BERRY BURST (2026-10-12): Burst.Count berries around the admin.
+		if not EnchantedMistService.IsActive() then
+			return refuse("No Enchanted Mist is running here: a burst needs one. Nothing changed.")
+		end
+		local at = rootOf(admin)
+		if not at then
+			return refuse("Stand in the world first: the berries land around you. Nothing changed.")
+		end
+		local wanted = EnchantedMistData.Spawn.Burst.Count
+		local made = EnchantedMistBerryService.Burst(at, wanted, EnchantedMistBerryService.Hooks.now(),
+			AdminAnnounce.nameOf(admin))
+		if made <= 0 then
+			return refuse("No free floor around you: berries keep apart and off the pods. Move and try again. "
+				.. "Nothing changed.")
+		end
+		record(admin, nil, "Mist:burst:" .. tostring(made), nil, nil)
+		announce(admin, { kind = "burst" })
+		return { ok = true, message = string.format("%d Dewberr%s dropped around you%s.", made,
+			if made == 1 then "y" else "ies", if made < wanted then string.format(" (no room for %d)", wanted - made)
+				else "") }
+	elseif verb == "say" then
+		-- MOSSKEEPER SAYS (2026-10-12): filtered for everybody, in his bubble;
+		-- the bubble is the whole announcement.
+		local words, problem = sayWords(extra)
+		if not words then
+			return refuse(problem or "Nothing was said.")
+		end
+		local filtered, said = AdminService.FilterBroadcast(words, userIdOf(admin) or 0)
+		if not filtered or type(said) ~= "string" or said == "" then
+			return refuse("The text filter could not check those words. Nothing was said.")
+		end
+		if not MosskeeperService.Say(said) then
+			return refuse("The Mosskeeper is not out on this server. Nothing was said.")
+		end
+		record(admin, nil, "Mist:say", nil, nil)
+		return { ok = true, message = "The Mosskeeper said it to everyone in this server." }
+	else
+		return refuse("Unknown Enchanted Mist request. Nothing changed.")
 	end
 	if not ok then
 		return refuse(MIST_REFUSALS[why] or "The Mist did not change; the server log says why.")
 	end
-	record(admin, nil, "Mist:" .. verb, nil, nil)
+	record(admin, nil, "Mist:" .. verb .. (if verb == "start" then ":" .. tostring(extra or EnchantedMistData.Schedule.ActiveSeconds) else ""),
+		nil, nil)
 	announce(admin, { kind = if verb == "start" then "miststart" else "mistend" })
 	if verb == "end" then
 		return { ok = true, message = "Enchanted Mist ended for everyone in this server." }
@@ -1090,6 +1231,209 @@ local function mist(admin: any, verb: any): Reply
 		message = string.format("Enchanted Mist started for everyone in this server. It ends in %s.",
 			minutes(if endsAt then endsAt - now else 0)),
 	}
+end
+
+--==============================================================================
+-- THE MIST'S TOOLS FOR A PLAYER (2026-10-12, the owner's item 12)
+--
+-- On anybody in this server, the target checked as for cash (Handle): their
+-- carried Dewberries and their progress toward a pod, each set through
+-- PlayerDataService.UpdateDewberries (saved, published) like a pick or a
+-- delivery; a Mysterious Pod through stage 4's own grant (MysteryPodService:
+-- the hidden record, ready in 30 s, the Bag's room); their Mysterious Pods
+-- ready now. Said to everybody (item 10) -- except a lowering of the
+-- Dewberries and a progress reset to 0 (the owner: silent), and never what is
+-- inside a pod.
+--==============================================================================
+local function wholeIn(value: any, low: number, high: number): number?
+	if type(value) ~= "number" or value ~= value or value ~= math.floor(value) or value < low or value > high then
+		return nil
+	end
+	return value
+end
+
+local function mistBerries(admin: any, target: Player, amount: any): Reply
+	local cap = EnchantedMistData.CarryCap
+	local n = wholeIn(amount, 0, cap)
+	if not n then
+		return refuse(string.format("Dewberries go from 0 to %d. Nothing changed.", cap))
+	end
+	local before = 0
+	local changed = PlayerDataService.UpdateDewberries(target, function(p: any): boolean
+		before = math.clamp(math.floor(tonumber(p.DewberriesCarried) or 0), 0, cap)
+		if before == n then
+			return false
+		end
+		p.DewberriesCarried = n
+		return true
+	end)
+	if not changed then
+		return refuse(string.format("%s already carries %d/%d Dewberries. Nothing changed.", target.Name, before, cap))
+	end
+	record(admin, target, "MistBerries", n, nil)
+	-- A raise says what was given; a lowering says nothing (the owner).
+	if n > before then
+		announce(admin, { kind = "dewberries", amount = n - before, own = target == admin,
+			target = AdminAnnounce.nameOf(target) }, userIdOf(target))
+	end
+	return { ok = true, message = string.format("%s now carries %d/%d Dewberries.", target.Name, n, cap) }
+end
+
+local function mistProgress(admin: any, target: Player, amount: any): Reply
+	local per = EnchantedMistData.BerriesPerPod
+	local n = wholeIn(amount, 0, per - 1)
+	if not n then
+		return refuse(string.format("Dewberry progress goes from 0 to %d. Nothing changed.", per - 1))
+	end
+	local before = 0
+	local changed = PlayerDataService.UpdateDewberries(target, function(p: any): boolean
+		before = math.floor(tonumber(p.DewberryProgress) or 0)
+		if before == n then
+			return false
+		end
+		p.DewberryProgress = n
+		return true
+	end)
+	if not changed then
+		return refuse(string.format("%s's Dewberry progress is already %d/%d. Nothing changed.", target.Name, before, per))
+	end
+	record(admin, target, "MistProgress", n, nil)
+	-- A reset to 0 says nothing (the owner).
+	if n > 0 then
+		announce(admin, { kind = "progress", amount = n, own = target == admin, target = AdminAnnounce.nameOf(target) },
+			userIdOf(target))
+	end
+	return { ok = true, message = string.format("%s's Dewberry progress is now %d/%d.", target.Name, n, per) }
+end
+
+-- The pod asked for: "random", or exactly { species, size? } from the pool
+-- (MysteryPodService's Choice).
+type PodChoice = { species: string, size: number? }
+
+local function podChoice(choice: any): (boolean, PodChoice?, string?)
+	if choice == "random" then
+		return true, nil, nil
+	end
+	if type(choice) ~= "table" then
+		return false, nil, "Choose RANDOM or a creature. Nothing was given."
+	end
+	for key in pairs(choice) do
+		if key ~= "species" and key ~= "size" then
+			return false, nil, "Choose RANDOM or a creature. Nothing was given."
+		end
+	end
+	local entry = MysteryPodService.PoolEntry(choice.species)
+	if not entry then
+		return false, nil, "That creature is not in the Mysterious Pod. Nothing was given."
+	end
+	local size = choice.size
+	if EnchantedMistData.isSized(entry.Rarity) then
+		if size ~= nil and wholeIn(size, 1, SeedData.TierCount) == nil then
+			return false, nil, "Choose a size from Tiny to Colossal, or none for a random one. Nothing was given."
+		end
+	elseif size ~= nil then
+		return false, nil, string.format("%s keeps its own size. Nothing was given.", entry.Name)
+	end
+	return true, { species = entry.Id, size = size }, nil
+end
+
+local function mistPod(admin: any, target: Player, choice: any, confirmName: any): Reply
+	if not MysteryPodService.ShellId() or not MysteryPodService.CanGrant() then
+		return refuse("The Mysterious Pod is not set up on this server. Nothing was given.")
+	end
+	local good, chosen, why = podChoice(choice)
+	if not good then
+		return refuse(why or "Nothing was given.")
+	end
+	local own = target == admin
+	if not own and not confirmMatches(confirmName, target) then
+		return refuse(string.format("Giving to %s needs the confirm with their username. Nothing was given.", target.Name))
+	end
+	if not PlayerDataService.IsPersistent(target) then
+		return refuse(string.format("%s profile is not saving in this session, so nothing can be given.",
+			whose(target, own)))
+	end
+	if not CarryService.IsHeldRestored(target) then
+		return refuse(string.format("%s has not loaded yet. Nothing was given.", bagOf(target, own)))
+	end
+	local room, count, known = CarryService.PodRoom(target)
+	if not known then
+		return refuse(string.format("%s has not loaded yet. Nothing was given.", bagOf(target, own)))
+	end
+	if room <= 0 then
+		return refuse(string.format("No room: %s holds %d/%d pods. Nothing was given.", bagOf(target, own), count,
+			SAVE.MaxPods))
+	end
+	local item: string? = nil
+	local changed = PlayerDataService.UpdateDewberries(target, function(p: any): boolean
+		local given, id = MysteryPodService.Grant(target, p, chosen)
+		item = id
+		return given
+	end)
+	if not changed or not item then
+		return refuse("The pod could not be given (the Bag may have filled). Nothing was given.")
+	end
+	MysteryPodService.Hooks.saveSoon(target)
+	-- What is inside: the server log's alone.
+	local profile = PlayerDataService.Get(target)
+	local records = profile and (profile :: any).MysteryPods
+	local rec = if type(records) == "table" then records[item :: string] else nil
+	record(admin, target, string.format("MistPod:%s:%s:%s", if chosen then "chosen" else "random",
+		if rec then tostring(rec.Species) else "?",
+		if rec and rec.Size then SeedData.TierName(rec.Size) else "its own size"), nil, nil)
+	announce(admin, { kind = "mistpod", own = own, target = AdminAnnounce.nameOf(target) }, userIdOf(target))
+	return { ok = true, message = string.format("Gave %s a Mysterious Pod. It is ready to hatch in %d s.",
+		if own then "yourself" else target.Name, EnchantedMistData.HatchSeconds) }
+end
+
+local function mistReady(admin: any, target: Player): Reply
+	if not MysteryPodService.ShellId() then
+		return refuse("The Mysterious Pod is not set up on this server. Nothing changed.")
+	end
+	local now = MysteryPodService.Hooks.now()
+	local waiting: { [string]: boolean } = {}
+	local items: { string } = {}
+	PlayerDataService.UpdateDewberries(target, function(p: any): boolean
+		local late, all = MysteryPodService.MakeReady(p, now)
+		for _, item in ipairs(late) do
+			waiting[item] = true
+		end
+		items = all
+		return #late > 0
+	end)
+	-- A shell hatches at the later of its record's time and its Bag row's.
+	local profile = PlayerDataService.Get(target)
+	local held = profile and (profile :: any).Held
+	if type(held) == "table" then
+		local mine: { [string]: boolean } = {}
+		for _, item in ipairs(items) do
+			mine[item] = true
+		end
+		for _, entry in ipairs(held) do
+			local row: any = entry
+			if type(row) == "table" and type(row.Item) == "string" and mine[row.Item]
+				and (tonumber(row.HatchAt) or 0) > now then
+				if CarryService.SetPodDeadline(target, row.Item, now) then
+					waiting[row.Item] = true
+				end
+			end
+		end
+	end
+	local made = 0
+	for _ in pairs(waiting) do
+		made += 1
+	end
+	if made == 0 then
+		return refuse(if target == admin then "You have no Mysterious Pod waiting to hatch. Nothing changed."
+			else string.format("%s has no Mysterious Pod waiting to hatch. Nothing changed.", target.Name))
+	end
+	MysteryPodService.Hooks.saveSoon(target)
+	record(admin, target, "MistReady", made, nil)
+	announce(admin, { kind = "mistready", own = target == admin, target = AdminAnnounce.nameOf(target) },
+		userIdOf(target))
+	return { ok = true, message = string.format("%s %d Mysterious Pod%s %s ready to hatch now.",
+		if target == admin then "Your" else target.Name .. "'s", made, if made == 1 then "" else "s",
+		if made == 1 then "is" else "are") }
 end
 
 --==============================================================================
@@ -1147,9 +1491,9 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 		return miniEvent(sender, targetId, amount)
 	end
 	-- AN ENCHANTED MIST is any allowlisted admin's (checked above): the second
-	-- word is the verb (mist).
+	-- word is the verb, the third a start's length or his line to say (mist).
 	if action == "Mist" then
-		return mist(sender, targetId)
+		return mist(sender, targetId, amount)
 	end
 	if type(targetId) ~= "number" or targetId ~= targetId or targetId <= 0
 		or targetId ~= math.floor(targetId) then
@@ -1165,6 +1509,17 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 
 	if action == "ResetPlayerProgress" then
 		return resetProgress(sender, target, confirmName)
+	end
+	-- THE MIST'S TOOLS FOR A PLAYER (2026-10-12): the third word the count, the
+	-- progress or the pod asked for; the fourth, a pod's confirm.
+	if action == "MistBerries" then
+		return mistBerries(sender, target, amount)
+	elseif action == "MistProgress" then
+		return mistProgress(sender, target, amount)
+	elseif action == "MistPod" then
+		return mistPod(sender, target, amount, confirmName)
+	elseif action == "MistReady" then
+		return mistReady(sender, target)
 	end
 	return grant(sender, target, action, amount)
 end
@@ -1336,6 +1691,17 @@ local function keepStatus()
 						end
 						if gui:GetAttribute("Roster") ~= roster then
 							gui:SetAttribute("Roster", roster)
+						end
+						-- MIST STATUS (2026-10-12): the running Mist's berries --
+						-- on the map, and appeared and picked since it began.
+						local ok, stats = pcall(EnchantedMistBerryService.Stats)
+						if ok and type(stats) == "table" then
+							for name, value in pairs({ MistOnMap = stats.onMap, MistSpawned = stats.spawned,
+								MistPicked = stats.picked }) do
+								if gui:GetAttribute(name) ~= value then
+									gui:SetAttribute(name, value)
+								end
+							end
 						end
 					end
 				end

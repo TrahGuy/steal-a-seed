@@ -27,9 +27,11 @@
 -- MissingBindings lists, the state is "disabled" and nothing is scheduled.
 --
 -- AN ADMIN'S MIST (the owner, 2026-10-11: START MIST NOW / END MIST NOW on the
--- admin console, AdminService): a normal Mist -- 300 s, the berries, the
--- deliveries, the look, the sign's ACTIVE countdown -- started at once, EVEN
--- WITH Enabled FALSE (every binding built: the owner keeps the schedule off).
+-- admin console, AdminService): a normal Mist -- 300 s (or 2 or 10 minutes,
+-- 2026-10-12), the berries, the deliveries, the look, the sign's ACTIVE
+-- countdown -- started at once, EVEN WITH Enabled FALSE (every binding built).
+-- MAKE ELIGIBLE NOW (2026-10-12) cuts the schedule's cooldown short while it
+-- runs, and never starts a Mist itself.
 -- Refused while one runs, while a binding is missing, and at Night (the road
 -- is shut, and a forced Night ends a Mist). Source "admin" in the log. With
 -- the schedule off it leaves the schedule untouched -- at its end the state
@@ -307,10 +309,16 @@ end
 --==============================================================================
 -- AN ADMIN'S MIST (AdminService: the console's START MIST NOW, END MIST NOW)
 --==============================================================================
--- Starts a Mist at once for `by` (an admin's name, for the log). Returns
--- whether it started and why not: ALREADY_ACTIVE, NOT_BUILT (a binding
--- missing), NIGHT. Runs with the schedule off.
-function EnchantedMistService.AdminStart(now: number, by: string?): (boolean, string)
+-- Starts a Mist at once for `by` (an admin's name, for the log), `seconds`
+-- long (2026-10-12, the console's 2 / 5 / 10 MIN: one of SCHEDULE.AdminSeconds,
+-- the normal ActiveSeconds without one). Returns whether it started and why
+-- not: ALREADY_ACTIVE, NOT_BUILT (a binding missing), NIGHT, BAD_LENGTH. Runs
+-- with the schedule off.
+function EnchantedMistService.AdminStart(now: number, by: string?, seconds: number?): (boolean, string)
+	local length = seconds or SCHEDULE.ActiveSeconds
+	if table.find(SCHEDULE.AdminSeconds, length) == nil then
+		return false, "BAD_LENGTH"
+	end
 	if st.phase == STATES.Active then
 		return false, "ALREADY_ACTIVE"
 	end
@@ -325,7 +333,7 @@ function EnchantedMistService.AdminStart(now: number, by: string?): (boolean, st
 	st.events += 1
 	st.eventId = string.format("%s-admin-%d", st.boot, st.events)
 	st.startedAt = now
-	st.endsAt = now + SCHEDULE.ActiveSeconds
+	st.endsAt = now + length
 	-- The schedule's next eligibility only while it runs: with it off, none.
 	if st.running then
 		st.eligibleAt = now + SCHEDULE.CooldownSeconds
@@ -333,7 +341,7 @@ function EnchantedMistService.AdminStart(now: number, by: string?): (boolean, st
 	st.phase = STATES.Active
 	publish()
 	log(string.format("MIST %s started (source admin%s)%s; ends in %ds.", st.eventId,
-		if by then ", by " .. by else "", if st.running then "" else " with the schedule off", SCHEDULE.ActiveSeconds))
+		if by then ", by " .. by else "", if st.running then "" else " with the schedule off", length))
 	tell(startListeners, { eventId = st.eventId, startedAt = now, endsAt = st.endsAt, source = "admin",
 		degraded = false })
 	return true, "STARTED"
@@ -350,6 +358,28 @@ function EnchantedMistService.AdminEnd(now: number, by: string?): (boolean, stri
 	end
 	finish("admin", now)
 	return true, "ENDED"
+end
+
+-- MAKE ELIGIBLE NOW (2026-10-12, the console): the schedule's cooldown cut
+-- short, so the next completed natural reset starts a Mist -- it never starts
+-- one itself, nor forces a reset. Only while the schedule runs (OFF with
+-- EnchantedMistConfig.Enabled false: the console greys it out) and cools down:
+-- ACTIVE while a Mist runs, ALREADY_ELIGIBLE when there is nothing to cut.
+function EnchantedMistService.MakeEligible(now: number, by: string?): (boolean, string)
+	if not st.running then
+		return false, "OFF"
+	end
+	if st.phase == STATES.Active then
+		return false, "ACTIVE"
+	end
+	if st.phase ~= STATES.Cooldown then
+		return false, "ALREADY_ELIGIBLE"
+	end
+	st.eligibleAt = now
+	st.phase = STATES.Eligible
+	publish()
+	log("MIST eligible now" .. (if by then " (admin " .. by .. ")" else "") .. ": the next completed reset starts one.")
+	return true, "ELIGIBLE"
 end
 
 --==============================================================================

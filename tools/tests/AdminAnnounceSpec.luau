@@ -304,6 +304,35 @@ local ok, err = pcall(function()
 				return 1300
 			end,
 		},
+		-- The Mist's tools (2026-10-12, item 12): AdminMistSpec's; here only present.
+		EnchantedMistBerryService = {
+			Hooks = { now = function()
+				return 1000
+			end },
+			Burst = function()
+				return 0
+			end,
+			Stats = function()
+				return { onMap = 0, spawned = 0, picked = 0 }
+			end,
+		},
+		MysteryPodService = {
+			Hooks = { now = function()
+				return 1000
+			end, saveSoon = function() end },
+			ShellId = function()
+				return nil
+			end,
+			CanGrant = function()
+				return false
+			end,
+			PoolEntry = function()
+				return nil
+			end,
+		},
+		MosskeeperService = { Say = function()
+			return false
+		end },
 	}
 	local module = Server:WaitForChild("AdminService")
 	local chunk, lerr = loadstring(module.Source, "=AdminService")
@@ -550,7 +579,8 @@ local ok, err = pcall(function()
 			.. "schedule, nightfall, nest stock or a purchase", table.concat(sayers, ","))
 	local adminSrc = Server:WaitForChild("AdminService").Source
 	local _, calls = string.gsub(adminSrc, "\n%s*announce%(admin, ", "")
-	check(calls == 7, "AdminService says a line from seven places, each right after its record", calls)
+	check(calls == 13, "AdminService says a line from thirteen places, each right after its record (seven of item "
+		.. "10's; since item 12 the Mist's eligible, burst, Dewberries, progress, pod and ready -- AdminMistSpec)", calls)
 end)
 
 if not ok then

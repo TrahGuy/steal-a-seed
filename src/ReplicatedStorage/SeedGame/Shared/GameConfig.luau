@@ -7979,6 +7979,21 @@ GameConfig.AdminAnnounce = {
 		Plants = "%d grown plants",
 		Items = "%d items",
 		Somebody = "An admin",
+		-- THE MIST'S TOOLS (2026-10-12, the owner's item 12). Never a lowering of
+		-- a player's Dewberries nor a progress reset to 0 (the owner: silent);
+		-- never what is inside a Mysterious Pod.
+		OneDewberry = "%d Dewberry",
+		Dewberries = "%d Dewberries",
+		DewberriesGiven = "%s gave %s %s!",
+		DewberriesOwn = "%s gave themselves %s!",
+		Progress = "%s set %s's Dewberry progress to %d/%d",
+		ProgressOwn = "%s set their Dewberry progress to %d/%d",
+		MistPod = "%s gave %s a Mysterious Pod!",
+		MistPodOwn = "%s gave themselves a Mysterious Pod!",
+		MistReady = "%s made %s's Mysterious Pods ready!",
+		MistReadyOwn = "%s made their Mysterious Pods ready!",
+		Burst = "%s dropped a Dewberry burst!",
+		MistEligible = "%s made the Enchanted Mist eligible!",
 	},
 }
 

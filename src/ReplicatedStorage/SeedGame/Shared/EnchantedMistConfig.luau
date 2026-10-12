@@ -55,6 +55,8 @@ EnchantedMistConfig.Berries = {
 		Appeared = "A Dewberry appeared!",
 		NearPlots = "Near the plots",
 		InBiome = "In %s",
+		-- An admin's burst (2026-10-12): around them, by display name.
+		AroundAdmin = "Around %s",
 		Picked = "Dewberry picked! %d/%d",
 		PickedFull = "Dewberries full! %d/%d",
 		FullDetail = "Bring them to the Mosskeeper",
@@ -96,6 +98,10 @@ EnchantedMistConfig.Mosskeeper = {
 	ServerAction = "Mosskeeper",
 	-- The player is in his dialogue (a local attribute: he serves them).
 	TalkingAttribute = "SeedMosskeeperTalking",
+	-- AN ADMIN'S LINE (MOSSKEEPER SAYS), on the Workspace for everybody, late
+	-- joiners too: JSON { n = its count, t = its words, e = the server time it
+	-- ends } (MosskeeperService.Say, MosskeeperTalk.said / saidLeft).
+	SaidAttribute = "SeedMosskeeperSaid",
 	Lines = {
 		Active = "Bring me 10 Dewberries for a Mysterious Pod. You can deliver them a few at a time.",
 		Inactive = "I'm waiting for Enchanted Mist. Keep your berries safe: I can take them when it returns.",
@@ -194,6 +200,18 @@ EnchantedMistConfig.Mosskeeper = {
 	-- Plain ASCII words only: LuckiestGuy draws every one of them.
 	--==========================================================================
 	Talk = {
+		-- AN ADMIN'S LINE in his bubble (2026-10-12, the owner's item 12): at most
+		-- this many characters -- his own longest line is 87, and that fits a
+		-- phone's bubble in its four lines.
+		SayMaxChars = 90,
+		-- It stays over his head this long -- as long as an admin announcement
+		-- (GameConfig.Announce.ShowSeconds), since it is one -- or its reading
+		-- time, if that is longer (MosskeeperTalk.sayTime).
+		SaySeconds = 12,
+		-- A player may skip it on their own screen with a click or a tap anywhere
+		-- (the owner, 2026-10-12) once it has stood this long, so a press already
+		-- on its way never skips it at once (MosskeeperTalk.skipsSaid).
+		SaySkipAfter = 0.5,
 		-- The replies, keys 1-4 in this order (a click, a tap, the D-pad and A too).
 		Options = {
 			{ id = "give", text = "Give all Dewberries" },

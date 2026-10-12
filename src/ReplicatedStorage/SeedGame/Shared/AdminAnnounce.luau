@@ -19,6 +19,7 @@
 --==============================================================================
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 
 local CFG = GameConfig.AdminAnnounce
 
@@ -55,6 +56,15 @@ end
 --   mini, miniend (+ mode)      a GLOBAL mini event started or ended
 --   spawn (+ words)             a give: SpawnCatalog's words, "5 Giant Petalpip pods"
 --   money, speed (+ amount)     a give of cash or Speed
+-- THE MIST'S TOOLS (2026-10-12, the owner's item 12):
+--   dewberries (+ amount)       Dewberries given: a raise, never a lowering
+--                               (AdminService says nothing for one), never 0
+--   progress (+ amount)         a player's Dewberry progress set; never 0 (the
+--                               owner: a reset to 0 says nothing)
+--   mistpod                     a Mysterious Pod given -- never what is inside
+--   mistready                   a player's Mysterious Pods made ready
+--   burst                       a burst of Dewberries dropped
+--   misteligible                the Enchanted Mist made eligible
 -- `own` when the admin gave to themselves; `target` the player's name otherwise.
 export type What = {
 	kind: string,
@@ -111,6 +121,40 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return string.format(W.GiveOwn, admin, amount)
 		end
 		return string.format(W.Give, admin, what.target or W.Somebody, amount)
+	elseif kind == "dewberries" then
+		local n = what.amount
+		if not n or n <= 0 then
+			return nil
+		end
+		local berries = string.format(if n == 1 then W.OneDewberry else W.Dewberries, n)
+		if what.own then
+			return string.format(W.DewberriesOwn, admin, berries)
+		end
+		return string.format(W.DewberriesGiven, admin, what.target or W.Somebody, berries)
+	elseif kind == "progress" then
+		local n = what.amount
+		if not n or n <= 0 then
+			return nil
+		end
+		local per = EnchantedMistData.BerriesPerPod
+		if what.own then
+			return string.format(W.ProgressOwn, admin, n, per)
+		end
+		return string.format(W.Progress, admin, what.target or W.Somebody, n, per)
+	elseif kind == "mistpod" then
+		if what.own then
+			return string.format(W.MistPodOwn, admin)
+		end
+		return string.format(W.MistPod, admin, what.target or W.Somebody)
+	elseif kind == "mistready" then
+		if what.own then
+			return string.format(W.MistReadyOwn, admin)
+		end
+		return string.format(W.MistReady, admin, what.target or W.Somebody)
+	elseif kind == "burst" then
+		return string.format(W.Burst, admin)
+	elseif kind == "misteligible" then
+		return string.format(W.MistEligible, admin)
 	end
 	return nil
 end

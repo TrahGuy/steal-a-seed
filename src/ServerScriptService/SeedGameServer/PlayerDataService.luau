@@ -571,8 +571,10 @@ end
 --
 -- `change` edits the counts in one resumption and answers whether it changed
 -- anything; only then is the profile marked for saving and the counts
--- published. EnchantedMistBerryService (a pick) and the Mosskeeper (a
--- delivery) are the only callers; each decides, this keeps.
+-- published. EnchantedMistBerryService (a pick), the Mosskeeper (a delivery)
+-- and, since 2026-10-12, the admin console's Mist tools (AdminService: a
+-- player's Dewberries, their progress, a Mysterious Pod, READY NOW) are the
+-- only callers; each decides, this keeps.
 --==============================================================================
 function PlayerDataService.UpdateDewberries(player: Player, change: (Profile) -> boolean): boolean
 	local entry = entries[player]

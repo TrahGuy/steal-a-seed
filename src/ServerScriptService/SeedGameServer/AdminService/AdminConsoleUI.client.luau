@@ -8,12 +8,12 @@
 -- letters, a dark edge: OwnerTitleService's recipe), a thin red keyline round
 -- the frame, the close X, and no dimmer (UIKit's see-through one). Inside:
 --
---   TABS        PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE in the header row -- a
---               row that scrolls where it is narrower than they are; the title
---               reads ADMIN on a short screen, so all five fit a phone
---   TARGET BAR  one, under the tabs, on the tabs that act on a player (PLAYER
---               and SPAWN): who the actions are for -- headshot, display name,
---               @username, and their cash, Speed and bag room, live (the
+--   TABS        PLAYER, SPAWN, WORLD, MIST, EVENTS, ANNOUNCE in the header row
+--               -- a row that scrolls where it is narrower than they are; the
+--               title reads ADMIN on a short screen, so all six fit a phone
+--   TARGET BAR  one, under the tabs, on the tabs that act on a player (PLAYER,
+--               SPAWN and MIST): who the actions are for -- headshot, display
+--               name, @username, and their cash, Speed and bag room, live (the
 --               server's Roster). You by default.
 --   PLAYER      ADD MONEY and ADD SPEED: a box that takes K, M, B, T and Qd
 --               beside its button, quick chips (1M, 1B, 1T, 1Qd, MAX), and the
@@ -25,7 +25,12 @@
 --               target's free bag room; the preview line; SPAWN
 --   WORLD       Start Night, Start Day; the weather -- every admin account's
 --               since 2026-10-07 (the owner's alone before) -- and its duration
---               chips; the Enchanted Mist's START / END MIST NOW (2026-10-11)
+--               chips
+--   MIST        the Enchanted Mist (2026-10-11): START / END MIST NOW and, since
+--               2026-10-12 (item 12), its length, MAKE ELIGIBLE NOW, its
+--               berries' count, a BERRY BURST, MOSSKEEPER SAYS, and for the
+--               target their Dewberries, their progress, a Mysterious Pod and
+--               READY NOW
 --   EVENTS      the mini events: the mode, its duration chips, START / END
 --   ANNOUNCE    the words and their count, THIS SERVER or ALL SERVERS, SEND
 --   ANSWER      the server's answer to the last press, one line over the
@@ -335,8 +340,10 @@ local state = {
 	-- Which question is up: nil, "give", "weather", "mist", "mini", "all".
 	asking = nil :: string?,
 	askVerb = nil :: string?,
-	-- The duration a question asked about: what its CONFIRM sends.
+	-- The duration a question asked about: what its CONFIRM sends; MOSSKEEPER
+	-- SAYS's words, likewise.
 	askSeconds = nil :: number?,
+	askText = nil :: string?,
 	-- RESET PROGRESS's red box: shut until its button opens it.
 	resetOpen = false,
 	-- SPAWN's choices.
@@ -352,6 +359,11 @@ local state = {
 	-- The durations chosen on the chips (ConsoleModel.WeatherSeconds, EventSeconds).
 	rainSeconds = WEATHER.DefaultSeconds,
 	miniSeconds = MINI.DefaultSeconds,
+	-- THE MIST TAB (2026-10-12): an admin Mist's length (ConsoleModel.MistSeconds),
+	-- and the Mysterious Pod to give -- nil for RANDOM, each.
+	mistSeconds = MIST_SECONDS,
+	podSpecies = nil :: string?,
+	podSize = nil :: number?,
 	scope = "server",
 }
 
@@ -772,6 +784,7 @@ do
 	ui.page = {
 		player = build.list(pages, "Page_player", SECTION_GAP),
 		world = build.list(pages, "Page_world", SECTION_GAP),
+		mist = build.list(pages, "Page_mist", SECTION_GAP),
 		events = build.list(pages, "Page_events", SECTION_GAP),
 		announce = build.list(pages, "Page_announce", SECTION_GAP),
 	}
@@ -1266,7 +1279,7 @@ local function placeSizeQty(w: number, rowH: number)
 end
 
 --==============================================================================
--- WORLD: THE DAY AND THE NIGHT, THE WEATHER (EVERY ADMIN'S), THE MIST
+-- WORLD: THE DAY AND THE NIGHT, THE WEATHER (EVERY ADMIN'S)
 --
 -- Each section one card: its state -- captioned with whom it reaches -- beside
 -- the buttons that change it, and the weather's duration chips under its row.
@@ -1304,11 +1317,24 @@ do
 		ui.rainChips[i] = { seconds = seconds, button = rainChips[i] }
 	end
 	ui.weatherSection = wCard
+end
 
-	-- The Enchanted Mist (2026-10-11, the owner): START MIST NOW and END MIST
-	-- NOW for this server -- a normal Mist even while its schedule is off. Every
-	-- admin account's (the server checks the allowlist), each asking in place
-	-- like the weather's.
+--==============================================================================
+-- MIST: THE ENCHANTED MIST AND ITS TOOLS (its own tab since 2026-10-12, the
+-- owner's item 12)
+--
+-- THE MIST: its state beside START MIST NOW and END MIST NOW (2026-10-11: a
+-- normal Mist even while its schedule is off), its length (2 / 5 / 10 MIN)
+-- beside MAKE ELIGIBLE NOW (only while the schedule runs: greyed out while it
+-- is off), and its berries -- on the map, appeared, picked (the server's
+-- MistOnMap, MistSpawned, MistPicked). AROUND YOU: a BERRY BURST, and
+-- MOSSKEEPER SAYS, which asks in place. FOR THE TARGET (the bar's player):
+-- their Dewberries 0..5, their progress 0..9, a Mysterious Pod -- RANDOM or a
+-- creature, RANDOM or a size -- and READY NOW. Every press is a request; the
+-- server checks it all.
+--==============================================================================
+do
+	local page = ui.page.mist
 	local mistCard = build.card(page, "Mist")
 	local mistRow = build.action(mistCard, "Mist", "full", { { "StartMist", "START MIST NOW" },
 		{ "EndMist", "END MIST NOW" } })
@@ -1319,7 +1345,96 @@ do
 	face(ui.endMist, "danger")
 	ui.mistRow = ui.startMist.hit.Parent
 	ui.mistAsk = build.question(mistCard, "MistQuestion", "full", "CONFIRM")
+	local lengthSpecs: { { string } } = {}
+	for _, seconds in ipairs(Model.MistSeconds) do
+		table.insert(lengthSpecs, { "MistLength" .. seconds, Model.durationLabel(seconds) })
+	end
+	table.insert(lengthSpecs, { "MistEligible", "ELIGIBLE NOW" })
+	local lengths = build.buttons(mistCard, 4, M.ChipMinW, "full", lengthSpecs)
+	ui.mistLengths = {}
+	for i, seconds in ipairs(Model.MistSeconds) do
+		ui.mistLengths[i] = { seconds = seconds, button = lengths[i] }
+	end
+	ui.mistEligible = lengths[#lengths]
+	ui.mistBerries = build.line(mistCard, "Berries", 12, LOOK.Muted)
+	ui.mistBerries.AutomaticSize = Enum.AutomaticSize.None
+	ui.mistBerries.TextWrapped = false
+	ui.mistBerries.TextTruncate = Enum.TextTruncate.AtEnd
 	ui.mistSection = mistCard
+
+	-- AROUND YOU: the burst, and his words.
+	local aroundCard = build.card(page, "Around")
+	local burstRow = build.action(aroundCard, "Burst", "full", { { "MistBurst", "BERRY BURST" } }, 160)
+	local burstDot
+	ui.mistBurstNote, burstDot, burstRow.left = build.state(burstRow.frame, "BurstNote", "DEWBERRIES \u{00B7} AROUND YOU")
+	burstDot.BackgroundColor3 = GOOD
+	ui.mistBurst = burstRow.buttons[1]
+	face(ui.mistBurst, "mist")
+	local sayRow = build.action(aroundCard, "Say", "full", { { "MistSay", "SAY" } }, 112)
+	ui.sayBox = build.box(sayRow.frame, "SayWords",
+		string.format("The Mosskeeper says... (%d characters)", EnchantedMistConfig.Mosskeeper.Talk.SayMaxChars))
+	sayRow.left = ui.sayBox
+	ui.mistSay = sayRow.buttons[1]
+	ui.mistSay.style("done")
+	ui.sayRow = ui.mistSay.hit.Parent
+	ui.sayAsk = build.question(aroundCard, "SayQuestion", "full", "SAY")
+
+	-- FOR THE TARGET: their counts, a pod, ready now.
+	local forCard = build.card(page, "ForPlayer")
+	ui.berriesLine = build.line(forCard, "BerriesLine", 12, TEXT)
+	ui.berriesLine.Font = LOOK.BodyBoldFont
+	local berrySpecs: { { string } } = {}
+	for n = 0, EnchantedMistData.CarryCap do
+		table.insert(berrySpecs, { "Berries" .. n, tostring(n) })
+	end
+	local berries = build.buttons(forCard, 10, M.CountMinW, "full", berrySpecs)
+	ui.berryChips = {}
+	for i, b in ipairs(berries) do
+		ui.berryChips[i] = { count = i - 1, button = b }
+	end
+	ui.progressLine = build.line(forCard, "ProgressLine", 12, TEXT)
+	ui.progressLine.Font = LOOK.BodyBoldFont
+	local progressSpecs: { { string } } = {}
+	for n = 0, EnchantedMistData.BerriesPerPod - 1 do
+		table.insert(progressSpecs, { "Progress" .. n, tostring(n) })
+	end
+	local progress = build.buttons(forCard, 10, M.CountMinW, "full", progressSpecs)
+	ui.progressChips = {}
+	for i, b in ipairs(progress) do
+		ui.progressChips[i] = { count = i - 1, button = b }
+	end
+	ui.podLine = build.line(forCard, "PodLine", 12, TEXT)
+	ui.podLine.Font = LOOK.BodyBoldFont
+	local entries = EnchantedMistData.Pool.Entries
+	local creatureSpecs: { { string } } = { { "PodRandom", "RANDOM" } }
+	for _, entry in ipairs(entries) do
+		table.insert(creatureSpecs, { "Pod_" .. entry.Id, string.upper(entry.Name) })
+	end
+	local creatures = build.buttons(forCard, #entries + 1, M.CreatureMinW, "full", creatureSpecs)
+	ui.creatureChips = {}
+	for i, b in ipairs(creatures) do
+		local entry = entries[i - 1]
+		ui.creatureChips[i] = { id = if entry then entry.Id else nil, sized = entry == nil
+			or EnchantedMistData.isSized(entry.Rarity), button = b }
+	end
+	local sizeSpecs: { { string } } = { { "SizeRandom", "RANDOM" } }
+	for tier = 1, SeedData.TierCount do
+		table.insert(sizeSpecs, { "PodSize" .. tier, string.upper(SeedData.TierName(tier)) })
+	end
+	local sizes = build.buttons(forCard, SeedData.TierCount + 1, M.ChipMinW, "full", sizeSpecs)
+	ui.podSizeChips = {}
+	for i, b in ipairs(sizes) do
+		ui.podSizeChips[i] = { tier = if i > 1 then i - 1 else nil, button = b }
+	end
+	local podRow = build.action(forCard, "Pod", "full", { { "MistGivePod", "GIVE POD" }, { "MistReady", "READY NOW" } })
+	local _, podDot
+	ui.podSummary, podDot, podRow.left = build.state(podRow.frame, "PodChoice", "MYSTERIOUS POD")
+	podDot.BackgroundColor3 = GOLD
+	ui.givePod, ui.readyNow = podRow.buttons[1], podRow.buttons[2]
+	face(ui.givePod, "mist")
+	ui.readyNow.style("sky")
+	ui.podRow = ui.givePod.hit.Parent
+	ui.podAsk = build.question(forCard, "PodQuestion", "full", "GIVE")
 end
 
 --==============================================================================
@@ -1610,10 +1725,12 @@ function paint.tabs()
 	if L then
 		put(ui.pages, if targeted then L.page else L.pageFull)
 	end
-	-- The weather for every admin account (2026-10-07).
+	-- The weather for every admin account (2026-10-07); the Mist on its own tab
+	-- (2026-10-12).
 	local shown = Model.sections("world")
 	ui.weatherSection.Visible = table.find(shown, "weather") ~= nil
-	ui.mistSection.Visible = table.find(shown, "mist") ~= nil
+	local mistShown = Model.sections("mist")
+	ui.mistSection.Visible = table.find(mistShown, "mist") ~= nil
 end
 
 function paint.target()
@@ -1884,6 +2001,95 @@ function paint.world()
 	end
 end
 
+-- A pool creature's entry by id (EnchantedMistData.Pool), or nil.
+local function poolEntry(id: string?): any
+	for _, entry in ipairs(EnchantedMistData.Pool.Entries) do
+		if entry.Id == id then
+			return entry
+		end
+	end
+	return nil
+end
+
+-- The pod chosen, in words: "RANDOM CREATURE · RANDOM SIZE", "ELDERBOUGH ·
+-- COLOSSAL", "SNARLBLOOM · ITS OWN SIZE".
+local function podWords(): string
+	local entry = poolEntry(state.podSpecies)
+	if not entry then
+		return "RANDOM CREATURE  \u{00B7}  RANDOM SIZE"
+	end
+	local size = if not EnchantedMistData.isSized(entry.Rarity) then "ITS OWN SIZE"
+		elseif state.podSize then string.upper(SeedData.TierName(state.podSize :: number))
+		else "RANDOM SIZE"
+	return string.upper(entry.Name) .. "  \u{00B7}  " .. size
+end
+
+function paint.mist()
+	local MA = MIST.Attributes
+	local mistState = Workspace:GetAttribute(MA.State)
+	local active = mistState == MIST.States.Active
+	-- The schedule runs only while its next eligibility is published -- an admin's
+	-- Mist with the schedule off is "active" with none (EnchantedMistService).
+	local scheduleOn = type(Workspace:GetAttribute(MA.EligibleAt)) == "number"
+	-- The length chosen; MAKE ELIGIBLE NOW only while the schedule runs (greyed
+	-- out while it is off), lit while it cools down.
+	for _, chip in ipairs(ui.mistLengths) do
+		chip.button.style(if chip.seconds == state.mistSeconds then "on" else "idle")
+	end
+	ui.mistEligible.style(if not scheduleOn then "off" elseif mistState == MIST.States.Cooldown then "go" else "idle")
+	-- The running Mist's berries: the server's, once a second.
+	local onMap = screen:GetAttribute("MistOnMap")
+	ui.mistBerries.Text = if active and type(onMap) == "number"
+		then string.format("BERRIES: %d ON THE MAP  \u{00B7}  %d APPEARED  \u{00B7}  %d PICKED THIS MIST", onMap,
+			tonumber(screen:GetAttribute("MistSpawned")) or 0, tonumber(screen:GetAttribute("MistPicked")) or 0)
+		elseif scheduleOn then "NO MIST RUNNING  \u{00B7}  THE SCHEDULE IS ON"
+		else "NO MIST RUNNING  \u{00B7}  THE SCHEDULE IS OFF"
+	ui.mistBurstNote.Text = if active
+		then string.format("%d AROUND YOU, KEEPING APART", EnchantedMistData.Spawn.Burst.Count)
+		else "NEEDS A RUNNING MIST"
+	if active then
+		face(ui.mistBurst, "mist")
+	else
+		ui.mistBurst.style("off")
+	end
+	-- The target's own counts (their attributes, the server's).
+	local p = currentTarget()
+	local PA = MIST.PlayerAttributes
+	local carried = tonumber(p:GetAttribute(PA.Carried)) or 0
+	local progress = tonumber(p:GetAttribute(PA.Progress)) or 0
+	local whom = if p == player then "YOU" else string.upper(p.DisplayName)
+	ui.berriesLine.Text = string.format("DEWBERRIES %s CARR%s: %d/%d", whom, if p == player then "Y" else "IES",
+		carried, EnchantedMistData.CarryCap)
+	ui.progressLine.Text = string.format("%s PROGRESS TOWARD A POD: %d/%d", if p == player then "YOUR" else whom .. "'S",
+		progress, EnchantedMistData.BerriesPerPod)
+	for _, chip in ipairs(ui.berryChips) do
+		chip.button.style(if chip.count == carried then "on" else "idle")
+	end
+	for _, chip in ipairs(ui.progressChips) do
+		chip.button.style(if chip.count == progress then "on" else "idle")
+	end
+	-- The pod: a size only for a sized creature the admin chose.
+	local entry = poolEntry(state.podSpecies)
+	local sized = entry ~= nil and EnchantedMistData.isSized(entry.Rarity)
+	if not sized then
+		state.podSize = nil
+	end
+	for _, chip in ipairs(ui.creatureChips) do
+		chip.button.style(if chip.id == state.podSpecies then "on" else "idle")
+	end
+	for _, chip in ipairs(ui.podSizeChips) do
+		chip.button.style(if chip.tier ~= nil and not sized then "off" elseif chip.tier == state.podSize then "on" else "idle")
+	end
+	ui.podLine.Text = "A MYSTERIOUS POD FOR " .. whom
+	ui.podSummary.Text = podWords()
+	local podAsking = state.asking == "pod"
+	ui.podAsk.block.Visible = podAsking
+	ui.podRow.Visible = not podAsking
+	local saying = state.asking == "say"
+	ui.sayAsk.block.Visible = saying
+	ui.sayRow.Visible = not saying
+end
+
 function paint.announce()
 	local all = state.scope == "all"
 	ui.thisServer.style(if all then "idle" else "on")
@@ -1906,6 +2112,8 @@ local function mainButton(): GuiObject?
 		return if ui.giveRow.Visible then ui.giveCancel.hit else ui.spawnButton.hit
 	elseif which == "StartNight" then
 		return ui.startNight.hit
+	elseif which == "StartMist" then
+		return if ui.mistAsk.block.Visible then ui.mistAsk.cancel.hit else ui.startMist.hit
 	elseif which == "StartGlobalEvent" then
 		return ui.startMini.hit
 	elseif which == "Send" then
@@ -1921,6 +2129,7 @@ function paint.all()
 	paint.grid()
 	paint.spawn()
 	paint.world()
+	paint.mist()
 	paint.announce()
 	padFirst.Value = mainButton()
 end
@@ -2280,10 +2489,18 @@ for _, chip in ipairs(ui.rainChips) do
 	end)
 end
 
--- THE ENCHANTED MIST (2026-10-11): each asks in place, like the weather.
+--==============================================================================
+-- MIST'S BUTTONS (2026-10-11; its own tab and tools since 2026-10-12)
+--
+-- START and END each ask in place, like the weather -- START for the length
+-- chosen, which its CONFIRM sends; MOSSKEEPER SAYS asks in place too, and a
+-- pod for anybody else asks with their name as SPAWN's give does.
+--==============================================================================
 local function askMist(verb: string)
+	local secs = state.mistSeconds
 	ui.mistAsk.words.Text = if verb == "end" then "End the Enchanted Mist on this server now?"
-		else string.format("Start an Enchanted Mist on this server now, for %s?", mmss(MIST_SECONDS))
+		else string.format("Start an Enchanted Mist on this server now, for %s?", mmss(secs))
+	state.askSeconds = secs
 	setAsking("mist", verb)
 	selectIfPad(ui.mistAsk.cancel.hit)
 end
@@ -2299,8 +2516,114 @@ ui.mistAsk.cancel.hit.Activated:Connect(function()
 end)
 ui.mistAsk.confirm.hit.Activated:Connect(function()
 	local verb = state.askVerb or "end"
+	local secs = state.askSeconds
 	setAsking(nil, nil)
-	task.spawn(send, Model.args.mist(verb))
+	task.spawn(send, Model.args.mist(verb, if verb == "start" then secs else nil))
+end)
+for _, chip in ipairs(ui.mistLengths) do
+	chip.button.hit.Activated:Connect(function()
+		state.mistSeconds = chip.seconds
+		if state.asking == "mist" then
+			setAsking(nil, nil)
+		else
+			paint.mist()
+		end
+	end)
+end
+ui.mistEligible.hit.Activated:Connect(function()
+	task.spawn(send, Model.args.mist("eligible"))
+end)
+ui.mistBurst.hit.Activated:Connect(function()
+	task.spawn(send, Model.args.mist("burst"))
+end)
+ui.mistSay.hit.Activated:Connect(function()
+	local text = ui.sayBox.Text
+	if not string.find(text, "%S") then
+		note("Not said: type his line first.", false)
+		return
+	end
+	ui.sayAsk.words.Text = "Say this as the Mosskeeper to everyone here?"
+	state.askText = text
+	setAsking("say", nil)
+	selectIfPad(ui.sayAsk.cancel.hit)
+end)
+ui.sayAsk.cancel.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	note("Nothing was said.", nil)
+end)
+ui.sayAsk.confirm.hit.Activated:Connect(function()
+	local text = state.askText
+	setAsking(nil, nil)
+	task.spawn(function()
+		local reply = send(Model.args.mist("say", text))
+		if reply and reply.ok == true and ui.sayBox.Text == text then
+			ui.sayBox.Text = ""
+		end
+	end)
+end)
+-- The target's Dewberries and progress: a chip is the number, sent at once.
+for _, chip in ipairs(ui.berryChips) do
+	chip.button.hit.Activated:Connect(function()
+		task.spawn(send, Model.args.mistBerries(currentTarget().UserId, chip.count))
+	end)
+end
+for _, chip in ipairs(ui.progressChips) do
+	chip.button.hit.Activated:Connect(function()
+		task.spawn(send, Model.args.mistProgress(currentTarget().UserId, chip.count))
+	end)
+end
+-- The pod to give: RANDOM or a creature, RANDOM or a size (a sized one's only).
+for _, chip in ipairs(ui.creatureChips) do
+	chip.button.hit.Activated:Connect(function()
+		state.podSpecies = chip.id
+		if state.asking == "pod" then
+			setAsking(nil, nil)
+		else
+			paint.mist()
+		end
+	end)
+end
+for _, chip in ipairs(ui.podSizeChips) do
+	chip.button.hit.Activated:Connect(function()
+		local entry = poolEntry(state.podSpecies)
+		if chip.tier ~= nil and not (entry and EnchantedMistData.isSized(entry.Rarity)) then
+			return
+		end
+		state.podSize = chip.tier
+		if state.asking == "pod" then
+			setAsking(nil, nil)
+		else
+			paint.mist()
+		end
+	end)
+end
+local function givePodNow(confirmName: string?)
+	task.spawn(send, Model.args.mistPod(currentTarget().UserId, Model.podChoice(state.podSpecies, state.podSize),
+		confirmName))
+end
+ui.givePod.hit.Activated:Connect(function()
+	local p = currentTarget()
+	if p ~= player then
+		-- Anybody but yourself: the question first, in place of the row.
+		ui.podAsk.words.Text = string.format("Give %s a Mysterious Pod (%s)?", p.DisplayName .. " (@" .. p.Name .. ")",
+			podWords())
+		setAsking("pod", nil)
+		selectIfPad(ui.podAsk.cancel.hit)
+		return
+	end
+	givePodNow(nil)
+end)
+ui.podAsk.cancel.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	note("No pod was given.", nil)
+end)
+ui.podAsk.confirm.hit.Activated:Connect(function()
+	local name = currentTarget().Name
+	setAsking(nil, nil)
+	givePodNow(name)
+end)
+ui.readyNow.hit.Activated:Connect(function()
+	task.spawn(send, Model.args.mistReady(currentTarget().UserId))
 end)
 
 --==============================================================================
@@ -2467,6 +2790,7 @@ local function tick(want: boolean)
 		end
 		paint.world()
 		paint.spawn()
+		paint.mist()
 		task.delay(1, step)
 	end
 	step()

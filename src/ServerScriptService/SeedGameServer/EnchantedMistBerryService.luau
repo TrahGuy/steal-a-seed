@@ -102,6 +102,10 @@ EnchantedMistBerryService.Hooks = {
 	end,
 	-- A spot and its words, or nil: a spec's own placement replaces the map's.
 	spot = nil :: (() -> (Vector3?, string?))?,
+	-- The floor under (x, z), or nil: an admin's burst stands on it.
+	floor = function(x: number, z: number): Vector3?
+		return MiniEventService.FloorAt(x, z)
+	end,
 	-- Where the models go (a spec gives its own folder).
 	parent = function(): Instance
 		local folder = Workspace:FindFirstChild(B.FolderName)
@@ -321,16 +325,9 @@ local function announce(berry: Berry)
 	end
 end
 
--- One spawn opportunity: a berry, or nothing.
-function EnchantedMistBerryService._spawn(now: number): Berry?
-	local eventId = run.eventId
-	if not eventId or count() >= SPAWN.MaxActive or run.endsAt - now < SPAWN.QuietEndSeconds then
-		return nil
-	end
-	local at, where = pickSpot()
-	if not at then
-		return nil
-	end
+-- A berry of the running Mist at `at`: built, heard and announced -- or, with
+-- no model, nothing at all.
+local function place(eventId: string, at: Vector3, where: string?, now: number): Berry?
 	run.serial += 1
 	local berry: Berry = {
 		id = string.format("%s-b%d", eventId, run.serial),
@@ -358,6 +355,70 @@ function EnchantedMistBerryService._spawn(now: number): Berry?
 	end
 	announce(berry)
 	return berry
+end
+
+-- One spawn opportunity: a berry, or nothing.
+function EnchantedMistBerryService._spawn(now: number): Berry?
+	local eventId = run.eventId
+	if not eventId or count() >= SPAWN.MaxActive or run.endsAt - now < SPAWN.QuietEndSeconds then
+		return nil
+	end
+	local at, where = pickSpot()
+	if not at then
+		return nil
+	end
+	return place(eventId, at, where, now)
+end
+
+--==============================================================================
+-- AN ADMIN'S BERRY BURST (2026-10-12, the owner's item 12: the console's
+-- BERRY BURST)
+--
+-- `n` berries around `center` (the admin's body), each on a real floor
+-- (Hooks.floor) at the height the admin stands on, Burst.MinRadius ..
+-- MaxRadius from them, keeping Spacing from every berry and PodClear from
+-- every pod -- roomAt, the natural spawns' own rule. The burst may pass
+-- MaxActive: the natural spawner then waits until the map is under it again
+-- (_spawn). Only in a running Mist. Returns how many appeared: a spot never
+-- found is skipped, never forced.
+--==============================================================================
+local function burstSpot(center: Vector3): Vector3?
+	local burst = SPAWN.Burst
+	local base = Hooks.floor(center.X, center.Z)
+	local level = if base then base.Y else center.Y - burst.RootHeight
+	for _ = 1, burst.Tries do
+		local angle = Hooks.random() * math.pi * 2
+		local radius = burst.MinRadius + (burst.MaxRadius - burst.MinRadius) * Hooks.random()
+		local x, z = center.X + math.cos(angle) * radius, center.Z + math.sin(angle) * radius
+		local floor = Hooks.floor(x, z)
+		if floor and math.abs(floor.Y - level) <= burst.MaxStep and roomAt(floor) then
+			return floor
+		end
+	end
+	return nil
+end
+
+function EnchantedMistBerryService.Burst(center: Vector3, n: number, now: number, near: string?): number
+	local eventId = run.eventId
+	if not eventId or Hooks.eventId() ~= eventId then
+		return 0
+	end
+	local made = 0
+	for _ = 1, math.max(0, math.floor(n)) do
+		local at = burstSpot(center)
+		if at and place(eventId, at, if near then string.format(W.AroundAdmin, near) else W.NearPlots, now) then
+			made += 1
+		end
+	end
+	log(string.format("%s: an admin's burst put %d of %d berr%s down (%d on the map).", eventId, made, n,
+		if n == 1 then "y" else "ies", count()))
+	return made
+end
+
+-- For the console's MIST STATUS (2026-10-12): the running Mist's berries -- up
+-- now, and appeared and picked since it began (a burst's among them).
+function EnchantedMistBerryService.Stats(): { eventId: string?, onMap: number, spawned: number, picked: number }
+	return { eventId = run.eventId, onMap = count(), spawned = run.spawned, picked = run.picked }
 end
 
 --==============================================================================

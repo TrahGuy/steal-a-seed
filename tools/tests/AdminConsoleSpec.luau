@@ -40,6 +40,7 @@ local MenuLayout = require(Shared.MenuLayout)
 local SeedData = require(Shared.SeedData)
 local Admin = ServerScriptService.SeedGameServer.AdminService
 local Model = require(Admin.ConsoleModel)
+local EnchantedMistData = require(Shared.EnchantedMistData)
 local SpawnCatalog = require(Admin.SpawnCatalog)
 
 local out = {}
@@ -154,25 +155,30 @@ local ok, err = pcall(function()
 	for _, tab in ipairs(Model.Tabs) do
 		table.insert(ids, tab.id)
 	end
-	check(table.concat(ids, ",") == "player,spawn,world,events,announce",
-		"PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE -- the mini events their own tab since 2026-10-12", table.concat(ids, ","))
+	check(table.concat(ids, ",") == "player,spawn,world,mist,events,announce",
+		"PLAYER, SPAWN, WORLD, MIST, EVENTS, ANNOUNCE -- the mini events their own tab since 2026-10-12 (item 11), the "
+			.. "Enchanted Mist and its tools since item 12", table.concat(ids, ","))
 	check(Model.stepTab("player", -1) == "announce" and Model.stepTab("announce", 1) == "player"
-			and Model.stepTab("spawn", 1) == "world" and Model.stepTab("world", 1) == "events"
-			and Model.stepTab("events", -1) == "world" and Model.stepTab("events", 1) == "announce",
+			and Model.stepTab("spawn", 1) == "world" and Model.stepTab("world", 1) == "mist"
+			and Model.stepTab("mist", 1) == "events" and Model.stepTab("events", -1) == "mist"
+			and Model.stepTab("events", 1) == "announce",
 		"LB and RB step through them and wrap at both ends")
 	-- The weather is every admin's (owner, 2026-10-07): ConsoleModel.sections no
 	-- longer asks who is looking, so every console draws the same WORLD tab.
 	-- The Enchanted Mist (2026-10-11) likewise, under the weather.
 	local world = Model.sections("world")
-	check(table.concat(world, ",") == "daynight,weather,mist" and table.concat(Model.sections("events"), ",") == "events",
-		"WORLD shows night/day, the weather and the Enchanted Mist to every admin account -- the weather is no longer "
-			.. "hidden for the two that are not the owner's -- and EVENTS the mini events", table.concat(world, ","))
+	check(table.concat(world, ",") == "daynight,weather" and table.concat(Model.sections("events"), ",") == "events"
+			and table.concat(Model.sections("mist"), ",") == "mist,around,forplayer",
+		"WORLD shows night/day and the weather to every admin account -- the weather is no longer hidden for the two "
+			.. "that are not the owner's -- EVENTS the mini events, MIST the Enchanted Mist, around you, for the target",
+		table.concat(world, ","))
 	local modelSrc = ServerScriptService.SeedGameServer.AdminService.ConsoleModel.Source
 	check(string.find(modelSrc, "function ConsoleModel.sections(tabId: string): { string }", 1, true) ~= nil
 			and string.find(modelSrc, "isOwner", 1, true) == nil,
 		"and ConsoleModel has no notion of an owner left: every tab is the same for every admin account")
 	check(Model.MainButton.player == "AddMoney" and Model.MainButton.spawn == "Spawn"
-			and Model.MainButton.world == "StartNight" and Model.MainButton.events == "StartGlobalEvent"
+			and Model.MainButton.world == "StartNight" and Model.MainButton.mist == "StartMist"
+			and Model.MainButton.events == "StartGlobalEvent"
 			and Model.MainButton.announce == "Send",
 		"a controller starts on each tab's main button")
 	-- THE TARGET BAR ONLY WHERE AN ACTION IS A PLAYER'S (2026-10-12): elsewhere
@@ -183,8 +189,18 @@ local ok, err = pcall(function()
 			table.insert(targeted, tab.id)
 		end
 	end
-	check(table.concat(targeted, ",") == "player,spawn",
-		"the one target picker shows on PLAYER and SPAWN, the tabs that act on a player", table.concat(targeted, ","))
+	check(table.concat(targeted, ",") == "player,spawn,mist",
+		"the one target picker shows on PLAYER, SPAWN and MIST, the tabs that act on a player", table.concat(targeted, ","))
+	-- THE MIST TAB (2026-10-12, item 12): its lengths and a pod's choice.
+	check(table.concat(Model.MistSeconds, ",") == "120,300,600"
+			and table.find(Model.MistSeconds, EnchantedMistData.Schedule.ActiveSeconds) ~= nil
+			and Model.MistSeconds == EnchantedMistData.Schedule.AdminSeconds,
+		"an admin's Mist lasts 2, 5 or 10 minutes -- the server's own list, the normal 5 among them")
+	local chosen = Model.podChoice("elderbough", 7)
+	local secret = Model.podChoice("snarlbloom", 7)
+	check(Model.podChoice(nil, 7) == "random" and chosen.species == "elderbough" and chosen.size == 7
+			and secret.species == "snarlbloom" and secret.size == nil,
+		"a pod's choice: RANDOM, or a creature with its size -- a Secret's never asked")
 	check(Model.title(true) == "ADMIN" and Model.title(false) == "ADMIN CONSOLE",
 		"the title reads ADMIN on a short screen (room for the five tabs), ADMIN CONSOLE elsewhere")
 	-- THE DURATION CHIPS (2026-10-12), in place of the seconds boxes.
@@ -260,6 +276,14 @@ local ok, err = pcall(function()
 		{ Model.args.miniEvent("end", nil), "MiniEvent|end|nil|nil" },
 		{ Model.args.mist("start"), "Mist|start|nil|nil" },
 		{ Model.args.mist("end"), "Mist|end|nil|nil" },
+		{ Model.args.mist("start", 600), "Mist|start|600|nil" },
+		{ Model.args.mist("eligible"), "Mist|eligible|nil|nil" },
+		{ Model.args.mist("burst"), "Mist|burst|nil|nil" },
+		{ Model.args.mist("say", "Hi"), "Mist|say|Hi|nil" },
+		{ Model.args.mistBerries(5551, 5), "MistBerries|5551|5|nil" },
+		{ Model.args.mistProgress(5551, 7), "MistProgress|5551|7|nil" },
+		{ Model.args.mistPod(5551, "random", "SpecTarget"), "MistPod|5551|random|SpecTarget" },
+		{ Model.args.mistReady(5551), "MistReady|5551|nil|nil" },
 		{ Model.args.announce("all", "Hello", true), "Announce|all|Hello|true" },
 		{ Model.args.announce("server", "Hello", false), "Announce|server|Hello|false" },
 		{ Model.args.spawn(5551, req, "SpecTarget"), "Spawn|5551|{request}|SpecTarget" },
@@ -443,12 +467,12 @@ local ok, err = pcall(function()
 		-- A finger: the tabs, the target bar, the toolbar -- and on a phone or a
 		-- short screen every row of the compact pages a finger's 40 (2026-10-12).
 		local touchy = s.compact or p.short
-		if C.tabs.h < 44 or C.target.h < 40 or C.toolbar.h < 30 or C.tabW < 84 or C.rowH < MM.RowDesk
+		if C.tabs.h < 44 or C.target.h < 40 or C.toolbar.h < 30 or C.tabW < MM.TabMinShort or C.rowH < MM.RowDesk
 			or (touchy and (C.rowH < 40 or C.toolbar.h < 40)) then
 			table.insert(touchProblems, string.format("%s has a control below a finger (row %d, toolbar %d)", case.tag,
 				C.rowH, C.toolbar.h))
 		end
-		if string.sub(case.tag, 1, 5) == "phone" and C.tabsScroll then
+		if C.tabsScroll then
 			table.insert(tabStripProblems, case.tag)
 		end
 		-- THE COMPACT CONSOLE (2026-10-12, item 11): every tab's height, row by
@@ -467,7 +491,9 @@ local ok, err = pcall(function()
 				room = if Model.TargetTabs[tab.id] then C.page.h else C.pageFull.h
 			end
 			table.insert(parts, string.format("%s %d/%d", string.upper(tab.id), need, room))
-			if need > room then
+			-- MIST may scroll on a phone (the owner, 2026-10-12) -- and on a window
+			-- shorter than a 1280 x 720 desktop's: every other tab fits.
+			if need > room and not (tab.id == "mist" and (string.sub(case.tag, 1, 5) == "phone" or L.safe.Y < 650)) then
 				table.insert(over, string.format("%s +%d", string.upper(tab.id), need - room))
 			end
 		end
@@ -494,10 +520,12 @@ local ok, err = pcall(function()
 		.. "controls with a whole row of cards in view", table.concat(spawnProblems, "; "))
 	check(#touchProblems == 0, "every tab, the target bar and the toolbar a finger's size, and on every phone and "
 		.. "short screen every row and the toolbar 40 tall", table.concat(touchProblems, "; "))
-	check(fit640 == true, "THE COMPACT CONSOLE (item 11): on the 640 x 360 phone every tab fits with no scroll")
+	check(fit640 == true, "THE COMPACT CONSOLE (item 11): on the 640 x 360 phone every tab fits with no scroll -- "
+		.. "MIST excepted, its tools too many for a phone (the owner: it may scroll there)")
 	check(#fitProblems == 0, "and on every listed desk, phone and TV at least that tall (the heights above; a "
 		.. "shorter screen is said, not held to it)", table.concat(fitProblems, "; "))
-	check(#tabStripProblems == 0, "every listed phone shows all five tabs beside the title, the strip unscrolled",
+	check(#tabStripProblems == 0, "every listed screen -- desk, phone, TV -- shows all six tabs beside the title, the "
+		.. "strip unscrolled",
 		table.concat(tabStripProblems, ", "))
 	check(#chipProblems == 0 and wrapped > 0, string.format("every SPAWN group reachable: the search beside or over "
 		.. "the chips, never on them; all %d chips in view wrapped (%d screens), else arrows scroll to them (%d screens)",
@@ -518,7 +546,8 @@ local ok, err = pcall(function()
 		"it only ever asks, through one InvokeServer of what ConsoleModel built")
 	local builders = { "Model.args.addMoney(", "Model.args.addSpeed(", "Model.args.reset(", "Model.args.startNight(",
 		"Model.args.startDay(", "Model.args.weather(", "Model.args.miniEvent(", "Model.args.announce(",
-		"Model.args.spawn(", "Model.spawnRequest(", "Model.args.mist(" }
+		"Model.args.spawn(", "Model.spawnRequest(", "Model.args.mist(", "Model.args.mistBerries(",
+		"Model.args.mistProgress(", "Model.args.mistPod(", "Model.args.mistReady(" }
 	local missing = {}
 	for _, b in ipairs(builders) do
 		if not has(run, b) then
@@ -527,7 +556,7 @@ local ok, err = pcall(function()
 	end
 	check(#missing == 0, "every button sends through its ConsoleModel builder", table.concat(missing, ", "))
 	check(has(run, "Model.sections(\"world\")") and has(run, "ui.weatherSection.Visible")
-			and has(run, "ui.mistSection.Visible = table.find(shown, \"mist\") ~= nil")
+			and has(run, "ui.mistSection.Visible = table.find(mistShown, \"mist\") ~= nil")
 			and not has(run, "isOwner") and not has(run, "IsOwner") and not has(src, "OWNER ONLY"),
 		"the weather section is shown from ConsoleModel.sections for every admin -- no owner check, no OWNER ONLY "
 			.. "heading, and a press asks the server whoever presses it")
@@ -545,7 +574,7 @@ local ok, err = pcall(function()
 			and has(run, "setAsking(\"mist\", verb)")
 			and has(run, "{ { \"StartMist\", \"START MIST NOW\" },")
 			and has(run, "{ \"EndMist\", \"END MIST NOW\" } })")
-			and has(run, "task.spawn(send, Model.args.mist(verb))"),
+			and has(run, 'task.spawn(send, Model.args.mist(verb, if verb == "start" then secs else nil))'),
 		"giving to anybody else, the weather, the Enchanted Mist's START / END MIST NOW, the events and ALL SERVERS "
 			.. "ask in place; the reset waits for the name")
 	--==========================================================================
@@ -605,8 +634,9 @@ local ok, err = pcall(function()
 			and has(askMistBody, '"Start an Enchanted Mist on this server now, for %s?"')
 			and has(askMistBody, 'setAsking("mist", verb)') and askMistBody ~= "" and not sends(askMistBody)
 			and not sends(handler("ui.startMist")) and not sends(handler("ui.endMist"))
-			and has(handler("ui.mistAsk.confirm"), "task.spawn(send, Model.args.mist(verb))"),
-		"THE ENCHANTED MIST still asks first, in the same words")
+			and has(handler("ui.mistAsk.confirm"), "local secs = state.askSeconds")
+			and has(handler("ui.mistAsk.confirm"), 'task.spawn(send, Model.args.mist(verb, if verb == "start" then secs else nil))'),
+		"THE ENCHANTED MIST still asks first, in the same words -- and starts for the length it asked about")
 	check(has(handler("ui.startMini"), "askMini(state.miniMode)") and has(handler("ui.endMini"), 'askMini("end")')
 			and has(askMiniBody, '"End the global event on EVERY server?"')
 			and has(askMiniBody, '"Start %s on EVERY server for %s?"') and has(askMiniBody, 'setAsking("mini", verb)')

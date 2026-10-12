@@ -10,12 +10,13 @@
 --             word for it), worked out EXACTLY in whole numbers ("1.1T" is
 --             1,100,000,000,000, never a float a hair off), junk refused with
 --             a line that says why; the quick chips 1M .. 1Qd and MAX
---   tabs      PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE (EVENTS its own tab since
---             2026-10-12, item 11); the sections each shows -- the weather for
---             every admin account since 2026-10-07 (the owner's alone before),
---             the Enchanted Mist since 2026-10-11; which tabs show the target
---             bar; LB / RB's step; the button a controller's selection starts
---             on in each; the duration chips; SPAWN's size stepper
+--   tabs      PLAYER, SPAWN, WORLD, MIST, EVENTS, ANNOUNCE (EVENTS its own tab
+--             since 2026-10-12, item 11; MIST, the Enchanted Mist and its
+--             tools, since item 12); the sections each shows -- the weather
+--             for every admin account since 2026-10-07 (the owner's alone
+--             before); which tabs show the target bar; LB / RB's step; the
+--             button a controller's selection starts on in each; the duration
+--             chips; SPAWN's size stepper; the Mist's lengths and pod choices
 --   requests  exactly what each button sends through the one RemoteFunction:
 --             the action and its three words, the same shapes the console sent
 --             before the redesign, and SPAWN's request table (AdminService)
@@ -39,6 +40,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 local SpawnCatalog = require(script.Parent:WaitForChild("SpawnCatalog"))
+local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 
 local ConsoleModel = {}
 
@@ -157,13 +159,14 @@ ConsoleModel.Tabs = {
 	{ id = "player", label = "PLAYER" },
 	{ id = "spawn", label = "SPAWN" },
 	{ id = "world", label = "WORLD" },
+	{ id = "mist", label = "MIST" },
 	{ id = "events", label = "EVENTS" },
 	{ id = "announce", label = "ANNOUNCE" },
 } :: { Tab }
 
 -- The tabs that act on a player, and so show the target bar (2026-10-12): the
--- rest take its room for their own rows.
-ConsoleModel.TargetTabs = { player = true, spawn = true } :: { [string]: boolean }
+-- rest take its room for their own rows. MIST's tools for a player act on it.
+ConsoleModel.TargetTabs = { player = true, spawn = true, mist = true } :: { [string]: boolean }
 
 -- The title in the header row: ADMIN on a short screen, where the five tabs
 -- need the room beside it (2026-10-12); ADMIN CONSOLE elsewhere.
@@ -173,15 +176,18 @@ end
 
 -- The sections of a tab, top to bottom. The weather is every admin account's
 -- since 2026-10-07 (the owner's alone before), so every console shows it; the
--- Enchanted Mist (2026-10-11) likewise, under it. The mini events have their
--- own tab since 2026-10-12, so WORLD fits a phone.
+-- Enchanted Mist (2026-10-11) likewise -- on its own MIST tab since
+-- 2026-10-12 (item 12), with its tools. The mini events have their own tab
+-- since 2026-10-12 too, so WORLD fits a phone.
 function ConsoleModel.sections(tabId: string): { string }
 	if tabId == "player" then
 		return { "money", "speed", "reset" }
 	elseif tabId == "spawn" then
 		return { "groups", "search", "grid", "form", "size", "quantity", "preview", "spawn" }
 	elseif tabId == "world" then
-		return { "daynight", "weather", "mist" }
+		return { "daynight", "weather" }
+	elseif tabId == "mist" then
+		return { "mist", "around", "forplayer" }
 	elseif tabId == "events" then
 		return { "events" }
 	elseif tabId == "announce" then
@@ -207,6 +213,7 @@ ConsoleModel.MainButton = {
 	player = "AddMoney",
 	spawn = "Spawn",
 	world = "StartNight",
+	mist = "StartMist",
 	events = "StartGlobalEvent",
 	announce = "Send",
 } :: { [string]: string }
@@ -219,6 +226,24 @@ ConsoleModel.MainButton = {
 --==============================================================================
 ConsoleModel.WeatherSeconds = { 60, 180, 300, 600 } :: { number }
 ConsoleModel.EventSeconds = { 60, 90, 180, 300 } :: { number }
+-- An admin's Mist (2026-10-12, item 12): 2, 5 or 10 minutes -- the server's own
+-- list (EnchantedMistData.Schedule.AdminSeconds), 5 the default.
+ConsoleModel.MistSeconds = EnchantedMistData.Schedule.AdminSeconds :: { number }
+
+-- A Mysterious Pod's choices (2026-10-12): RANDOM or a pool creature, and for a
+-- sized one (Legendary, Mythic, Divine) RANDOM or a size. nil is "random".
+function ConsoleModel.podChoice(speciesId: string?, size: number?): any
+	if speciesId == nil then
+		return "random"
+	end
+	local sized = false
+	for _, entry in ipairs(EnchantedMistData.Pool.Entries) do
+		if entry.Id == speciesId then
+			sized = EnchantedMistData.isSized(entry.Rarity)
+		end
+	end
+	return { species = speciesId, size = if sized then size else nil }
+end
 
 -- "1 MIN", "1:30", "10 MIN".
 function ConsoleModel.durationLabel(seconds: number): string
@@ -267,9 +292,28 @@ ConsoleModel.args = {
 	miniEvent = function(verb: string, seconds: number?): Args
 		return args("MiniEvent", verb, seconds, nil)
 	end,
-	-- "start" (START MIST NOW: the normal 300 s) or "end" (END MIST NOW).
-	mist = function(verb: string): Args
-		return args("Mist", verb, nil, nil)
+	-- "start" (START MIST NOW, the third word its length since 2026-10-12: one of
+	-- MistSeconds) or "end" (END MIST NOW); since 2026-10-12 "eligible" (MAKE
+	-- ELIGIBLE NOW), "burst" (a BERRY BURST around you) and "say" (MOSSKEEPER
+	-- SAYS, the third word his line).
+	mist = function(verb: string, extra: any?): Args
+		return args("Mist", verb, extra, nil)
+	end,
+	-- The Mist's tools for the target bar's player (2026-10-12): their carried
+	-- Dewberries, their progress toward a pod, a Mysterious Pod ("random" or
+	-- { species, size? }, with their username for anybody but you), and their
+	-- Mysterious Pods ready now.
+	mistBerries = function(targetId: number, count: number): Args
+		return args("MistBerries", targetId, count, nil)
+	end,
+	mistProgress = function(targetId: number, progress: number): Args
+		return args("MistProgress", targetId, progress, nil)
+	end,
+	mistPod = function(targetId: number, choice: any, confirmName: string?): Args
+		return args("MistPod", targetId, choice, confirmName)
+	end,
+	mistReady = function(targetId: number): Args
+		return args("MistReady", targetId, nil, nil)
 	end,
 	-- "server" or "all"; `confirmed` only after YES, ALL SERVERS.
 	announce = function(scope: string, text: string, confirmed: boolean): Args
@@ -352,8 +396,12 @@ end
 ConsoleModel.Metrics = {
 	MaxW = 900,
 	MaxH = 600,
-	TabMinShort = 84,
-	TabMinTall = 100,
+	-- A tab's least width on a short screen: 72 since the sixth tab (2026-10-12,
+	-- MIST) so all six fit a 640 x 360 phone beside ADMIN; still 44 tall.
+	TabMinShort = 72,
+	-- Elsewhere too since the sixth tab, so six fit a small window's header
+	-- beside ADMIN CONSOLE; a desktop's tabs are wider than this (up to 150).
+	TabMinTall = 72,
 	TabGap = 4,
 	TargetShort = 40,
 	TargetTall = 48,
@@ -390,6 +438,9 @@ ConsoleModel.Metrics = {
 	ChipMinW = 64,
 	GrantChipMinW = 44,
 	ModeMinW = 100,
+	-- THE MIST TAB (2026-10-12): a count chip (0 .. 9), a pool creature's chip.
+	CountMinW = 40,
+	CreatureMinW = 96,
 	FormMinW = 60,
 	ScopeMinW = 120,
 	ScrollBar = 6,
@@ -674,6 +725,22 @@ function ConsoleModel.pageHeight(tabId: string, w: number, rowH: number, opts: P
 		-- THIS SERVER / ALL SERVERS, the words, the count beside SEND.
 		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.chipsHeight(2, cardW, M.ScopeMinW, 2, rowH),
 			M.MessageH, ConsoleModel.actionRowHeight(cardW, 1, rowH) }))
+	elseif tabId == "mist" then
+		-- THE MIST (2026-10-12, item 12): its state beside START / END, the
+		-- lengths beside MAKE ELIGIBLE NOW, the berries' line. AROUND YOU: the
+		-- burst, MOSSKEEPER SAYS. FOR THE TARGET: their counts, DEWBERRIES 0..5,
+		-- PROGRESS 0..9, the creature, the size, GIVE POD and READY NOW.
+		local pool = #EnchantedMistData.Pool.Entries
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH),
+			ConsoleModel.chipsHeight(#ConsoleModel.MistSeconds + 1, cardW, M.ChipMinW, 4, rowH), M.SmallLineH }))
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 1, rowH),
+			ConsoleModel.actionRowHeight(cardW, 1, rowH) }))
+		table.insert(sections, ConsoleModel.cardHeight({ M.SmallLineH,
+			ConsoleModel.chipsHeight(EnchantedMistData.CarryCap + 1, cardW, M.CountMinW, 10, rowH), M.SmallLineH,
+			ConsoleModel.chipsHeight(EnchantedMistData.BerriesPerPod, cardW, M.CountMinW, 10, rowH), M.SmallLineH,
+			ConsoleModel.chipsHeight(pool + 1, cardW, M.CreatureMinW, pool + 1, rowH),
+			ConsoleModel.chipsHeight(SeedData.TierCount + 1, cardW, M.ChipMinW, SeedData.TierCount + 1, rowH),
+			ConsoleModel.actionRowHeight(cardW, 2, rowH) }))
 	end
 	local h = M.PagePad * 2
 	for i, s in ipairs(sections) do

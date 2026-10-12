@@ -112,21 +112,53 @@ end
 
 --==============================================================================
 -- THE GRANT: inside the delivery's own profile change; never yields.
+--
+-- `choice` (2026-10-12, an admin's GIVE A MYSTERIOUS POD): a pool creature by
+-- id -- and, for a sized rarity, its size -- in place of the roll; a sized
+-- creature without one rolls its size as a delivery's does. A creature the
+-- pool does not hold, a size out of range or a size asked for a Secret is
+-- never granted. Without a choice the grant rolls everything, as before.
 --==============================================================================
-function MysteryPodService.Grant(player: any, profile: any): boolean
+export type Choice = { species: string, size: number? }
+
+-- The pool's entry for a creature id, or nil.
+function MysteryPodService.PoolEntry(id: any): any
+	for _, entry in ipairs(POOL.Entries) do
+		if entry.Id == id then
+			return entry
+		end
+	end
+	return nil
+end
+
+-- Answers whether it granted, and the shell's Item id (its record's key).
+function MysteryPodService.Grant(player: any, profile: any, choice: Choice?): (boolean, string?)
 	local shell = MysteryPodService.ShellId()
 	if not shell then
 		return false
 	end
-	local entry = EnchantedMistData.pickCreature(Hooks.random())
+	local entry = if choice then MysteryPodService.PoolEntry(choice.species)
+		else EnchantedMistData.pickCreature(Hooks.random())
 	local creature = entry and Hooks.species(entry.Id)
 	if not creature then
 		-- An outcome the game cannot make is never saved.
 		return false
 	end
-	local size: number? = if EnchantedMistData.isSized(entry.Rarity)
-		then EnchantedMistData.pickSize(Hooks.random())
-		else nil
+	local size: number? = nil
+	local asked = if choice then choice.size else nil
+	if EnchantedMistData.isSized(entry.Rarity) then
+		if asked ~= nil then
+			if type(asked) ~= "number" or asked ~= math.floor(asked) or asked < 1 or asked > SeedData.TierCount then
+				return false
+			end
+			size = asked
+		else
+			size = EnchantedMistData.pickSize(Hooks.random())
+		end
+	elseif asked ~= nil then
+		-- A Secret keeps its own size: one asked for it is refused, never dropped.
+		return false
+	end
 	local given, item = Hooks.giveShell(player, shell)
 	if not given or type(item) ~= "string" then
 		return false
@@ -144,7 +176,37 @@ function MysteryPodService.Grant(player: any, profile: any): boolean
 		ReadyAt = Hooks.now() + EnchantedMistData.HatchSeconds,
 	}
 	log(string.format("%s was given a Mysterious Pod (%s).", tostring(player.Name), item))
-	return true
+	return true, item
+end
+
+--==============================================================================
+-- MAKE READY NOW (2026-10-12, an admin's: the owner's item 12)
+--
+-- Every Mysterious Pod `profile` holds a record for, ready at `now` (the
+-- grant's own clock, Hooks.now) -- inside the caller's profile change, never
+-- yielding. Answers the Item ids whose record was still waiting, and every
+-- shell's: the caller moves each one's Bag row too (CarryService.
+-- SetPodDeadline), as a shell hatches at the later of the two.
+--==============================================================================
+function MysteryPodService.MakeReady(profile: any, now: number): ({ string }, { string })
+	local records = profile.MysteryPods
+	local waiting: { string } = {}
+	local items: { string } = {}
+	if type(records) ~= "table" then
+		return waiting, items
+	end
+	for item, rec in pairs(records) do
+		if type(item) == "string" and type(rec) == "table" then
+			table.insert(items, item)
+			if (tonumber(rec.ReadyAt) or 0) > now then
+				rec.ReadyAt = now
+				table.insert(waiting, item)
+			end
+		end
+	end
+	table.sort(waiting)
+	table.sort(items)
+	return waiting, items
 end
 
 --==============================================================================

@@ -473,13 +473,14 @@ local ok, err = pcall(function()
 			and not twice.ok and twice.message == "An Enchanted Mist is already running here. Nothing changed."
 			and stop.ok and stop.message == "Enchanted Mist ended for everyone in this server."
 			and not stopTwice.ok and stopTwice.message == "No Enchanted Mist is running here. Nothing changed."
-		if not (fine and asked and byName and mine and table.concat(actions, ",") == "Mist:start,Mist:end") then
+		-- A start's length rides in its audit action since 2026-10-12 (item 12: 2, 5 or 10 minutes).
+		if not (fine and asked and byName and mine and table.concat(actions, ",") == "Mist:start:300,Mist:end") then
 			table.insert(mistBad, string.format("%s: %s / %s / %s / %s; audit %s", who.Name, start.message, twice.message,
 				stop.message, stopTwice.message, table.concat(actions, ",")))
 		end
 	end
 	check(#mistBad == 0, "the Enchanted Mist is all three admins': each starts one and ends it, a second start or end "
-		.. "refused with nothing changed, each change in the audit under who made it (Mist:start, Mist:end)",
+		.. "refused with nothing changed, each change in the audit under who made it (Mist:start:300, Mist:end)",
 		table.concat(mistBad, " | "))
 	local fromMist = #calls
 	local refusedMist = admin.Handle(fourth, "Mist", "start")

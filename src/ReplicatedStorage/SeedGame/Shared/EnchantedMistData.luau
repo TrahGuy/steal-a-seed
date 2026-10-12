@@ -32,6 +32,9 @@ EnchantedMistData.Schedule = {
 	CooldownSeconds = 3600,
 	FirstEligibleMin = 1200,
 	FirstEligibleMax = 3600,
+	-- An admin's START MIST NOW (2026-10-12, the owner's item 12): 2, 5 or 10
+	-- minutes, the console's chips; the normal ActiveSeconds among them.
+	AdminSeconds = { 120, 300, 600 },
 }
 
 --==============================================================================
@@ -112,6 +115,12 @@ EnchantedMistData.Spawn = {
 	PodClear = 10,
 	Tries = 12,
 	QuietEndSeconds = 10,
+	-- AN ADMIN'S BERRY BURST (2026-10-12, the owner's item 12): Count berries
+	-- around the admin, MinRadius .. MaxRadius studs out -- wide enough for
+	-- five at Spacing -- on a floor no more than MaxStep above or below the
+	-- one the admin stands on (RootHeight under their body when none is found
+	-- there), Tries spots each.
+	Burst = { Count = 5, MinRadius = 8, MaxRadius = 24, MaxStep = 4, RootHeight = 3, Tries = 30 },
 }
 
 --==============================================================================
