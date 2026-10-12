@@ -501,7 +501,7 @@ local ok, err = pcall(function()
 			and string.find(talkSrc, "for _, gui in ipairs(CollectionService:GetTagged(VIP_TAG)) do", 1, true),
 		"the talk open: the hub sign, your own titles, your VIP name and his TAP TALK prompt step aside; given back after")
 	local toastSrc = scripts:WaitForChild("ActionToastUI").Source
-	check(string.find(toastSrc, "metrics = if fromTop or layout.sidebar then PHONE elseif small", 1, true)
+	check(string.find(toastSrc, "metrics = if layout.sidebar then PHONE elseif small then SMALL else FULL", 1, true)
 			and string.find(toastSrc, "local PHONE: Metrics = { head = 14, headMin = 12, detail = 11,", 1, true)
 			and HudLayout.solve({ safe = Vector2.new(705, 302), touch = true, keyboard = false }).sidebar == true,
 		"notices on every touch screen (HudLayout's sidebars): the PHONE size, a 14-px head (the owner's reference)")

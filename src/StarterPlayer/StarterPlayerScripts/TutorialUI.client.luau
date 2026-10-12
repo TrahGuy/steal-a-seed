@@ -165,10 +165,11 @@ end
 -- The banner, Skip and GUIDE live in one full-size holder that draws nothing
 -- and takes no input. On a phone the words stand in the left column, beside
 -- the band the notices pass through at the top of the screen; while a notice is
--- up the holder is hidden, so a notice is never written over the guide's words
--- or they over it, and comes back the moment the notice has gone (Notice.reach).
+-- up the holder gives way -- up a little and fading (2026-10-12; it was hidden
+-- outright) -- so a notice is never written over the guide's words or they over
+-- it, and comes back the moment the last notice has gone (Notice.giveWay).
 -- Only the words: the arrows, the highlight and the markers in the world carry
--- on. Everywhere else the holder is always shown and changes nothing.
+-- on. Everywhere else the notices stack under the card (Notice.band).
 --==============================================================================
 local words = Instance.new("Frame")
 words.Name = "Words"
@@ -333,15 +334,19 @@ end
 table.insert(connections, instruction:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
 table.insert(connections, subline:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
 
--- The words stand down while a notice is up beside them (a phone only), and
--- while a buff popover with no clear place but over them is open (2026-10-09:
--- a 705 x 338 phone, under the panel's row) -- BoostIconsUI's client-local
--- BoostIcons.CoversAttribute, which the Pod Rush tracker steps aside for too.
+-- The words stand down while a buff popover with no clear place but over them
+-- is open (2026-10-09: a 705 x 338 phone, under the panel's row) --
+-- BoostIconsUI's client-local BoostIcons.CoversAttribute, which the Pod Rush
+-- tracker steps aside for too. And on a phone, while a notice is up at the top
+-- centre beside them, the card GIVES WAY (2026-10-12, the owner): up a little
+-- and fading, back the moment the last notice has gone (Notice.giveWay).
 local COVERS = Config.BoostIcons.CoversAttribute
 local function coverWords()
-	words.Visible = not ((guide and Notice.reach() ~= nil) or player:GetAttribute(COVERS) == true)
+	words.Visible = player:GetAttribute(COVERS) ~= true
+	Notice.giveWay(words, guide and Notice.showing() > 0,
+		require(Shared:WaitForChild("StatusText")).reducedMotion())
 end
-table.insert(connections, Notice.onReach(coverWords))
+table.insert(connections, Notice.onShowing(coverWords))
 table.insert(connections, player:GetAttributeChangedSignal(COVERS):Connect(coverWords))
 
 local function placeBanner()
@@ -398,6 +403,12 @@ local function placeBanner()
 		resume.TextXAlignment = Enum.TextXAlignment.Center
 		resume.Position = UDim2.new(0.5, banner.Position.X.Offset, 0, layout.banner.y)
 	end
+	-- THE NOTICES' BAND (2026-10-12): off a phone the notices stack UNDER the
+	-- guide's card -- the banner, Skip and GUIDE -- while it shows; on a phone the
+	-- card gives way to them instead (coverWords).
+	Notice.band("guide-banner", "above", if guide then nil else banner)
+	Notice.band("guide-skip", "above", if guide then nil else skip)
+	Notice.band("guide-resume", "above", if guide then nil else resume)
 	coverWords()
 end
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner))
@@ -502,6 +513,11 @@ handWords.ZIndex = 6
 local handKey = outlined(spotGui, "Key", Spot.Words.KeySize, GOLD, 2)
 handKey.Visible = false
 handKey.ZIndex = 6
+-- The notices hang under the hand and its words while a button is lit, and the
+-- hand never gives way (the owner, 2026-10-12; Notice.band).
+Notice.band("guide-hand", "above", hand)
+Notice.band("guide-hand-words", "above", handWords)
+Notice.band("guide-hand-key", "above", handKey)
 
 --==============================================================================
 -- THE CELEBRATION
@@ -519,6 +535,9 @@ party.Size = UDim2.fromOffset(620, 150)
 party.Visible = false
 party.ZIndex = 8
 party.Parent = gui
+-- The moment wins the band: a notice it would meet gives way until it has gone
+-- (the owner, 2026-10-12; Notice.band).
+Notice.band("guide-celebration", "over", party)
 local partyScale = Instance.new("UIScale")
 partyScale.Scale = 0.2
 partyScale.Parent = party

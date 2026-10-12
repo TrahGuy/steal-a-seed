@@ -154,6 +154,9 @@ card.ZIndex = 2
 card.Parent = gui
 local fit = Instance.new("UIScale")
 fit.Parent = card
+-- The moment wins the notices' band: a notice it would meet gives way until the
+-- card has gone (the owner, 2026-10-12; Notice.band).
+Notice.band("invite-card", "over", card)
 
 local function place(object: GuiObject, r: MenuLayout.Rect)
 	object.Position = UDim2.fromOffset(r.x, r.y)

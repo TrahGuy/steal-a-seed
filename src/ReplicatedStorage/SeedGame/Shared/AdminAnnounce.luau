@@ -164,6 +164,16 @@ function AdminAnnounce.key(adminId: number, kind: string, targetId: number?): st
 	return string.format("admin:%d:%s%s", adminId, kind, if targetId then ":" .. tostring(targetId) else "")
 end
 
+-- SILENT LINES (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is
+-- overlapping"): the Mist's start and end make their own sound -- BEGINS and
+-- ENDS, alone -- so their lines come without the notice's ping. Every other
+-- admin line keeps it.
+local QUIET: { [string]: boolean } = { miststart = true, mistend = true }
+
+function AdminAnnounce.quiet(kind: string): boolean
+	return QUIET[kind] == true
+end
+
 --==============================================================================
 -- A BURST FOLDS. The same admin giving the same player the same kind of thing
 -- again within FoldSeconds of the last adds to the one line: its count and

@@ -1,5 +1,42 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 B2: EVERY NOTICE AT THE TOP CENTRE, AND WHO GIVES WAY — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK on the captures; the 54 specs touching it green (HudLayoutSpec 1470/0, NoticeSpec 100/0, AdminAnnounceSpec 43/0, TreadmillFunSpec 116/0, BoostIconsSpec 43/0, ...; HatchRollSpec and TrafficLogSpec, the known wall-clock flakes, green alone); MUTANTS 6/6 CAUGHT; GUARDED PLAYS ON THE PHONE EMULATOR (705 x 338) AND A DESKTOP WINDOW (1169 x 716); captures in output/item16b2-2026-10-12)
+
+The owner, with a marked-up phone screenshot: "ALL NOTIFICATIONS go to the TOP CENTRE, just under BIOMES / PLOT / OBBY, on DESKTOP AND MOBILE. Stack them downward from there; never past the screen's middle." Then the rule for clashes: the one giving way slides up a little and fades in about 0.3 s; a new notice lifts and fades the older one; Reduced Motion gets a plain fade. The overlap list went to the owner first, who confirmed it item by item.
+- **Where (HudLayout.toastUnderRow):** the first notice's slot is 8 px under the button row on every screen: TELEPORT or RETURN, BIOMES, OBBY, the run's clock.
+  - On a phone it is never above the column's top. Centred, up to 340 wide.
+  - `toastTop` is true everywhere. The stack hangs down from that slot and never runs past 8 px above the middle.
+  - Until today the notices stood over the belt (2026-10-04).
+- **The stack (ActionToastUI):** the first notice stands at the top and each newer one goes under it.
+  - When the next would pass the middle, the OLDEST gives way: up GiveWayPixels (10) and fading over GiveWaySeconds (0.3). The rest move up a slot.
+  - Metrics follow the screen: phone 14/11 px, small window SMALL, desktop FULL.
+  - DisplayOrder 13 -> 49: notices draw over every panel (the owner's answer (b)), the prompts and the hatch timers, and under the chase word, the admin console, ADMIN and the guide's spotlight.
+  - With a panel open (OpenPanel; the Mosskeeper talk included) the stack keeps to one line.
+- **Who gives way (Notice.band, the owner's list):**
+  - The notices stack UNDER an "above":
+    - off a phone: the guide's card (banner, Skip, GUIDE), the Pod Rush tracker, the mill bar;
+    - on every screen: the spotlight's hand and words, and an admin announcement (where that leaves no room, a notice waits for it).
+  - A notice gives way to an "over" and comes back after it, if its time is not up: the chase word, CONGRATULATIONS!, the Pod Rush end card, the invite card, REBORN!, the chest splash, the Mysterious Pod's draw.
+  - On a phone, the guide's card, the tracker and the mill bar give way to a notice (Notice.giveWay: a fade, plus a slide by AnchorPoint so their own placement is never written over).
+  - World billboards never fade; notices draw over them.
+  - The walk-speed pop keeps clear of the stack.
+  - A passing line (the biome name, a sale) that lands in the notices' band stands under the stack (HudLayout.notice, `reach`): on a phone's column as before, and now on a phone with no column, or where a window drops the line under its buttons.
+- **The band's tick:** a delay that re-arms itself only while a notice is up or waiting, as `stillTrue`'s does. No per-frame hook (HudLayoutSpec counts them).
+- **Item 16C, folded in:** an admin's Mist start and end lines come without the notice's ping (AdminAnnounce.quiet; TellEveryone sends `quiet`). BEGINS and ENDS are their sound. Every other admin line keeps its ping.
+- **Found in Play and fixed:**
+  - A quick step-aside, back, step-aside made the phone's guide card drift (its rest was read mid-tween). giveWay now reads the rest values only once a return has finished. Re-checked live: back to exactly anchor 0 and transparency 0.
+  - Under the desktop's guide card, the stack's depth was still measured from the slot above the card, so a third notice ended 3 px from the middle. The depth now follows the stack's top. Re-checked live: two fit, and the third makes the oldest give way.
+- **LIVE, phone (705 x 338):**
+  - p08: two notices under BIOMES / PLOT / OBBY, first on top.
+  - p09: a third arriving; the oldest gave way and the rest moved up.
+  - p03, p04, p07, p13: the guide card gave way and came back exactly.
+  - p12: one line during the talk, the replies 70 px clear of him.
+- **LIVE, desktop (1169 x 716):**
+  - d01, d05: notices stacked under the guide's banner, which stays.
+  - d06: a third arriving; the oldest gave way.
+  - d09: one line during the talk, the replies right of him and clear of his bar.
+- **Noted, not changed:** from the plots, the hub's world Mist sign stands right under the top row, so a notice draws over its words (rule 14).
+- **Files:** HudLayout, Notice, ActionToastUI, TutorialUI, PodRushUI, AnnouncementUI, AlertUI, TreadmillFunUI, InviteRewardUI, MysteryRevealUI, RebirthFX, RewardSplash, AdminAnnounce, AdminService. Specs: HudLayoutSpec, BoostIconsSpec, TreadmillFunSpec, EnchantedMistSpec, AdminAnnounceSpec.
 ## ITEM 16 B: MOBILE SIZING — THE TALK, THE NOTICES, THE HUB SIGN — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK on the captures, NOT PUBLISHED; MosskeeperTalkSpec 34/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0, AdminMistSpec 69/0, EventHubSpec 53/0, MistLookSpec 13/0, HudLayoutSpec 1468/0, SecretToastSpec 61/0, MistAudioSpec 17/0, and the other notice and title readers green; MUTANTS 12/12 CAUGHT; TWO GUARDED PLAYS ON THE PHONE EMULATOR, 705 x 338; captures in output/item16b-2026-10-12)
 
 The owner on a phone: "notification looks so large in mobile, specially the npc dialogue", with a Grow a Garden phone screenshot for the size.

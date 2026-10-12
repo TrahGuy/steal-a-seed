@@ -108,6 +108,10 @@ list.SortOrder = Enum.SortOrder.LayoutOrder
 list.Padding = UDim.new(0, 6)
 list.HorizontalAlignment = Enum.HorizontalAlignment.Center
 list.Parent = stack
+-- THE NOTICES' BAND (2026-10-12, the owner): an announcement keeps the top slot
+-- and the notices stack under it; where that leaves no room, they wait for it
+-- to end (Notice.band; the stack draws nothing while it holds no line).
+require(Shared:WaitForChild("Notice")).band("announcement", "above", stack)
 
 local function outlined(label: TextLabel, thickness: number): UIStroke
 	local edge = Instance.new("UIStroke")

@@ -437,14 +437,14 @@ end
 -- in every server it reaches. TellEveryone is a seam, like TellPlayer: a spec
 -- records the lines instead of the wire.
 --==============================================================================
-function AdminService.TellEveryone(title: string, key: string)
+function AdminService.TellEveryone(title: string, key: string, quiet: boolean?)
 	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
 	local remotes = if seedGame then seedGame:FindFirstChild("Remotes") else nil
 	local event = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if event and event:IsA("RemoteEvent") then
 		pcall(function()
-			event:FireAllClients(Notice.ServerNotice,
-				{ title = title, key = key, icon = GameConfig.AdminAnnounce.Icon })
+			event:FireAllClients(Notice.ServerNotice, { title = title, key = key, icon = GameConfig.AdminAnnounce.Icon,
+				quiet = if quiet then true else nil })
 		end)
 	end
 end
@@ -455,7 +455,10 @@ local folds: { [string]: AdminAnnounce.Fold } = {}
 local function announce(admin: any, what: AdminAnnounce.What, targetId: number?)
 	local line = AdminAnnounce.line(AdminAnnounce.nameOf(admin), what)
 	if line then
-		AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId))
+		-- The Mist's start and end without the ping: BEGINS and ENDS are their
+		-- sound (2026-10-12, AdminAnnounce.quiet).
+		AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId),
+			AdminAnnounce.quiet(what.kind))
 	end
 end
 

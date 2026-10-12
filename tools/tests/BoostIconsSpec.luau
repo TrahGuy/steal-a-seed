@@ -245,7 +245,8 @@ local ok, err = pcall(function()
 		end
 	end
 	check(#bad == 0, "on 12 screens, 1 to 6 icons stand over the strip's name band, 8 px clear of every group and "
-		.. "both thumbs, the toast over them, nothing else moved", table.concat(bad, "; "))
+		.. "both thumbs, the notices' slot above them (the top centre since 2026-10-12), nothing else moved",
+		table.concat(bad, "; "))
 	check(#tooBig == 0, "and the row stays bounded: never under the Min size, never more than two rows, no problem",
 		table.concat(tooBig, "; "))
 	local s1, c1, n1 = HudLayout.iconGrid(6, 1000, 40)
@@ -258,8 +259,9 @@ local ok, err = pcall(function()
 	do
 		local desk = HudLayout.solve(screen(1920, 1080, false, 3))
 		local phone = HudLayout.solve(screen(801, 392, true, 3))
-		check(desk.iconSize == CFG.Size.Desktop and phone.iconSize == CFG.Size.Phone and phone.toastTop == false,
-			"desktop icons 40 px, a phone's 30, and a phone's notices over the belt too")
+		check(desk.iconSize == CFG.Size.Desktop and phone.iconSize == CFG.Size.Phone and phone.toastTop == true
+				and desk.toastTop == true,
+			"desktop icons 40 px, a phone's 30; the notices hang at the top centre on both (2026-10-12, the owner)")
 	end
 
 	--==========================================================================

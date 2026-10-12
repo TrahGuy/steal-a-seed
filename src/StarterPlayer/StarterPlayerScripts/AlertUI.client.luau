@@ -169,6 +169,10 @@ wordStroke.Thickness = 4
 wordStroke.Color = Color3.fromRGB(24, 12, 12)
 wordStroke.Transparency = 1
 wordStroke.Parent = word
+-- THE NOTICES' BAND (2026-10-12, the owner): the chase word wins it -- a notice
+-- it would meet gives way for its second and is back after (Notice.band; while
+-- the word is faded out it stands nowhere).
+require(Shared:WaitForChild("Notice")).band("chase-word", "over", word)
 
 --==============================================================================
 -- STATE

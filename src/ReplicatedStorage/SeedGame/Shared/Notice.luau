@@ -157,6 +157,13 @@ Notice.SlideLead = 0.06
 Notice.NudgeScale = 1.04
 Notice.NudgeSeconds = 0.16
 Notice.EvictSeconds = 0.16
+-- GIVING WAY (2026-10-12, the owner's rule for the top-centre band): the one
+-- giving way -- the oldest notice when the next would pass the middle, a notice
+-- under a card that wins the band, a phone's guide card or tracker under a
+-- notice -- slides up this far and fades over this long, and comes back the
+-- same way. Reduced Motion: the fade alone.
+Notice.GiveWaySeconds = 0.3
+Notice.GiveWayPixels = 10
 -- How often a notice with `stillTrue` is asked again while it is up.
 Notice.RecheckSeconds = 0.25
 -- Every duration the renderer uses is multiplied by this. 1 in the game; a
@@ -731,6 +738,188 @@ function Notice.onShowing(fn: () -> ()): RBXScriptConnection
 	local event = showingSignal or Instance.new("BindableEvent")
 	showingSignal = event
 	return event.Event:Connect(fn)
+end
+
+--==============================================================================
+-- WHAT ELSE STANDS IN THE NOTICES' BAND (2026-10-12)
+--
+-- The notices hang at the top centre on every screen (HudLayout.toastUnderRow).
+-- What else may stand in that band says so here, by the GuiObject it draws:
+--
+--   "above"  the notices stack UNDER it while it shows -- the guide's card and
+--            the spotlight's words, a desktop's Pod Rush tracker and mill bar,
+--            an admin announcement
+--   "over"   it wins: a notice it would meet gives way (GiveWaySeconds) and
+--            comes back when it has gone, if its time is not up -- the chase
+--            word, CONGRATULATIONS!, REBORN!, the invite and chest cards, the
+--            Pod Rush end card, the Mysterious Pod's draw
+--
+-- What gives way to the notices instead (a phone's guide card, tracker and
+-- mill bar) reads `showing` and `reach`. Each rect is asked live -- the
+-- object's AbsolutePosition and AbsoluteSize, one space for every ScreenGui --
+-- and only while the object draws: Visible all the way up, its ScreenGui
+-- enabled. nil takes a key off. Made on first use, like `reach`.
+--==============================================================================
+export type BandKind = "above" | "over"
+export type BandRect = { x: number, y: number, w: number, h: number }
+
+local bandEntries: { [string]: { kind: BandKind, object: GuiObject } } = {}
+local bandSignal: BindableEvent? = nil
+
+function Notice.band(key: string, kind: BandKind, object: GuiObject?)
+	local was = bandEntries[key]
+	if object then
+		if was and was.object == object and was.kind == kind then
+			return
+		end
+		bandEntries[key] = { kind = kind, object = object }
+	elseif was then
+		bandEntries[key] = nil
+	else
+		return
+	end
+	local event = bandSignal
+	if event then
+		event:Fire()
+	end
+end
+
+-- Whether `object` is drawn now: in the place, its ScreenGui enabled, it and
+-- every GuiObject over it Visible, with some size -- and a label or a picture
+-- not faded all the way out (the chase word stays Visible at transparency 1).
+function Notice.drawn(object: GuiObject): boolean
+	local layer = object:FindFirstAncestorWhichIsA("LayerCollector")
+	if not layer or (layer:IsA("ScreenGui") and not layer.Enabled) then
+		return false
+	end
+	local any = object :: any
+	if (object:IsA("TextLabel") or object:IsA("TextButton"))
+		and any.TextTransparency >= 1 and any.BackgroundTransparency >= 1 then
+		return false
+	elseif (object:IsA("ImageLabel") or object:IsA("ImageButton"))
+		and any.ImageTransparency >= 1 and any.BackgroundTransparency >= 1 then
+		return false
+	end
+	local at: Instance? = object
+	while at and at ~= layer do
+		if at:IsA("GuiObject") and not at.Visible then
+			return false
+		end
+		at = at.Parent
+	end
+	return object.AbsoluteSize.X > 0 and object.AbsoluteSize.Y > 0
+end
+
+-- The rects of one kind standing now, in AbsolutePosition's space.
+function Notice.bandRects(kind: BandKind): { BandRect }
+	local out: { BandRect } = {}
+	for _, entry in pairs(bandEntries) do
+		if entry.kind == kind and Notice.drawn(entry.object) then
+			local p, s = entry.object.AbsolutePosition, entry.object.AbsoluteSize
+			table.insert(out, { x = p.X, y = p.Y, w = s.X, h = s.Y })
+		end
+	end
+	return out
+end
+
+function Notice.onBand(fn: () -> ()): RBXScriptConnection
+	local event = bandSignal or Instance.new("BindableEvent")
+	bandSignal = event
+	return event.Event:Connect(fn)
+end
+
+--==============================================================================
+-- GIVING WAY TO THE NOTICES (2026-10-12)
+--
+-- What steps aside for a notice -- a phone's guide card, Pod Rush tracker and
+-- mill bar -- calls giveWay(root, true) while one is up and giveWay(root,
+-- false) after: everything under `root` fades out over GiveWaySeconds and the
+-- whole of it slides up GiveWayPixels, then back the same way. The slide moves
+-- the AnchorPoint, never the Position, so the element's own placement is never
+-- written over; Reduced Motion (`still`) keeps the fade alone. Each resting
+-- transparency is read as it starts, so it comes back exactly as it was.
+--==============================================================================
+local TRANSPARENT: { [string]: { string } } = {
+	Frame = { "BackgroundTransparency" },
+	TextLabel = { "BackgroundTransparency", "TextTransparency", "TextStrokeTransparency" },
+	TextButton = { "BackgroundTransparency", "TextTransparency", "TextStrokeTransparency" },
+	ImageLabel = { "BackgroundTransparency", "ImageTransparency" },
+	ImageButton = { "BackgroundTransparency", "ImageTransparency" },
+	ViewportFrame = { "BackgroundTransparency", "ImageTransparency" },
+	UIStroke = { "Transparency" },
+}
+
+type GiveWayState = {
+	on: boolean,
+	-- True once the last return has finished: only then are the resting values
+	-- read again. Read mid-tween they would be half-faded and half-slid, and a
+	-- quick step-aside, back, step-aside would drift (seen in Play, 2026-10-12).
+	settled: boolean,
+	turn: number,
+	rest: { { target: Instance, prop: string, value: number } },
+	anchor: Vector2,
+}
+local givingWay: { [Instance]: GiveWayState } = setmetatable({} :: any, { __mode = "k" })
+
+function Notice.giveWay(root: GuiObject, on: boolean, still: boolean?)
+	local state = givingWay[root]
+	if not state then
+		if not on then
+			return
+		end
+		state = { on = false, settled = true, turn = 0, rest = {}, anchor = root.AnchorPoint }
+		givingWay[root] = state
+	end
+	if state.on == on then
+		return
+	end
+	state.on = on
+	state.turn += 1
+	local turn = state.turn
+	local TweenService = game:GetService("TweenService")
+	local info = TweenInfo.new(Notice.GiveWaySeconds * Notice.TimeScale, Enum.EasingStyle.Quad,
+		if on then Enum.EasingDirection.In else Enum.EasingDirection.Out)
+	if on then
+		if state.settled then
+			state.settled = false
+			state.rest = {}
+			state.anchor = root.AnchorPoint
+			local all = root:GetDescendants()
+			table.insert(all, root)
+			for _, target in ipairs(all) do
+				for _, prop in ipairs(TRANSPARENT[target.ClassName] or {}) do
+					local value = (target :: any)[prop]
+					if value < 1 then
+						table.insert(state.rest, { target = target, prop = prop, value = value })
+					end
+				end
+			end
+		end
+		for _, rest in ipairs(state.rest) do
+			if rest.target.Parent then
+				TweenService:Create(rest.target, info, { [rest.prop] = 1 }):Play()
+			end
+		end
+		local tall = root.AbsoluteSize.Y
+		if not still and tall > 0 then
+			TweenService:Create(root, info, {
+				AnchorPoint = state.anchor + Vector2.new(0, Notice.GiveWayPixels / tall),
+			}):Play()
+		end
+	else
+		for _, rest in ipairs(state.rest) do
+			if rest.target.Parent then
+				TweenService:Create(rest.target, info, { [rest.prop] = rest.value }):Play()
+			end
+		end
+		local back = TweenService:Create(root, info, { AnchorPoint = state.anchor })
+		back.Completed:Once(function(status: Enum.PlaybackState)
+			if status == Enum.PlaybackState.Completed and state.turn == turn then
+				state.settled = true
+			end
+		end)
+		back:Play()
+	end
 end
 
 return Notice

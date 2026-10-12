@@ -74,6 +74,9 @@ panel.Parent = gui
 local panelMax = Instance.new("UISizeConstraint")
 panelMax.MaxSize = Vector2.new(460, 216)
 panelMax.Parent = panel
+-- The draw wins the notices' band: a notice it would meet gives way until it has
+-- gone (the owner, 2026-10-12; Notice.band).
+require(Shared:WaitForChild("Notice")).band("mystery-draw", "over", panel)
 UIKit.corner(panel, 16)
 local edge = Instance.new("UIStroke")
 edge.Thickness = 4

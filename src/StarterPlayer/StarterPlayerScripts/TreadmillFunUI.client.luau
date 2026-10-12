@@ -44,6 +44,8 @@ local BeltCatch = require(Shared:WaitForChild("BeltCatch"))
 local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local Notice = require(Shared:WaitForChild("Notice"))
+local StatusText = require(Shared:WaitForChild("StatusText"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -505,6 +507,11 @@ local GAP = 8
 local hudRects: { SpeedMilestones.Rect } = {}
 local hudBounds: SpeedMilestones.Rect? = nil
 local hudMeasuredAt = -math.huge
+-- THE NOTICES' BAND (2026-10-12): their first slot in this gui's pixels, the
+-- scale and offset that take Notice.reach (HUD units) there, and whether this
+-- is a phone -- where the bar gives way to them rather than they stack under it.
+local toastAt: { x: number, y: number, w: number, k: number, oy: number }? = nil
+local onPhone = false
 
 local function measureHud()
 	local size = measureGui.AbsoluteSize
@@ -541,6 +548,11 @@ local function measureHud()
 	add(L.admin, insetTop)
 	hudRects = rects
 	hudBounds = { x = shift.X, y = shift.Y, w = size.X, h = size.Y }
+	toastAt = { x = L.toast.x * k + shift.X, y = L.toast.y * k + shift.Y, w = L.toast.w * k, k = k, oy = shift.Y }
+	onPhone = L.sidebar
+	-- Off a phone the notices stack under the bar where it stands in their band
+	-- (the owner, 2026-10-12; Notice.band counts it only above the middle).
+	Notice.band("mill-bar", "above", if onPhone then nil else bar)
 end
 
 -- The bar's own size, and the room its badge takes out to its left and over
@@ -653,8 +665,13 @@ RunService.RenderStepped:Connect(function(dt: number)
 		end
 	end
 	bar.Visible = barRect ~= nil
+	-- On a phone, standing in the notices' band at the top, the bar gives way
+	-- while a notice is up and is back after (the owner, 2026-10-12).
+	local inBand = barRect ~= nil and bounds ~= nil and barRect.y < bounds.y + bounds.h / 2
+	Notice.giveWay(bar, onPhone and inBand and Notice.showing() > 0, StatusText.reducedMotion())
 
-	-- A1: over the head while it lasts, clear of the HUD and under the bar.
+	-- A1: over the head while it lasts, clear of the HUD, under the bar and
+	-- clear of the notices standing at the top (2026-10-12).
 	if pop.Visible then
 		local at = if head and head:IsA("BasePart") then project(head.Position + Vector3.new(0, 2.6, 0)) else nil
 		if t >= popUntil or not at then
@@ -662,10 +679,16 @@ RunService.RenderStepped:Connect(function(dt: number)
 		else
 			local foot: Vector2 = at
 			if bounds then
-				local blocked = aroundNow(t)
+				local blocked = table.clone(aroundNow(t))
 				if barRect then
-					blocked = table.clone(blocked)
 					table.insert(blocked, barRect)
+				end
+				local reach, slot = Notice.reach(), toastAt
+				if reach and slot then
+					local stackFoot = reach * slot.k + slot.oy
+					if stackFoot > slot.y then
+						table.insert(blocked, { x = slot.x, y = slot.y, w = slot.w, h = stackFoot - slot.y })
+					end
 				end
 				local w, h, up = POP_W * k, POP_WORDS_H * k, POP_WORDS_UP * k
 				local words = SpeedMilestones.clearOf({ x = foot.X - w / 2, y = foot.Y - up - h / 2, w = w, h = h }, blocked, bounds, GAP)

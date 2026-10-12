@@ -295,12 +295,29 @@ local function guideShowing(): boolean
 end
 
 local placedAs: string? = nil
+-- THE NOTICES' BAND (2026-10-12, the owner): off a phone the notices stack
+-- under the tracker; on a phone there is no room for both, so the tracker GIVES
+-- WAY while a notice is up -- up a little and fading -- and is back after.
+local onPhone = false
+local yielding = false
+local function giveWay()
+	yielding = onPhone and Notice.showing() > 0
+	local still = StatusText.reducedMotion()
+	Notice.giveWay(tracker, yielding, still)
+	Notice.giveWay(strip, yielding, still)
+end
+Notice.onShowing(giveWay)
+
 local function place()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local input = HudLayout.measure(gui)
 	local L = HudLayout.solve(input)
+	onPhone = L.sidebar
+	Notice.band("podrush-tracker", "above", if onPhone then nil else tracker)
+	Notice.band("podrush-strip", "above", if onPhone then nil else strip)
+	giveWay()
 	local camera = Workspace.CurrentCamera
 	local phone = GameConfig.titlePhone(if camera then camera.ViewportSize else nil, UserInputService.TouchEnabled)
 	local k = if phone then T.PhoneScale else 1
@@ -361,7 +378,10 @@ local function paintTracker(now: number)
 	local level = PodRush.levelFor(count)
 	for i, medal in ipairs(medals) do
 		medal.ImageColor3 = if i <= level then WHITE else DIM
-		medal.ImageTransparency = if i <= level then 0 else 0.2
+		-- Not while giving way to a notice: that fade owns it until it is back.
+		if not yielding then
+			medal.ImageTransparency = if i <= level then 0 else 0.2
+		end
 	end
 end
 
@@ -462,6 +482,9 @@ card.Visible = false
 card.Parent = cardGui
 local cardScale = Instance.new("UIScale")
 cardScale.Parent = card
+-- The moment wins the notices' band: a notice it would meet gives way until the
+-- card has gone (the owner, 2026-10-12; Notice.band).
+Notice.band("podrush-endcard", "over", card)
 
 local cardMedal = picture(card, "Medal", ART.Icon, 76, 2)
 cardMedal.AnchorPoint = Vector2.new(0.5, 0)

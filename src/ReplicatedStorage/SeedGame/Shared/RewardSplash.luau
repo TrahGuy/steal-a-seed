@@ -246,6 +246,9 @@ function RewardSplash.build(opts: Options): Built?
 	local scale = Instance.new("UIScale")
 	scale.Scale = k
 	scale.Parent = card
+	-- The moment wins the notices' band: a notice it would meet gives way until
+	-- the card has gone (the owner, 2026-10-12; Notice.band).
+	require(script.Parent:WaitForChild("Notice")).band("reward-splash", "over", card)
 
 	-- Outlines a little heavier than they were on the plate: the only thing
 	-- between a word and the scene now.

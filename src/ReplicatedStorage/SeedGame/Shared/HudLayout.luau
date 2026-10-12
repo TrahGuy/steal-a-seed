@@ -1259,45 +1259,36 @@ local function iconsOver(input: Input, L: Layout, band: Rect, beside: { Rect }?)
 	return row, size, columns
 end
 
-local function withIcons(band: Rect, icons: Rect?): Rect
-	return if icons then HudLayout.union(band, icons) else band
-end
-
 --==============================================================================
--- THE TOAST: ONE LINE ABOVE THE BELT
+-- THE NOTICES AT THE TOP CENTRE (2026-10-12, the owner: "all notifications go
+-- to the top centre, just under BIOMES / PLOT / OBBY, on desktop and mobile")
 --
--- Centred on the belt, 8 px over it, and as wide as 340 allows between
--- whatever shares its rows -- the cash block, the BAT/TRAP column, the thumbs.
--- Where that leaves less than 200 it is lifted above the lowest thing it met
--- and tried again, so a short phone gets a line higher up rather than a sliver.
+-- The toast rect is the FIRST notice's slot: 8 px under the button row --
+-- TELEPORT (or RETURN TO PLOT) with BIOMES and OBBY beside it, the run's clock
+-- in OBBY's slot -- and never above the column's top on a phone (columnTop:
+-- under ADMIN where ADMIN hangs under the row). Centred on the column, or on
+-- TELEPORT, as wide as 340 allows between the groups sharing its rows. The
+-- stack hangs from it and grows DOWN (toastTop, noticeStack), never past the
+-- middle; what else stands in the band says whether the stack starts under it
+-- or steps aside for it (Notice.band, ActionToastUI). Until today the toast
+-- stood over the belt, the icons and the hotbar under it (2026-10-04).
+--
+-- Placed LAST, once the row is: nothing in the row keeps off the notices
+-- (besideClear), which always stand under it.
 --==============================================================================
-local function toastAbove(sw: number, hotbar: Rect, beside: { Rect }): Rect
-	local T, M, G = CONFIG.Toast, CONFIG.Margin, CONFIG.Gap
-	local centre = hotbar.x + hotbar.w / 2
-	local bottom = hotbar.y - G
-	local lo, hi = M, sw - M
-	for _ = 1, 3 do
-		local band = rect(0, bottom - T.Height, sw, T.Height)
-		local ceiling = bottom
-		lo, hi = M, sw - M
-		for _, other in ipairs(beside) do
-			if sharesRows(band, other, G) then
-				if other.x + other.w / 2 < centre then
-					lo = math.max(lo, other.x + other.w + G)
-				else
-					hi = math.min(hi, other.x - G)
-				end
-				ceiling = math.min(ceiling, other.y - G)
-			end
+local function toastUnderRow(input: Input, L: Layout): Rect
+	local T, G = CONFIG.Toast, CONFIG.Gap
+	local bottom: number? = nil
+	for _, r in ipairs({ L.teleport, L.returnPlot, L.obby, L.biomes, L.run }) do
+		if r.w > 0 and r.h > 0 then
+			bottom = math.max(bottom or -math.huge, r.y + r.h)
 		end
-		if hi - lo >= T.MinWidth then
-			break
-		end
-		bottom = ceiling
 	end
-	local width = math.max(0, math.min(T.Width, hi - lo))
-	local x = math.clamp(centre - width / 2, lo, math.max(lo, hi - width))
-	return rect(x, bottom - T.Height, width, T.Height)
+	local top = math.max(0, if bottom then bottom + G else 0, L.columnTop or 0)
+	local centre = L.columnCentre
+		or (if L.teleport.w > 0 then L.teleport.x + L.teleport.w / 2 else input.safe.X / 2)
+	local r = HudLayout.centreIn(L, rect(centre - T.Width / 2, top, T.Width, T.Height), T.Width)
+	return rect(r.x, top, r.w, T.Height)
 end
 
 --==============================================================================
@@ -1452,15 +1443,16 @@ HudLayout.adminBeside = adminBeside
 --==============================================================================
 -- Whether a rect beside TELEPORT clears everything it must: the safe area's
 -- margin, the topbar's free span where it is up in the topbar, every group and
--- badge, the belt's toast and the guide's words, the touch controls, ADMIN and
--- the clock -- and `extra`, which BIOMES passes OBBY in.
+-- badge, the guide's words, the touch controls, ADMIN and the clock -- and
+-- `extra`, which BIOMES passes OBBY in. Not the notices: they hang under this
+-- row (2026-10-12, toastUnderRow), placed after it.
 local function besideClear(input: Input, L: Layout, extra: { Rect }): (Rect) -> boolean
 	local M, G = CONFIG.Margin, CONFIG.Gap
 	local sw = input.safe.X
 	local insetTop = input.insetTop or 0
 	local viewport = input.viewport
 	local originX = if viewport then (viewport.X - sw) / 2 else 0
-	local others: { Rect } = { L.toast, L.banner, L.skip }
+	local others: { Rect } = { L.banner, L.skip }
 	for _, r in ipairs(extra) do
 		table.insert(others, r)
 	end
@@ -1730,7 +1722,7 @@ local function desktop(input: Input): Layout
 		clockChip = false,
 		topRow = false,
 		run = rect(0, 0, 0, 0),
-		toastTop = false,
+		toastTop = true,
 		guide = false,
 		admin = nil,
 	}
@@ -1743,7 +1735,6 @@ local function desktop(input: Input): Layout
 		HudLayout.union(updates, settings),
 	})
 	L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, nil)
-	L.toast = toastAbove(sw, withIcons(band, L.icons), { cash })
 	-- ON A TV ONLY: the notice band and TELEPORT TO PLOT under it came down
 	-- (`lift`), so the tutorial banner keeps 8 px under the button, as compact's
 	-- always has. The desktop's 84 is not touched.
@@ -1758,6 +1749,7 @@ local function desktop(input: Input): Layout
 	L.biomesPlate = Vector2.new(L.biomes.w, L.biomes.h)
 	L.returnPlot = L.teleport
 	L.returnPlate = L.teleportPlate
+	L.toast = toastUnderRow(input, L)
 	return L
 end
 
@@ -2226,7 +2218,7 @@ local function compact(input: Input, keepRight: boolean?): Layout
 		clockChip = false,
 		topRow = false,
 		run = rect(0, 0, 0, 0),
-		toastTop = false,
+		toastTop = true,
 		guide = false,
 		admin = nil,
 	}
@@ -2246,7 +2238,6 @@ local function compact(input: Input, keepRight: boolean?): Layout
 	-- The tutorial banner keeps 8 px under the teleport button as well as the rows.
 	L.banner, L.skip = bannerIn(sw, math.max(railBottom, L.teleport.y + L.teleport.h), beside)
 	L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, beside)
-	L.toast = toastAbove(sw, withIcons(band, L.icons), beside)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	L.obby, L.obbyWide = obbyBeside(input, L)
 	L.biomes, L.biomesWide = biomesBeside(input, L)
@@ -2254,6 +2245,7 @@ local function compact(input: Input, keepRight: boolean?): Layout
 	L.biomesPlate = Vector2.new(L.biomes.w, L.biomes.h)
 	L.returnPlot = L.teleport
 	L.returnPlate = L.teleportPlate
+	L.toast = toastUnderRow(input, L)
 	return L
 end
 
@@ -2804,7 +2796,8 @@ local function sidebars(input: Input): Layout
 		invite = invite,
 		-- The x2 card is no longer a row button on a phone (2026-10-05).
 		boost = nil,
-		toast = toastAbove(sw, band, { cash, thumb, jump }),
+		-- The notices' first slot, under the row (toastUnderRow, at the end).
+		toast = rect(0, 0, 0, 0),
 		teleport = teleport,
 		teleportScale = CONFIG.Teleport.PhoneScale,
 		obby = rect(0, 0, 0, 0),
@@ -2828,23 +2821,19 @@ local function sidebars(input: Input): Layout
 		rowEnd = if inRow then row.stop else nil,
 		columnCentre = if inRow then row.centre else nil,
 		columnTop = columnTop,
-		toastTop = false,
+		toastTop = true,
 		guide = guide,
 		admin = admin,
 	}
 	L.clock = clock
 	--==========================================================================
-	-- THE ICON ROW AND THE NOTICES, OVER THE BELT (2026-10-04)
+	-- THE ICON ROW, OVER THE BELT (2026-10-04)
 	--
-	-- The owner's order for every screen: the hotbar at the bottom, the active
-	-- icons directly above it, the short notices just above the icons. On a
-	-- phone that is the column between the thumbstick and the jump button,
-	-- clear of the cash block -- and on EVERY phone, with or without the top
-	-- row (the rain chip and the mini line were never placed on a phone with
-	-- no row). The notices stood at the top of the column from 2026-09-29 to
-	-- here; they are drawn at the phone's smaller size and stack up no further
-	-- than the middle band allows -- one at a time on a short phone
-	-- (noticeStack), so they never climb over the character.
+	-- The owner's order: the hotbar at the bottom, the active icons directly
+	-- above it -- on a phone in the column between the thumbstick and the jump
+	-- button, clear of the cash block, with or without the top row. The short
+	-- notices stood just above the icons from 2026-10-04 until the owner moved
+	-- every screen's notices to the top centre (2026-10-12, toastUnderRow).
 	--==========================================================================
 	do
 		local around: { Rect } = { L.cash }
@@ -2861,7 +2850,6 @@ local function sidebars(input: Input): Layout
 		end
 		table.insert(around, stack)
 		L.icons, L.iconSize, L.iconColumns = iconsOver(input, L, band, around)
-		L.toast = toastAbove(sw, withIcons(band, L.icons), around)
 	end
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	local beside, first = row.obby, row.biomes
@@ -2873,12 +2861,14 @@ local function sidebars(input: Input): Layout
 		L.biomes, L.biomesWide = biomesBeside(input, L)
 		L.obbyPlate = Vector2.new(L.obby.w, L.obby.h)
 		L.biomesPlate = Vector2.new(L.biomes.w, L.biomes.h)
+		L.toast = toastUnderRow(input, L)
 		return L
 	end
 	-- On the row: the run's clock has OBBY's slot on the course.
 	L.obby, L.obbyWide = beside, row.obbyWide
 	L.biomes, L.biomesWide = first, row.biomesWide
 	L.run = beside
+	L.toast = toastUnderRow(input, L)
 	return L
 end
 
@@ -3340,12 +3330,14 @@ end
 --==============================================================================
 -- THE NOTICE STACK (2026-09-27)
 --
--- ActionToastUI's notices stand on the toast rect, newest at the bottom and
--- older ones above it. `one` is one notice's height with the gap under it and
--- `most` how many the screen may show at once. The stack grows up only while
--- it stays 8 px clear of every group and both thumbs, and never into the middle
--- band -- `middle` (the window's centre, in safe space) plus MiddleBand, where
--- the controller's reticle and its reason line sit. Always at least one.
+-- ActionToastUI's notices hang from the toast rect (`toastTop`, every screen
+-- since 2026-10-12): the first at the top, each newer one under it. `one` is
+-- one notice's height with the gap under it and `most` how many the screen may
+-- show at once. The stack grows down only while it stays 8 px clear of every
+-- group and both thumbs, and never past the middle -- `middle` (the window's
+-- centre, in safe space), where the controller's reticle and its reason line
+-- sit. Always at least one. (The belt's branch below, growing UP into
+-- MiddleBand, is what every screen used from 2026-10-04 to 2026-10-12.)
 --
 -- Returns the whole area the stack may take and how many notices fit in it.
 -- HudLayoutSpec holds that area clear on every listed screen.
@@ -3366,12 +3358,12 @@ function HudLayout.noticeStack(L: Layout, one: number, most: number, middle: num
 		table.insert(others, L.jump)
 	end
 	--==========================================================================
-	-- ON A PHONE THE STACK HANGS FROM THE TOP (2026-09-29; `toastTop`)
+	-- THE STACK HANGS FROM THE TOP (2026-09-29 on a phone; `toastTop`, every
+	-- screen since 2026-10-12)
 	--
-	-- The newest notice at the top of the centre column and older ones under
-	-- it, growing DOWN only while the whole stack ends 8 px above the middle of
-	-- the screen -- the character's own head -- and keeps 8 px off every group.
-	-- Always at least one.
+	-- From the top of the centre column, growing DOWN only while the whole
+	-- stack ends 8 px above the middle of the screen -- the character's own
+	-- head -- and keeps 8 px off every group. Always at least one.
 	--==========================================================================
 	if L.toastTop then
 		local held = 1
@@ -3456,6 +3448,16 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	end
 	-- A TV brings the band down with the clock above it; 0 everywhere else.
 	top += L.lift or 0
+	-- UNDER THE NOTICES (2026-10-12): they hang at the top centre on every screen
+	-- now. A line that ends up in their band -- dropped under the buttons, or on
+	-- a phone with no column -- stands under the stack while one is up, as the
+	-- column's does.
+	local function underNotices(y: number): number
+		if type(reach) == "number" and reach == reach and y + height + G > L.toast.y and y < reach + G then
+			return reach + G
+		end
+		return y
+	end
 	-- On a phone the teleport button stands right under the clock, in this
 	-- band (TELEPORT TO PLOT ON A PHONE): a notice that would share its rows
 	-- stands 8 px under it instead, and is placed round the top rows from there
@@ -3483,7 +3485,7 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 		end
 	end
 	if (top + height + G <= L.railTop or top >= L.railBottom + G) and #inRows == 0 then
-		return 0, top
+		return 0, underNotices(top)
 	end
 	local centre = L.safe.X / 2
 	-- Measured to the badges as well as the buttons -- each on the side its
@@ -3512,10 +3514,10 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 		end
 	end
 	if width / 2 <= math.min(centre - lo, hi - centre) then
-		return 0, top
+		return 0, underNotices(top)
 	end
 	if width <= hi - lo then
-		return (lo + hi) / 2 - centre, top
+		return (lo + hi) / 2 - centre, underNotices(top)
 	end
 	-- Dropped under the rows, and under the teleport, OBBY and BIOMES buttons
 	-- where lower.
@@ -3525,7 +3527,7 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 			lowest = math.max(lowest, b.y + b.h)
 		end
 	end
-	return 0, lowest + G
+	return 0, underNotices(lowest + G)
 end
 
 --==============================================================================
@@ -4057,9 +4059,15 @@ end
 --
 -- The permanent groups with their badges, INVITE's "!", the thumbstick and the
 -- jump button, the bands over the belt (the item name, the REMOVE row, the
--- boost icons, the toast line) and the top row's buttons: what a passing card
--- -- the Invite a Friend reward popup (MenuLayout.rewardPopup) -- stands clear
--- of. Empty rects are left out.
+-- boost icons) and the top row's buttons: what a passing card -- the Invite a
+-- Friend reward popup (MenuLayout.rewardPopup) -- stands clear of. Empty rects
+-- are left out.
+--
+-- NOT the notices (2026-10-12): they hang at the top centre now, and what
+-- shares that band follows the owner's rules there instead of keeping off an
+-- empty slot -- the notices stack under some (a tracker, the guide's card),
+-- step aside for others (a reward card, the chase word), and others step aside
+-- for them (Notice.band, ActionToastUI).
 --==============================================================================
 function HudLayout.occupied(L: Layout): { Rect }
 	local out: { Rect } = {}
@@ -4085,7 +4093,6 @@ function HudLayout.occupied(L: Layout): { Rect }
 	add(L.namePopup)
 	add(L.removeRow)
 	add(L.icons)
-	add(L.toast)
 	add(L.teleport)
 	add(L.obby)
 	add(L.biomes)
@@ -4093,11 +4100,10 @@ function HudLayout.occupied(L: Layout): { Rect }
 	return out
 end
 
--- occupied() without the notices' line (L.toast) -- the line is the notices'
--- only while one passes. What a big passing card may stand over where keeping
--- off it as well leaves it no room or too small to read (2026-10-09, under the
--- phone's panel row: the REBORN! card, the invite reward card), as the buff
--- popover always may (HudLayout.popoverRect).
+-- occupied() without the notices' line: what a big passing card may stand over
+-- (2026-10-09: the REBORN! card, the invite reward card), as the buff popover
+-- always may (HudLayout.popoverRect). The same list since the notices moved to
+-- the top centre (2026-10-12), kept for its callers.
 function HudLayout.occupiedButToast(L: Layout): { Rect }
 	local out: { Rect } = {}
 	for _, r in ipairs(HudLayout.occupied(L)) do

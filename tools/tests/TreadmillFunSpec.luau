@@ -260,8 +260,14 @@ do
 		"the bar has a solid dark track with a gold edge, the gold fill outlined in black on it")
 	-- And the guide's card, which TutorialUI draws over this gui (in the v1048 Play the bar stood among its words).
 	check(has(ui, "local more = UIKit.guideRects(playerGui, origin)") and has(ui, "aroundNow(t),")
-			and has(ui, "local blocked = aroundNow(t)"),
+			and has(ui, "local blocked = table.clone(aroundNow(t))"),
 		"the bar and the pop keep clear of the guide's card while it shows")
+	-- The notices at the top centre (2026-10-12, the owner): off a phone they stack under the bar where it stands
+	-- up there; on a phone the bar gives way to them; and the walk pop keeps clear of the stack.
+	check(has(ui, 'Notice.band("mill-bar", "above", if onPhone then nil else bar)')
+			and has(ui, "Notice.giveWay(bar, onPhone and inBand and Notice.showing() > 0, StatusText.reducedMotion())")
+			and has(ui, "table.insert(blocked, { x = slot.x, y = slot.y, w = slot.w, h = stackFoot - slot.y })"),
+		"the notices' band: the bar keeps the top on a desktop and gives way on a phone; the pop clears the stack")
 	-- And of the Pod Rush tracker or its strip, under the top row as well (a Play on 2026-10-10: the bar at the
 	-- top centre stood on the tracker). Its gui and frames by name, so a rename there fails here.
 	local rushUi = sourceOf(Scripts, "PodRushUI")

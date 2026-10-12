@@ -581,6 +581,22 @@ local ok, err = pcall(function()
 	local _, calls = string.gsub(adminSrc, "\n%s*announce%(admin, ", "")
 	check(calls == 13, "AdminService says a line from thirteen places, each right after its record (seven of item "
 		.. "10's; since item 12 the Mist's eligible, burst, Dewberries, progress, pod and ready -- AdminMistSpec)", calls)
+	-- SILENT LINES (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is overlapping"): the Mist's
+	-- start and end ring BEGINS and ENDS alone, so their lines come without the notice's ping.
+	local loud = {}
+	for _, kind in ipairs({ "rain", "thunder", "weatherend", "night", "day", "mini", "spawn", "money", "speed",
+		"dewberries", "progress", "mistpod", "mistready", "burst", "misteligible" }) do
+		if AdminAnnounce.quiet(kind) then
+			table.insert(loud, kind)
+		end
+	end
+	check(AdminAnnounce.quiet("miststart") and AdminAnnounce.quiet("mistend") and #loud == 0,
+		"the Mist's start and end lines are quiet (BEGINS and ENDS are their sound); every other admin line keeps "
+			.. "its ping", table.concat(loud, ", "))
+	check(has(adminSrc, "AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId),\n"
+			.. "\t\t\tAdminAnnounce.quiet(what.kind))")
+			and has(adminSrc, "quiet = if quiet then true else nil })"),
+		"and AdminService sends that quiet with the line, which the notice reads (Notice.readServerNotice)")
 end)
 
 if not ok then

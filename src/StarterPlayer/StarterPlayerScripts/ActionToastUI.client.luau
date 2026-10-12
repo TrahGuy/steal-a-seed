@@ -48,13 +48,22 @@
 --==============================================================================
 -- WHERE, AND UNDER WHAT
 --
--- HudLayout's `toast`: the newest notice sits there, over the belt, and older
--- ones stand above it -- never more than the stack allows, and never up into
--- the middle of the screen, where the controller's reticle is. DisplayOrder 13,
--- so it draws UNDER the hatch timers (14), the prompts (15), the cash and speed
--- (20), the belt (30) and every panel. Nothing in it can take input: no button,
--- nothing Active, nothing Selectable, so a tap, a click or a controller's
--- selection goes straight past it.
+-- AT THE TOP CENTRE (2026-10-12, the owner, desktop and mobile): HudLayout's
+-- `toast` is the first notice's slot, just under BIOMES / PLOT / OBBY. The
+-- first notice hangs there and each newer one under it; when the next would
+-- pass the middle of the screen, the OLDEST -- the top one -- gives way (up a
+-- little, fading) and the rest move up a slot. What else stands in the band
+-- says so through Notice.band: the stack starts under an "above" (the guide's
+-- card, a tracker, an announcement) and a notice gives way to an "over" (the
+-- chase word, a reward card) and comes back after it. With a panel open the
+-- stack keeps to one line. Until 2026-10-12 it stood over the belt.
+--
+-- DisplayOrder 49: over every panel (the owner: a notice draws over an open
+-- panel's title strip) and over the prompts and the hatch timers; under the
+-- chase word (50), the admin console and ADMIN, and the guide's spotlight.
+-- Nothing in it can take input but a dismissible notice's close: no other
+-- button, nothing Active, nothing Selectable, so a tap, a click or a
+-- controller's selection goes straight past it.
 --==============================================================================
 
 local GuiService = game:GetService("GuiService")
@@ -93,7 +102,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "SeedToast"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
-gui.DisplayOrder = 13
+gui.DisplayOrder = 49
 -- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE); nothing changes elsewhere.
 UIKit.tenFoot(gui)
 gui.Parent = playerGui
@@ -195,6 +204,12 @@ type Drawn = {
 	headLabel: TextLabel?,
 	detailLabel: TextLabel?,
 	leaving: boolean,
+	-- GIVING WAY to an "over" in the band (2026-10-12): `hide` fades it on top
+	-- of `alpha` (the larger wins), `yielded` lifts its slot GiveWayPixels, and
+	-- `slotY` is where its slot is.
+	hide: NumberValue,
+	yielded: boolean,
+	slotY: number,
 	-- Every instance whose transparency the fades move, with its resting value.
 	fades: { { target: Instance, prop: string, base: number } },
 	-- The close button of a notice the player may take down (Notice's
@@ -207,7 +222,7 @@ local stack: { Notice.Shown } = {}
 local sounds = Notice.newSoundState()
 
 local function applyAlpha(d: Drawn)
-	local a = d.alpha.Value
+	local a = math.max(d.alpha.Value, d.hide.Value)
 	for _, f in ipairs(d.fades) do
 		(f.target :: any)[f.prop] = f.base + (1 - f.base) * a
 	end
@@ -256,6 +271,8 @@ local function build(post: Notice.Post, key: string): Drawn
 
 	local alpha = Instance.new("NumberValue")
 	alpha.Value = 1
+	local hide = Instance.new("NumberValue")
+	hide.Value = 0
 	local d: Drawn = {
 		key = key,
 		post = post,
@@ -268,6 +285,9 @@ local function build(post: Notice.Post, key: string): Drawn
 		headLabel = nil,
 		detailLabel = nil,
 		leaving = false,
+		hide = hide,
+		yielded = false,
+		slotY = 0,
 		fades = {},
 		close = nil,
 	}
@@ -502,16 +522,26 @@ local function build(post: Notice.Post, key: string): Drawn
 	alpha.Changed:Connect(function()
 		applyAlpha(d)
 	end)
+	hide.Changed:Connect(function()
+		applyAlpha(d)
+	end)
 	applyAlpha(d)
 	return d
 end
 
 --==============================================================================
--- THE STACK'S SLOTS: NEWEST AT THE BOTTOM
+-- THE STACK'S SLOTS: FIRST AT THE TOP, NEWEST UNDER IT (2026-10-12)
+--
+-- Hanging from the top, the oldest notice stands in the first slot and each
+-- newer one under it (the owner). On the belt -- no screen since 2026-10-12 --
+-- the newest stood at the bottom, nearest the slot, with the older above.
 --==============================================================================
 local function slotTween(d: Drawn, y: number, instant: boolean)
+	d.slotY = y
+	-- A notice giving way to an "over" stands GiveWayPixels up from its slot.
+	local lift = if d.yielded and not reducedMotion() then Notice.GiveWayPixels else 0
 	-- Up from the belt, or down from the top of the column.
-	local goal = if fromTop then UDim2.new(0.5, 0, 0, y) else UDim2.new(0.5, 0, 1, -y)
+	local goal = if fromTop then UDim2.new(0.5, 0, 0, y - lift) else UDim2.new(0.5, 0, 1, -y - lift)
 	if instant or reducedMotion() then
 		d.frame.Position = goal
 		return
@@ -525,7 +555,11 @@ end
 local function restack(newest: Drawn?)
 	local y = 0
 	local standing = 0
-	for i = #drawn, 1, -1 do
+	local first, last, step = #drawn, 1, -1
+	if fromTop then
+		first, last, step = 1, #drawn, 1
+	end
+	for i = first, last, step do
 		local d = drawn[i]
 		if not d.leaving then
 			slotTween(d, y, d == newest)
@@ -549,6 +583,7 @@ local function forget(d: Drawn)
 		end
 	end
 	d.alpha:Destroy()
+	d.hide:Destroy()
 	d.frame:Destroy()
 end
 
@@ -564,7 +599,9 @@ local function leave(d: Drawn, seconds: number)
 	local info = TweenInfo.new(secs(seconds), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	local fade = TweenService:Create(d.alpha, info, { Value = 1 })
 	if not reducedMotion() then
-		TweenService:Create(d.body, info, { Position = UDim2.new(0.5, 0, 0.5, -4) }):Play()
+		-- Up and out. At the top it is the owner's giving way: GiveWayPixels.
+		TweenService:Create(d.body, info, { Position = UDim2.new(0.5, 0, 0.5,
+			if fromTop then -Notice.GiveWayPixels else -4) }):Play()
 	end
 	fade.Completed:Once(function()
 		forget(d)
@@ -625,6 +662,137 @@ local function nudge(d: Drawn)
 			Enum.EasingDirection.In), { Scale = 1 }):Play()
 	end)
 	up:Play()
+end
+
+--==============================================================================
+-- WHAT ELSE STANDS IN THE BAND (2026-10-12, the owner's rules; Notice.band)
+--
+--   * The stack starts 8 px under the lowest "above" over its column -- the
+--     guide's card, a tracker, an announcement -- and moves when that does.
+--   * It never runs past the middle, and with a panel open (OpenPanel) it keeps
+--     to one line: the oldest give way first (trim). One always stays.
+--   * A notice an "over" would meet -- the chase word, a reward card -- gives
+--     way (up GiveWayPixels, faded over GiveWaySeconds; Reduced Motion: the fade
+--     alone) and comes back when it has gone, if its time is not up.
+--   * Where an "above" leaves less than one line, a new notice waits for room.
+-- Asked when the band changes and five times a second while a notice is up or
+-- waiting; nothing at all the rest of the time.
+--==============================================================================
+local homeArea: HudLayout.Rect? = nil
+local placedSafe = Vector2.zero
+local waiting: { { post: Notice.Post, at: number } } = {}
+-- The band's tick (below show): whether it is armed, how often, and its starter.
+local banding = false
+local BAND_TICK = 0.2
+local watchBand: () -> () = function() end
+
+local function panelOpen(): boolean
+	return player:GetAttribute(GameConfig.Attributes.OpenPanel) ~= nil
+end
+
+local function middleY(): number
+	local camera = workspace.CurrentCamera
+	return if camera then camera.ViewportSize.Y / 2 - GuiService:GetGuiInset().Y else 0
+end
+
+-- A band rect (AbsolutePosition's space) in this gui's units.
+local function unitsOf(r: Notice.BandRect): HudLayout.Rect
+	local k = HudLayout.scaleOf(gui)
+	local at = gui.AbsolutePosition
+	return { x = (r.x - at.X) / k, y = (r.y - at.Y) / k, w = r.w / k, h = r.h / k }
+end
+
+-- The room from the stack's top to 8 px above the middle.
+local function room(): number
+	return middleY() - CONFIG_GAP - stackTop
+end
+
+local function trim()
+	local standing: { Drawn } = {}
+	local deep = -metrics.between
+	for _, d in ipairs(drawn) do
+		if not d.leaving then
+			table.insert(standing, d)
+			deep += d.height + metrics.between
+		end
+	end
+	local left = #standing
+	for _, d in ipairs(standing) do
+		if left <= 1 or (left <= maxShown and not (fromTop and deep > room())) then
+			break
+		end
+		deep -= d.height + metrics.between
+		left -= 1
+		leave(d, Notice.GiveWaySeconds)
+	end
+end
+
+local function applyCeiling()
+	local area = homeArea
+	if not (fromTop and area) then
+		return
+	end
+	local top = area.y
+	local middle = middleY()
+	for _, r in ipairs(Notice.bandRects("above")) do
+		local u = unitsOf(r)
+		if u.x < area.x + area.w and u.x + u.w > area.x and u.y < middle then
+			top = math.max(top, u.y + u.h + CONFIG_GAP)
+		end
+	end
+	if math.abs(top - stackTop) < 0.5 then
+		return
+	end
+	stackTop = top
+	-- The least depth from the new top: what the layout's area leaves under it.
+	stackDepth = math.max(0, area.y + area.h - top)
+	column.Position = HudLayout.place({ x = area.x, y = top, w = area.w, h = area.h }, Vector2.new(0.5, 0),
+		placedSafe)
+	trim()
+	restack(nil)
+end
+
+-- Whether an "over" would meet this notice's slot (where it stands unlifted).
+local function meetsOver(d: Drawn, overs: { HudLayout.Rect }): boolean
+	local area = homeArea
+	if not area then
+		return false
+	end
+	local mine = { x = area.x + (area.w - width) / 2, y = stackTop + d.slotY, w = width, h = d.height }
+	for _, o in ipairs(overs) do
+		if HudLayout.gap(mine, o) < CONFIG_GAP then
+			return true
+		end
+	end
+	return false
+end
+
+local function oversNow(): { HudLayout.Rect }
+	local overs: { HudLayout.Rect } = {}
+	for _, r in ipairs(Notice.bandRects("over")) do
+		table.insert(overs, unitsOf(r))
+	end
+	return overs
+end
+
+local function setYield(d: Drawn, on: boolean)
+	if d.yielded == on or d.leaving then
+		return
+	end
+	d.yielded = on
+	local info = TweenInfo.new(secs(Notice.GiveWaySeconds), Enum.EasingStyle.Quad,
+		if on then Enum.EasingDirection.In else Enum.EasingDirection.Out)
+	TweenService:Create(d.hide, info, { Value = if on then 1 else 0 }):Play()
+	slotTween(d, d.slotY, false)
+end
+
+local function applyOvers()
+	local overs = oversNow()
+	for _, d in ipairs(drawn) do
+		if not d.leaving then
+			setYield(d, meetsOver(d, overs))
+		end
+	end
 end
 
 local function show(post: Notice.Post)
@@ -691,7 +859,19 @@ local function show(post: Notice.Post)
 	end
 	local madeRoom = live ~= nil
 
-	-- A new notice: the stack rule decides who makes room.
+	-- NO ROOM AT ALL (2026-10-12): an "above" -- an announcement on a short
+	-- phone -- can leave less than one line between it and the middle. The
+	-- notice waits for room (the band's tick puts it up), and is dropped if it
+	-- waited longer than it would have shown.
+	applyCeiling()
+	if fromTop and room() < metrics.head + 4 then
+		table.insert(waiting, { post = post, at = now })
+		watchBand()
+		return
+	end
+
+	-- A new notice: the stack rule decides who makes room -- at the top, the
+	-- oldest gives way (up and fading, GiveWaySeconds).
 	local verdict, _, evicted = Notice.step(stack, post, now, maxShown)
 	if verdict == "refresh" then
 		-- The rules still remember one whose drawing has already gone.
@@ -701,7 +881,7 @@ local function show(post: Notice.Post)
 	for _, gone in ipairs(evicted) do
 		for _, d in ipairs(drawn) do
 			if d.key == gone.key and not d.leaving then
-				leave(d, Notice.EvictSeconds)
+				leave(d, if fromTop then Notice.GiveWaySeconds else Notice.EvictSeconds)
 			end
 		end
 	end
@@ -736,21 +916,24 @@ local function show(post: Notice.Post)
 	-- camera's size had not settled when the gui was first placed, and a depth
 	-- kept from then was 27 px too shallow for the rest of the session.
 	if fromTop then
-		local camera = workspace.CurrentCamera
-		local middle = if camera then camera.ViewportSize.Y / 2 - GuiService:GetGuiInset().Y else 0
-		local depth = math.max(stackDepth, middle - CONFIG_GAP - stackTop)
+		local depth = math.max(stackDepth, room())
 		local deep = d.height
 		for i = #drawn - 1, 1, -1 do
 			local older = drawn[i]
 			if not older.leaving then
 				deep += older.height + metrics.between
 				if deep > depth then
-					leave(older, Notice.EvictSeconds)
+					leave(older, Notice.GiveWaySeconds)
 				end
 			end
 		end
 	end
 	restack(d)
+	-- Arriving where an "over" stands, it starts out given way.
+	if meetsOver(d, oversNow()) then
+		d.yielded = true
+		d.hide.Value = 1
+	end
 	local still = reducedMotion()
 	d.body.Position = UDim2.new(0.5, 0, 0.5, if still then 0 else Notice.RisePixels)
 	d.scale.Scale = if still then 1 else Notice.StartScale
@@ -772,6 +955,7 @@ local function show(post: Notice.Post)
 	if post.stillTrue then
 		watch()
 	end
+	watchBand()
 
 	-- A cue that is missing, or a player who muted SOUND FX, plays nothing:
 	-- SoundKit routes it through the UI bus, whose level is the player's.
@@ -800,8 +984,9 @@ local function place()
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local small = layout.compact or layout.sidebar
 	fromTop = layout.toastTop
-	-- A phone's notices are the phone's size wherever they stand.
-	metrics = if fromTop or layout.sidebar then PHONE elseif small then SMALL else FULL
+	-- A phone's notices are the phone's size and a small window's the small size,
+	-- wherever they stand (2026-10-12: every screen hangs them from the top).
+	metrics = if layout.sidebar then PHONE elseif small then SMALL else FULL
 	width = math.max(160, layout.toast.w)
 	-- The window's middle, in this gui's safe space: the reticle's band.
 	local camera = workspace.CurrentCamera
@@ -814,7 +999,8 @@ local function place()
 	-- show): two short notices -- CHECKPOINT and the next stage's name -- fit
 	-- where two of the tallest would not, and counting would have the second
 	-- put the first out the moment it arrived.
-	maxShown = if fromTop then most else count
+	-- With a panel open, one line over its title strip (the owner, 2026-10-12).
+	maxShown = if panelOpen() then 1 elseif fromTop then most else count
 	-- On the belt the column stands on its bottom edge; at the top it hangs from
 	-- its top edge, and may grow down to the middle of the screen and no further.
 	local anchor = if fromTop then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
@@ -822,15 +1008,26 @@ local function place()
 	-- The least the stack may be: one notice's own band. How much deeper it may
 	-- grow is asked when a notice arrives (show).
 	stackDepth = area.h
+	homeArea, placedSafe = area, layout.safe
 	column.AnchorPoint = anchor
 	column.Position = HudLayout.place(area, anchor, layout.safe)
 	column.Size = UDim2.fromOffset(width, area.h)
 	for _, d in ipairs(drawn) do
 		d.frame.AnchorPoint = anchor
 	end
+	if fromTop then
+		-- Under whatever "above" stands in the band now: applyCeiling moves the
+		-- column whenever the top it finds is not where the column stands.
+		stackTop = area.y - 1
+		applyCeiling()
+	end
+	trim()
 	restack(nil)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+-- A panel opening or closing: one line with it open, the stack's own count
+-- without (2026-10-12).
+player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(place)
 -- The active-boost icon row (BoostIconsUI, 2026-10-04) stands over the belt
 -- and the toast line steps up over it: asked again whenever its count changes.
 Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)
@@ -843,6 +1040,39 @@ Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribut
 -- topbar's free span (Roblox's own buttons coming and going).
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
 place()
+
+-- THE BAND'S TICK (2026-10-12): what stands in the band moves and comes and
+-- goes, so while a notice is up or waiting the stack's top, its fit and the
+-- "overs" are asked again five times a second -- a delay that re-arms itself
+-- only then, as `stillTrue`'s does; no loop. A change in the band asks at once.
+local function bandTick()
+	if #drawn == 0 and #waiting == 0 then
+		banding = false
+		return
+	end
+	applyCeiling()
+	applyOvers()
+	local queued = waiting[1]
+	if queued and room() >= metrics.head + 4 then
+		table.remove(waiting, 1)
+		if Notice.now() - queued.at < Notice.lifeOf(queued.post) then
+			show(queued.post)
+		end
+	end
+	task.delay(secs(BAND_TICK), bandTick)
+end
+watchBand = function()
+	if not banding then
+		banding = true
+		task.delay(secs(BAND_TICK), bandTick)
+	end
+end
+Notice.onBand(function()
+	task.defer(function()
+		applyCeiling()
+		applyOvers()
+	end)
+end)
 
 --==============================================================================
 -- THE TWO WAYS A NOTICE ARRIVES

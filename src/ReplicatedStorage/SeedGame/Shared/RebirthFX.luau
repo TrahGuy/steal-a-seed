@@ -943,6 +943,9 @@ function RebirthFX.play(o: Options): Handle?
 		button.ZIndex = 1
 		button.Parent = screen
 		card = button
+		-- The moment wins the notices' band: a notice it would meet gives way
+		-- until the card has gone (the owner, 2026-10-12; Notice.band).
+		require(Shared:WaitForChild("Notice")).band("reborn-card", "over", button)
 		local scale = Instance.new("UIScale")
 		scale.Parent = button
 		fit = scale

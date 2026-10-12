@@ -1533,7 +1533,7 @@ for _, case in ipairs(everyScreen) do
 	end
 
 	local toastClear = t.w >= TOAST.MinWidth and t.w <= TOAST.Width and t.h == TOAST.Height
-		and t.x >= 8 and t.y >= 8 and t.x + t.w <= sw - 8 and t.y + t.h <= sh - 8
+		and t.x >= 8 and t.y >= 0 and t.x + t.w <= sw - 8 and t.y + t.h <= sh - 8
 		and t.y + t.h <= L.hotbar.y - 8
 	local toastNote = r2s(t)
 	for _, g in ipairs(groups) do
@@ -1545,18 +1545,26 @@ for _, case in ipairs(everyScreen) do
 	for _, zone in ipairs(zones) do
 		toastClear = toastClear and HudLayout.gap(t, zone) >= 8
 	end
-	-- Over the belt on EVERY screen again (2026-10-04, the owner's order: the
-	-- hotbar, the active icons, the short notices just over them). A phone's
-	-- notices hung from the top of the centre column from 2026-09-29 until then.
-	local onTop = false
-	local beltTop = HudLayout.hotbarBand(L.hotbar).y
-	toastClear = toastClear and L.toastTop == false and t.y + t.h <= beltTop - 8 + 0.01
-	if not toastClear then
-		toastNote ..= string.format(" (toastTop %s, bottom %.0f, belt band %.0f)", tostring(L.toastTop),
-			t.y + t.h, beltTop)
+	-- AT THE TOP CENTRE ON EVERY SCREEN (2026-10-12, the owner: "all notifications
+	-- go to the top centre, just under BIOMES / PLOT / OBBY, on desktop and
+	-- mobile"): the first notice's slot 8 px under the button row -- TELEPORT or
+	-- RETURN, BIOMES, OBBY, the run's clock -- and never above the column's top on
+	-- a phone, whose row is up in the topbar; the stack hangs from it. Over the
+	-- belt from 2026-10-04 until then.
+	local onTop = true
+	local rowBottom: number? = nil
+	for _, r in ipairs({ L.teleport, L.returnPlot, L.obby, L.biomes, L.run }) do
+		if r.w > 0 and r.h > 0 then
+			rowBottom = math.max(rowBottom or -math.huge, r.y + r.h)
+		end
 	end
-	check(toastClear, tag .. ": the toast is over the belt, 200-340 wide, clear of every group and both thumbs",
-		toastNote)
+	local wantTop = math.max(0, if rowBottom then rowBottom + 8 else 0, L.columnTop or 0)
+	toastClear = toastClear and L.toastTop == true and math.abs(t.y - wantTop) < 0.01
+	if not toastClear then
+		toastNote ..= string.format(" (toastTop %s, top %.0f, wanted %.0f)", tostring(L.toastTop), t.y, wantTop)
+	end
+	check(toastClear, tag .. ": the notices' first slot is at the top centre, 8 px under BIOMES / PLOT / OBBY (the "
+		.. "column's top on a phone), 200-340 wide, clear of every group and both thumbs", toastNote)
 	check(t.w >= longestHead,
 		tag .. ": every refusal headline fits one line at 16 px -- the longest is \"" .. longestTitle .. "\"",
 		string.format("%.0f of %d", longestHead, t.w))
@@ -1570,9 +1578,10 @@ for _, case in ipairs(everyScreen) do
 	check(#tall == 0, tag .. ": every next step fits two lines at 11 px", table.concat(tall, ", "))
 
 	-- THE NOTICE STACK (2026-09-27): the whole area ActionToastUI's notices may
-	-- stand in -- one on the toast rect, older ones above it -- clear of every
-	-- group and both thumbs, and never into the middle band where the
-	-- controller's reticle and its reason line sit. At both notice sizes.
+	-- stand in -- hanging from the toast rect since 2026-10-12, the first at the
+	-- top and newer ones under it -- clear of every group and both thumbs, and
+	-- ending 8 px above the middle, where the controller's reticle and its
+	-- reason line sit. At both notice sizes.
 	local middle = if case.input.viewport and case.input.insetTop
 		then case.input.viewport.Y / 2 - case.input.insetTop else sh / 2
 	for _, size in ipairs({ { one = 26 + 4 + 2 + 15 + 4 + 8, most = Notice.MaxShown },
@@ -1845,9 +1854,10 @@ do
 			.. "they stood before the row -- PLOT as narrow as its plate",
 		r2s(t) .. " / " .. r2s(o))
 	check(blocked.topRow == false and blocked.columnTop == nil and blocked.columnCentre == nil
-			and blocked.rowLo == nil and blocked.rowHi == nil and blocked.toastTop == false
+			and blocked.rowLo == nil and blocked.rowHi == nil and blocked.toastTop == true
 			and blocked.guide == false and blocked.run.w == 0 and blocked.clockChip == true,
-		"and it has no column: the notices stay over the belt, the guide keeps its banner, the run keeps its line")
+		"and it has no column: the notices hang under its buttons (every screen's top centre since 2026-10-12), "
+			.. "the guide keeps its banner, the run keeps its line")
 	-- Its lines, by the rules every screen had before the row.
 	local status, notice, boosts = HudLayout.statusRows(blocked, TOPBAR)
 	local _, noticeTop = HudLayout.notice(blocked, 0, CFG.NoticeHeight, CFG.NoticeTop - TOPBAR)
@@ -1869,9 +1879,15 @@ do
 	check(sideBySide or stacked,
 		"and two boosts stand side by side in that row (or one over the other, clear of the panel under the Bag)",
 		r2s(rows[1]) .. " " .. r2s(rows[2]))
-	check(blocked.toast.y + blocked.toast.h <= blocked.hotbar.y - 8
-			and blocked.toast.y > input.viewport.Y / 2 - TOPBAR,
-		"and the toast is over the belt", r2s(blocked.toast))
+	-- The notices' first slot 8 px under PLOT and OBBY, above the middle; and a
+	-- passing line that lands in their band stands under the stack while one
+	-- is up (HudLayout.notice, `reach`).
+	local under = math.max(t.y + t.h, o.y + o.h) + 8
+	local _, nameTop = HudLayout.notice(blocked, 0, CFG.NoticeHeight, CFG.NoticeTop - TOPBAR, under + 60)
+	check(math.abs(blocked.toast.y - under) < 0.01 and blocked.toast.y < input.viewport.Y / 2 - TOPBAR
+			and nameTop >= under + 60 + 8 - 0.01,
+		"and its notices hang 8 px under its buttons, a passing line standing under them while one is up",
+		r2s(blocked.toast) .. " name at " .. tostring(nameTop))
 
 	-- ALL OR NOTHING: a row with room for BIOMES and PLOT and none for OBBY is
 	-- not used. 600 wide with the free span from 324 holds the clock and those
@@ -2516,12 +2532,16 @@ for _, case in ipairs(columnCases) do
 			or notice.y < boosts.y + boosts.h + CFG.Phone.NoticeGap - 1e-6 then
 			bad(tag, "the passing lines' band is not NoticeGap under the boost row " .. r2s(notice))
 		end
-		-- The biome name still stands in that band; the toast is over the belt
-		-- now (2026-10-04), not up here.
+		-- The biome name still stands in that band; the notices hang from the
+		-- column's top (2026-10-12, the top centre on every screen), so a name
+		-- arriving while one is up stands under the stack (`reach`).
 		local _, nameTop = HudLayout.notice(L, nameW, CFG.NoticeHeight, CFG.NoticeTop - TOPBAR)
-		if nameTop ~= notice.y or L.toast.y <= notice.y + notice.h then
-			bad(tag, string.format("the biome name (%g) is not in the band (%g), or the toast (%g) is up in it",
-				nameTop, notice.y, L.toast.y))
+		local reach = L.toast.y + 37
+		local _, underTop = HudLayout.notice(L, nameW, CFG.NoticeHeight, CFG.NoticeTop - TOPBAR, reach)
+		if nameTop ~= notice.y or L.toast.y ~= top or underTop < reach + CFG.Phone.NoticeGap - 1e-6 then
+			bad(tag, string.format("the biome name (%g) is not in the band (%g), the notices (%g) do not hang "
+				.. "from the column's top, or a name stands at %g over a notice reaching %g", nameTop, notice.y,
+				L.toast.y, underTop, reach))
 		end
 		if tp.y + tp.h > top + 1e-6 or L.obby.y + L.obby.h > top + 1e-6
 			or L.biomes.y + L.biomes.h > top + 1e-6 then
@@ -2843,10 +2863,10 @@ local toastSrc = sourceOf("ActionToastUI") or ""
 local teleSrc = sourceOf("PlotTeleportUI") or ""
 check(toastSrc:find("layout.toast", 1, true) ~= nil and toastSrc:find("HudLayout.noticeStack(layout", 1, true) ~= nil
 		and toastSrc:find("Notice.step(", 1, true) ~= nil
-		and toastSrc:find("gui.DisplayOrder = 13", 1, true) ~= nil
+		and toastSrc:find("gui.DisplayOrder = 49", 1, true) ~= nil
 		and not toastSrc:find("while true", 1, true),
-	"the notices are placed by HudLayout (toast + noticeStack), coalesced by Notice.step, drawn under prompts "
-		.. "and panels, and run no loop")
+	"the notices are placed by HudLayout (toast + noticeStack), coalesced by Notice.step, drawn OVER the panels, "
+		.. "the prompts and the hatch timers (2026-10-12, the owner) and under the chase word, and run no loop")
 check(teleSrc:find("layout.teleport", 1, true) ~= nil
 		and teleSrc:find("remote:FireServer(PLOT.TeleportAction)", 1, true) ~= nil
 		and teleSrc:find("GetAttribute(ATTR.InSafeZone) == true", 1, true) ~= nil
@@ -2876,22 +2896,69 @@ check(teleSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(p
 check(teleSrc:find("plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)", 1, true) ~= nil,
 	"PlotTeleportUI draws its plate at HudLayout's teleportPlate, whatever the touch area round it")
 check(toastSrc:find("fromTop = layout.toastTop", 1, true) ~= nil
-		and toastSrc:find("metrics = if fromTop or layout.sidebar then PHONE elseif small then SMALL else FULL", 1, true) ~= nil
+		and toastSrc:find("metrics = if layout.sidebar then PHONE elseif small then SMALL else FULL", 1, true) ~= nil
 		and toastSrc:find("Notice.setReach(if fromTop and y > 0 then", 1, true) ~= nil
-		and toastSrc:find("local depth = math.max(stackDepth, middle - CONFIG_GAP - stackTop)", 1, true) ~= nil
+		and toastSrc:find("local depth = math.max(stackDepth, room())", 1, true) ~= nil
 		and toastSrc:find("GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)", 1, true) ~= nil
 		and toastSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)', 1, true) ~= nil,
-	"ActionToastUI draws a phone's notices at the phone's size wherever they stand (over the belt since "
-		.. "2026-10-04), re-places when the icon row's count changes, and follows the topbar's free span")
+	"ActionToastUI draws a phone's notices at the phone's size and a small window's at the small size, hanging "
+		.. "from the top centre on every screen (2026-10-12), re-places when the icon row's count changes, and follows "
+		.. "the topbar's free span")
+-- THE TOP-CENTRE BAND, THE RENDERER'S SIDE (2026-10-12, the owner's rules): the first notice at the top and each
+-- newer one under it; when the next would pass the middle the oldest gives way (up and fading, GiveWaySeconds); one
+-- line while a panel is open; the stack starts under an "above" in the band, a notice gives way to an "over" and comes
+-- back after; with no room at all a notice waits for it.
+check(toastSrc:find("if fromTop then\n\t\tfirst, last, step = 1, #drawn, 1\n\tend", 1, true) ~= nil
+		and toastSrc:find("leave(older, Notice.GiveWaySeconds)", 1, true) ~= nil
+		and toastSrc:find("-Notice.GiveWayPixels else -4", 1, true) ~= nil
+		and toastSrc:find("maxShown = if panelOpen() then 1 elseif fromTop then most else count", 1, true) ~= nil
+		and toastSrc:find("player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(place)", 1, true) ~= nil
+		and toastSrc:find('for _, r in ipairs(Notice.bandRects("above")) do', 1, true) ~= nil
+		and toastSrc:find("setYield(d, meetsOver(d, overs))", 1, true) ~= nil
+		and toastSrc:find("table.insert(waiting, { post = post, at = now })", 1, true) ~= nil,
+	"the notices stand first-at-the-top, the oldest giving way up and fading; one line under an open panel; under an "
+		.. "\"above\" in the band, giving way to an \"over\" and back after; waiting where there is no room")
+-- And what shares the band says so (Notice.band): the notices stack under the guide's card off a phone, the
+-- spotlight's hand, a desktop's Pod Rush tracker and mill bar and an announcement; the chase word and the moments --
+-- CONGRATULATIONS!, the Pod Rush end card, the invite card, REBORN!, the chest splash, the Mysterious Pod's draw --
+-- win it; a phone's guide card, tracker and mill bar give way to the notices.
+local bandSays = {
+	{ "TutorialUI", 'Notice.band("guide-hand-words", "above", handWords)' },
+	{ "TutorialUI", 'Notice.band("guide-celebration", "over", party)' },
+	{ "PodRushUI", 'Notice.band("podrush-tracker", "above", if onPhone then nil else tracker)' },
+	{ "PodRushUI", 'Notice.band("podrush-endcard", "over", card)' },
+	{ "PodRushUI", "Notice.giveWay(tracker, yielding, still)" },
+	{ "AnnouncementUI", '.band("announcement", "above", stack)' },
+	{ "AlertUI", '.band("chase-word", "over", word)' },
+	{ "InviteRewardUI", 'Notice.band("invite-card", "over", card)' },
+	{ "MysteryRevealUI", '.band("mystery-draw", "over", panel)' },
+}
+local bandMissing = {}
+for _, said in ipairs(bandSays) do
+	if not (sourceOf(said[1]) or ""):find(said[2], 1, true) then
+		table.insert(bandMissing, said[1])
+	end
+end
+for name, needle in pairs({ RebirthFX = '.band("reborn-card", "over", button)',
+	RewardSplash = '.band("reward-splash", "over", card)' }) do
+	local module = Shared:FindFirstChild(name)
+	if not (module and module.Source:find(needle, 1, true)) then
+		table.insert(bandMissing, name)
+	end
+end
+check(#bandMissing == 0, "everything sharing the notices' band says how: under, over, or giving way",
+	table.concat(bandMissing, ", "))
 check(tutorialSrc:find("guide = layout.guide", 1, true) ~= nil
-		and tutorialSrc:find("words.Visible = not ((guide and Notice.reach() ~= nil) or player:GetAttribute(COVERS) == true)",
-			1, true) ~= nil
+		and tutorialSrc:find("words.Visible = player:GetAttribute(COVERS) ~= true", 1, true) ~= nil
+		and tutorialSrc:find("Notice.giveWay(words, guide and Notice.showing() > 0,", 1, true) ~= nil
 		and tutorialSrc:find("local COVERS = Config.BoostIcons.CoversAttribute", 1, true) ~= nil
 		and tutorialSrc:find("player:GetAttributeChangedSignal(COVERS):Connect(coverWords)", 1, true) ~= nil
-		and tutorialSrc:find("Notice.onReach(coverWords)", 1, true) ~= nil
+		and tutorialSrc:find("Notice.onShowing(coverWords)", 1, true) ~= nil
+		and tutorialSrc:find('Notice.band("guide-banner", "above", if guide then nil else banner)', 1, true) ~= nil
 		and tutorialSrc:find("if banner.Visible and not guide then", 1, true) ~= nil,
-	"TutorialUI stands the guide's words in the left column where HudLayout says guide, stands them down while a "
-		.. "notice is up or a buff popover covers them (2026-10-09), and pushes nothing down from there")
+	"TutorialUI stands the guide's words in the left column where HudLayout says guide; there they GIVE WAY to a "
+		.. "notice (2026-10-12) and stand down under a buff popover (2026-10-09); off a phone the notices stack under "
+		.. "the card; and it pushes nothing down from there")
 for _, name in ipairs({ "BiomeGuideUI", "SellUI" }) do
 	local src = sourceOf(name) or ""
 	check(src:find("Notice.reach())", 1, true) ~= nil and src:find("Notice.onReach(function()", 1, true) ~= nil
