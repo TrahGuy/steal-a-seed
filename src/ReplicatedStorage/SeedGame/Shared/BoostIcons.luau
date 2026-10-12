@@ -15,6 +15,7 @@
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 
 local CFG = GameConfig.BoostIcons
 local WORDS = CFG.Words
@@ -51,6 +52,11 @@ export type Snapshot = {
 	luckLeft: number?,
 	luckTotal: number?,
 	luckBy: string?,
+	-- THE ENCHANTED MIST (2026-10-12, item 15): its state and, while it is
+	-- active, when it started and ends.
+	mistState: string?,
+	mistStartedAt: number?,
+	mistEndsAt: number?,
 }
 
 export type Entry = {
@@ -114,6 +120,9 @@ function BoostIcons.read(player: Player, workspace: Workspace, now: number): Sna
 		luckLeft = num(workspace:GetAttribute(L.Left)),
 		luckTotal = num(workspace:GetAttribute(L.Total)),
 		luckBy = str(workspace:GetAttribute(L.By)),
+		mistState = str(workspace:GetAttribute(EnchantedMistConfig.Attributes.State)),
+		mistStartedAt = num(workspace:GetAttribute(EnchantedMistConfig.Attributes.StartedAt)),
+		mistEndsAt = num(workspace:GetAttribute(EnchantedMistConfig.Attributes.EndsAt)),
 	}
 end
 
@@ -138,6 +147,9 @@ function BoostIcons.watched(): { { on: string, name: string } }
 	table.insert(list, { on = "player", name = GameConfig.PodRush.Attributes.Count })
 	for _, name in pairs(GameConfig.ServerBoost.Luck.Attributes) do
 		table.insert(list, { on = "workspace", name = name })
+	end
+	for _, key in ipairs({ "State", "StartedAt", "EndsAt" }) do
+		table.insert(list, { on = "workspace", name = (EnchantedMistConfig.Attributes :: any)[key] })
 	end
 	return list
 end
@@ -170,6 +182,22 @@ function BoostIcons.entries(s: Snapshot): { Entry }
 			hint = if s.rainState == "active" then WORDS.WeatherOpen else WORDS.WeatherOpening,
 			endsAt = rainEnds,
 			total = span(s.rainStartedAt, rainEnds),
+		}
+	end
+
+	-- THE ENCHANTED MIST (2026-10-12, item 15): while it is ACTIVE, with its time
+	-- left -- what to do, never a modifier of its own.
+	local mistEnds = s.mistEndsAt
+	if s.mistState == EnchantedMistConfig.States.Active and mistEnds and mistEnds > now then
+		found.mist = {
+			id = "mist",
+			source = "mist",
+			glyph = "boost",
+			tint = CFG.Tints.mist,
+			title = WORDS.Mist,
+			effect = WORDS.MistEffect,
+			endsAt = mistEnds,
+			total = span(s.mistStartedAt, mistEnds),
 		}
 	end
 

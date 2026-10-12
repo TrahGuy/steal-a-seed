@@ -315,7 +315,8 @@ end
 local function announce(berry: Berry)
 	-- SILENT, every berry (the owner, 2026-10-11): the twinkle AT the berry is a
 	-- spawn's only sound; the notice still updates in place, one key for all.
-	local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared, quiet = true }
+	local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared, quiet = true,
+		icon = "mist" }
 	for _, player in ipairs(Hooks.players()) do
 		-- Nobody full or still loading is sent after a berry they cannot take.
 		local profile = Hooks.profile(player)
@@ -502,6 +503,8 @@ function EnchantedMistBerryService._claim(player: any, id: string, now: number):
 		-- on the fifth: EnchantedMistBerries.client), not the notice's ping.
 		quiet = true,
 		full = full,
+		-- The Mist's badge (2026-10-12, item 15).
+		icon = "mist",
 	})
 	log(string.format("%s picked %s (%d/%d).", tostring(player.Name), id, carried, CAP))
 	return true, "OK"

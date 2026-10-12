@@ -359,6 +359,8 @@ function MosskeeperService.Give(player: any): { [string]: any }
 			key = CFG.NoticeKey,
 			-- The delivery makes its own sound on the client (GIVE ALL, POD EARNED).
 			quiet = true,
+			-- The Mist's badge (2026-10-12, item 15).
+			icon = "mist",
 		})
 	end
 	return result

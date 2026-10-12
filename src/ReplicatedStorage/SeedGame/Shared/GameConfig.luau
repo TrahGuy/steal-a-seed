@@ -6827,7 +6827,7 @@ GameConfig.Rebirth = {
 		{ Text = "Plants", Icon = "Rail.GardenIcon" },
 		{ Text = "Pods", Icon = "Store.Icons.pod1" },
 		{ Text = "Weapons", Icon = nil },
-		{ Text = "Spin tickets", Icon = "SourceIcons.tickets" },
+		{ Text = "Spin tickets", Icon = "BagLook.IconImages.tickets" },
 		{ Text = "The Index", Icon = "Rail.IndexIcon" },
 		{ Text = "Passes", Icon = "Pass.BuffIcon" },
 		{ Text = "Boosts", Icon = "SourceIcons.chest" },
@@ -9447,8 +9447,8 @@ GameConfig.MenuIcons = {
 -- +25% event showing one icon, whichever picture it wears (BoostIcons reads the
 -- authoritative Workspace RainMode).
 --
---   rain      rain-256.png             the Rain event's line and notices
---   thunder   thunderstorm-256.png     the same, while its mode is "thunder"
+--   rain      event-rain badge         the Rain event's line and notices
+--   thunder   event-thunderstorm badge the same, while its mode is "thunder"
 --   chest     free_chest-256.png       a Bonus Chest claim's notice
 --   wheel     reward_wheel-256.png     the Reward Wheel's prize and claim notices
 --   sacrifice sacrifice-256.png        the pedestal's boost line and its notice
@@ -9457,15 +9457,12 @@ GameConfig.MenuIcons = {
 --             stays the Speed icon as `speed` -- see below): a +training boost
 --             line (chest or wheel)
 --   community community_reward-256.png the community chest's claimed notice only
---   tickets   spin_tickets-256.png     the Ticket Shower's icon, its notices and
---                                      the "+1" over a player who took one: the
---                                      Bag's own Spin Ticket picture (BagLook)
---   disco     disco-256.png            the Disco's icon and its notices: the
---                                      owner's upload of art/icons/boosts/disco-
---                                      256.png (cropped from output/imagegen/
---                                      podnappers-disco-event-icon-v1.png), id given
---                                      2026-10-04 -- an Image, "disco-256", by the
---                                      CrazyCozy Games group. Never the disco AUDIO id.
+--   tickets   event-ticket-shower      the Ticket Shower's icon and its notices
+--             badge                    (the "+1" over a player who took one keeps
+--                                      the Spin Ticket's own picture, BagLook)
+--   disco     event-disco badge        the Disco's icon and its notices. Never the
+--                                      disco AUDIO id.
+-- (The badges since 2026-10-12, item 15: see THE EVENT BADGES below.)
 --==============================================================================
 --==============================================================================
 -- SPEED AND TRAINING ARE TWO ICONS NOW (2026-10-08, the owner's TREADMILL FUN
@@ -9486,9 +9483,20 @@ GameConfig.MenuIcons = {
 --   coin       the belt's SEED COIN (BeltCatch), on its catch notices.
 --   milestone  the MILESTONE BADGE (SpeedMilestones), on milestone notices.
 --==============================================================================
+--==============================================================================
+-- THE EVENT BADGES (2026-10-12, the owner's item 15): Codex's studded round
+-- badges (art/icons/event-badges-2026-10-12), the owner's uploads of the 512
+-- masters, are the EVENTS' pictures -- rain, thunder, disco, tickets, podrush,
+-- luck and the new mist -- wherever an event's icon shows: its notices and its
+-- icon over the hotbar (BoostIcons). Every one is drawn by the badges' crop
+-- (SourceIconCrops, below). The flat pictures they replace (rain 130178353004540, thunderstorm
+-- 97835526705727, disco 129016824458756, server luck 127834257988056, the Pod
+-- Rush's PodRush.Art.Icon) are drawn nowhere as event icons now; the Spin
+-- Ticket ITEM keeps its own picture (BagLook.IconImages.tickets).
+--==============================================================================
 GameConfig.SourceIcons = {
-	rain = "rbxassetid://130178353004540",
-	thunder = "rbxassetid://97835526705727",
+	rain = "rbxassetid://124395986247415",
+	thunder = "rbxassetid://77214036609787",
 	chest = "rbxassetid://134062175986179",
 	wheel = "rbxassetid://120181822443205",
 	sacrifice = "rbxassetid://120984862343497",
@@ -9496,18 +9504,21 @@ GameConfig.SourceIcons = {
 	speed = "rbxassetid://99714577637458",
 	training = "rbxassetid://113941145748388",
 	community = "rbxassetid://139312630119333",
-	tickets = "rbxassetid://112516668911937",
-	disco = "rbxassetid://129016824458756",
+	tickets = "rbxassetid://122867243894278",
+	disco = "rbxassetid://125027997607358",
 	coin = "rbxassetid://97002362837712",
 	milestone = "rbxassetid://101850589009212",
 	-- The owner's rebirth emblem (2026-10-09): the icon of the line everybody
 	-- else in the server reads when somebody is reborn.
 	rebirth = GameConfig.Rebirth.Art.Emblem,
-	-- The owner's POD RUSH icon (2026-10-09): its announcement, its boost icon
-	-- and its lines. Drawn by its crop (SourceIconCrops).
-	podrush = GameConfig.PodRush.Art.Icon,
-	-- SERVER LUCK's chip and line (2026-10-12, item 9B): the owner's icon.
-	luck = "rbxassetid://127834257988056",
+	-- POD RUSH: its announcement, its boost icon and its lines (its badge since
+	-- 2026-10-12; the owner's first icon, PodRush.Art.Icon, stays its tracker's).
+	podrush = "rbxassetid://131117409930612",
+	-- SERVER LUCK's chip and line (2026-10-12, item 9B; its badge since item 15).
+	luck = "rbxassetid://85718740545636",
+	-- THE ENCHANTED MIST (2026-10-12, item 15): its icon over the hotbar while it
+	-- is ACTIVE and its notices (the berries, the Mosskeeper's delivery).
+	mist = "rbxassetid://109594999484180",
 	-- An admin's line to everybody (2026-10-12, item 10): the admin console's own
 	-- picture (MenuIcons.admin).
 	admin = GameConfig.Rail.SettingsIcon,
@@ -9516,8 +9527,23 @@ GameConfig.SourceIcons = {
 -- A source picture uploaded with a clear margin round it is drawn by its crop
 -- wherever StatusText draws it (the notices, the boost icons): ImageRectOffset
 -- and ImageRectSize in the upload's stored pixels.
+--
+-- THE EVENT BADGES (2026-10-12): the uploads are Codex's 512 masters, the disc
+-- 92% of the canvas (measured on the uploads: alpha from 22 to 489); this crop
+-- frames them as his tight copies -- the disc 96%, about 2% clear each side --
+-- so a badge fills its box like the other icons (ScaleType.Fit).
+-- (One table per key: the whole config is frozen at the end, table by table.)
+local function eventBadgeCrop()
+	return { Offset = Vector2.new(11, 11), Size = Vector2.new(490, 490) }
+end
 GameConfig.SourceIconCrops = {
-	podrush = { Offset = GameConfig.PodRush.Art.CropOffset, Size = GameConfig.PodRush.Art.CropSize },
+	rain = eventBadgeCrop(),
+	thunder = eventBadgeCrop(),
+	disco = eventBadgeCrop(),
+	tickets = eventBadgeCrop(),
+	podrush = eventBadgeCrop(),
+	luck = eventBadgeCrop(),
+	mist = eventBadgeCrop(),
 }
 
 --==============================================================================
@@ -9566,6 +9592,7 @@ GameConfig.WheelPodArt = {
 --
 --   weather    the Rain or the Thunderstorm -- ONE icon for the event and its
 --              +25% (its picture follows the server's RainMode)
+--   mist       the Enchanted Mist while it is ACTIVE (2026-10-12, item 15)
 --   disco      a Disco mode: the Disco Mill's x10 (Ticket Disco, DISCO + MILL)
 --              or, for the pure DISCO ONLY, its movement boost
 --   tickets    a Ticket mode (Ticket Disco, Ticket Shower Only), with this
@@ -9587,7 +9614,7 @@ GameConfig.WheelPodArt = {
 --==============================================================================
 GameConfig.BoostIcons = {
 	-- Left to right.
-	Order = { "weather", "luck", "disco", "tickets", "podrush", "income", "training", "sprout", "sacrifice" },
+	Order = { "weather", "luck", "mist", "disco", "tickets", "podrush", "income", "training", "sprout", "sacrifice" },
 	-- The drawn icon (px, safe space) by HUD mode; never smaller than Min,
 	-- however many there are. Gap between two.
 	Size = { Desktop = 40, Compact = 34, Phone = 30, Min = 24 },
@@ -9620,6 +9647,8 @@ GameConfig.BoostIcons = {
 		sacrifice = Color3.fromRGB(38, 255, 0),
 		-- SERVER LUCK (2026-10-12, item 9B): a clover green.
 		luck = Color3.fromRGB(96, 230, 120),
+		-- THE ENCHANTED MIST (2026-10-12, item 15): the hub sign's mint.
+		mist = Color3.fromRGB(150, 255, 196),
 	},
 	-- What each popover says. %d / %s are filled in from the configs the
 	-- servers pay by, never typed here.
@@ -9665,6 +9694,9 @@ GameConfig.BoostIcons = {
 		LuckPaused = "Standing still while the Enchanted Mist is on; it runs on after.",
 		-- A chip standing still says what it has left, not when it ends.
 		PausedLeft = "Paused: %s left",
+		-- THE ENCHANTED MIST (2026-10-12, item 15), while it is ACTIVE.
+		Mist = "Enchanted Mist",
+		MistEffect = "Collect Dewberries and bring them to the Mosskeeper.",
 	},
 }
 

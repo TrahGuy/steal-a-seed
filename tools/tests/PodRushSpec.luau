@@ -104,9 +104,11 @@ local ok, err = pcall(function()
 			and ART.Silver == "rbxassetid://108448116105933" and ART.Gold == "rbxassetid://100048210150003"
 			and ART.CropOffset == Vector2.new(41, 41) and ART.CropSize == Vector2.new(430, 430),
 		"the owner's four uploads, one shared crop (41,41)+430")
-	check(GameConfig.SourceIcons.podrush == ART.Icon and GameConfig.SourceIconCrops.podrush.Offset == ART.CropOffset
-			and GameConfig.SourceIconCrops.podrush.Size == ART.CropSize,
-		"the notices and the boost icon draw the rush icon by its crop")
+	check(GameConfig.SourceIcons.podrush == "rbxassetid://131117409930612"
+			and GameConfig.SourceIconCrops.podrush.Offset == Vector2.new(11, 11)
+			and GameConfig.SourceIconCrops.podrush.Size == Vector2.new(490, 490),
+		"the notices and the boost icon draw the Pod Rush's event badge (2026-10-12) by the badges' crop; its first "
+			.. "icon (ART.Icon) stays its tracker's")
 	check(GameConfig.bonusChestReward("training") ~= nil, "the SILVER boost is the chest's own training boost")
 
 	--==========================================================================
@@ -904,11 +906,12 @@ local ok, err = pcall(function()
 	local holder = Instance.new("Frame")
 	holder.Parent = fixture
 	local rushIcon = StatusText.icon(holder, "boost", Color3.new(1, 1, 1), 30, "podrush")
-	local ticketIcon = StatusText.icon(holder, "boost", Color3.new(1, 1, 1), 30, "tickets")
-	local p1, p2 = rushIcon:FindFirstChild("Picture"), ticketIcon:FindFirstChild("Picture")
-	check(p1 and p1.Image == ART.Icon and p1.ImageRectOffset == ART.CropOffset and p1.ImageRectSize == ART.CropSize
-			and p2 and p2.ImageRectSize == Vector2.zero,
-		"a notice or boost icon draws the rush icon by its crop, and the others as before")
+	local chestIcon = StatusText.icon(holder, "boost", Color3.new(1, 1, 1), 30, "chest")
+	local p1, p2 = rushIcon:FindFirstChild("Picture"), chestIcon:FindFirstChild("Picture")
+	check(p1 and p1.Image == GameConfig.SourceIcons.podrush and p1.ImageRectOffset == Vector2.new(11, 11)
+			and p1.ImageRectSize == Vector2.new(490, 490) and p2 and p2.ImageRectSize == Vector2.zero,
+		"a notice or boost icon draws the Pod Rush's badge by the badges' crop (2026-10-12), and an icon that is not an "
+			.. "event's whole, as before")
 
 	local ProfileSchema = require(Server:WaitForChild("ProfileSchema"))
 	local d = ProfileSchema.Default().PodRush

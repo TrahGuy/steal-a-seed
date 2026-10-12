@@ -207,10 +207,38 @@ local ok, err = pcall(function()
 			and sourceOf({ now = 1, sacrificeMultiplier = 1.5, sacrificeEndsAt = 9 }) == "sacrifice"
 			and sourceOf({ now = 1, miniState = "running", miniMode = "tickets", miniEndsAt = 9 }) == "tickets"
 			and sourceOf({ now = 1, miniState = "running", miniMode = "disco", miniEndsAt = 9 }) == "disco"
-			and SOURCES.tickets == GameConfig.BagLook.IconImages.tickets
-			and SOURCES.disco == "rbxassetid://129016824458756",
-		"each boost icon wears its own source (income, training, sacrifice, tickets, disco); the tickets the Bag's "
-			.. "Spin Ticket picture, the disco the owner's upload (2026-10-04)")
+			and SOURCES.tickets == "rbxassetid://122867243894278" and SOURCES.tickets ~= GameConfig.BagLook.IconImages.tickets
+			and SOURCES.disco == "rbxassetid://125027997607358",
+		"each boost icon wears its own source (income, training, sacrifice, tickets, disco); the tickets and the disco "
+			.. "their event badges (2026-10-12), the Spin Ticket ITEM keeping the Bag's own picture")
+	-- THE EVENT BADGES (2026-10-12, the owner's item 15): the owner's uploads of Codex's 512 masters, each drawn
+	-- by the one crop that frames it as his tight copy.
+	local badges = {
+		rain = "rbxassetid://124395986247415", thunder = "rbxassetid://77214036609787",
+		disco = "rbxassetid://125027997607358", tickets = "rbxassetid://122867243894278",
+		podrush = "rbxassetid://131117409930612", luck = "rbxassetid://85718740545636",
+		mist = "rbxassetid://109594999484180",
+	}
+	local wrongBadge = {}
+	for key, id in pairs(badges) do
+		local crop = GameConfig.SourceIconCrops[key]
+		if SOURCES[key] ~= id or not crop or crop.Offset ~= Vector2.new(11, 11) or crop.Size ~= Vector2.new(490, 490) then
+			table.insert(wrongBadge, key)
+		end
+	end
+	check(#wrongBadge == 0, "the seven events wear the owner's badge uploads (rain, thunder, disco, tickets, podrush, "
+		.. "luck, mist), each by the crop (11,11)+490 that frames a 512 master as a tight copy", table.concat(wrongBadge, ","))
+	local serverModules = game:GetService("ServerScriptService"):WaitForChild("SeedGameServer")
+	local berrySrc = serverModules:WaitForChild("EnchantedMistBerryService").Source
+	local mossSrc = serverModules:WaitForChild("MosskeeperService").Source
+	local _, berryIcons = string.gsub(berrySrc, 'icon = "mist"', "")
+	local _, mossIcons = string.gsub(mossSrc, 'icon = "mist"', "")
+	check(berryIcons == 2 and mossIcons == 1,
+		"the Mist's own notices wear its badge: a berry appearing, a berry picked, a delivery to the Mosskeeper",
+		string.format("%d %d", berryIcons, mossIcons))
+	check(string.find(source("MiniEventUI"), "picture.Image = GameConfig.BagLook.IconImages.tickets", 1, true) ~= nil
+			and string.find(source("MiniEventUI"), 'sourceImage("tickets")', 1, true) == nil,
+		"the \"+1\" over a player who took a ticket keeps the Spin Ticket's own picture, never the event's badge")
 	-- The Bag cell's picture (2026-10-09: the owner's studded tile is the whole
 	-- cell) one layer under the rail's satchel and over the plate, its layer set
 	-- AFTER the satchel's own (built first, the old one sat at 2 under the

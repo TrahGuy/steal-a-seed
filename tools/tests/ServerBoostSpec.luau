@@ -142,8 +142,8 @@ local ok, err = pcall(function()
 	check(STORE.Icons.starterpack == "rbxassetid://133935209044475"
 			and STORE.Icons.serverluck == "rbxassetid://127834257988056"
 			and STORE.Icons.summonrain == "rbxassetid://134495129410572"
-			and GameConfig.SourceIcons.luck == STORE.Icons.serverluck,
-		"the owner's three icons; SERVER LUCK's on its chip and its line too")
+			and GameConfig.SourceIcons.luck == "rbxassetid://85718740545636",
+		"the owner's three icons; SERVER LUCK's chip and line wear its event badge (2026-10-12), the shelf its icon")
 
 	--==========================================================================
 	say("\n-- 2. the Shop's cards --")

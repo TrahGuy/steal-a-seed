@@ -131,8 +131,8 @@ local ok, err = pcall(function()
 	local partyWords = tostring(p1.title) .. tostring(p1.effect) .. tostring(p1.hint)
 	check(string.find(partyWords, "\u{00D7}", 1, true) == nil and string.find(partyWords, "Mill", 1, true) == nil
 			and string.find(partyWords, "training", 1, true) == nil
-			and GameConfig.SourceIcons[p1.source] == "rbxassetid://129016824458756",
-		"and never a x10, a mill or training; its picture is the configured Disco icon")
+			and GameConfig.SourceIcons[p1.source] == "rbxassetid://125027997607358",
+		"and never a x10, a mill or training; its picture is the Disco's event badge (2026-10-12)")
 	local gone = BoostIcons.entries({
 		now = NOW,
 		rainState = "closing", rainEndsAt = NOW + 50,
@@ -162,6 +162,24 @@ local ok, err = pcall(function()
 			and BoostIcons.nextOpen(order, "weather", -1, true) == "tickets"
 			and BoostIcons.nextOpen(order, "tickets", 1, true) == "weather" and BoostIcons.nextOpen({}, nil, 1, false) == nil,
 		"the controller's key opens the first, then each next, and closes past the last; left/right wrap")
+
+	-- THE ENCHANTED MIST (2026-10-12, the owner's item 15): an icon while it is ACTIVE, in the row's own popover.
+	local mistOn = BoostIcons.entries({ now = NOW, mistState = "active", mistStartedAt = NOW - 60, mistEndsAt = NOW + 240,
+		rainState = "active", rainMode = "rain", rainEndsAt = NOW + 100 })
+	local mist = mistOn[2]
+	check(#mistOn == 2 and mistOn[1].id == "weather" and mist and mist.id == "mist" and mist.source == "mist"
+			and mist.title == "Enchanted Mist" and mist.effect == "Collect Dewberries and bring them to the Mosskeeper."
+			and mist.hint == nil and mist.endsAt == NOW + 240 and mist.total == 300
+			and BoostIcons.timeLine(mist, NOW) == "Ends in 4:00" and CFG.Order[3] == "mist" and CFG.Order[2] == "luck",
+		"the Mist while ACTIVE: its badge after the weather and Server Luck (which keeps its place beside the weather), "
+			.. "\"Enchanted Mist\", what to do, its time left (Ends in 4:00) and its ring over the whole 5 minutes",
+		mist and (mist.title .. " | " .. mist.effect))
+	local quiet = 0
+	for _, state in ipairs({ "cooldown", "eligible", "disabled" }) do
+		quiet += #BoostIcons.entries({ now = NOW, mistState = state, mistEndsAt = NOW + 240 })
+	end
+	quiet += #BoostIcons.entries({ now = NOW, mistState = "active", mistEndsAt = NOW - 1 })
+	check(quiet == 0, "no Mist icon while it cools down, waits for a reset or is off, nor past its end", quiet)
 
 	--==========================================================================
 	say("2. The row on every screen")

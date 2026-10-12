@@ -1,7 +1,26 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 15: THE EVENT BADGES — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the look OK'd by the owner via the peer; BoostIconsSpec 43/0, SourceIconsSpec 21/0, DiscoPartySpec 19/0, PodRushSpec 98/0, ServerBoostSpec 65/0, RebirthSpec 78/0, HudLayoutSpec 1468/0 and 13 more icon/HUD readers green (lean testing); 4 OF 4 MUTANTS CAUGHT; ONE SHORT GUARDED PLAY; captures in output/item15-event-badges-2026-10-12)
+
+The owner's item 15 via the peer, wired before the publish: Codex's studded round event badges (art/icons/event-badges-2026-10-12, committed with the wiring, and his tight copies in art/icons/tight/event-*.png).
+- **The uploads**: all Images in the CrazyCozy Games group (744756221), loaded in Studio Edit (fetch Success), 512 x 512.
+  - The ids: enchanted-mist 109594999484180, pod-rush 131117409930612, rain 124395986247415, ticket-shower 122867243894278, server-luck 85718740545636, disco 125027997607358, thunderstorm 77214036609787.
+  - They are the 512 MASTERS: their alpha spans 22-489, the masters' 21-490, the tight copies' 11-500.
+  - So each is drawn by one crop, SourceIconCrops (11,11)+490, which frames it as the tight copy (the disc 96%).
+- **Wired:**
+  - GameConfig.SourceIcons rain, thunder, disco, tickets, podrush and luck are the badges, in the notices and the icons over the hotbar.
+  - The Pod Rush's first icon stays its tracker's. The Server Luck shop shelf keeps its product icon.
+  - The Spin Ticket ITEM keeps its own picture (BagLook): the "+1" over a player who took one, the Bag, the Rebirth "Spin tickets" chip.
+- **The Mist on the row:** a "mist" icon while the Mist is ACTIVE, with the row's popover: "Enchanted Mist" · "Collect Dewberries and bring them to the Mosskeeper." · "Ends in m:ss".
+  - Order: weather, luck, mist. Server Luck keeps its place beside the weather (item 9B).
+  - Its notices wear its badge: a berry appearing, a berry picked, a delivery to the Mosskeeper.
+- **LIVE** (the throwaway store): a Rain and a 5-minute Mist started from the console.
+  - The row drew the rain and mist badges by the crop, both loaded (badges_01).
+  - The Mist's popover (badges_02); a notice "A DEWBERRY APPEARED!" wearing the Mist badge (badges_03).
+  - The popover opens over the notice line, as the row's popovers already did.
 ## THE QUEUE, ITEMS 1-14: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; THE FINAL FULL SUITE 154/154; the owner publishes)
 
+- **Follow-up: item 15, the event badges, was wired after this entry and before the owner's publish (its entry above).**
 - **On origin/wip, unpublished:**
   - 0576eb1 item 11 (the compact console); 50d16b0 (the old Shop button);
   - e783a0b + 6993177 item 12 (the Mist's admin tools);
@@ -32,7 +51,7 @@
     - the gear icon;
     - FoldSeconds 30;
     - the GUIDE pill over the hub sign.
-## ITEM 14: THE ENCHANTED MIST SWITCHED ON — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; captures sent to the owner via the peer for the look OK; EnchantedMistSpec 59/0, EnchantedMistBerrySpec 70/0, MistLookSpec 13/0, MosskeeperSpec 69/0, MysteryPodSpec 33/0, AdminMistSpec 69/0, EventHubSpec 53/0 (the owner's lean testing: the specs it touches; one full suite at the end); 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY FOR ITEMS 13 AND 14; captures in output/item13-14-play-2026-10-12)
+## ITEM 14: THE ENCHANTED MIST SWITCHED ON — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the look OK'd by the owner via the peer; EnchantedMistSpec 59/0, EnchantedMistBerrySpec 70/0, MistLookSpec 13/0, MosskeeperSpec 69/0, MysteryPodSpec 33/0, AdminMistSpec 69/0, EventHubSpec 53/0 (the owner's lean testing: the specs it touches; one full suite at the end); 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY FOR ITEMS 13 AND 14; captures in output/item13-14-play-2026-10-12)
 
 The owner's item 14 via the peer: the event ON, an admin's start counting while the schedule runs, and one end-to-end Play where the SCHEDULE starts a Mist naturally.
 - **EnchantedMistConfig.Enabled = true.** The schedule runs:

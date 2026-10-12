@@ -1,0 +1,1076 @@
+{
+  "Export": "proportional bicubic exports; when explicitly approved, frame by alpha>=16 visible disc and clear only exterior pixels outside centred circular boundary",
+  "CircleCheck": "strict all-alpha count outside configured centred circle, with no tolerance; separate fitted bbox check allows1.5px antialias",
+  "TightCanvas": "512x512 RGBA, about2% padding per side relative to disc",
+  "Badges": [
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 0,
+        "MinY": 37,
+        "MaxX": 1219,
+        "MaxY": 1211,
+        "BoundsWidth": 1220,
+        "BoundsHeight": 1175,
+        "AlphaPixels": 1071641,
+        "TransparentPixels": 500875,
+        "OutsideCircleAlphaPixels": 48,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 609.5,
+        "CenterY": 624,
+        "FittedRadius": 610,
+        "MaximumAlphaRadius": 742.3875335699004,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        37.371063,
+        32.871063,
+        1177.2578,
+        1177.2578
+      ],
+      "File": "event-enchanted-mist.png",
+      "Key": "enchanted-mist",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\enchanted-mist-native.png",
+      "NativeSHA256": "ED0A9184F27FA6AC575470662B26A599BE294AA318065D655811B3B061774E3D",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-3dab2e01-f153-4e1b-b7b8-ad17ea2d17f7.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 41,
+        "MinY": 40,
+        "MaxX": 1210,
+        "MaxY": 1202,
+        "BoundsWidth": 1170,
+        "BoundsHeight": 1163,
+        "AlphaPixels": 1065489,
+        "TransparentPixels": 507027,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 625.5,
+        "CenterY": 621,
+        "FittedRadius": 585,
+        "MaximumAlphaRadius": 585.6289354190075,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Enchanted Mist",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 21,
+            "MinY": 23,
+            "MaxX": 490,
+            "MaxY": 488,
+            "BoundsWidth": 470,
+            "BoundsHeight": 466,
+            "AlphaPixels": 171168,
+            "TransparentPixels": 90976,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 255.5,
+            "FittedRadius": 235,
+            "MaximumAlphaRadius": 235.19034844142735,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 5,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-enchanted-mist.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 12,
+            "MaxX": 500,
+            "MaxY": 499,
+            "BoundsWidth": 490,
+            "BoundsHeight": 488,
+            "AlphaPixels": 186951,
+            "TransparentPixels": 75193,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 255.5,
+            "FittedRadius": 245,
+            "MaximumAlphaRadius": 246.02540519222808,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 6,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-enchanted-mist.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 0,
+        "MinY": 39,
+        "MaxX": 1231,
+        "MaxY": 1237,
+        "BoundsWidth": 1232,
+        "BoundsHeight": 1199,
+        "AlphaPixels": 1072063,
+        "TransparentPixels": 500453,
+        "OutsideCircleAlphaPixels": 265,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 615.5,
+        "CenterY": 638,
+        "FittedRadius": 616,
+        "MaximumAlphaRadius": 711.6531809807359,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        33.84542,
+        34.84542,
+        1180.3092,
+        1180.3092
+      ],
+      "File": "event-rain.png",
+      "Key": "rain",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\rain-native.png",
+      "NativeSHA256": "8730556422B3E65A57E3C6A8D02AF61A2CD18EB1ADACDC6B9C690171C1E93B30",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-0f492d2c-d849-493d-9ae9-f55ccd3929da.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 37,
+        "MinY": 42,
+        "MaxX": 1210,
+        "MaxY": 1207,
+        "BoundsWidth": 1174,
+        "BoundsHeight": 1166,
+        "AlphaPixels": 1065437,
+        "TransparentPixels": 507079,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 623.5,
+        "CenterY": 624.5,
+        "FittedRadius": 587,
+        "MaximumAlphaRadius": 587.1545793059951,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Rain",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 21,
+            "MinY": 23,
+            "MaxX": 490,
+            "MaxY": 488,
+            "BoundsWidth": 470,
+            "BoundsHeight": 466,
+            "AlphaPixels": 170290,
+            "TransparentPixels": 91854,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 255.5,
+            "FittedRadius": 235,
+            "MaximumAlphaRadius": 235.30937082912783,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 30,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-rain.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 12,
+            "MaxX": 500,
+            "MaxY": 498,
+            "BoundsWidth": 490,
+            "BoundsHeight": 487,
+            "AlphaPixels": 185990,
+            "TransparentPixels": 76154,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 255,
+            "FittedRadius": 245,
+            "MaximumAlphaRadius": 246.17321137768016,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 36,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-rain.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 24,
+        "MinY": 33,
+        "MaxX": 1220,
+        "MaxY": 1235,
+        "BoundsWidth": 1197,
+        "BoundsHeight": 1203,
+        "AlphaPixels": 1088062,
+        "TransparentPixels": 484454,
+        "OutsideCircleAlphaPixels": 15,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 622,
+        "CenterY": 634,
+        "FittedRadius": 601.5,
+        "MaximumAlphaRadius": 824.7593588435357,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 0,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        32.750263,
+        30.250265,
+        1187.4995,
+        1187.4995
+      ],
+      "File": "event-thunderstorm.png",
+      "Key": "thunderstorm",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\thunderstorm-native.png",
+      "NativeSHA256": "A327B00639EF84911B6A4244A71BEDD284DE255F44187B58F87ECC387A6AAC42",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-e1144c30-cd42-491d-989a-61fc2aa0d9cb.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 36,
+        "MinY": 38,
+        "MaxX": 1216,
+        "MaxY": 1209,
+        "BoundsWidth": 1181,
+        "BoundsHeight": 1172,
+        "AlphaPixels": 1081362,
+        "TransparentPixels": 491154,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 626,
+        "CenterY": 623.5,
+        "FittedRadius": 590.5,
+        "MaximumAlphaRadius": 590.7497355056539,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 0,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Thunderstorm",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 21,
+            "MinY": 23,
+            "MaxX": 490,
+            "MaxY": 491,
+            "BoundsWidth": 470,
+            "BoundsHeight": 469,
+            "AlphaPixels": 170758,
+            "TransparentPixels": 91386,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 257,
+            "FittedRadius": 235,
+            "MaximumAlphaRadius": 235.12177695823925,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 11,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-thunderstorm.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 12,
+            "MaxX": 500,
+            "MaxY": 501,
+            "BoundsWidth": 490,
+            "BoundsHeight": 490,
+            "AlphaPixels": 186470,
+            "TransparentPixels": 75674,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 256.5,
+            "FittedRadius": 245,
+            "MaximumAlphaRadius": 245.62267810607392,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 10,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-thunderstorm.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 0,
+        "MinY": 27,
+        "MaxX": 1225,
+        "MaxY": 1229,
+        "BoundsWidth": 1226,
+        "BoundsHeight": 1203,
+        "AlphaPixels": 1085085,
+        "TransparentPixels": 487431,
+        "OutsideCircleAlphaPixels": 751,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 612.5,
+        "CenterY": 628,
+        "FittedRadius": 613,
+        "MaximumAlphaRadius": 707.9027122422967,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        33.547287,
+        29.547287,
+        1184.9054,
+        1184.9054
+      ],
+      "File": "event-disco.png",
+      "Key": "disco",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\disco-native.png",
+      "NativeSHA256": "45572D8C55FE20CD8F2B1E123021D2F775CD5E7F76987EE53AA12F588C8FCE69",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-d1e69232-5c25-4460-bed5-4d5114abfdc3.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 37,
+        "MinY": 37,
+        "MaxX": 1214,
+        "MaxY": 1206,
+        "BoundsWidth": 1178,
+        "BoundsHeight": 1170,
+        "AlphaPixels": 1076715,
+        "TransparentPixels": 495801,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 625.5,
+        "CenterY": 621.5,
+        "FittedRadius": 589,
+        "MaximumAlphaRadius": 589.4527122679139,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Disco",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 22,
+            "MinY": 21,
+            "MaxX": 490,
+            "MaxY": 488,
+            "BoundsWidth": 469,
+            "BoundsHeight": 468,
+            "AlphaPixels": 170774,
+            "TransparentPixels": 91370,
+            "OutsideCircleAlphaPixels": 3,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 256,
+            "CenterY": 254.5,
+            "FittedRadius": 234.5,
+            "MaximumAlphaRadius": 236.29272100511264,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 102,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-disco.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 10,
+            "MinY": 12,
+            "MaxX": 500,
+            "MaxY": 499,
+            "BoundsWidth": 491,
+            "BoundsHeight": 488,
+            "AlphaPixels": 186528,
+            "TransparentPixels": 75616,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255,
+            "CenterY": 255.5,
+            "FittedRadius": 245.5,
+            "MaximumAlphaRadius": 245.95985444783463,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 103,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-disco.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 32,
+        "MinY": 25,
+        "MaxX": 1221,
+        "MaxY": 1253,
+        "BoundsWidth": 1190,
+        "BoundsHeight": 1229,
+        "AlphaPixels": 1084968,
+        "TransparentPixels": 487548,
+        "OutsideCircleAlphaPixels": 60,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 626.5,
+        "CenterY": 639,
+        "FittedRadius": 614.5,
+        "MaximumAlphaRadius": 765.7037612549647,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        31.301722,
+        25.801722,
+        1191.3966,
+        1191.3966
+      ],
+      "File": "event-ticket-shower.png",
+      "Key": "ticket-shower",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\ticket-shower-native.png",
+      "NativeSHA256": "3748D407E00407414D8223C32C573E8157F0903C0D5DEBDD2A11A990FA9FDEC4",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-032f6145-835b-4e85-850b-2b62be712877.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 35,
+        "MinY": 36,
+        "MaxX": 1218,
+        "MaxY": 1206,
+        "BoundsWidth": 1184,
+        "BoundsHeight": 1171,
+        "AlphaPixels": 1078062,
+        "TransparentPixels": 494454,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 626.5,
+        "CenterY": 621,
+        "FittedRadius": 592,
+        "MaximumAlphaRadius": 592.6982790594216,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Ticket Shower",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 21,
+            "MinY": 24,
+            "MaxX": 490,
+            "MaxY": 490,
+            "BoundsWidth": 470,
+            "BoundsHeight": 467,
+            "AlphaPixels": 169120,
+            "TransparentPixels": 93024,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 257,
+            "FittedRadius": 235,
+            "MaximumAlphaRadius": 234.67264433674413,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 3,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-ticket-shower.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 11,
+            "MinY": 14,
+            "MaxX": 501,
+            "MaxY": 500,
+            "BoundsWidth": 491,
+            "BoundsHeight": 487,
+            "AlphaPixels": 184689,
+            "TransparentPixels": 77455,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 256,
+            "CenterY": 257,
+            "FittedRadius": 245.5,
+            "MaximumAlphaRadius": 245.39967400141344,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 5,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-ticket-shower.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 13,
+        "MinY": 28,
+        "MaxX": 1237,
+        "MaxY": 1223,
+        "BoundsWidth": 1225,
+        "BoundsHeight": 1196,
+        "AlphaPixels": 1128522,
+        "TransparentPixels": 443994,
+        "OutsideCircleAlphaPixels": 61,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 625,
+        "CenterY": 625.5,
+        "FittedRadius": 612.5,
+        "MaximumAlphaRadius": 680.181777174308,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 0,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        18.650557,
+        18.150557,
+        1214.6989,
+        1214.6989
+      ],
+      "File": "event-pod-rush.png",
+      "Key": "pod-rush",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\pod-rush-native.png",
+      "NativeSHA256": "63A2F6720019AC805B12A51943A3D43FE2A557ED4902336299C8B2480B571147",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-06e4e5ca-4165-4e42-b662-3d96a353f7d0.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 23,
+        "MinY": 30,
+        "MaxX": 1228,
+        "MaxY": 1220,
+        "BoundsWidth": 1206,
+        "BoundsHeight": 1191,
+        "AlphaPixels": 1120380,
+        "TransparentPixels": 452136,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 625.5,
+        "CenterY": 625,
+        "FittedRadius": 603,
+        "MaximumAlphaRadius": 604.3494436168531,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 0,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Pod Rush",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 22,
+            "MinY": 25,
+            "MaxX": 490,
+            "MaxY": 486,
+            "BoundsWidth": 469,
+            "BoundsHeight": 462,
+            "AlphaPixels": 169129,
+            "TransparentPixels": 93015,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 256,
+            "CenterY": 255.5,
+            "FittedRadius": 234.5,
+            "MaximumAlphaRadius": 235.9157688667716,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 79,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-pod-rush.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 10,
+            "MinY": 14,
+            "MaxX": 500,
+            "MaxY": 497,
+            "BoundsWidth": 491,
+            "BoundsHeight": 484,
+            "AlphaPixels": 184725,
+            "TransparentPixels": 77419,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255,
+            "CenterY": 255.5,
+            "FittedRadius": 245.5,
+            "MaximumAlphaRadius": 246.53245222485415,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 42,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-pod-rush.png"
+        }
+      ]
+    },
+    {
+      "NativeStats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 0,
+        "MinY": 29,
+        "MaxX": 1235,
+        "MaxY": 1253,
+        "BoundsWidth": 1236,
+        "BoundsHeight": 1225,
+        "AlphaPixels": 1131993,
+        "TransparentPixels": 440523,
+        "OutsideCircleAlphaPixels": 35,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 617.5,
+        "CenterY": 641,
+        "FittedRadius": 618,
+        "MaximumAlphaRadius": 761.2044731870668,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "SquareSourceCrop": [
+        16.89198,
+        20.89198,
+        1214.2161,
+        1214.2161
+      ],
+      "File": "event-server-luck.png",
+      "Key": "server-luck",
+      "NativeCopy": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\originals\\server-luck-native.png",
+      "NativeSHA256": "3E347D00B499EE1F71680AC40645B57FFC5BC156D7CD57C974F014A3474FD962",
+      "NativeSource": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-6c9a254f-cbb5-4615-bdc1-7bb04aefcf7a.png",
+      "NativeVisibleAlpha16Stats": {
+        "Width": 1254,
+        "Height": 1254,
+        "MinX": 21,
+        "MinY": 31,
+        "MaxX": 1226,
+        "MaxY": 1224,
+        "BoundsWidth": 1206,
+        "BoundsHeight": 1194,
+        "AlphaPixels": 1124249,
+        "TransparentPixels": 448267,
+        "OutsideCircleAlphaPixels": 0,
+        "OutsideCircleVisiblePixels": 0,
+        "CenterX": 623.5,
+        "CenterY": 627.5,
+        "FittedRadius": 603,
+        "MaximumAlphaRadius": 604.1080201420934,
+        "CornerAlpha": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "MaximumEdgeAlpha": 1,
+        "PixelFormat": "Format32bppArgb"
+      },
+      "Name": "Server Luck",
+      "Variants": [
+        {
+          "ConfiguredCircleRadius": 235.52,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 22,
+            "MinY": 24,
+            "MaxX": 489,
+            "MaxY": 487,
+            "BoundsWidth": 468,
+            "BoundsHeight": 464,
+            "AlphaPixels": 169776,
+            "TransparentPixels": 92368,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255.5,
+            "CenterY": 255.5,
+            "FittedRadius": 234,
+            "MaximumAlphaRadius": 235.46655813512032,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "master",
+          "ClearedExteriorPixels": 22,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\event-server-luck.png"
+        },
+        {
+          "ConfiguredCircleRadius": 246.15384615384613,
+          "StrictAlphaPixelsOutsideConfiguredCircle": 0,
+          "Stats": {
+            "Width": 512,
+            "Height": 512,
+            "MinX": 10,
+            "MinY": 14,
+            "MaxX": 500,
+            "MaxY": 498,
+            "BoundsWidth": 491,
+            "BoundsHeight": 485,
+            "AlphaPixels": 185434,
+            "TransparentPixels": 76710,
+            "OutsideCircleAlphaPixels": 0,
+            "OutsideCircleVisiblePixels": 0,
+            "CenterX": 255,
+            "CenterY": 256,
+            "FittedRadius": 245.5,
+            "MaximumAlphaRadius": 245.96747752497686,
+            "CornerAlpha": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "MaximumEdgeAlpha": 0,
+            "PixelFormat": "Format32bppArgb"
+          },
+          "ConfiguredCircleCenter": [
+            255.5,
+            255.5
+          ],
+          "Variant": "tight",
+          "ClearedExteriorPixels": 11,
+          "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\tight\\event-server-luck.png"
+        }
+      ]
+    }
+  ],
+  "ApprovedExteriorCleanup": true,
+  "Sheet": {
+    "Sizes": [
+      64,
+      40,
+      30,
+      24
+    ],
+    "Width": 1160,
+    "Height": 954,
+    "UsesTightCopies": true,
+    "Path": "D:\\KAPE\\Steal an Artifact\\art\\icons\\event-badges-2026-10-12\\sheet.png",
+    "Backgrounds": [
+      "sky blue",
+      "field green",
+      "night HUD"
+    ]
+  },
+  "MasterCanvas": "512x512 RGBA",
+  "GeneratedOn": "2026-10-12",
+  "SuccessfulBuiltInCalls": 8,
+  "FailedBuiltInCalls": 1,
+  "FailedCall": "First Mist refinement: connection failed; retried successfully with the same built-in tool",
+  "OwnerApprovals": [
+    "Include Server Luck",
+    "Clean the outside pixels"
+  ],
+  "VisualReadability": {
+    "Scope": "Actual-size sheet inspected at 64/40/30/24 px on sky blue, field green, dark night; not a live UI test",
+    "Badges": [
+      {
+        "key": "enchanted-mist",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Mint fruit/swirl recognizable; tiny crescent is secondary"
+      },
+      {
+        "key": "rain",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Main silhouette and badge colour remain distinct"
+      },
+      {
+        "key": "thunderstorm",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Main silhouette and badge colour remain distinct"
+      },
+      {
+        "key": "disco",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Mirrored ball/pink-cyan colours recognizable; individual mirror tiles and small notes soften"
+      },
+      {
+        "key": "ticket-shower",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Main silhouette and badge colour remain distinct"
+      },
+      {
+        "key": "pod-rush",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Pod and white/red stopwatch identifiable; clock-hand details soften"
+      },
+      {
+        "key": "server-luck",
+        "MainSymbolReadableAt24": true,
+        "AllTinyDetailsReadableAt24": false,
+        "Note": "Main silhouette and badge colour remain distinct"
+      }
+    ]
+  },
+  "StrictOutsideAlphaCleanup": "Approved and completed; all fourteen exports have strict count0 outside configured circles"
+}

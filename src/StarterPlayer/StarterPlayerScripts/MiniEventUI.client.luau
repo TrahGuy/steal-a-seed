@@ -103,13 +103,13 @@ local function pop(eventId: string, count: number)
 	edge.Thickness = 2
 	edge.Parent = plus
 
-	-- The Spin Ticket's own picture (the Bag's); "+1" stands alone if it never
-	-- loads.
+	-- The Spin Ticket's own picture (the Bag's: never the Ticket Shower's event
+	-- badge, 2026-10-12); "+1" stands alone if it never loads.
 	local picture = Instance.new("ImageLabel")
 	picture.Name = "Ticket"
 	picture.BackgroundTransparency = 1
 	picture.ScaleType = Enum.ScaleType.Fit
-	picture.Image = StatusText.sourceImage("tickets") or ""
+	picture.Image = GameConfig.BagLook.IconImages.tickets or ""
 	picture.Size = UDim2.fromOffset(POP.Height, POP.Height)
 	picture.LayoutOrder = 2
 	picture.Visible = picture.Image ~= ""

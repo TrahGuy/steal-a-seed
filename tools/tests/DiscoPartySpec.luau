@@ -326,8 +326,8 @@ local ok, err = pcall(function()
 	check(GameConfig.BoostIcons.Words.Party == "Disco Party"
 			and string.format(GameConfig.BoostIcons.Words.PartyEffect, 50) == "Up to +50% movement speed"
 			and modes.party.Announce.Detail == "Up to +50% movement speed for everyone!"
-			and modes.party.Announce.Icon == "disco" and GameConfig.SourceIcons.disco == "rbxassetid://129016824458756",
-		"the popover's words are the owner's (\"Up to +50% movement speed\", 2026-10-04), on the configured Disco icon")
+			and modes.party.Announce.Icon == "disco" and GameConfig.SourceIcons.disco == "rbxassetid://125027997607358",
+		"the popover's words are the owner's (\"Up to +50% movement speed\", 2026-10-04), on the Disco's event badge")
 	-- "Up to" is the truth while the cap bites: somebody on the curve gains less.
 	local fastest = GameConfig.walkSpeedFor(math.huge)
 	check(fastest * modes.party.SpeedFactor > MAX and MAX / modes.party.SpeedFactor == 100,
