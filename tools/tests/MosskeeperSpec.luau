@@ -930,8 +930,8 @@ local ok, err = pcall(function()
 	local mistSrc = Server:WaitForChild("EnchantedMistService").Source
 	check(M.Priority == 77 and string.find(mistSrc, "EnchantedMistService.Priority = 75", 1, true) ~= nil,
 		"started after the coordinator and its berries")
-	check(EnchantedMistConfig.ShowMosskeeper == true and EnchantedMistConfig.Enabled == false,
-		"he stands in the hub (the owner, 2026-10-11); the event's schedule stays off until the owner says")
+	check(EnchantedMistConfig.ShowMosskeeper == true and EnchantedMistConfig.Enabled == true,
+		"he stands in the hub (the owner, 2026-10-11); the event's schedule on (the owner, 2026-10-12)")
 	local ui = Scripts:WaitForChild("MosskeeperUI").Source
 	local view = Scripts:WaitForChild("MosskeeperView").Source
 	check(string.find(ui, "camera.CameraType ~= Enum.CameraType.Custom or camera.CameraSubject ~= humanoid or "

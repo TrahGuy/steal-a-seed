@@ -461,7 +461,7 @@ local ok, err = pcall(function()
 			and string.find(barView, "trackStroke.Color = BAR.TrackEdge", 1, true) ~= nil
 			and typeof(EnchantedMistConfig.Mosskeeper.Bar.TrackEdge) == "Color3",
 		"the bar ends on the Mysterious Pod itself, live, over a solid edged track")
-	check(EnchantedMistConfig.Enabled == false, "the event itself still off")
+	check(EnchantedMistConfig.Enabled == true, "the event itself on (the owner, 2026-10-12)")
 end)
 
 if not ok then

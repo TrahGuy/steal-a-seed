@@ -7,15 +7,17 @@
 -- EnchantedMistData's. Kept out of GameConfig while the hub's layout there is
 -- another session's work in progress; it reads GameConfig.Map.EventHub only.
 --
--- OFF until the owner approves: `Enabled` is false, and even when it is on the
--- event runs only once every binding EnchantedMistService.MissingBindings lists
--- is in place. The shared sign shows with `ShowSign`: ON since 2026-10-11 (the
--- owner), so while the event is off it reads COMING SOON, and the next Publish
--- puts it live.
+-- ON since 2026-10-12 (the owner's item 14): `Enabled` runs the schedule -- a
+-- new server's first eligibility 20-60 minutes in, then 60 minutes after each
+-- start, each Mist after the next completed natural reset -- and even so only
+-- once every binding EnchantedMistService.MissingBindings lists is in place.
+-- An admin's START MIST NOW counts as a start while it runs. The shared sign
+-- shows with `ShowSign` (ON since 2026-10-11): its real states, and COMING
+-- SOON only while the schedule is off.
 --==============================================================================
 local EnchantedMistConfig = {}
 
-EnchantedMistConfig.Enabled = false
+EnchantedMistConfig.Enabled = true
 EnchantedMistConfig.ShowSign = true
 
 -- Workspace attributes the server publishes, the deadline before the state
@@ -535,7 +537,9 @@ EnchantedMistConfig.Sign = {
 	-- The truthful states (KB/ENCHANTED-MIST-RESET-ALIGNED-CLAUDE-PROMPT.md §4).
 	Words = {
 		ComingSoon = "COMING SOON",
-		Cooldown = "Eligible in %s",
+		-- The owner, 2026-10-12, for kids: "Next Mist in" (was "Eligible in"); the
+		-- note still says it waits for the reset.
+		Cooldown = "Next Mist in %s",
 		CooldownNote = "Begins after biome reset",
 		Eligible = "Waiting for biome reset",
 		-- An estimate (dusk + the night), moved by a Pod Rush hold; never a promise.

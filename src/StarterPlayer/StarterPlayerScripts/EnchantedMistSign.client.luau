@@ -3,7 +3,7 @@
 -- Steal a Seed :: EnchantedMistSign (2026-10-11)
 --
 -- The shared ENCHANTED MIST timer above the Event Hub: the header, the truthful
--- state (EnchantedMistStatus -- COMING SOON, "Eligible in", "Waiting for biome
+-- state (EnchantedMistStatus -- COMING SOON, "Next Mist in", "Waiting for biome
 -- reset" with an ESTIMATE, "Biomes resetting", "ACTIVE · Ends in"), and a note.
 -- Every player in a server reads the same published state and deadline; the
 -- countdown is worked out here from Workspace:GetServerTimeNow(), repainted at

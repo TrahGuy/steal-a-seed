@@ -6,7 +6,7 @@
 --
 --   1. the numbers: the confirmed rules (carry 5, 10 per pod, 30 s hatch, the
 --      15-cumulative example), the schedule, the confirmed odds and their picks
---   2. the sign's words: every state, truthful -- COMING SOON, "Eligible in",
+--   2. the sign's words: every state, truthful -- COMING SOON, "Next Mist in",
 --      waiting with an ESTIMATE, resetting, active, syncing; and how big it
 --      draws: its built studs near, never under MinHeaderUnits far, growing
 --      upward
@@ -111,8 +111,8 @@ local ok, err = pcall(function()
 	local a, b = EnchantedMistStatus.describe(v({ state = STATES.Disabled }), now)
 	check(a == WORDS.ComingSoon and b == nil, "switched off or missing a binding: COMING SOON")
 	a, b = EnchantedMistStatus.describe(v({ state = STATES.Cooldown, eligibleAt = now + 3600 }), now)
-	check(a == "Eligible in 60:00" and b == WORDS.CooldownNote, "cooling down: Eligible in, and it begins after a reset",
-		tostring(a))
+	check(a == "Next Mist in 60:00" and b == WORDS.CooldownNote and WORDS.CooldownNote == "Begins after biome reset",
+		"cooling down: Next Mist in (the owner's words for kids, 2026-10-12), and it begins after a reset", tostring(a))
 	a, b = EnchantedMistStatus.describe(v({ state = STATES.Eligible, eligibleAt = now - 5, worldPhase = "Day",
 		worldPhaseEndsAt = now + 100 }), now)
 	check(a == WORDS.Eligible and b == "Estimated start in ~01:55",
@@ -190,16 +190,25 @@ local ok, err = pcall(function()
 		return 1800
 	end
 
+	-- The switch off (as it was until 2026-10-12): disabled, no eligibility.
+	configCopy.Enabled = false
 	M._boot(0)
 	check(M.State() == STATES.Disabled and published[ATTR.State] == STATES.Disabled
 			and published[ATTR.EligibleAt] == nil,
-		"off by default (Enabled false): published disabled, no eligibility")
+		"with the switch off: published disabled, no eligibility")
+	configCopy.Enabled = EnchantedMistConfig.Enabled
 	local missing = M.MissingBindings()
 	local text = table.concat(missing, " | ")
 	-- Since 2026-10-11 every piece is built (the Look last), every pool creature
 	-- registered (SeedData.MistSpecies) and both odds tables confirmed.
 	check(#missing == 0, "nothing is missing: every piece built, every creature registered, both tables confirmed",
 		text)
+	-- ON (the owner, 2026-10-12, item 14): the real switch, every binding in place.
+	M._boot(0)
+	check(EnchantedMistConfig.Enabled == true and M.State() == STATES.Cooldown and M.EligibleAt() == 1800
+			and published[ATTR.State] == STATES.Cooldown and published[ATTR.EligibleAt] == 1800,
+		"switched on, every binding in place: a new server cools down, first eligible 20-60 minutes in (here 30), "
+			.. "published for the sign", M.State())
 
 	-- The guard still holds: with a piece unbuilt, switching on does nothing.
 	configCopy.Enabled = true
@@ -455,8 +464,9 @@ local ok, err = pcall(function()
 	-- 5. THE WIRING
 	--==========================================================================
 	say("-- the wiring --")
-	check(EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowSign == true,
-		"the event's schedule off by default; the shared sign ON (the owner, 2026-10-11): COMING SOON while it is off")
+	check(EnchantedMistConfig.Enabled == true and EnchantedMistConfig.ShowSign == true,
+		"the event's schedule ON (the owner, 2026-10-12, item 14); the shared sign ON (2026-10-11): its real states, "
+			.. "COMING SOON only while the schedule is off")
 	local signSrc = StarterPlayer:WaitForChild("StarterPlayerScripts"):WaitForChild("EnchantedMistSign").Source
 	check(string.find(signSrc, "sign.gui.MaxDistance = SIGN.MaxDistance\n", 1, true)
 			and string.find(signSrc, "local middle = Vector3.new(centre.X, (GameConfig.Map :: any).GroundY + HUB.FloorY + "

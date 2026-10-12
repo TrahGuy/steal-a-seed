@@ -754,7 +754,7 @@ local ok, err = pcall(function()
 	check(M.Priority == 76 and string.find(mistSrc, "EnchantedMistService.Priority = 75", 1, true) ~= nil
 			and string.find(mistSrc, "Berries = true", 1, true) ~= nil,
 		"started after the coordinator it listens to; the berries counted as built")
-	check(EnchantedMistConfig.Enabled == false, "the event itself still off")
+	check(EnchantedMistConfig.Enabled == true, "the event itself on (the owner, 2026-10-12)")
 end)
 
 if not ok then

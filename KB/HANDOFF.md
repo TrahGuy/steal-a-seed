@@ -1,5 +1,34 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 14: THE ENCHANTED MIST SWITCHED ON — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; captures sent to the owner via the peer for the look OK; EnchantedMistSpec 59/0, EnchantedMistBerrySpec 70/0, MistLookSpec 13/0, MosskeeperSpec 69/0, MysteryPodSpec 33/0, AdminMistSpec 69/0, EventHubSpec 53/0 (the owner's lean testing: the specs it touches; one full suite at the end); 3 OF 3 MUTANTS CAUGHT; ONE GUARDED PLAY FOR ITEMS 13 AND 14; captures in output/item13-14-play-2026-10-12)
+
+The owner's item 14 via the peer: the event ON, an admin's start counting while the schedule runs, and one end-to-end Play where the SCHEDULE starts a Mist naturally.
+- **EnchantedMistConfig.Enabled = true.** The schedule runs:
+  - A new server's first eligibility is a random 20-60 minutes in, then 60 minutes after each start.
+  - Each Mist starts on the next completed natural reset; MissingBindings is empty.
+  - The hub sign shows the real states: "Next Mist in", "Waiting for biome reset" with its estimate, ACTIVE. COMING SOON only while the schedule is off.
+- **An admin's START MIST NOW counts as a start while the schedule runs** (the owner's YES): the next eligibility is 60 minutes from it. With the schedule off it changes nothing, as before.
+  - Both rules were already in EnchantedMistService.AdminStart and pinned in EnchantedMistSpec. Mutants now prove the pins: off the schedule, the cooldown never moves.
+- **Specs that pinned the switch off now pin it on:** EnchantedMistSpec, EnchantedMistBerrySpec, MistLookSpec, MosskeeperSpec, MysteryPodSpec.
+  - EnchantedMistSpec boots with the switch off (disabled), then with the real switch on (cooling down, first eligible 20-60 minutes in, published for the sign).
+- **The sign's words (the owner, for kids):** "Eligible in %s" became "Next Mist in %s" (EnchantedMistConfig.Sign.Words.Cooldown); the note still says "Begins after biome reset". The change came after the Play: its captures show the old words, and the Edit spec shows the new ("Next Mist in 60:00").
+- **THE PLAY (one guarded Play, the throwaway store):**
+  - **Item 13's disco first:** five DISCO ONLY events from the console.
+    - Four picked the first song, one the second. The pick is fair: 20,000 GUID-like ids split 10,006 / 9,994.
+    - Every event played exactly the song its id picks, looping, at its level (1.30 and 1.00), within 0.08-0.14 s of the event's clock.
+    - A late join (Music.client run afresh) took the same song and bar within 0.12 s. Each end brought BGM1 back.
+  - **Item 14's loop:**
+    - A fresh server: "ON. First eligible in 2950s".
+    - A gated test-only host (ZZMistHost, synced for the Play, deleted after) compressed only the first eligibility: the schedule's own _boot with its random draw stubbed to 20 s. The sign then read "ELIGIBLE IN 00:20" (mist14_01), then "WAITING FOR BIOME RESET · Estimated start in ~04:29" (mist14_03).
+    - That first dawn came 3 s before the eligibility, so the schedule rightly waited for the next. Then "MIST fa30ed8d-2-1 started after dawn 2; ends in 300s": natural, no console (mist14_04). The next eligibility was +3597 s, 60 minutes from its start.
+    - 30 berries appeared over the Mist.
+    - A pick by a real hold on a berry's E prompt (carried 1).
+    - Progress 9 set with the console's PROGRESS chip, then a delivery: Talk, #1 Give all. "delivered 1 Dewberry: 1 pod(s)" and "DELIVERED 1! A MYSTERIOUS POD IS YOURS." (mist14_06).
+    - The hatch by the card's HOLD TO HATCH; a Mysterious Pod never goes through HATCH ALL, by design. The reveal landed a Tiny Mossbristle, "PLANTED!" (mist14_07, mist14_08).
+    - The end on time: "ended (time). Next eligible in 3299s"; the berries "30 spawned, 1 picked, 6 removed", none left. The sign back to the cooldown (mist14_09) and the day look back.
+  - **Test-only, reported:** the sign's AlwaysOnTop off for the captures; the console shut by OpenPanel; my own test character moved beside a berry and the Mosskeeper.
+  - **Teardown:** the host deleted; the prepublish probe shows 373 scripts = disk, 0 ZZ, the marker removed.
+- **Open for the owner:** after the Tiny Mossbristle was planted, cash went from $394K to $2.34M in about two minutes (its income, stage 4's numbers): worth a look at the economy.
 ## ITEM 13: THE SECOND DISCO SONG — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; the pick and the level the owner's, via the peer; DiscoDancersSpec 59/0, MiniEventSpec 90/0, PodRushSpec 98/0, SproutDashSpec 49/0, MusicBedSpec 28/0, SoundLevelSpec 28/0, RainAudioSpec 39/0 (the owner's lean testing: the specs it touches; one full suite at the end); 4 OF 4 MUTANTS CAUGHT; LIVE: in item 14's one guarded Play (the owner's call: one Play for both))
 
 The owner's item 13 via the peer: the new disco track rbxassetid://72867304318133 (the Suno prompt: silly upbeat novelty disco, "Sprout disco!"), added to GameConfig.Music.DiscoTracks beside the first.

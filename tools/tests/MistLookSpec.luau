@@ -140,8 +140,8 @@ local ok, err = pcall(function()
 	local built = string.match(strip((service :: any).Source), "Look = (%a+),")
 	-- ShowMosskeeper on since 2026-10-11 (the owner: the hub set stands always);
 	-- the look stays the Mist's own.
-	check(built == "true" and EnchantedMistConfig.Enabled == false and EnchantedMistConfig.ShowMosskeeper == true,
-		"the Look is built; the event's schedule still off, Mosskeeper's hub set on", built)
+	check(built == "true" and EnchantedMistConfig.Enabled == true and EnchantedMistConfig.ShowMosskeeper == true,
+		"the Look is built; the event's schedule on (the owner, 2026-10-12), Mosskeeper's hub set on", built)
 end)
 
 if not ok then
