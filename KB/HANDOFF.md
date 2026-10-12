@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 16 C2: THE SOUND AUDIT — ONE MUSIC BED AT A TIME — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK; MusicBedSpec 29/0, MistAudioSpec 19/0, RainAudioSpec 39/0, SoundLevelSpec 28/0, DiscoDancersSpec 59/0, PodRushSpec 98/0, SproutDashSpec 49/0; MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY FOR THE AUDIT AND ONE FOR THE PROOF)
+## ITEM 16 C2: THE SOUND AUDIT — ONE MUSIC BED AT A TIME — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK (the timelines as proof), NOT PUBLISHED; MusicBedSpec 29/0, MistAudioSpec 19/0, RainAudioSpec 39/0, SoundLevelSpec 28/0, DiscoDancersSpec 59/0, PodRushSpec 98/0, SproutDashSpec 49/0; MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY FOR THE AUDIT AND ONE FOR THE PROOF)
 
 The owner: "check the other sounds too, sometimes rain bgm is overlapping too". The rules:
 - one music bed at a time, with clean crossfades;
@@ -22,7 +22,7 @@ The owner: "check the other sounds too, sometimes rain bgm is overlapping too". 
 - The bed went 0.090 -> 0.001 under the rain and back to 0.090 after.
 - A rain started and ended within 1.6 s left the day's music playing, untouched.
 **Files:** Music.client, Weather.client. Specs: MusicBedSpec, MistAudioSpec.
-## ITEM 16 C: THE MIST'S START AND END, ONE CLEAN SOUND EACH — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK on the timeline; EnchantedMistBerrySpec 73/0, MistAudioSpec 18/0, AdminMistSpec 69/0 and the other readers green; MUTANTS 4/4 CAUGHT; GUARDED PLAYS: a diagnosis timeline and a proof timeline through the console's own START and END)
+## ITEM 16 C: THE MIST'S START AND END, ONE CLEAN SOUND EACH — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK (the timelines as proof), NOT PUBLISHED; EnchantedMistBerrySpec 73/0, MistAudioSpec 18/0, AdminMistSpec 69/0 and the other readers green; MUTANTS 4/4 CAUGHT; GUARDED PLAYS: a diagnosis timeline and a proof timeline through the console's own START and END)
 
 The owner: "when i trigger the enchanted mist, sfx is overlapping".
 - **The diagnosis.** A client log of every Sound, through the console's own START MIST NOW path:
