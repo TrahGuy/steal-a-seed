@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 18 B: "SKIP REBIRTH" — A REBIRTH BOUGHT, NO CASH OR MILL NEEDED — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; RebirthSpec 93/0 (8 new), StoreSpec 28/0, ServerBoostSpec 65/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, AdminSpec 129/0, InstantCreditSpec 27/0, MysteryShopSpec 14/0, SpinPurchaseSpec 49/0, RebirthCelebrationSpec 92/0, StorageDoorsSpec 128/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 18 B: "SKIP REBIRTH" — A REBIRTH BOUGHT, NO CASH OR MILL NEEDED — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, NOT PUBLISHED; RebirthSpec 93/0 (8 new), StoreSpec 28/0, ServerBoostSpec 65/0, CompactMenusSpec 46/0, RobuxPriceSpec 22/0, CashFormatSpec 26/0, AdminSpec 129/0, InstantCreditSpec 27/0, MysteryShopSpec 14/0, SpinPurchaseSpec 49/0, RebirthCelebrationSpec 92/0, StorageDoorsSpec 128/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner's product: "Skip Rebirth", 3718117755, 249 R$ (the owner's id and price). The dashboard text says it is: an instant rebirth with no cash or mill needed; the permanent bonus (+50% training, +25% plant income), the next title and a fence upgrade; cash spent and the mill back to Compost Walk; Speed, plot, plants, pods and items kept; can be bought again. The game now does exactly that.
 
@@ -22,11 +22,13 @@ The owner's product: "Skip Rebirth", 3718117755, 249 R$ (the owner's id and pric
 - Also: the expired-quote refusal now says "Open the panel again." (the HUD button's panel or the shrine's), not "Open the shrine again."
 
 **The Play** (guarded, throwaway store; desktop 1169 x 716; `output/rebirth-button-2026-10-12/18B_skip_rebirth_sheet.png`):
-- b1: the panel short of the mill offers SKIP REBIRTH at the live price (Studio's regional 99). It drew OVER the REBIRTH button: the panel's layout pass re-sets that button after a quote. FIXED after this Play: the two now share the button's row in halves (relayout → placeFootRow; RebirthSpec pins it). NOT YET SEEN LIVE.
+- b1: the panel short of the mill offers SKIP REBIRTH at the live price (Studio's regional 99). It drew OVER the REBIRTH button: the panel's layout pass re-sets that button after a quote. FIXED after this Play: the two now share the button's row in halves (relayout → placeFootRow; RebirthSpec pins it). SEEN LIVE in a second, one-minute Play (the owner's ask; `c1_panel_skip_fixed.png`): REBIRTH and SKIP REBIRTH 195 px each, 8 px apart, on one row.
 - b5: the Boosts shelf with SKIP REBIRTH.
 - b3, b4: two grants made by the test host (GrantSkip as a receipt makes it; the purchase sheet is CoreGui, which MCP clicks may not press) with $1,494 and mill 1. Rebirth 1 came within a second (REBORN! over the open Shop). Rebirth 2 came exactly 10 s later (RebirthAt +10).
 
 **Not tested live:** a real receipt (CoreGui), and a phone (the emulator stood on desktop). Both are spec-covered: the grant, the owed count, the cooldown queue, the waiting line, the cap, the wiring.
+
+**Pushed** with the owner's OK on the fixed panel: 18daa7c.
 
 **Files:** GameConfig (Store kind, the Boosts row, Store.Icons, Rebirth.Skip, Save.MaxSkipRebirthsOwed, the QUOTE words), Rebirth (check's `skip`, skipItem), ShopCatalog, ProfileSchema, PlayerDataService (AddSkipRebirthsOwed, the reset's keep list), StoreService (the grant hook), RebirthService (reborn, GrantSkip, SkipOwed, the loop), RebirthUI (the panel's SKIP REBIRTH). Specs: RebirthSpec, ServerBoostSpec.
 
