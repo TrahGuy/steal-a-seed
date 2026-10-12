@@ -227,10 +227,13 @@ local ok, err = pcall(function()
 	local reveal = sourceOf(Scripts, "MysteryRevealUI")
 	check(has(reveal, "local i = math.floor((-strip.Position.X.Offset - width / 2) / pitch + 0.5) + 1")
 			and has(reveal, "SoundKit.play(\"MistReelTick\")")
-			and count(reveal, "SoundKit.play(\"MistCardLands\")") == 2
+			and count(reveal, "SoundKit.play(\"MistCardLands\")") == 3
 			and has(reveal, "if state == Enum.PlaybackState.Completed then")
-			and has(reveal, "\t\t\t\ttitle.Text = W.Secret\n\t\t\t\tSoundKit.play(\"MistSecret\")"),
-		"the reveal: a tick for every card centred, a landing on each reel (reduced motion too), A SECRET! on a Secret")
+			and has(reveal, "\t\t\t\ttitle.Text = W.Secret\n\t\t\t\tSoundKit.play(\"MistSecret\")")
+			-- OPEN ALL's grid (2026-10-12, item 17): one landing for the grid, A SECRET! if one is in it.
+			and has(reveal, "\tSoundKit.play(\"MistCardLands\")\n\tif secret then\n\t\tSoundKit.play(\"MistSecret\")\n\tend"),
+		"the reveal: a tick for every card centred, a landing on each reel (reduced motion too), A SECRET! on a Secret; "
+			.. "OPEN ALL's grid lands once, with A SECRET! when it holds one")
 	local loadout = sourceOf(Scripts, "LoadoutUI")
 	check(has(loadout, "if mist and podsNow.mistGrowing[tostring(item.ref)] then\n\t\t\t\t\t\tSoundKit.play(\"MistPodReady\")")
 			and has(loadout, "\t\tpodsNow.mistGrowing = mistGrowing\n"),
