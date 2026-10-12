@@ -2931,7 +2931,7 @@ local bandSays = {
 	{ "AnnouncementUI", '.band("announcement", "above", stack)' },
 	{ "AlertUI", '.band("chase-word", "over", word)' },
 	{ "InviteRewardUI", 'Notice.band("invite-card", "over", card)' },
-	{ "MysteryRevealUI", '.band("mystery-draw", "over", panel)' },
+	{ "MysteryRevealUI", 'Notice.band("mystery-draw", "over", scrim)' },
 }
 local bandMissing = {}
 for _, said in ipairs(bandSays) do

@@ -6,21 +6,39 @@
 -- PROMPT.md §11), for this family only -- never the retired hatch cards.
 --
 -- After the server has hatched a Mysterious Pod exactly once and saved what
--- came out (MysteryPodService.TellHatch, to its owner alone), a compact
--- studded strip at the top of the screen reels the pool's creature cards and
--- lands on the SAVED creature; for Legendary to Divine a second reel lands on
--- the SAVED size once the landed creature has held a moment to be read
--- (Shell.LandHoldSeconds, 2026-10-12); a Secret skips it ("A SECRET!"). Then
--- the world reveal
--- (HatchFX) plays as for any hatch, Shell.ReelSeconds after it began. The
--- client decides nothing: the reel's filler order comes from the hatch's own
--- token, and it always lands where the server said. No camera is touched.
--- Reduced Motion: the cards appear already landed.
+-- came out (MysteryPodService.TellHatch, to its owner alone), the creature
+-- cards run across the screen and land on the SAVED creature; for Legendary to
+-- Divine a second reel lands on the SAVED size once the landed creature has
+-- held a moment to be read; a Secret skips it ("A SECRET!"). Then the world
+-- reveal (HatchFX) plays as for any hatch, at the draw's end. The client
+-- decides nothing: the reel's filler order comes from the hatch's own token,
+-- and it always lands where the server said. No camera is touched.
+--
+-- 2026-10-12, the owner:
+--   THE LOOK      no panel: the cards run over a slight dimmer covering the
+--                 whole screen, notches too; the titles outlined over it.
+--   THE PACE      each reel spins EnchantedMistData.Shell.SpinSeconds (at
+--                 least 5 s), slowing onto its card the whole way, over about
+--                 twice the cards it had.
+--   EVERY DRAW    "sometimes the draw doesn't run, it auto chooses": a second
+--                 hatch cut the running draw short, and Performance Mode (which
+--                 forces Reduced FX) landed every draw at once. Now each draw
+--                 waits its turn -- the server reserves them one after another
+--                 (MysteryPodService.Reserve) and says when each starts -- and
+--                 only the player's OWN Reduced FX, or Roblox's Reduced Motion,
+--                 lands the cards at once.
+--   SKIP          a small SKIP (or the pad's B) jumps this draw to its landed
+--                 cards, each held a moment; the server's result and timing
+--                 are untouched, and the next draw starts at its own time.
 --==============================================================================
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -28,7 +46,6 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local StatusText = require(Shared:WaitForChild("StatusText"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
@@ -36,17 +53,24 @@ local RarityFX = require(Shared:WaitForChild("RarityFX"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
 local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
+local PerformanceMode = require(Shared:WaitForChild("PerformanceMode"))
+local Notice = require(Shared:WaitForChild("Notice"))
 
 local CFG = EnchantedMistConfig.Mystery
 local W = CFG.Words
-local LOOK = GameConfig.StuddedLook
 local INK = Color3.fromRGB(14, 10, 18)
 local WHITE = Color3.fromRGB(255, 255, 255)
 local CARD_W, CARD_H, GAP = 104, 140, 8
 local CHIP_W, CHIP_H = 96, 84
 local Z = 4
--- The slot each reel lands on; filler after it fills the window's right side.
-local LAND = 12
+-- Each reel's cards and the one it lands on, filler after it filling the
+-- window's right side: about twice the cards since the reels spin 5.5 s.
+local CREATURE_COUNT, CREATURE_LAND = 34, 30
+local SIZE_COUNT, SIZE_LAND = 30, 26
+-- How long each landed card holds after a SKIP, and when SKIP may be pressed
+-- (never by the hatch press itself).
+local SKIP_HOLD = 0.8
+local SKIP_AFTER = 0.5
 
 local channel = SeedGame:WaitForChild("Remotes"):WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
 
@@ -57,47 +81,53 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedMysteryReveal"
 gui.ResetOnSpawn = false
--- Over the panels (Sacrifice 37), under the RUN alarm (50).
-gui.DisplayOrder = 38
+-- Over the panels (Sacrifice 37), the rail's buttons (40) and the HUD cards
+-- (42), so the dimmer covers the whole screen as the owner asked; under the
+-- guides (45), the announcements (47), the notices (49) and the RUN alarm (50).
+-- The rail stays pressable: the dimmer takes no input. The whole screen,
+-- notches too (IgnoreGuiInset alone stops at the safe insets).
+gui.DisplayOrder = 44
+gui.IgnoreGuiInset = true
+gui.ScreenInsets = Enum.ScreenInsets.None
 gui.Enabled = false
 gui.Parent = playerGui
 
--- The studded panel (the kit's texture over white, edged in the moss band).
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.AnchorPoint = Vector2.new(0.5, 0)
-panel.Position = UDim2.new(0.5, 0, 0.08, 0)
-panel.Size = UDim2.new(0.92, 0, 0, 216)
-panel.BackgroundColor3 = WHITE
-panel.ZIndex = Z
-panel.Parent = gui
-local panelMax = Instance.new("UISizeConstraint")
-panelMax.MaxSize = Vector2.new(460, 216)
-panelMax.Parent = panel
--- The draw wins the notices' band: a notice it would meet gives way until it has
--- gone (the owner, 2026-10-12; Notice.band).
-require(Shared:WaitForChild("Notice")).band("mystery-draw", "over", panel)
-UIKit.corner(panel, 16)
-local edge = Instance.new("UIStroke")
-edge.Thickness = 4
-edge.Color = EnchantedMistConfig.Mosskeeper.Look.Edge
-edge.Parent = panel
-local texture = Instance.new("ImageLabel")
-texture.Name = "StudTexture"
-texture.Size = UDim2.fromScale(1, 1)
-texture.BackgroundTransparency = 1
-texture.Image = LOOK.Texture
-texture.ScaleType = Enum.ScaleType.Tile
-texture.TileSize = UDim2.fromOffset(LOOK.Tile, LOOK.Tile)
-texture.ImageTransparency = LOOK.BodyStuds
-texture.ZIndex = Z
-texture.Parent = panel
-UIKit.corner(texture, 16)
+-- THE DIMMER: a dark sheet over everything, a little see-through; no
+-- CanvasGroup (its transparency ghosts). It takes no input.
+local scrim = Instance.new("Frame")
+scrim.Name = "Scrim"
+scrim.Size = UDim2.fromScale(1, 1)
+scrim.BackgroundColor3 = Color3.fromRGB(6, 4, 12)
+scrim.BackgroundTransparency = 0.55
+scrim.BorderSizePixel = 0
+scrim.Active = false
+scrim.ZIndex = Z - 2
+scrim.Parent = gui
+-- The draw wins the notices' band: a notice gives way until it has gone (the
+-- owner, 2026-10-12; Notice.band).
+Notice.band("mystery-draw", "over", scrim)
 
-local title = MenuKit.heading(panel, "Title", 24, EnchantedMistConfig.Mosskeeper.Look.Band, Z + 2)
+-- The cards' place: the upper middle, as wide as the old strip.
+local stage = Instance.new("Frame")
+stage.Name = "Stage"
+stage.AnchorPoint = Vector2.new(0.5, 0.5)
+stage.Position = UDim2.fromScale(0.5, 0.4)
+stage.Size = UDim2.new(0.92, 0, 0, 216)
+stage.BackgroundTransparency = 1
+stage.ZIndex = Z
+stage.Parent = gui
+local stageMax = Instance.new("UISizeConstraint")
+stageMax.MaxSize = Vector2.new(460, 216)
+stageMax.Parent = stage
+
+-- The title, outlined over the dimmer.
+local title = MenuKit.heading(stage, "Title", 26, WHITE, Z + 2)
 title.AnchorPoint = Vector2.new(0.5, 0)
-title.Position = UDim2.new(0.5, 0, 0, 6)
-title.Size = UDim2.new(1, -20, 0, 30)
+title.Position = UDim2.new(0.5, 0, 0, 2)
+title.Size = UDim2.new(1, -20, 0, 32)
+local titleEdge = title:FindFirstChildOfClass("UIStroke") or UIKit.stroke(title, INK, 3)
+titleEdge.Color = INK
+titleEdge.Thickness = 3
 
 local window = Instance.new("Frame")
 window.Name = "Window"
@@ -107,7 +137,7 @@ window.Size = UDim2.new(1, -20, 0, CARD_H + 12)
 window.BackgroundTransparency = 1
 window.ClipsDescendants = true
 window.ZIndex = Z + 1
-window.Parent = panel
+window.Parent = stage
 -- Where the reel lands: a notch at the window's top and bottom (clear of the
 -- card's words).
 for _, edgeY in ipairs({ 0, 1 }) do
@@ -133,13 +163,36 @@ strip.Size = UDim2.new(0, 0, 1, 0)
 strip.ZIndex = Z + 1
 strip.Parent = window
 
+-- SKIP (2026-10-12, the owner): a small pill at the draw's bottom-right, under
+-- the cards and clear of the title and the belt; a touch screen's at least 44
+-- tall. Shown SKIP_AFTER into a draw that moves.
+local skipButton = Instance.new("TextButton")
+skipButton.Name = "Skip"
+skipButton.AnchorPoint = Vector2.new(1, 0)
+skipButton.Position = UDim2.new(1, -10, 0, 42 + CARD_H + 12 + 8)
+skipButton.BackgroundColor3 = Color3.fromRGB(24, 20, 34)
+skipButton.BackgroundTransparency = 0.15
+skipButton.AutoButtonColor = true
+skipButton.Font = Enum.Font.LuckiestGuy
+skipButton.Text = "SKIP"
+skipButton.TextColor3 = WHITE
+skipButton.TextSize = 16
+skipButton.Visible = false
+skipButton.ZIndex = Z + 6
+skipButton.Parent = stage
+UIKit.corner(skipButton, 14)
+UIKit.stroke(skipButton, Color3.fromRGB(150, 255, 196), 1.5)
+
 local fx: { any } = {}
 local moving: { any } = {}
 local stopMoving: (() -> ())? = nil
 local tween: Tween? = nil
+-- The moving reel's stop, for a SKIP: it lands where it was going at once.
+local landNow: (() -> ())? = nil
 local playing = 0
 
 local function clear()
+	landNow = nil
 	if tween then
 		tween:Cancel()
 		tween = nil
@@ -160,6 +213,19 @@ local function clear()
 	strip.Position = UDim2.new()
 end
 
+-- ONLY AN EXPLICIT REDUCED MOTION lands the cards at once: the player's own
+-- Reduced FX (PerformanceMode.ownReduced -- never the one Performance Mode
+-- forces) or Roblox's own setting.
+local function snapping(): boolean
+	if PerformanceMode.ownReduced(player) then
+		return true
+	end
+	local ok, value = pcall(function()
+		return (GuiService :: any).ReducedMotionEnabled
+	end)
+	return ok and value == true
+end
+
 -- The pool entry a species id names (its card's words), or one from SeedData.
 local function entryFor(id: string, rarity: string?): any
 	for _, e in ipairs(EnchantedMistData.Pool.Entries) do
@@ -172,9 +238,15 @@ local function entryFor(id: string, rarity: string?): any
 end
 
 -- Lay `count` items in the strip, item `land` the answer (filler both sides of
--- it), and slide it under the notches.
+-- it), and slide it under the notches over `seconds` -- or set it there at once
+-- (`seconds` 0: a snap). It brakes evenly (Quad), a wheel's way, so it moves
+-- the whole spin and stops as CARD LANDS plays (a Quint stood still for its
+-- last second and a half). `near`, if given, hears each frame which item is
+-- under the notches (and the landed one when it stops). While it moves,
+-- `landNow` stops it on its answer at once (a SKIP): the same cards, nothing
+-- built again.
 local function reel(count: number, land: number, width: number, build: (index: number, slot: Frame) -> (),
-	seconds: number)
+	seconds: number, near: ((centred: number, all: boolean) -> ())?)
 	strip.Size = UDim2.new(0, count * (width + GAP), 1, 0)
 	for i = 1, count do
 		local slot = Instance.new("Frame")
@@ -190,18 +262,29 @@ local function reel(count: number, land: number, width: number, build: (index: n
 	local function at(i: number): UDim2
 		return UDim2.new(0.5, -width / 2 - (i - 1) * (width + GAP), 0, 0)
 	end
-	if StatusText.reducedMotion() or seconds <= 0 then
+	-- Stopped on the answer: the cards about it built, and CARD LANDS.
+	local function stop()
+		landNow = nil
 		strip.Position = at(land)
+		if near then
+			near(land, true)
+		end
 		SoundKit.play("MistCardLands")
+	end
+	if seconds <= 0 then
+		stop()
 		return
 	end
 	strip.Position = at(1)
-	local t = TweenService:Create(strip, TweenInfo.new(seconds, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	if near then
+		near(1, true)
+	end
+	local t = TweenService:Create(strip, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{ Position = at(land) })
 	tween = t
 	-- The Enchanted Mist's REEL TICK for every card that passes the notches (the
 	-- one centred changes), and CARD LANDS when it stops there -- a reel cut
-	-- short by the next reveal says nothing.
+	-- short (cleared, or landed by a SKIP) says nothing more of its own.
 	local pitch = width + GAP
 	local centred = 1
 	local ticking = RunService.RenderStepped:Connect(function()
@@ -210,119 +293,246 @@ local function reel(count: number, land: number, width: number, build: (index: n
 			centred = i
 			SoundKit.play("MistReelTick")
 		end
+		if near then
+			near(i, false)
+		end
 	end)
 	t.Completed:Once(function(state: Enum.PlaybackState)
 		ticking:Disconnect()
 		if state == Enum.PlaybackState.Completed then
+			landNow = nil
 			SoundKit.play("MistCardLands")
 		end
 	end)
+	landNow = function()
+		ticking:Disconnect()
+		t:Cancel()
+		stop()
+	end
 	t:Play()
 end
 
-local function play(payload: any)
+-- THE CREATURE REEL: filler drawn by the pool's own odds from the hatch's token
+-- (mostly the commonest, the Secrets rarest), so the reel never misstates
+-- them; the answer is always card CREATURE_LAND.
+local function creatureReel(payload: any, seconds: number)
 	local species = tostring(payload.species)
-	local size = tonumber(payload.size)
-	local seconds = math.clamp(tonumber(payload.seconds) or EnchantedMistData.Shell.ReelSeconds, 1, 10)
 	local token = math.floor(tonumber(payload.token) or 0)
-	playing += 1
-	local mine = playing
-	clear()
-	gui.Enabled = true
-	local sized = size ~= nil and EnchantedMistData.isSized(tostring(payload.rarity))
-	-- The landed creature holds before the size reel (2026-10-12): reelTimes.
-	local times = EnchantedMistData.reelTimes(sized, seconds)
-	local creatureSeconds = times.creature
-	title.Text = W.Creature
-	-- The filler: drawn by the pool's own odds from the hatch's token (mostly
-	-- the commonest, the Secrets rarest), so the reel never misstates them.
-	-- The answer is always card LAND.
 	local ids = {}
 	for _, e in ipairs(EnchantedMistData.Pool.Entries) do
 		table.insert(ids, e.Id)
 	end
 	local rng = Random.new(token)
-	local count = 17
-	local items = MistOddsView.reelItems(count, LAND, species, function()
+	local items = MistOddsView.reelItems(CREATURE_COUNT, CREATURE_LAND, species, function()
 		return EnchantedMistData.pickCreature(rng:NextNumber()).Id
 	end, ids)
-	local views = {}
-	reel(count, LAND, CARD_W, function(i, slot)
-		local e = if i == LAND then entryFor(species, payload.rarity) else entryFor(items[i])
-		-- Only the cards seen as the reel slows get their creature drawn (the
-		-- rest pass in a blur): a handful of models, never the whole strip.
-		local near = i >= LAND - 4 and i <= LAND + 2
-		local card = MistOddsView.card(slot, e, Z + 2, CARD_H, moving, fx, if near then views else {})
+	-- Each card's creature is built as the card comes up to the notches -- the
+	-- window's own at once, then at most two a frame -- so every card the spin
+	-- shows stands its creature (a 5.5 s spin is no blur), with no hitch for the
+	-- whole strip at once (each is a model). They stand on their cards' studs,
+	-- as on the Odds page.
+	local views: { { any } } = {}
+	local function near(centred: number, all: boolean)
+		local made = 0
+		for k = math.max(1, centred - 2), math.min(CREATURE_COUNT, centred + 3) do
+			local list = views[k]
+			if list and list[1] and not list[1].built then
+				MistOddsView.drawViews(list)
+				made += 1
+				if made >= 2 and not all then
+					return
+				end
+			end
+		end
+	end
+	reel(CREATURE_COUNT, CREATURE_LAND, CARD_W, function(i, slot)
+		local e = if i == CREATURE_LAND then entryFor(species, payload.rarity) else entryFor(items[i])
+		views[i] = {}
+		local card = MistOddsView.card(slot, e, Z + 2, CARD_H, moving, fx, views[i])
 		card.Size = UDim2.fromScale(1, 1)
-	end, creatureSeconds)
-	-- The creatures that exist stand on their cards' studs, as on the Odds page.
-	MistOddsView.drawViews(views)
+	end, seconds, near)
 	for _, h in ipairs(fx) do
 		RarityFX.setActive(h, true)
 	end
 	stopMoving = MistOddsView.animate(moving)
+end
+
+-- THE SIZE REEL, its filler by the size odds as the creatures' by theirs.
+local function sizeReel(payload: any, seconds: number)
+	local size = tonumber(payload.size) or 1
+	local token = math.floor(tonumber(payload.token) or 0)
+	local tiers = SeedData.Tiers
+	local all = {}
+	for tier = 1, #EnchantedMistData.Sizes.Weights do
+		table.insert(all, tier)
+	end
+	local sizeRng = Random.new(token + 1)
+	local items = MistOddsView.reelItems(SIZE_COUNT, SIZE_LAND, size, function()
+		return EnchantedMistData.pickSize(sizeRng:NextNumber())
+	end, all)
+	reel(SIZE_COUNT, SIZE_LAND, CHIP_W, function(i, slot)
+		local tier = items[i] :: number
+		local t = tiers[tier]
+		local colour = if t then t.color else WHITE
+		local chip = MenuKit.frame(slot, "Chip", Z + 3, colour, 0, 10)
+		chip.AnchorPoint = Vector2.new(0.5, 0.5)
+		chip.Position = UDim2.fromScale(0.5, 0.5)
+		chip.Size = UDim2.new(1, 0, 0, CHIP_H)
+		MenuKit.keyline(chip, INK, 2)
+		UIKit.studs(chip, { pitch = 12, size = 6, inset = 3, face = colour:Lerp(WHITE, 0.25),
+			shade = colour:Lerp(INK, 0.35), zIndex = Z + 4 })
+		-- Its odds at the card's top edge, as on every card here.
+		local pct = MistOddsView.sizeWords(chip, "Chance", 18, tier, Z + 6, moving)
+		pct.AnchorPoint = Vector2.new(0.5, 0)
+		pct.Position = UDim2.new(0.5, 0, 0, 4)
+		pct.Size = UDim2.new(1, -8, 0, 20)
+		local word = MenuKit.text(chip, "Size", 20, WHITE, Z + 6)
+		word.AnchorPoint = Vector2.new(0.5, 1)
+		word.Position = UDim2.new(0.5, 0, 1, -10)
+		word.Size = UDim2.new(1, -8, 0, 28)
+		word.Text = if t then t.name else tostring(tier)
+		local stroke = word:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = INK
+		end
+	end, seconds)
+	stopMoving = MistOddsView.animate(moving)
+end
+
+--==============================================================================
+-- EACH DRAW IN ITS TURN (2026-10-12)
+--
+-- Draws arrive as their pods hatch; each plays whole, from its own start: at
+-- the server's `startAt` (MysteryPodService.Reserve), or at once if that has
+-- passed. Item 17's OPEN ALL is its own reveal and never waits here.
+--==============================================================================
+local queue: { any } = {}
+local busy = false
+local skipTo: (() -> ())? = nil
+local runNext: () -> ()
+
+local function finish(mine: number)
+	if mine ~= playing then
+		return
+	end
+	playing += 1
+	skipTo = nil
+	skipButton.Visible = false
+	ContextActionService:UnbindAction("SeedMysterySkip")
+	clear()
+	gui.Enabled = false
+	runNext()
+end
+
+local function play(payload: any)
+	playing += 1
+	local mine = playing
+	clear()
+	gui.Enabled = true
+	local sized = tonumber(payload.size) ~= nil and EnchantedMistData.isSized(tostring(payload.rarity))
+	local secret = payload.rarity == "Secret"
+	local snap = snapping()
+	-- The landed creature holds before the size reel: reelTimes.
+	local times = EnchantedMistData.reelTimes(sized)
+	local sizing = false
+	title.Text = W.Creature
+	creatureReel(payload, if snap then 0 else times.creature)
 	task.delay(times.next, function()
 		if mine ~= playing then
 			return
 		end
 		if not sized then
-			if payload.rarity == "Secret" then
+			if secret then
 				title.Text = W.Secret
 				SoundKit.play("MistSecret")
 			end
 			return
 		end
 		clear()
+		sizing = true
 		title.Text = W.Size
-		local tiers = SeedData.Tiers
-		-- The filler by the size odds, as the creatures' by theirs.
-		local all = {}
-		for tier = 1, #EnchantedMistData.Sizes.Weights do
-			table.insert(all, tier)
+		sizeReel(payload, if snap then 0 else times.sizeSpin)
+	end)
+	task.delay(times.close, finish, mine)
+	-- SKIP: the reel on screen lands at once where it was going -- the same
+	-- cards, nothing built again (a rebuild of every card hitched) -- and each
+	-- landed card holds SKIP_HOLD: the creature's, then a sized one's size;
+	-- pressed on the size reel, only the size. Then the draw closes. Not where
+	-- the cards already land at once.
+	skipTo = function()
+		if mine ~= playing then
+			return
 		end
-		local sizeRng = Random.new(token + 1)
-		local chips = 15
-		local items = MistOddsView.reelItems(chips, LAND, size, function()
-			return EnchantedMistData.pickSize(sizeRng:NextNumber())
-		end, all)
-		reel(chips, LAND, CHIP_W, function(i, slot)
-			local tier = items[i] :: number
-			local t = tiers[tier]
-			local colour = if t then t.color else WHITE
-			local chip = MenuKit.frame(slot, "Chip", Z + 3, colour, 0, 10)
-			chip.AnchorPoint = Vector2.new(0.5, 0.5)
-			chip.Position = UDim2.fromScale(0.5, 0.5)
-			chip.Size = UDim2.new(1, 0, 0, CHIP_H)
-			MenuKit.keyline(chip, INK, 2)
-			UIKit.studs(chip, { pitch = 12, size = 6, inset = 3, face = colour:Lerp(WHITE, 0.25),
-				shade = colour:Lerp(INK, 0.35), zIndex = Z + 4 })
-			-- Its odds at the card's top edge, as on every card here.
-			local pct = MistOddsView.sizeWords(chip, "Chance", 18, tier, Z + 6, moving)
-			pct.AnchorPoint = Vector2.new(0.5, 0)
-			pct.Position = UDim2.new(0.5, 0, 0, 4)
-			pct.Size = UDim2.new(1, -8, 0, 20)
-			local word = MenuKit.text(chip, "Size", 20, WHITE, Z + 6)
-			word.AnchorPoint = Vector2.new(0.5, 1)
-			word.Position = UDim2.new(0.5, 0, 1, -10)
-			word.Size = UDim2.new(1, -8, 0, 28)
-			word.Text = if t then t.name else tostring(tier)
-			local stroke = word:FindFirstChildOfClass("UIStroke")
-			if stroke then
-				stroke.Color = INK
+		playing += 1
+		local skipped = playing
+		skipButton.Visible = false
+		ContextActionService:UnbindAction("SeedMysterySkip")
+		local land = landNow
+		if land then
+			land()
+		end
+		if secret and title.Text ~= W.Secret then
+			title.Text = W.Secret
+			SoundKit.play("MistSecret")
+		end
+		task.delay(SKIP_HOLD, function()
+			if skipped ~= playing then
+				return
 			end
-		end, times.sizeSpin)
-		stopMoving = MistOddsView.animate(moving)
-	end)
-	task.delay(times.close, function()
-		if mine == playing then
+			if sizing or not sized then
+				finish(skipped)
+				return
+			end
 			clear()
-			gui.Enabled = false
-		end
-	end)
+			title.Text = W.Size
+			sizeReel(payload, 0)
+			task.delay(SKIP_HOLD, finish, skipped)
+		end)
+	end
+	skipButton.Visible = false
+	if not snap then
+		task.delay(SKIP_AFTER, function()
+			if mine ~= playing then
+				return
+			end
+			skipButton.Size = if UserInputService.TouchEnabled then UDim2.fromOffset(96, 44) else UDim2.fromOffset(84, 34)
+			skipButton.Visible = true
+			ContextActionService:BindActionAtPriority("SeedMysterySkip", function(_, state)
+				if state == Enum.UserInputState.Begin and skipTo then
+					skipTo()
+				end
+				return Enum.ContextActionResult.Sink
+			end, false, 3000, Enum.KeyCode.ButtonB)
+		end)
+	end
+end
+
+skipButton.Activated:Connect(function()
+	if skipTo then
+		skipTo()
+	end
+end)
+
+runNext = function()
+	local payload = table.remove(queue, 1)
+	if not payload then
+		busy = false
+		return
+	end
+	busy = true
+	local wait = (tonumber(payload.startAt) or 0) - Workspace:GetServerTimeNow()
+	if wait > 0 then
+		task.delay(wait, play, payload)
+	else
+		play(payload)
+	end
 end
 
 channel.OnClientEvent:Connect(function(action: any, payload: any)
 	if action == CFG.Action and type(payload) == "table" and payload.phase == "hatch" then
-		play(payload)
+		table.insert(queue, payload)
+		if not busy then
+			runNext()
+		end
 	end
 end)

@@ -421,7 +421,8 @@ EnchantedMistConfig.Deck = {
 --==============================================================================
 -- THE MYSTERIOUS POD'S HATCH (MysteryPodService -> MysteryRevealUI.client): the
 -- pod's owner is told the saved creature (and size) as its shell breaks, for
--- their card reels; the world reveal follows Shell.ReelSeconds later.
+-- their card draw; the world reveal follows at the draw's end
+-- (EnchantedMistData.drawSeconds, MysteryPodService.Reserve).
 --==============================================================================
 EnchantedMistConfig.Mystery = {
 	Action = "MysteryHatch",

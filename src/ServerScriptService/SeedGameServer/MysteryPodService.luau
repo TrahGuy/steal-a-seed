@@ -19,7 +19,7 @@
 -- outcome -- the saved creature, at the saved size, or a Secret's own -- and
 -- the record is consumed in the same no-yield step that takes the shell off
 -- the Bag, so it hatches exactly once. The owner of the pod is told first
--- (their card reels), the world reveal follows ReelSeconds later.
+-- (their card draw), the world reveal follows at the draw's end (Reserve).
 --
 -- OFF until bound: no shell id, or a shell or creature SeedData does not
 -- know, and no pod is granted (MosskeeperService refuses the whole delivery).
@@ -242,15 +242,51 @@ function MysteryPodService.Consume(player: any, item: string)
 	end
 end
 
--- The owner's card reels: the saved creature, then (sized) the saved size.
-function MysteryPodService.TellHatch(player: any, outcome: Outcome, token: number)
+--==============================================================================
+-- EACH PLAYER'S DRAWS, ONE AFTER ANOTHER (2026-10-12, the owner: "sometimes
+-- the draw doesn't run, it auto chooses")
+--
+-- A second pod hatched while a draw ran used to cut that draw short: its
+-- creature came out unseen. Now each draw is reserved here, starting when this
+-- player's last one ends (or `after` from `now`, whichever is later) and
+-- running EnchantedMistData.drawSeconds for its outcome; PlantService brings
+-- the world reveal in at the draw's end and the client plays them in turn.
+-- `now` is the caller's Workspace:GetServerTimeNow(), the client's clock too.
+-- A hatch refused after its reservation gives the slot back (Unreserve).
+--==============================================================================
+local drawEnds: { [any]: number } = setmetatable({} :: any, { __mode = "k" })
+local drawWas: { [any]: { ends: number, was: number? } } = setmetatable({} :: any, { __mode = "k" })
+
+function MysteryPodService.Reserve(player: any, outcome: Outcome, now: number, after: number?): (number, number)
+	local sized = outcome.size ~= nil and EnchantedMistData.isSized(tostring(outcome.species.Rarity))
+	local seconds = EnchantedMistData.drawSeconds(sized)
+	local was = drawEnds[player]
+	local startAt = math.max(now + math.max(tonumber(after) or 0, 0), was or -math.huge)
+	drawEnds[player] = startAt + seconds
+	drawWas[player] = { ends = startAt + seconds, was = was }
+	return startAt, seconds
+end
+
+function MysteryPodService.Unreserve(player: any, startAt: number, seconds: number)
+	local r = drawWas[player]
+	if r and r.ends == startAt + seconds and drawEnds[player] == r.ends then
+		drawEnds[player] = r.was
+		drawWas[player] = nil
+	end
+end
+
+-- The owner's card draw: the saved creature, then (sized) the saved size, from
+-- `startAt` (server clock) for `seconds` (Reserve).
+function MysteryPodService.TellHatch(player: any, outcome: Outcome, token: number, startAt: number?, seconds: number?)
+	local sized = outcome.size ~= nil and EnchantedMistData.isSized(tostring(outcome.species.Rarity))
 	Hooks.tell(player, {
 		phase = "hatch",
 		token = token,
 		species = outcome.species.Id,
 		rarity = outcome.species.Rarity,
 		size = outcome.size,
-		seconds = SHELL.ReelSeconds,
+		startAt = startAt,
+		seconds = seconds or EnchantedMistData.drawSeconds(sized),
 	})
 	Hooks.saveSoon(player)
 end

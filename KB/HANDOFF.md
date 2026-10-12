@@ -1,5 +1,51 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK, with the twinkle commit 457f6a0; MysteryPodSpec 37/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY)
+
+The owner (via the peer):
+- "sometimes the draw doesn't run, it auto chooses";
+- each spin at least 5 s;
+- no white panel: the cards over a dark full-screen dimmer;
+- a SKIP;
+- a queue item 17's OPEN ALL can bypass.
+
+**The bug, three causes:**
+- Performance Mode forces Reduced FX, and the draw snapped on any Reduced FX, so with Performance Mode on every draw landed at once. Now only the player's own Reduced FX (`PerformanceMode.ownReduced`) or Roblox's Reduced Motion snaps.
+- A second pod hatched during a draw cut that draw short, so its creature came out unseen. Now `MysteryPodService.Reserve` books each draw after the player's last one, on the server clock. TellHatch sends `startAt` + `seconds`. The client queues the draws and plays each from its `startAt`. A hatch refused after booking gives its slot back (`Unreserve`).
+- The draw and the world reveal had no shared clock. Both now run from the reserved start; the world reveal comes at the draw's end.
+
+**The pace (EnchantedMistData.Shell, drawSeconds, reelTimes):**
+- each reel spins 5.5 s;
+- the landed creature holds 1.1 s before the size reel;
+- a sized draw runs 12.7 s; a Secret 6.6 s, its "A SECRET!" coming after the reel;
+- 34 cards land on 30, and 30 sizes on 26.
+
+The reels brake evenly (Quad). A Quint stood still for its last 1.5 s while CARD LANDS waited.
+
+**The look:**
+- No panel. The cards run over a full-screen dimmer at 0.55 (IgnoreGuiInset + ScreenInsets None), with no CanvasGroup and outlined titles.
+- DisplayOrder 38 -> 44: the Play showed the rail's buttons (40) bright over the dimmer. The draw now sits under the guides (45), announcements (47), notices (49) and the RUN alarm (50).
+- The rail stays pressable: the dimmer takes no input.
+- Every card shows its creature, each built as it nears the notches, two a frame at most. Only 7 were drawn before, and at 5.5 s the rest read as empty cards. A creature view costs 3-7 ms, so 34 at once would hitch.
+
+**SKIP:**
+- A pill at the draw's bottom-right: 84x34, or 96x44 on touch. It shows 0.5 s into a moving draw; pad B too.
+- It lands the reel on screen where it was going, on the same cards. The first version rebuilt all 34 cards + 6 models in one frame.
+- Each landed card holds 0.8 s; pressed on the size reel, only the size.
+- Local only: the next queued draw still starts at its own `startAt`. Seen in the Play: a skipped draw's successor waited for the skipped draw's natural end.
+
+**Item 17:** only phase "hatch" is queued, so OPEN ALL is its own reveal and never waits here.
+
+**The Play** (guarded, throwaway store). Pods came through a gated ZZ host: the console's MistPod/MistReady, then `PlantService.HatchFromBag`.
+- Sized draw: the creature landed at ~5.5 s, the size at ~12.4 s; closed at ~14.0 s.
+- Secret: "A SECRET!" at ~5.7 s; closed at ~7.2 s.
+- Live SKIP clicks: on the creature reel it landed at once, showed the size 0.8 s later and closed. On the size reel it landed the size and closed 0.8 s later, 3.3 s before the natural close.
+
+KNOWN LIMIT, not checked on a device. In Studio (unfocused, 10-15 fps), a card that has just come into view draws blank for a moment: a fresh ViewportFrame's first draw. In isolation, five made at once drew nothing at +0.1 s and all by +1.9 s. The old reel had the same delay. After a SKIP, the five landed cards appear together after that moment. At 60 fps expect a frame or two; the owner should eye a SKIP once on a phone.
+
+**Captures:** output/mystery-draw-2026-10-12/, with the sheet `16D_fixed_sheet.png`. Captures 10-30 run the fixed code, reloaded into the running Play. Captures 01-09 are from before the fixes.
+**Files:** EnchantedMistData, EnchantedMistConfig (comment), MysteryPodService, PlantService (both hatch paths), MysteryRevealUI. Specs: MysteryPodSpec, HudLayoutSpec (the band's needle).
+
 ## THE BERRY TWINKLE, LOUDER AND WIDER — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MistAudioSpec 19/0, EnchantedMistBerrySpec 73/0, SoundLevelSpec 28/0; MUTANT 1/1 CAUGHT)
 
 The owner: the DEWBERRY APPEARS twinkle was "almost nothing to hear".

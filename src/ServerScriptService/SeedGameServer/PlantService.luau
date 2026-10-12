@@ -1816,8 +1816,13 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- NO ROLL FOR THE RAIN EVENT'S PODS (the owner's rule, 2026-10-02): their
 	-- creature is revealed and handed over straight away, exactly as a hatch
 	-- with the roll switched off -- which every other pod still has on.
-	-- A Mysterious Pod's own card reels come first, and no roll after them.
-	local reel = if mystery then EnchantedMistData.Shell.ReelSeconds else 0
+	-- A Mysterious Pod's own card draw comes first -- after any of this player's
+	-- still running (MysteryPodService.Reserve, 2026-10-12) -- and no roll after it.
+	local drawAt, drawLen = now, 0
+	if mystery then
+		drawAt, drawLen = MysteryPodService.Reserve(player, mystery, now)
+	end
+	local reel = if mystery then drawAt + drawLen - now else 0
 	local revealAt = if mystery then now + reel
 		elseif species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)
 	local rolled = if mystery then 0 else math.max(revealAt - now, 0)
@@ -1854,6 +1859,9 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	local given, why = CarryService.GiveHatched(player, species, tier, equipAfter,
 		if rolled > 0 then revealAt else nil, true)
 	if not given then
+		if mystery then
+			MysteryPodService.Unreserve(player, drawAt, drawLen)
+		end
 		return false, why
 	end
 	-- Said here rather than in CarryService, which also hands a Tool over for a
@@ -1922,8 +1930,8 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 		end
 	end
 	if mystery then
-		-- The owner's card reels, then the shell breaks for everyone.
-		MysteryPodService.TellHatch(player, mystery, revealToken)
+		-- The owner's card draw, then the shell breaks for everyone.
+		MysteryPodService.TellHatch(player, mystery, revealToken, drawAt, drawLen)
 		task.delay(reel, show)
 	else
 		show()
@@ -2927,9 +2935,16 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	end
 	-- When its moment plays (HATCH ALL's lead from now) and when the plant may be
 	-- shown: the roll after that, none for the Rain pods -- a bed hatch's timing.
-	-- A Mysterious Pod: its owner's card reels first, no roll after them.
-	local delay = math.max(tonumber(lead) or 0, 0) + (if mystery then EnchantedMistData.Shell.ReelSeconds else 0)
-	local at = Workspace:GetServerTimeNow() + delay
+	-- A Mysterious Pod: its owner's card draw first -- after any of this
+	-- player's still running (MysteryPodService.Reserve, 2026-10-12) -- and no
+	-- roll after it.
+	local now = Workspace:GetServerTimeNow()
+	local drawAt, drawLen = now, 0
+	if mystery then
+		drawAt, drawLen = MysteryPodService.Reserve(player, mystery, now, lead)
+	end
+	local delay = if mystery then drawAt + drawLen - now else math.max(tonumber(lead) or 0, 0)
+	local at = now + delay
 	if mystery then
 		s = mystery.species
 		tier = mystery.tier
@@ -2946,6 +2961,9 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	if plot and countIn(plot) < capacityOf(plot) then
 		local id = PlayerDataService.MintItem(player)
 		if not id then
+			if mystery then
+				MysteryPodService.Unreserve(player, drawAt, drawLen)
+			end
 			return false, "NO_RECORD", false, false, 0
 		end
 		entry = plantCreature(plot, s, tier, spotsFor(plot, 1)[1], id, true)
@@ -2954,6 +2972,9 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 		local given, why = CarryService.GiveHatched(player, s, tier, if slot ~= nil then -1 else risen,
 			if rolled > 0 then revealAt else nil, true)
 		if not given then
+			if mystery then
+				MysteryPodService.Unreserve(player, drawAt, drawLen)
+			end
 			return false, why, false, false, 0
 		end
 	end
@@ -2995,8 +3016,8 @@ local function hatchOneFromBag(player: Player, item: string, early: boolean?, sl
 	end
 	revealToken += 1
 	if mystery then
-		-- The owner's card reels now; the world reveal follows the reel.
-		MysteryPodService.TellHatch(player, mystery, revealToken)
+		-- The owner's card draw, from its reserved start; the world reveal follows it.
+		MysteryPodService.TellHatch(player, mystery, revealToken, drawAt, drawLen)
 	end
 	local payload = {
 		token = revealToken,

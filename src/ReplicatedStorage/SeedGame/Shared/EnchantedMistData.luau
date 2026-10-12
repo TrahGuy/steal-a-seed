@@ -56,19 +56,23 @@ EnchantedMistData.HatchSeconds = 30
 -- Profile.MysteryPods). With no shell id, or one SeedData does not know, no pod can be granted and
 -- the event stays off (EnchantedMistService.MissingBindings). The shell's own
 -- species must grow in HatchSeconds (FixedGrowSeconds) and be unlisted.
--- ReelSeconds: how long the owner's card reels run before the world reveal;
--- LandHoldSeconds: how long a landed creature card stays before the size reel
--- starts (reelTimes, below).
+--
+-- THE DRAW'S PACE (the owner, 2026-10-12): EACH REEL SPINS AT LEAST 5 s --
+-- SpinSeconds, slowing onto its card the whole way; the landed creature holds
+-- LandHoldSeconds, long enough to read which creature came out; a sized
+-- creature's size reel spins as long again, and SettleSeconds after it lands
+-- the world reveal comes (drawSeconds: 12.7 s sized, 6.6 s for the rest, a
+-- Secret's "A SECRET!" in its hold). The whole draw ran 4.2 s until today.
 --==============================================================================
 EnchantedMistData.Shell = {
 	-- Bound (2026-10-11): the owner's LuckhollowPod, SeedData.MysterySpecies.
 	Id = "mysterypod" :: string?,
 	Name = "Mysterious Pod",
-	-- 4.2 since 2026-10-12 (3.6 before): room for the landed creature's hold.
-	ReelSeconds = 4.2,
+	SpinSeconds = 5.5,
 	-- 2026-10-12, the owner via the peer: the size reel replaced the landed
 	-- creature after ~0.15 s, so a player never saw which creature came out.
 	LandHoldSeconds = 1.1,
+	SettleSeconds = 0.6,
 }
 
 --==============================================================================
@@ -166,26 +170,36 @@ function EnchantedMistData.isSized(rarity: string): boolean
 	return SIZED[rarity] == true
 end
 
--- THE REVEAL'S TIMES (MysteryRevealUI), in seconds from its start, for a
--- reveal `seconds` long (Shell.ReelSeconds; the world reveal follows it):
---   creature  the creature reel's spin: it lands then
+-- How long a draw runs before the world reveal (Shell, THE DRAW'S PACE): the
+-- creature reel and its hold, and for a sized creature the size reel and a
+-- settle after it. The server schedules the world reveal by it
+-- (MysteryPodService.Reserve) and the client plays it (MysteryRevealUI).
+function EnchantedMistData.drawSeconds(sized: boolean): number
+	local S = EnchantedMistData.Shell
+	if sized then
+		return S.SpinSeconds + S.LandHoldSeconds + S.SpinSeconds + S.SettleSeconds
+	end
+	return S.SpinSeconds + S.LandHoldSeconds
+end
+
+-- THE REVEAL'S TIMES (MysteryRevealUI), in seconds from its start (the world
+-- reveal follows drawSeconds):
+--   creature  the creature reel's spin, Shell.SpinSeconds: it lands then
 --   next      a sized creature's card has held Shell.LandHoldSeconds -- long
 --             enough to read which creature came out -- and the size reel
 --             starts; a Secret's "A SECRET!" comes right after it lands
---   sizeSpin  the size reel's spin, landing before the world reveal (0 for a
---             Secret)
---   close     the strip closes
+--   sizeSpin  the size reel's spin, Shell.SpinSeconds again (0 unsized)
+--   close     the draw closes
 export type ReelTimes = { creature: number, next: number, sizeSpin: number, close: number }
 
-function EnchantedMistData.reelTimes(sized: boolean, seconds: number): ReelTimes
-	local hold = EnchantedMistData.Shell.LandHoldSeconds
-	local spin = math.max(seconds - hold, 0.6)
+function EnchantedMistData.reelTimes(sized: boolean): ReelTimes
+	local S = EnchantedMistData.Shell
+	local seconds = EnchantedMistData.drawSeconds(sized)
 	if sized then
-		local creature = spin * 0.5
-		return { creature = creature, next = creature + hold, sizeSpin = math.max(spin - creature - 0.4, 0.2),
+		return { creature = S.SpinSeconds, next = S.SpinSeconds + S.LandHoldSeconds, sizeSpin = S.SpinSeconds,
 			close = seconds + 0.6 }
 	end
-	return { creature = spin, next = spin + 0.15, sizeSpin = 0, close = seconds + 0.6 }
+	return { creature = S.SpinSeconds, next = S.SpinSeconds + 0.15, sizeSpin = 0, close = seconds + 0.6 }
 end
 
 -- The pool entry a uniform `r` in [0, 1) lands on.

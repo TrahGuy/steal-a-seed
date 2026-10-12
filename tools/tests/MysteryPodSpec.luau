@@ -222,10 +222,21 @@ local ok, err = pcall(function()
 	check(o ~= nil and o.species.Id == first.Id and o.tier == rec.Size and o.readyAt == rec.ReadyAt
 			and so ~= nil and so.size == nil and so.tier == SeedData.SecretTier and M.Outcome(P, "nope") == nil,
 		"the saved creature at the saved size; a Secret at its own; an unknown item nothing")
+	local oSized = o ~= nil and o.size ~= nil and EnchantedMistData.isSized(tostring(o.species.Rarity))
 	M.TellHatch(P, o, 41)
 	check(#told == 1 and told[1].phase == "hatch" and told[1].species == first.Id and told[1].size == rec.Size
-			and told[1].seconds == SHELL.ReelSeconds and saves == 1,
-		"its owner told the saved creature and size for the card reels, and a save asked for")
+			and told[1].seconds == EnchantedMistData.drawSeconds(oSized) and saves == 1,
+		"its owner told the saved creature and size for the card draw, and a save asked for")
+	-- EACH DRAW IN ITS TURN (2026-10-12, the owner: "sometimes the draw doesn't run, it auto chooses"): a second
+	-- hatch's draw starts when this player's last one ends; a hatch refused after its reservation gives it back.
+	local a0, aLen = M.Reserve(P, o, 1000)
+	local b0, bLen = M.Reserve(P, so, 1001, 0.5)
+	M.Unreserve(P, b0, bLen)
+	local c0 = M.Reserve(P, so, 1002)
+	check(a0 == 1000 and aLen == EnchantedMistData.drawSeconds(oSized) and b0 == a0 + aLen
+			and bLen == EnchantedMistData.drawSeconds(false) and c0 == a0 + aLen,
+		"each draw in its turn: a second one starts as the first ends, a refused one gives its slot back",
+		string.format("a %.1f+%.1f, b %.1f, c %.1f", a0, aLen, b0, c0))
 	M.Consume(P, "i8")
 	check(prof.MysteryPods.i8 == nil and M.Outcome(P, "i8") == nil and prof.MysteryPods.i9 ~= nil,
 		"spent once: the record gone with the shell, the other pod's kept")
@@ -262,9 +273,40 @@ local ok, err = pcall(function()
 		"the Mosskeeper refuses a pod-earning delivery until a pod can be granted, and saves after one")
 	local reels = strip(Scripts:WaitForChild("MysteryRevealUI").Source)
 	check(string.find(reels, "CFG.Action", 1, true) ~= nil and not string.find(reels, "CurrentCamera", 1, true)
-			and string.find(reels, "StatusText.reducedMotion()", 1, true) ~= nil
+			and string.find(reels, "if PerformanceMode.ownReduced(player) then", 1, true) ~= nil
+			and string.find(reels, "return (GuiService :: any).ReducedMotionEnabled", 1, true) ~= nil
+			and not string.find(reels, "StatusText.reducedMotion()", 1, true)
 			and not string.find(reels, "HatchRollUI", 1, true),
-		"the card reels: this family's own, no camera, Reduced Motion lands them at once")
+		"the card reels: this family's own, no camera; only an EXPLICIT Reduced Motion -- the player's own Reduced "
+			.. "FX or Roblox's -- lands them at once, never Performance Mode alone (2026-10-12)")
+	check(string.find(reels, "local wait = (tonumber(payload.startAt) or 0) - Workspace:GetServerTimeNow()", 1, true)
+				~= nil
+			and string.find(reels, "table.insert(queue, payload)\n\t\tif not busy then\n\t\t\trunNext()", 1, true) ~= nil
+			and string.find(reels, "task.delay(times.close, finish, mine)", 1, true) ~= nil,
+		"every draw plays whole and in its turn, from the server's start for it (MysteryPodService.Reserve)")
+	check(string.find(reels, "local SKIP_HOLD = 0.8", 1, true) ~= nil
+			and string.find(reels, "local SKIP_AFTER = 0.5", 1, true) ~= nil
+			and string.find(reels, "end, false, 3000, Enum.KeyCode.ButtonB)", 1, true) ~= nil
+			and string.find(reels, "if not snap then\n\t\ttask.delay(SKIP_AFTER, function()", 1, true) ~= nil
+			and string.find(reels, "UDim2.fromOffset(96, 44)", 1, true) ~= nil
+			and string.find(reels, "task.delay(SKIP_HOLD, finish, skipped)", 1, true) ~= nil
+			and string.find(reels, "local land = landNow\n\t\tif land then\n\t\t\tland()\n\t\tend", 1, true) ~= nil
+			and string.find(reels, "if sizing or not sized then", 1, true) ~= nil
+			and not string.find(reels, "creatureReel(payload, 0)", 1, true),
+		"SKIP (the owner, 2026-10-12): shown 0.5 s into a moving draw, a touch screen's 44 tall, the pad's B; the "
+			.. "reel on screen lands where it was going (the same cards, none built again), each landed card held 0.8 s "
+			.. "-- on the size reel only the size; nothing sent")
+	check(string.find(reels, "gui.ScreenInsets = Enum.ScreenInsets.None", 1, true) ~= nil
+			and string.find(reels, "gui.IgnoreGuiInset = true", 1, true) ~= nil
+			and string.find(reels, "scrim.BackgroundTransparency = 0.55", 1, true) ~= nil
+			and not string.find(reels, "BackgroundColor3 = WHITE", 1, true)
+			and not string.find(reels, "Instance.new(\"CanvasGroup\")", 1, true)
+			and string.find(reels, "local CREATURE_COUNT, CREATURE_LAND = 34, 30", 1, true) ~= nil
+			and string.find(reels, "local SIZE_COUNT, SIZE_LAND = 30, 26", 1, true) ~= nil
+			and string.find(reels, "gui.DisplayOrder = 44", 1, true) ~= nil,
+		"THE LOOK (2026-10-12): no white panel -- the cards run over a slight dimmer covering the whole screen, notches "
+			.. "and the rail's buttons too (44: under the notices and the RUN alarm), with no CanvasGroup; about twice "
+			.. "the cards for the longer spin")
 	-- A reel's card stands a creature that exists in its window, as the Odds
 	-- page does; one not made yet keeps the dark "???".
 	local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
@@ -292,12 +334,15 @@ local ok, err = pcall(function()
 	end
 	holder:Destroy()
 	check(made ~= nil and drawn == true and (unmade == nil or dark == true)
-			and string.find(reels, "MistOddsView.card(slot, e, Z + 2, CARD_H, moving, fx, if near then views else {})", 1,
+			and string.find(reels, "MistOddsView.card(slot, e, Z + 2, CARD_H, moving, fx, views[i])", 1, true) ~= nil
+			and string.find(reels, "if i == CREATURE_LAND then entryFor(species, payload.rarity)", 1, true) ~= nil
+			and string.find(reels, "for k = math.max(1, centred - 2), math.min(CREATURE_COUNT, centred + 3) do", 1,
 				true) ~= nil
-			and string.find(reels, "local near = i >= LAND - 4 and i <= LAND + 2", 1, true) ~= nil
-			and string.find(reels, "if i == LAND then entryFor(species, payload.rarity)", 1, true) ~= nil
-			and string.find(reels, "MistOddsView.drawViews(views)", 1, true) ~= nil,
-		"a reel's card draws a creature that exists in its window; one not made yet stays \"???\"",
+			and string.find(reels, "if made >= 2 and not all then", 1, true) ~= nil
+			and string.find(reels, "MistOddsView.drawViews(list)", 1, true) ~= nil
+			and string.find(reels, "end, seconds, near)", 1, true) ~= nil,
+		"a reel's card draws a creature that exists in its window -- every card (a 5.5 s spin is no blur), each built as "
+			.. "it nears the notches, two a frame at most; one not made yet stays \"???\"",
 		string.format("made %s drawn %s dark %s", tostring(made and made.Id), tostring(drawn), tostring(dark)))
 	-- No black window behind a creature (2026-10-12, the owner), on the Odds
 	-- page and the reels alike: a made one stands on its card's studs, white,
@@ -345,27 +390,34 @@ local ok, err = pcall(function()
 		"a chance on a light card (the pearl, the stone) in its rarity's deep ink, dark enough to read; Mythic's rose "
 			.. "and a gold card's own colour stay",
 		divine and tostring(divine.TextColor3))
-	local S = SHELL.ReelSeconds
-	local sizedT = EnchantedMistData.reelTimes(true, S)
-	local secretT = EnchantedMistData.reelTimes(false, S)
-	check(SHELL.LandHoldSeconds >= 1 and SHELL.LandHoldSeconds <= 1.2
-			and sizedT.creature >= 1.2 and sizedT.next - sizedT.creature >= 1 - 1e-9
-			and sizedT.sizeSpin >= 1 and sizedT.next + sizedT.sizeSpin <= S - 0.2
-			and secretT.next - secretT.creature <= 0.2 and secretT.close - secretT.creature >= 1
-			and sizedT.close <= 5 and secretT.close <= 5,
-		"a sized creature's landed card holds ~1 s before the size reel, which lands before the world reveal; a "
-			.. "Secret says so as it lands; the whole reveal stays under 5 s",
-		string.format("creature %.2f next %.2f size %.2f close %.2f", sizedT.creature, sizedT.next, sizedT.sizeSpin,
-			sizedT.close))
-	check(string.find(reels, "local times = EnchantedMistData.reelTimes(sized, seconds)", 1, true) ~= nil
+	-- EACH REEL SPINS AT LEAST 5 s (the owner, 2026-10-12): the creature reel, its landed card's ~1 s hold, and a
+	-- sized creature's size reel as long again, landing before the world reveal; a Secret's reel, then its words.
+	local sizedT = EnchantedMistData.reelTimes(true)
+	local secretT = EnchantedMistData.reelTimes(false)
+	local sizedAll, otherAll = EnchantedMistData.drawSeconds(true), EnchantedMistData.drawSeconds(false)
+	check(SHELL.SpinSeconds >= 5 and sizedT.creature >= 5 and sizedT.sizeSpin >= 5 and secretT.creature >= 5
+			and SHELL.LandHoldSeconds >= 1 and SHELL.LandHoldSeconds <= 1.2
+			and math.abs(sizedT.next - sizedT.creature - SHELL.LandHoldSeconds) < 1e-9
+			and sizedT.next + sizedT.sizeSpin <= sizedAll - 0.2
+			and secretT.next - secretT.creature <= 0.2 and otherAll >= secretT.creature + 1
+			and sizedAll >= 11 and sizedAll <= 14 and otherAll >= 6 and otherAll <= 7.5,
+		"EACH REEL SPINS AT LEAST 5 s: the creature reel, its landed card's ~1 s hold and the size reel as long "
+			.. "again, landing before the world reveal (~12.7 s); a Secret's reel, then \"A SECRET!\" (~6.6 s)",
+		string.format("creature %.2f next %.2f size %.2f; %.1f s / %.1f s", sizedT.creature, sizedT.next,
+			sizedT.sizeSpin, sizedAll, otherAll))
+	check(string.find(reels, "local times = EnchantedMistData.reelTimes(sized)", 1, true) ~= nil
 			and string.find(reels, "task.delay(times.next, function()", 1, true) ~= nil
-			and string.find(reels, "end, times.sizeSpin)", 1, true) ~= nil
-			and string.find(reels, "task.delay(times.close, function()", 1, true) ~= nil
-			and not string.find(reels, "creatureSeconds + 0.15", 1, true),
-		"the reveal takes its times from reelTimes (Reduced Motion still lands each reel at once)")
+			and string.find(reels, "creatureReel(payload, if snap then 0 else times.creature)", 1, true) ~= nil
+			and string.find(reels, "sizeReel(payload, if snap then 0 else times.sizeSpin)", 1, true) ~= nil
+			and string.find(reels, "TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)", 1, true)
+				~= nil,
+		"the draw takes its times from reelTimes (an explicit Reduced Motion still lands each reel at once); each reel "
+			.. "brakes evenly (Quad), moving the whole spin and stopping as CARD LANDS plays")
 	-- The reels' filler: by the odds' own mix (never misstating them), the
-	-- answer always at the landing, never two alike side by side.
-	local LAND, COUNT = 12, 17
+	-- answer always at the landing, never two alike side by side -- at the
+	-- client's own counts (34 cards landing on 30; 30 sizes on 26).
+	local LAND, COUNT = 30, 34
+	local SIZE_LAND, SIZE_COUNT = 26, 30
 	local ids, tiers = {}, {}
 	for _, e in ipairs(EnchantedMistData.Pool.Entries) do
 		table.insert(ids, e.Id)
@@ -383,10 +435,10 @@ local ok, err = pcall(function()
 		end, ids)
 		local sizeAnswer = tiers[(token % #tiers) + 1]
 		local sizeRng = Random.new(token + 1)
-		local sizes = MistOddsView.reelItems(15, LAND, sizeAnswer, function()
+		local sizes = MistOddsView.reelItems(SIZE_COUNT, SIZE_LAND, sizeAnswer, function()
 			return EnchantedMistData.pickSize(sizeRng:NextNumber())
 		end, tiers)
-		if items[LAND] == answer and sizes[LAND] == sizeAnswer and #items == COUNT and #sizes == 15 then
+		if items[LAND] == answer and sizes[SIZE_LAND] == sizeAnswer and #items == COUNT and #sizes == SIZE_COUNT then
 			landedRight += 1
 		end
 		for i = 1, COUNT do
@@ -398,11 +450,11 @@ local ok, err = pcall(function()
 				filler += 1
 			end
 		end
-		for i = 1, 15 do
+		for i = 1, SIZE_COUNT do
 			if i > 1 and sizes[i] == sizes[i - 1] then
 				alike += 1
 			end
-			if i ~= LAND then
+			if i ~= SIZE_LAND then
 				sizesSeen[sizes[i]] = (sizesSeen[sizes[i]] or 0) + 1
 				sizeFiller += 1
 			end
