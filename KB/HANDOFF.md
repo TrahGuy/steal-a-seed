@@ -1,5 +1,75 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 11: THE COMPACT ADMIN CONSOLE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by the owner via the peer; AdminConsoleSpec 61/0; AdminSpec 129/0, CompactMenusSpec 46/0, MiniEventSpec 90/0, RainEventSpec 98/0, PodRushSpec 98/0, AnnouncementSpec 62/0, ControllerSpec 64/0, RainPodsSpec 67/0, HudLayoutSpec 1468/0; THE FULL SUITE 153/153 IN SMALL BATCHES (PlotReleaseSpec 40/2 and TutorialSpotlightSpec's frame-time check 50/1 under batch load, 42/0 and 51/0 alone); 26 OF 26 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/item11-compact-console-2026-10-12)
+
+The owner's item 11 via the peer: less scrolling, above all on a phone; smaller buttons; each tab inside 640x360 where it can be; the log strip replaced by an answer that fades by itself.
+- **Five tabs:** PLAYER, SPAWN, WORLD, EVENTS (the mini events, their own tab now), ANNOUNCE. On a short screen the title reads ADMIN, so all five fit beside it.
+- **One target picker, only where it is needed:** the bar shows on PLAYER and SPAWN (ConsoleModel.TargetTabs). Elsewhere the page takes its room.
+- **Every row a fixed height:** 40 on a phone or a short screen, 36 on a desktop.
+  - Cards are 4 px in, rows 2 apart, cards 4 apart.
+  - Each section's state sits in a well: the old heading as a small caption (e.g. "WEATHER · THIS SERVER") over the live line, beside the buttons that change it.
+  - No word is drawn under 10 px.
+- **Durations are chips, not typed seconds:**
+  - Weather: 1 / 3 / 5 / 10 MIN, default 3.
+  - Mini events: 1 MIN / 1:30 / 3 MIN / 5 MIN, default 1:30; POD RUSH picks its own 5.
+  - A question asks for the chip chosen, and its CONFIRM sends that one.
+- **SPAWN:**
+  - POD / GROWN PLANT.
+  - A size stepper (< COLOSSAL >) that only ever lands on sizes the species comes in, beside − n/max +.
+  - The preview line, then SPAWN.
+  - The room line folded into n/max; the button says BAG: LOADING until the profile loads.
+- **PLAYER:**
+  - ADD MONEY and ADD SPEED cards: the box beside its button, the quick chips, the full number (the limit while empty).
+  - RESET PROGRESS sits behind one red button that opens the red box. In the box the typed username still unlocks it, as before.
+- **THE LOG STRIP IS GONE:**
+  - The server's own words show as one line over the page's foot: green done, red refused, grey where nothing was asked of anybody.
+  - It stays 3 s, then fades in 0.4 s.
+  - It never takes a press: a Frame and a TextLabel, neither Active nor Selectable (pinned).
+  - Live proof: pressing a SPAWN card under the visible answer, 1.4 s after it appeared, picked the card (capture p640_06).
+- **Every confirm keeps its words and steps:** the weather, the Mist, a global mini event (EVERY server), ALL SERVERS (YES, ALL SERVERS), a give to anybody else, and the reset's typed username. Each is pinned per handler. Each question now stands in its own row's place, at the same height.
+- **ConsoleModel.pageHeight:** a row model of each tab. AdminConsoleSpec measures every listed screen with it:
+  - Every tab fits on 640x360 and on every listed screen at least that tall.
+  - 705x338 scrolls a little: PLAYER +9, SPAWN +3, WORLD +5.
+- **Before -> after:**
+
+  640x360 phone (content / window):
+
+  | Part | Before | After |
+  |---|---|---|
+  | PLAYER | 500 / 147 | 162 / 175 |
+  | WORLD with the events | 876 / 147 | WORLD 202 / 219; EVENTS 184 / 219 |
+  | ANNOUNCE | 270 / 147 | 160 / 219 |
+  | SPAWN controls | 181 / 99 | 110 / 129 |
+
+  Desktop:
+
+  | Part | Before | After |
+  |---|---|---|
+  | PLAYER | 487 / 398 | 150 / 462 |
+  | WORLD | 868 / 398 | 186 / 514 |
+  | EVENTS | in WORLD | 164 / 514 |
+
+  The live numbers match the model; the model's EVENTS counts its help as two full lines (192).
+- **Live (one guarded Play, SeedTest_mistlook_20261011):**
+  - The desktop as it is, and the 640x302 phone layout drawn in the desktop window by a test-only host, since deleted.
+  - Captures: every tab both ways; the weather, event and ALL SERVERS questions; the open reset box; a grey answer. Each confirm was cancelled; nothing was sent.
+- **Not seen live:** a real phone (the emulator was never switched; phones are spec-measured), a controller, and a give to another player (Studio has one client).
+- **Open for the owner:**
+  - "ADMIN" as the title on phones.
+  - The headings now captions.
+  - The chip lengths.
+  - RESET behind one red button.
+  - 705x338 still scrolls a little.
+- **THE OWNER'S ANSWERS (2026-10-12, via the peer):**
+  - Last night's work is APPROVED: the x2 MONEY obsidian, the VIP spot proposal, the Server Luck rule and its table, the Faster Hatch and Starter Pack defaults, and the look choices.
+  - The three unused product ids: the owner has taken them off sale.
+  - The Mist's sound volumes: the owner will review them later.
+  - THE OWNER PUBLISHES, when everything is done; agents never do.
+- **Next:**
+  - The Shop button revert.
+  - 12, the Mist admin tools.
+  - 13, a second disco song.
+  - 14, the Enchanted Mist's schedule ON, with an admin's Mist counting as a start.
 ## ITEM 10: AN ADMIN'S CONSOLE ACTION, SAID TO EVERYBODY — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; OK'd by Claude on the owner's handoff; owner to review; AdminAnnounceSpec 41/0 (NEW); AdminSpec 129/0, MiniEventSpec 90/0, AdminConsoleSpec, PodRushSpec, AnnouncementSpec, SourceIconsSpec, AutoWeatherSpec, EnchantedMistSpec and DiscoPartySpec green; THE FULL SUITE 153/153 IN SMALL BATCHES (SacrificeSpec's timed-payment check 289/1 under batch load, 290/0 alone); 14 OF 14 MUTANTS CAUGHT; ONE GUARDED PLAY; captures in output/item10-admin-announce-2026-10-12)
 
 The owner's item 10 via the peer: when an admin uses the console, everybody in the server is told, by name, in the owner's style.

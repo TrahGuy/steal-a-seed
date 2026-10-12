@@ -958,12 +958,12 @@ local ok, err = pcall(function()
 			and string.find(consoleSrc, '{ "EndGlobalEvent", "END EVENT" }', 1, true) ~= nil
 			and string.find(consoleSrc, '"MINI EVENTS \\u{00B7} EVERY SERVER"', 1, true) ~= nil
 			and string.find(consoleSrc, '"WEATHER \\u{00B7} THIS SERVER"', 1, true) ~= nil
-			and string.find(consoleSrc, "ui.miniBox.Text = tostring(MINI.DefaultSeconds)", 1, true) ~= nil
-			and string.find(consoleSrc, "Model.args.miniEvent(verb, if verb == \"end\" then nil else seconds(ui.miniBox))",
+			and string.find(consoleSrc, "miniSeconds = MINI.DefaultSeconds,", 1, true) ~= nil
+			and string.find(consoleSrc, "Model.args.miniEvent(verb, if verb == \"end\" then nil else secs)",
 				1, true) ~= nil
 			and string.find(consoleModelSrc, 'return args("MiniEvent", verb, seconds, nil)', 1, true) ~= nil,
 		"the console: MINI EVENTS and WEATHER sections (the 2026-10-07 redesign's WORLD tab), START/END EVENT, the "
-			.. "90 s duration box")
+			.. "duration chips starting on 90 s (the compact console, 2026-10-12)")
 	check(M.DefaultSeconds == 90 and M.MinSeconds == 30 and M.MaxSeconds == 300 and T.PerPlayerCap == 3
 			and T.DropSeconds == 2 and T.MaxUnclaimed == 20 and T.ExpireSeconds == 30,
 		"the numbers: 90 s (30..300), a ticket every ~2 s, 3 per player -- and the owner's map-wide budget "

@@ -8,17 +8,24 @@
 --   1. the amount box: 1.5T, 1Qd, 999,999 and the rest worked out EXACTLY;
 --      junk refused, each with a line that says why; the limit
 --   2. the quick chips and the full-number line
---   3. the tabs: four, LB / RB wrapping, each one's main button; the weather
---      for every admin account (2026-10-07; the owner's alone before)
+--   3. the tabs: five (EVENTS its own since 2026-10-12), LB / RB wrapping, each
+--      one's main button, the target bar on PLAYER and SPAWN only; the weather
+--      for every admin account (2026-10-07; the owner's alone before); the
+--      duration chips inside their limits; SPAWN's size stepper
 --   4. what every button sends: the action and its three words -- the shapes
 --      the console sent before the redesign, and SPAWN's request
 --   5. the layout on every listed desktop, phone and TV: the panel inside the
 --      safe area, every block inside the shell and none over another, SPAWN's
 --      grid beside its controls (two columns on the 705 x 338 phone), a whole
---      card row in view, every tab and SPAWN a finger's width
+--      card row in view, every tab, row and SPAWN a finger's height -- and THE
+--      COMPACT CONSOLE (2026-10-12, item 11): every tab's height, worked out
+--      row by row, fits the 640 x 360 phone and every desktop and TV with no
+--      scroll; the other phones' are said
 --   6. the client's source: each button calls its builder, one InvokeServer and
 --      no FireServer, the weather drawn from ConsoleModel.sections, B and
---      Escape and the bumpers bound only while open, OpenPanel, no loop
+--      Escape and the bumpers bound only while open, OpenPanel, no loop; the
+--      log strip gone, the fading answer that never takes a press; every
+--      confirm with its words and steps as before
 --
 -- Not here, seen in Play instead: the panel on screen, presses, the pictures.
 --==============================================================================
@@ -147,24 +154,85 @@ local ok, err = pcall(function()
 	for _, tab in ipairs(Model.Tabs) do
 		table.insert(ids, tab.id)
 	end
-	check(table.concat(ids, ",") == "player,spawn,world,announce", "PLAYER, SPAWN, WORLD, ANNOUNCE", table.concat(ids, ","))
+	check(table.concat(ids, ",") == "player,spawn,world,events,announce",
+		"PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE -- the mini events their own tab since 2026-10-12", table.concat(ids, ","))
 	check(Model.stepTab("player", -1) == "announce" and Model.stepTab("announce", 1) == "player"
-			and Model.stepTab("spawn", 1) == "world" and Model.stepTab("world", -1) == "spawn",
+			and Model.stepTab("spawn", 1) == "world" and Model.stepTab("world", 1) == "events"
+			and Model.stepTab("events", -1) == "world" and Model.stepTab("events", 1) == "announce",
 		"LB and RB step through them and wrap at both ends")
 	-- The weather is every admin's (owner, 2026-10-07): ConsoleModel.sections no
 	-- longer asks who is looking, so every console draws the same WORLD tab.
 	-- The Enchanted Mist (2026-10-11) likewise, under the weather.
 	local world = Model.sections("world")
-	check(table.concat(world, ",") == "daynight,weather,mist,events",
-		"WORLD shows night/day, the weather, the Enchanted Mist and the events to every admin account -- the "
-			.. "weather is no longer hidden for the two that are not the owner's", table.concat(world, ","))
+	check(table.concat(world, ",") == "daynight,weather,mist" and table.concat(Model.sections("events"), ",") == "events",
+		"WORLD shows night/day, the weather and the Enchanted Mist to every admin account -- the weather is no longer "
+			.. "hidden for the two that are not the owner's -- and EVENTS the mini events", table.concat(world, ","))
 	local modelSrc = ServerScriptService.SeedGameServer.AdminService.ConsoleModel.Source
 	check(string.find(modelSrc, "function ConsoleModel.sections(tabId: string): { string }", 1, true) ~= nil
 			and string.find(modelSrc, "isOwner", 1, true) == nil,
 		"and ConsoleModel has no notion of an owner left: every tab is the same for every admin account")
 	check(Model.MainButton.player == "AddMoney" and Model.MainButton.spawn == "Spawn"
-			and Model.MainButton.world == "StartNight" and Model.MainButton.announce == "Send",
+			and Model.MainButton.world == "StartNight" and Model.MainButton.events == "StartGlobalEvent"
+			and Model.MainButton.announce == "Send",
 		"a controller starts on each tab's main button")
+	-- THE TARGET BAR ONLY WHERE AN ACTION IS A PLAYER'S (2026-10-12): elsewhere
+	-- the page takes its room.
+	local targeted = {}
+	for _, tab in ipairs(Model.Tabs) do
+		if Model.TargetTabs[tab.id] then
+			table.insert(targeted, tab.id)
+		end
+	end
+	check(table.concat(targeted, ",") == "player,spawn",
+		"the one target picker shows on PLAYER and SPAWN, the tabs that act on a player", table.concat(targeted, ","))
+	check(Model.title(true) == "ADMIN" and Model.title(false) == "ADMIN CONSOLE",
+		"the title reads ADMIN on a short screen (room for the five tabs), ADMIN CONSOLE elsewhere")
+	-- THE DURATION CHIPS (2026-10-12), in place of the seconds boxes.
+	local W, MI = GameConfig.Weather, GameConfig.MiniEvent
+	local outOfRange = {}
+	for _, s in ipairs(Model.WeatherSeconds) do
+		if s < W.MinSeconds or s > W.MaxSeconds or s ~= math.floor(s) then
+			table.insert(outOfRange, "weather " .. s)
+		end
+	end
+	for _, s in ipairs(Model.EventSeconds) do
+		if s < MI.MinSeconds or s > MI.MaxSeconds or s ~= math.floor(s) then
+			table.insert(outOfRange, "event " .. s)
+		end
+	end
+	check(#outOfRange == 0 and table.find(Model.WeatherSeconds, W.DefaultSeconds) ~= nil
+			and table.find(Model.EventSeconds, MI.DefaultSeconds) ~= nil
+			and table.find(Model.EventSeconds, MI.Modes.podrush.Seconds) ~= nil,
+		"the duration chips: every one whole seconds inside its event's limits (the weather's 20..1800, a mini "
+			.. "event's 30..300), each default among them, and POD RUSH's own length", table.concat(outOfRange, ", "))
+	check(Model.durationLabel(60) == "1 MIN" and Model.durationLabel(90) == "1:30" and Model.durationLabel(180) == "3 MIN"
+			and Model.durationLabel(600) == "10 MIN",
+		"each chip says its length short: 1 MIN, 1:30, 3 MIN, 10 MIN", Model.durationLabel(90))
+	-- SPAWN'S SIZE STEPPER (2026-10-12): only ever to a size the species comes in.
+	check(Model.sizeStep({ 1, 3, 7 }, 3, 1) == 7 and Model.sizeStep({ 1, 3, 7 }, 3, -1) == 1
+			and Model.sizeStep({ 1, 3, 7 }, 7, 1) == nil and Model.sizeStep({ 1, 3, 7 }, 1, -1) == nil
+			and Model.sizeStep({ 7 }, 7, 1) == nil and Model.sizeStep({ 7 }, 7, -1) == nil
+			and Model.sizeStep({ 2, 5 }, 1, 1) == 2,
+		"the size stepper skips the sizes a species lacks and stops at either end")
+	local walkedOff = {}
+	for _, species in ipairs(SpawnCatalog.all()) do
+		local sizes = SpawnCatalog.sizesOf(species)
+		table.sort(sizes)
+		local walked, at = { sizes[1] }, sizes[1]
+		while true do
+			local nextSize = Model.sizeStep(sizes, at, 1)
+			if not nextSize then
+				break
+			end
+			table.insert(walked, nextSize)
+			at = nextSize
+		end
+		if table.concat(walked, ",") ~= table.concat(sizes, ",") then
+			table.insert(walkedOff, species.Id)
+		end
+	end
+	check(#walkedOff == 0, "stepped up from its smallest, every spawnable species visits exactly the sizes it comes in",
+		table.concat(walkedOff, ", "))
 
 	--==========================================================================
 	-- 4. WHAT EVERY BUTTON SENDS
@@ -259,7 +327,7 @@ local ok, err = pcall(function()
 	end
 	local function titleW(short)
 		local size = if short then GameConfig.BagLook.TitleSizeShort else GameConfig.BagLook.TitleSize
-		return TextService:GetTextSize("ADMIN CONSOLE", size, Enum.Font.LuckiestGuy, Vector2.new(4000, 200)).X + 8
+		return TextService:GetTextSize(Model.title(short), size, Enum.Font.LuckiestGuy, Vector2.new(4000, 200)).X + 8
 	end
 	local list = {}
 	for _, d in ipairs({ { 1280, 720 }, { 1366, 768 }, { 1600, 900 }, { 1920, 1080 }, { 2560, 1440 }, { 1000, 609 },
@@ -277,6 +345,8 @@ local ok, err = pcall(function()
 			topbar = rect(0, 0, 0, t[3]), insetTop = t[3] }) })
 	end
 	local panelProblems, blockProblems, spawnProblems, touchProblems = {}, {}, {}, {}
+	local fitProblems, tabStripProblems, fit640 = {}, {}, nil
+	local MM = Model.Metrics
 	local phone
 	-- The group chips' widths, as the console measures them (MenuKit.textWidth).
 	local chipWidths = {}
@@ -320,19 +390,30 @@ local ok, err = pcall(function()
 			table.insert(panelProblems, case.tag .. " leaves the safe area")
 		end
 		local w, h = p.shell.X, p.shell.Y
-		local named = { tabs = C.tabs, target = C.target, page = C.page, log = C.log }
+		local named = { tabs = C.tabs, target = C.target, page = C.page, pageFull = C.pageFull, answer = C.answer }
 		for name, b in pairs(named) do
 			if not inside(b, w, h) or b.w <= 0 or b.h <= 0 then
 				table.insert(blockProblems, string.format("%s %s outside the shell", case.tag, name))
 			end
 		end
-		local order = { "tabs", "target", "page", "log" }
+		local order = { "tabs", "target", "page" }
 		for i = 1, #order do
 			for j = i + 1, #order do
 				if overlaps(named[order[i]], named[order[j]]) then
 					table.insert(blockProblems, string.format("%s %s overlaps %s", case.tag, order[i], order[j]))
 				end
 			end
+		end
+		-- The page without the bar takes the bar's room and no more; the answer's
+		-- line stands over the page's foot, inside it.
+		if overlaps(C.tabs, C.pageFull) or C.pageFull.y + C.pageFull.h ~= C.page.y + C.page.h
+			or C.pageFull.y > C.target.y + 0.01 then
+			table.insert(blockProblems, case.tag .. " the page without the bar is not the bar's room and the page's")
+		end
+		local a = C.answer
+		if a.h ~= MM.AnswerH or a.x < C.page.x or a.x + a.w > C.page.x + C.page.w or a.y < C.page.y
+			or math.abs((a.y + a.h) - (C.page.y + C.page.h - MM.PagePad)) > 0.01 then
+			table.insert(blockProblems, case.tag .. " the answer's line is not over the page's foot")
 		end
 		-- The tabs between the title and the close.
 		local closeX = w - p.pad - MenuLayout.Config.Touch
@@ -359,9 +440,46 @@ local ok, err = pcall(function()
 		if C.controls.h < (if p.short then 100 else 200) then
 			table.insert(spawnProblems, string.format("%s: SPAWN's controls only %d tall", case.tag, C.controls.h))
 		end
-		-- A finger's width: the tabs, the target bar, the toolbar.
-		if C.tabs.h < 44 or C.target.h < 40 or C.toolbar.h < 30 or C.tabW < 84 then
-			table.insert(touchProblems, case.tag .. " has a control below a finger's width")
+		-- A finger: the tabs, the target bar, the toolbar -- and on a phone or a
+		-- short screen every row of the compact pages a finger's 40 (2026-10-12).
+		local touchy = s.compact or p.short
+		if C.tabs.h < 44 or C.target.h < 40 or C.toolbar.h < 30 or C.tabW < 84 or C.rowH < MM.RowDesk
+			or (touchy and (C.rowH < 40 or C.toolbar.h < 40)) then
+			table.insert(touchProblems, string.format("%s has a control below a finger (row %d, toolbar %d)", case.tag,
+				C.rowH, C.toolbar.h))
+		end
+		if string.sub(case.tag, 1, 5) == "phone" and C.tabsScroll then
+			table.insert(tabStripProblems, case.tag)
+		end
+		-- THE COMPACT CONSOLE (2026-10-12, item 11): every tab's height, row by
+		-- row, against the room its page has -- under the target bar on PLAYER
+		-- and SPAWN, in the bar's room too elsewhere; SPAWN's controls column
+		-- against its own height.
+		local inner = C.page.w - MM.PagePad * 2 - MM.ScrollBar
+		local controlsInner = C.controls.w - MM.PagePad * 2 - MM.ScrollBar
+		local parts, over = {}, {}
+		for _, tab in ipairs(Model.Tabs) do
+			local need, room
+			if tab.id == "spawn" then
+				need, room = Model.pageHeight("spawn", controlsInner, C.rowH), C.controls.h
+			else
+				need = Model.pageHeight(tab.id, inner, C.rowH, { split = C.playerSplit })
+				room = if Model.TargetTabs[tab.id] then C.page.h else C.pageFull.h
+			end
+			table.insert(parts, string.format("%s %d/%d", string.upper(tab.id), need, room))
+			if need > room then
+				table.insert(over, string.format("%s +%d", string.upper(tab.id), need - room))
+			end
+		end
+		say(string.format("    %-16s %s%s", case.tag, table.concat(parts, "  "),
+			if #over > 0 then "  -> SCROLLS " .. table.concat(over, ", ") else ""))
+		-- Every screen at least as tall as the 640 x 360 phone (302 of safe area
+		-- under the topbar) fits with no scroll; a shorter one is said above.
+		if #over > 0 and L.safe.Y >= 302 - 0.01 then
+			table.insert(fitProblems, case.tag .. " " .. table.concat(over, ", "))
+		end
+		if case.tag == "phone 640x360" then
+			fit640 = #over == 0
 		end
 		if case.phone then
 			phone = C
@@ -369,17 +487,25 @@ local ok, err = pcall(function()
 	end
 	check(#panelProblems == 0, "the panel stands inside the safe area on " .. #list .. " screens (desks, phones, TVs)",
 		table.concat(panelProblems, "; "))
-	check(#blockProblems == 0, "the tabs, the target bar, the page and the log each inside the shell, none over "
-		.. "another, the tabs between the title and the close", table.concat(blockProblems, "; "))
+	check(#blockProblems == 0, "the tabs, the target bar and the page each inside the shell, none over another, the "
+		.. "tabs between the title and the close; the page without the bar in the bar's room; the answer's line over "
+		.. "the page's foot", table.concat(blockProblems, "; "))
 	check(#spawnProblems == 0, "SPAWN's toolbar, grid and controls inside the page and apart, the grid beside the "
 		.. "controls with a whole row of cards in view", table.concat(spawnProblems, "; "))
-	check(#touchProblems == 0, "every tab, the target bar and the toolbar a finger's width", table.concat(touchProblems, "; "))
+	check(#touchProblems == 0, "every tab, the target bar and the toolbar a finger's size, and on every phone and "
+		.. "short screen every row and the toolbar 40 tall", table.concat(touchProblems, "; "))
+	check(fit640 == true, "THE COMPACT CONSOLE (item 11): on the 640 x 360 phone every tab fits with no scroll")
+	check(#fitProblems == 0, "and on every listed desk, phone and TV at least that tall (the heights above; a "
+		.. "shorter screen is said, not held to it)", table.concat(fitProblems, "; "))
+	check(#tabStripProblems == 0, "every listed phone shows all five tabs beside the title, the strip unscrolled",
+		table.concat(tabStripProblems, ", "))
 	check(#chipProblems == 0 and wrapped > 0, string.format("every SPAWN group reachable: the search beside or over "
 		.. "the chips, never on them; all %d chips in view wrapped (%d screens), else arrows scroll to them (%d screens)",
 		#chipWidths, wrapped, scrolled), table.concat(chipProblems, "; "))
 	check(phone ~= nil and phone.columns == 2 and phone.panel.short and phone.tabsScroll ~= nil,
 		"on the phone's 705 x 338 the spawn grid has two columns", phone and phone.columns)
-	check(phone ~= nil and phone.logLines == 1, "and the log strip is one line there (three elsewhere)")
+	check(phone ~= nil and phone.answer.h == MM.AnswerH and phone.rowH == MM.RowTouch and MM.RowTouch >= 40,
+		"and there the rows are a finger's 40 and the answer one line over the page's foot -- the log strip is gone")
 
 	--==========================================================================
 	-- 6. THE CLIENT, FROM ITS SOURCE
@@ -422,6 +548,114 @@ local ok, err = pcall(function()
 			and has(run, "task.spawn(send, Model.args.mist(verb))"),
 		"giving to anybody else, the weather, the Enchanted Mist's START / END MIST NOW, the events and ALL SERVERS "
 			.. "ask in place; the reset waits for the name")
+	--==========================================================================
+	-- THE COMPACT CONSOLE'S CLIENT (2026-10-12, item 11)
+	--==========================================================================
+	-- THE LOG STRIP IS GONE; THE ANSWER FADES BY ITSELF.
+	check(not has(run, "paintLog") and not has(run, "ui.logLines") and not has(run, "state.log")
+			and not has(run, 'Name = "Log"') and MM.LogLine == nil and MM.LogLinesShort == nil,
+		"the log strip is gone: no strip, no log lines, nothing of it left in the model")
+	local noteBody = string.match(run, "\nlocal function note%(text: string, ok: boolean%?%)(.-)\nend\n") or ""
+	check(has(noteBody, "task.delay(M.AnswerSeconds, function()") and has(noteBody, "TweenInfo.new(M.AnswerFade)")
+			and has(noteBody, "if mine ~= answerSeq then") and has(noteBody, "pill.Visible = false")
+			and MM.AnswerSeconds >= 2 and MM.AnswerSeconds <= 4 and MM.AnswerFade > 0 and MM.AnswerFade <= 1,
+		"the answer fades by itself: up about three seconds, faded in under one, then gone; a newer answer has its own time",
+		string.format("%s s, fade %s s", tostring(MM.AnswerSeconds), tostring(MM.AnswerFade)))
+	check(has(noteBody, "if ok == true then GOOD elseif ok == false then BAD else NEUTRAL")
+			and has(run, 'note(if type(reply.message) == "string" then reply.message else "No answer.", reply.ok == true)'),
+		"in the server's own words: green done, red refused (grey where nothing was asked of anybody)")
+	-- THE PEER'S GUARD 1: the answer, over the page's foot, never takes a press.
+	local answerBlock = string.match(run, 'local answer = Instance%.new%("Frame"%)(.-)ui%.answer, ui%.answerWords, ui%.answerEdge = ')
+		or ""
+	check(answerBlock ~= "" and has(answerBlock, "answer.Active = false") and has(answerBlock, "answer.Selectable = false")
+			and has(answerBlock, 'local answerWords = Instance.new("TextLabel")')
+			and has(answerBlock, "answerWords.Active = false") and has(answerBlock, "answerWords.Selectable = false")
+			and not has(answerBlock, "Button") and not has(answerBlock, "TextBox") and not has(answerBlock, "Activated")
+			and not has(answerBlock, "Input") and not has(answerBlock, "clicks")
+			and not string.find(run, "ui%.answer%w*%.Active = true") and not string.find(run, "ui%.answer%w*[%.:]Input")
+			and not string.find(noteBody, "Active") and not string.find(noteBody, "Selectable"),
+		"THE ANSWER NEVER TAKES A PRESS: a Frame and a TextLabel, neither Active nor Selectable, no button, box or "
+			.. "handler in it, nothing that ever makes it one -- the row under it works the whole time it shows")
+	-- THE PEER'S GUARD 2: every confirm as strong as before -- its words and its
+	-- steps; only where it stands changed (in its own row's place).
+	local function handler(control)
+		local escaped = string.gsub(control, "%.", "%%.")
+		return string.match(run, "\n" .. escaped .. "%.hit%.Activated:Connect%(function%(%)(.-)\nend%)") or ""
+	end
+	local function body(name)
+		return string.match(run, "\nlocal function " .. name .. "%(verb: string%)(.-)\nend\n") or ""
+	end
+	-- Whether code asks the server anything: `send` as a word (task.spawn(send, ...)
+	-- too), a ConsoleModel request, or the remote itself.
+	local function sends(src)
+		return string.find(src, "%f[%w_]send%f[^%w_]") ~= nil or has(src, "Model.args.") or has(src, "InvokeServer")
+	end
+	local askWeatherBody, askMistBody, askMiniBody = body("askWeather"), body("askMist"), body("askMini")
+	check(has(handler("ui.startRain"), 'askWeather("start")') and has(handler("ui.startThunder"), 'askWeather("thunder")')
+			and has(handler("ui.endRain"), 'askWeather("end")') and not sends(handler("ui.startRain"))
+			and not sends(handler("ui.startThunder")) and not sends(handler("ui.endRain"))
+			and has(askWeatherBody, '"Stop the weather on this server?"')
+			and has(askWeatherBody, '"Start %s on this server for %s?"') and has(askWeatherBody, 'setAsking("weather", verb)')
+			and askWeatherBody ~= "" and not sends(askWeatherBody)
+			and has(handler("ui.weatherAsk.confirm"), "local secs = state.askSeconds")
+			and has(handler("ui.weatherAsk.confirm"), 'Model.args.weather(verb, if verb == "end" then nil else secs)'),
+		"THE WEATHER still asks first, in the same words, and CONFIRM sends the very duration it asked about")
+	check(has(handler("ui.startMist"), 'askMist("start")') and has(handler("ui.endMist"), 'askMist("end")')
+			and has(askMistBody, '"End the Enchanted Mist on this server now?"')
+			and has(askMistBody, '"Start an Enchanted Mist on this server now, for %s?"')
+			and has(askMistBody, 'setAsking("mist", verb)') and askMistBody ~= "" and not sends(askMistBody)
+			and not sends(handler("ui.startMist")) and not sends(handler("ui.endMist"))
+			and has(handler("ui.mistAsk.confirm"), "task.spawn(send, Model.args.mist(verb))"),
+		"THE ENCHANTED MIST still asks first, in the same words")
+	check(has(handler("ui.startMini"), "askMini(state.miniMode)") and has(handler("ui.endMini"), 'askMini("end")')
+			and has(askMiniBody, '"End the global event on EVERY server?"')
+			and has(askMiniBody, '"Start %s on EVERY server for %s?"') and has(askMiniBody, 'setAsking("mini", verb)')
+			and askMiniBody ~= "" and not sends(askMiniBody)
+			and not sends(handler("ui.startMini")) and not sends(handler("ui.endMini"))
+			and has(handler("ui.miniAsk.confirm"), "local secs = state.askSeconds")
+			and has(handler("ui.miniAsk.confirm"), 'Model.args.miniEvent(verb, if verb == "end" then nil else secs)'),
+		"A GLOBAL MINI EVENT still asks first -- EVERY server, in the same words -- and sends what it asked about")
+	local sendHandler = handler("ui.send")
+	local _, trues = string.gsub(run, "announce%(true%)", "")
+	check(has(sendHandler, 'if state.scope == "all" then') and has(sendHandler, '"Send this to EVERY server of this place?"')
+			and has(sendHandler, 'setAsking("all", nil)') and has(sendHandler, "announce(false)")
+			and not has(sendHandler, "announce(true)") and has(handler("ui.allAsk.confirm"), "announce(true)") and trues == 1
+			and has(run, 'build.question(card, "AllQuestion", "full", "YES, ALL SERVERS")'),
+		"ALL SERVERS still asks once more -- YES, ALL SERVERS -- and only that answer sends one")
+	local resetHandler = handler("ui.resetButton")
+	check(string.find(resetHandler, "^\n\tif state%.busy or not typedMatches%(%) then\n\t\treturn\n\tend") ~= nil
+			and has(resetHandler, "task.spawn(send, Model.args.reset(currentTarget().UserId, typed))")
+			and has(run, 'return trimmed ~= "" and string.lower(trimmed) == string.lower(currentTarget().Name)')
+			and has(run, '"TYPE %s TO CONFIRM"') and has(run, 'lockable(ui.resetButton, match and not state.busy, "danger"')
+			and not sends(handler("ui.openReset")) and has(handler("ui.openReset"), "state.resetOpen = true")
+			and not sends(handler("ui.closeReset"))
+			and has(run, "ui.resetCard.Visible = state.resetOpen"),
+		"RESET PROGRESS still waits for the username typed back, locked till it matches -- now behind one red button "
+			.. "that only opens its box")
+	local beforeAsk = string.match(handler("ui.spawnButton"), "^(.-)setAsking%(\"give\", nil%)") or "send"
+	check(has(handler("ui.spawnButton"), "if p ~= player then") and has(handler("ui.spawnButton"), 'setAsking("give", nil)')
+			and not sends(beforeAsk)
+			and has(handler("ui.giveConfirm"), "task.spawn(spawnNow, currentTarget().Name)"),
+		"a give to anybody else still asks first, and GIVE sends their name as the confirm")
+	check(has(run, 'local row = build.action(holder, name, scope, { { "Cancel", "CANCEL" }, { "Confirm", yes } })')
+			and has(run, 'row.buttons[2].style("danger")') and has(run, "ui.weatherRow.Visible = not weatherAsk")
+			and has(run, "ui.mistRow.Visible = not mistAsk") and has(run, "ui.miniRow.Visible = not miniAsk")
+			and has(run, "ui.sendRow.Visible = not asking"),
+		"each question stands in its own row's place, the same height (nothing under it moves), CONFIRM red")
+	-- THE TARGET BAR, THE CHIPS, THE ROWS.
+	check(has(run, "local targeted = Model.TargetTabs[state.tab] == true") and has(run, "ui.targetBar.Visible = targeted")
+			and has(run, "put(ui.pages, if targeted then L.page else L.pageFull)"),
+		"the target bar shows only on PLAYER and SPAWN; elsewhere the page takes its room")
+	check(has(run, "rainSeconds = WEATHER.DefaultSeconds,") and has(run, "miniSeconds = MINI.DefaultSeconds,")
+			and has(run, "for _, seconds in ipairs(Model.WeatherSeconds) do")
+			and has(run, "for _, seconds in ipairs(Model.EventSeconds) do") and has(run, "Model.durationLabel(seconds)")
+			and has(run, "state.askSeconds = secs") and not has(run, "rainBox") and not has(run, "miniBox"),
+		"the durations are the chips (each starting on its default): the seconds boxes are gone")
+	check(has(run, "Model.actionInline(w, n)") and has(run, "Model.actionRowHeight(w, n, rowH)")
+			and has(run, "Model.perRow(w, g.min, g.max)") and has(run, "Model.spawnRowHeight(w, rowH)")
+			and has(run, "local rowH = L.rowH") and has(run, "fit.MinTextSize = TEXT_MIN") and has(run, "local TEXT_MIN = 10"),
+		"the console lays out every row by ConsoleModel's own rules -- the ones pageHeight counts -- at the screen's "
+			.. "row height, no word drawn under 10")
 	check(not has(run, "while true") and not has(run, "Heartbeat") and not has(run, "RenderStepped"),
 		"no loop and no per-frame work: one task.delay chain while it is open")
 	check(has(run, "layout.admin") and has(run, "button.Selectable = true"),

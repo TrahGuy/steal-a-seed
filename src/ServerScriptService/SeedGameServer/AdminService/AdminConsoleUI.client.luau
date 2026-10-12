@@ -1,36 +1,46 @@
 --!strict
 -- Steal a Seed :: AdminConsoleUI
 --
--- The developer console's client, REDESIGNED 2026-10-07 (the owner's brief):
+-- The developer console's client, REDESIGNED 2026-10-07 (the owner's brief)
+-- and MADE COMPACT 2026-10-12 (item 11: less scrolling, above all on a phone):
 -- an ADMIN button in the topbar beside the clock, and behind it the ADMIN
 -- CONSOLE -- MenuKit's studded rim, its title in the owner's badge (rainbow
 -- letters, a dark edge: OwnerTitleService's recipe), a thin red keyline round
 -- the frame, the close X, and no dimmer (UIKit's see-through one). Inside:
 --
---   TABS        PLAYER, SPAWN, WORLD, ANNOUNCE in the header row -- a row that
---               scrolls where it is narrower than they are (a phone)
---   TARGET BAR  one, under the tabs, for every tab: who the actions are for --
---               headshot, display name, @username, and their cash, Speed and
---               bag room, live (the server's Roster). You by default.
---   PLAYER      ADD MONEY and ADD SPEED: a box that takes K, M, B, T and Qd and
---               shows the full number before anything is sent, quick chips (1M,
---               1B, 1T, 1Qd, MAX) and the limit; RESET PROGRESS in its own red
---               box at the bottom, behind the typed username
+--   TABS        PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE in the header row -- a
+--               row that scrolls where it is narrower than they are; the title
+--               reads ADMIN on a short screen, so all five fit a phone
+--   TARGET BAR  one, under the tabs, on the tabs that act on a player (PLAYER
+--               and SPAWN): who the actions are for -- headshot, display name,
+--               @username, and their cash, Speed and bag room, live (the
+--               server's Roster). You by default.
+--   PLAYER      ADD MONEY and ADD SPEED: a box that takes K, M, B, T and Qd
+--               beside its button, quick chips (1M, 1B, 1T, 1Qd, MAX), and the
+--               full number before anything is sent; RESET PROGRESS behind one
+--               red button, and then behind the typed username
 --   SPAWN       group chips and a search over a grid of species cards (each
---               with its picture); POD or GROWN; the sizes it really comes in
---               (the rest dimmed, no picker for a fixed size); how many, up to
---               the target's free bag room; the preview line; SPAWN
+--               with its picture); POD or GROWN PLANT; the size, stepped
+--               through the sizes it really comes in; how many, up to the
+--               target's free bag room; the preview line; SPAWN
 --   WORLD       Start Night, Start Day; the weather -- every admin account's
---               since 2026-10-07 (the owner's alone before); the Enchanted
---               Mist's START / END MIST NOW (2026-10-11); the mini events
+--               since 2026-10-07 (the owner's alone before) -- and its duration
+--               chips; the Enchanted Mist's START / END MIST NOW (2026-10-11)
+--   EVENTS      the mini events: the mode, its duration chips, START / END
 --   ANNOUNCE    the words and their count, THIS SERVER or ALL SERVERS, SEND
---   LOG         under every tab: the last five answers, green done or red
---               refused, with the time
+--   ANSWER      the server's answer to the last press, one line over the
+--               page's foot -- green done, red refused -- that fades by itself
+--               after about three seconds and never takes a press. (The log
+--               strip it replaced is gone.)
+--
+-- EVERY ROW IS A FIXED HEIGHT -- a finger's 40 on a phone -- so each tab's
+-- height is ConsoleModel's (pageHeight), which AdminConsoleSpec measures on
+-- every listed screen.
 --
 -- Every command the console had before, and SPAWN (AdminService, 2026-10-07)
 -- in place of the two-Secret grant. Each button sends exactly what
 -- ConsoleModel.args says -- the shapes it always sent -- through the one
--- RemoteFunction. What the server answered is the log.
+-- RemoteFunction. What the server answered is the answer line.
 --
 --==============================================================================
 -- IT DOES NOT SHIP TO ANYBODY ELSE
@@ -41,17 +51,19 @@
 -- in the PlayerGui of an allowlisted account, and does nothing for anybody else.
 -- Whatever runs here, EVERY PRESS IS A REQUEST: the server checks the sender,
 -- the target, the action, the amount, the confirm and its own waits, and
--- answers with the line the log shows. What the server puts on the gui
+-- answers with the line the answer shows. What the server puts on the gui
 -- (Spawning, the waits, Roster) only changes how a control LOOKS.
 --
 --==============================================================================
 -- DANGER IS CONFIRMED IN PLACE, NEVER IN A POPUP
 --
--- RESET PROGRESS waits for the username typed back. Giving to anybody but
--- yourself, the weather and the mini events each turn their button row into
--- the question and CANCEL / CONFIRM. ALL SERVERS asks once more, as it did.
--- A request on its way locks every button; SPAWN's own wait and a request that
--- never got an answer count down on the button itself.
+-- RESET PROGRESS opens its red box, and waits there for the username typed
+-- back. Giving to anybody but yourself, the weather, the Enchanted Mist and
+-- the mini events each turn their row into the question and CANCEL / CONFIRM
+-- -- the same words and the same steps as before the compact console, in the
+-- row's own place. ALL SERVERS asks once more, as it did. A request on its way
+-- locks every button; SPAWN's own wait and a request that never got an answer
+-- count down on the button itself.
 --
 --==============================================================================
 -- MOUSE, TOUCH AND CONTROLLER
@@ -59,10 +71,11 @@
 -- Every control is a GuiButton or a text box, and every one is Selectable. LB
 -- and RB step through the tabs and put the selection on the tab's main button
 -- (ConsoleModel.MainButton); B steps back -- out of the player list, then out
--- of a question, then out of the console -- and Escape closes it, both bound
--- only while it is open. The grid's cards take a press only when the list was
--- not being scrolled (MenuKit.tap). One centre panel at a time: the console
--- writes its name to OpenPanel and steps aside when another panel takes it.
+-- of a question, then out of the red box, then out of the console -- and
+-- Escape closes it, both bound only while it is open. The grid's cards take a
+-- press only when the list was not being scrolled (MenuKit.tap). One centre
+-- panel at a time: the console writes its name to OpenPanel and steps aside
+-- when another panel takes it.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -71,6 +84,8 @@ local HttpService = game:GetService("HttpService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
+local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
@@ -117,6 +132,8 @@ local TEXT = LOOK.Text
 local GOLD_TEXT = LOOK.Premium
 local GOOD = LOOK.Money
 local BAD = Color3.fromRGB(196, 52, 40)
+-- The answer's grey: a question answered "no" here, where nothing was asked of anybody.
+local NEUTRAL = Color3.fromRGB(88, 94, 108)
 local NIGHT_INK = Color3.fromRGB(44, 74, 170)
 local DANGER_FILL = Color3.fromRGB(255, 236, 232)
 local BACK_ACTION = "SeedAdminBack"
@@ -162,8 +179,14 @@ local MODE_WORDS: { [string]: string } = {
 		GameConfig.PodRush.RegrowSeconds, GameConfig.PodRush.Levels[1].Pods, GameConfig.PodRush.Levels[2].Pods,
 		GameConfig.PodRush.Levels[3].Pods, MINI.Modes.podrush.Seconds),
 }
--- Inside every page and card: the list's padding, the card's, the scroll bar.
-local PAGE_PAD, CARD_PAD, BAR = 8, 10, 6
+-- THE COMPACT ROWS (ConsoleModel.Metrics, 2026-10-12): inside every page and
+-- card, the scroll bar, and the gaps between rows, side by side and between
+-- cards.
+local M = Model.Metrics
+local PAGE_PAD, CARD_PAD, BAR = M.PagePad, M.CardPad, M.ScrollBar
+local ROW_GAP, COL_GAP, SECTION_GAP = M.RowGap, M.ColGap, M.SectionGap
+-- The smallest any word here is drawn: the menus' floor (GameConfig's MinText).
+local TEXT_MIN = 10
 
 --==============================================================================
 -- THE BUTTON, BESIDE THE CLOCK
@@ -298,7 +321,6 @@ padFirst.Parent = modal.shell
 --==============================================================================
 -- WHAT IS GOING ON: one table, so the chunk keeps well under Luau's 200 locals
 --==============================================================================
-type Entry = { at: string, text: string, ok: boolean? }
 local state = {
 	open = false,
 	tab = "player",
@@ -310,9 +332,13 @@ local state = {
 	freeAt = 0,
 	spawnFreeAt = 0,
 	listOpen = false,
-	-- Which question is up: nil, "give", "weather", "mini", "all".
+	-- Which question is up: nil, "give", "weather", "mist", "mini", "all".
 	asking = nil :: string?,
 	askVerb = nil :: string?,
+	-- The duration a question asked about: what its CONFIRM sends.
+	askSeconds = nil :: number?,
+	-- RESET PROGRESS's red box: shut until its button opens it.
+	resetOpen = false,
 	-- SPAWN's choices.
 	group = "",
 	search = "",
@@ -323,12 +349,15 @@ local state = {
 	-- A spawn whose answer never came: sent again unchanged, and for how long.
 	unanswered = nil :: { key: string, request: any, at: number }?,
 	miniMode = "ticketdisco",
+	-- The durations chosen on the chips (ConsoleModel.WeatherSeconds, EventSeconds).
+	rainSeconds = WEATHER.DefaultSeconds,
+	miniSeconds = MINI.DefaultSeconds,
 	scope = "server",
-	log = {} :: { Entry },
 }
 
 local ui: any = {}
 local grids: { { grid: UIGridLayout, max: number, min: number, scope: string } } = {}
+local actionRows: { any } = {}
 local order: { [Instance]: number } = {}
 local build: any = {}
 local paint: any = {}
@@ -354,13 +383,28 @@ local function selectIfPad(target: GuiObject?)
 	end
 end
 
+-- A button whose words are never drawn under the floor (MenuKit lets them go to 9).
+local function floored(b: any): any
+	local fit = b.label:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MinTextSize = TEXT_MIN
+	end
+	return b
+end
+
+-- Places a GuiObject at one of ConsoleModel's rects.
+local function put(object: GuiObject, r: any)
+	object.Position = UDim2.fromOffset(r.x, r.y)
+	object.Size = UDim2.fromOffset(r.w, r.h)
+end
+
 --==============================================================================
 -- THE PIECES EVERY PAGE IS BUILT FROM
 --
--- A page is a list that scrolls, on the studded baseplate: white headings with
--- an ink edge, and under each a light card holding lines, boxes and rows of
--- buttons -- two or three abreast where the width allows, one per row where it
--- does not.
+-- A page is a list that scrolls, on the studded baseplate: light cards, each
+-- holding rows -- a state beside the buttons that act on it, a row of chips, a
+-- box, a line. Every row is the screen's row height (ConsoleModel), so a page
+-- is exactly as tall as ConsoleModel.pageHeight says.
 --==============================================================================
 function build.list(parent: Instance, name: string, gap: number?): ScrollingFrame
 	local s = Instance.new("ScrollingFrame")
@@ -377,7 +421,7 @@ function build.list(parent: Instance, name: string, gap: number?): ScrollingFram
 	s.Parent = parent
 	local list = Instance.new("UIListLayout")
 	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Padding = UDim.new(0, gap or 8)
+	list.Padding = UDim.new(0, gap or SECTION_GAP)
 	list.Parent = s
 	local pad = Instance.new("UIPadding")
 	pad.PaddingTop = UDim.new(0, PAGE_PAD)
@@ -400,12 +444,12 @@ function build.column(parent: Instance, name: string, gap: number?): Frame
 	f.Parent = parent
 	local list = Instance.new("UIListLayout")
 	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Padding = UDim.new(0, gap or 6)
+	list.Padding = UDim.new(0, gap or ROW_GAP)
 	list.Parent = f
 	return f
 end
 
--- A white LuckiestGuy heading with its ink edge, on the plate.
+-- A white LuckiestGuy heading with its ink edge.
 function build.heading(parent: Instance, text: string, colour: Color3?): TextLabel
 	local h = MenuKit.heading(parent, "Heading", 18, colour or WHITE, Z + 1)
 	h.LayoutOrder = nextIn(parent)
@@ -415,7 +459,7 @@ function build.heading(parent: Instance, text: string, colour: Color3?): TextLab
 	return h
 end
 
--- A light card under a heading: its own padding and list.
+-- A light card: its own padding and list of rows.
 function build.card(parent: Instance, name: string, danger: boolean?): Frame
 	local c = Instance.new("Frame")
 	c.Name = name
@@ -435,7 +479,7 @@ function build.card(parent: Instance, name: string, danger: boolean?): Frame
 	end
 	local list = Instance.new("UIListLayout")
 	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Padding = UDim.new(0, 6)
+	list.Padding = UDim.new(0, ROW_GAP)
 	list.Parent = c
 	local pad = Instance.new("UIPadding")
 	pad.PaddingTop = UDim.new(0, CARD_PAD)
@@ -462,13 +506,13 @@ function build.box(holder: Instance, name: string, placeholder: string, height: 
 	local box = Instance.new("TextBox")
 	box.Name = name
 	box.LayoutOrder = nextIn(holder)
-	box.Size = UDim2.new(1, 0, 0, height or 40)
+	box.Size = UDim2.new(1, 0, 0, height or M.RowTouch - 4)
 	box.BackgroundColor3 = LOOK.Well
 	box.BackgroundTransparency = LOOK.WellTransparency
 	box.BorderSizePixel = 0
 	box.ClearTextOnFocus = false
 	box.Font = LOOK.BodyFont
-	box.TextSize = 16
+	box.TextSize = 15
 	box.TextColor3 = TEXT
 	box.PlaceholderColor3 = LOOK.Placeholder
 	box.PlaceholderText = placeholder
@@ -480,17 +524,17 @@ function build.box(holder: Instance, name: string, placeholder: string, height: 
 	UIKit.corner(box, 9)
 	MenuKit.keyline(box, LOOK.WellEdge, 1)
 	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 12)
-	pad.PaddingRight = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
 	pad.Parent = box
 	return box
 end
 
--- A row of buttons, `most` abreast where each can be `min` wide, fewer where
--- not. `scope` says whose width the row has (relayout): "full" a page's card,
--- "half" one of PLAYER's two cards, "controls" SPAWN's column.
-function build.buttons(holder: Instance, most: number, min: number, scope: string, specs: { { string } },
-	height: number?): { any }
+-- A row of buttons (or chips), `most` abreast where each can be `min` wide,
+-- fewer where not, each the screen's row height. `scope` says whose width the
+-- row has (relayout): "full" a page's card, "half" one of PLAYER's two cards,
+-- "controls" SPAWN's column, "page" the page itself.
+function build.buttons(holder: Instance, most: number, min: number, scope: string, specs: { { string } }): { any }
 	local frame = Instance.new("Frame")
 	frame.Name = "Buttons_" .. specs[1][1]
 	frame.BackgroundTransparency = 1
@@ -500,13 +544,13 @@ function build.buttons(holder: Instance, most: number, min: number, scope: strin
 	frame.Parent = holder
 	local grid = Instance.new("UIGridLayout")
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
-	grid.CellPadding = UDim2.fromOffset(6, 4)
-	grid.CellSize = UDim2.fromOffset(min, height or MenuLayout.Config.Touch)
+	grid.CellPadding = UDim2.fromOffset(COL_GAP, ROW_GAP)
+	grid.CellSize = UDim2.fromOffset(min, M.RowTouch)
 	grid.Parent = frame
 	table.insert(grids, { grid = grid, max = most, min = min, scope = scope })
 	local made: { any } = {}
 	for i, spec in ipairs(specs) do
-		local b = MenuKit.button(frame, spec[1], Z + 1, spec[2], 15)
+		local b = floored(MenuKit.button(frame, spec[1], Z + 1, spec[2], 15))
 		b.hit.LayoutOrder = i
 		b.hit.Selectable = true
 		made[i] = b
@@ -514,42 +558,88 @@ function build.buttons(holder: Instance, most: number, min: number, scope: strin
 	return made
 end
 
--- A small coloured dot and a line of state beside it.
-function build.state(holder: Instance, name: string): (TextLabel, Frame)
-	local row = Instance.new("Frame")
-	row.Name = name
-	row.BackgroundColor3 = LOOK.Well
-	row.BackgroundTransparency = LOOK.WellTransparency
-	row.Size = UDim2.new(1, 0, 0, 32)
-	row.AutomaticSize = Enum.AutomaticSize.Y
-	row.LayoutOrder = nextIn(holder)
-	row.Parent = holder
-	UIKit.corner(row, 9)
-	MenuKit.keyline(row, LOOK.WellEdge, 1)
-	local dot = MenuKit.frame(row, "Dot", Z + 1, LOOK.Muted, 0, 6)
-	dot.AnchorPoint = Vector2.new(0, 0.5)
-	dot.Position = UDim2.new(0, 11, 0, 16)
-	dot.Size = UDim2.fromOffset(12, 12)
-	local words = MenuKit.body(row, "Words", 15, TEXT, Z + 1)
-	words.Position = UDim2.fromOffset(30, 0)
-	words.Size = UDim2.new(1, -38, 0, 32)
-	words.AutomaticSize = Enum.AutomaticSize.Y
-	words.TextWrapped = true
-	words.TextXAlignment = Enum.TextXAlignment.Left
-	return words, dot
+-- A ROW OF STATE AND ACTION (2026-10-12): what the row acts on -- a state, a
+-- box, a count, a question's words; the caller sets it as `left` -- at the
+-- left, its buttons at the right; the left over the buttons where the row is
+-- too narrow for both (ConsoleModel.actionInline). `scope` as a row of
+-- buttons'; `most` the buttons' widest.
+function build.action(holder: Instance, name: string, scope: string, specs: { { string } }, most: number?): any
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.BackgroundTransparency = 1
+	frame.Size = UDim2.new(1, 0, 0, M.RowTouch)
+	frame.LayoutOrder = nextIn(holder)
+	frame.Parent = holder
+	local made: { any } = {}
+	for i, spec in ipairs(specs) do
+		local b = floored(MenuKit.button(frame, spec[1], Z + 1, spec[2], 15))
+		b.hit.Selectable = true
+		made[i] = b
+	end
+	local row = { frame = frame, left = nil :: GuiObject?, buttons = made, scope = scope, inset = 2,
+		most = most or (if #specs == 1 then M.ActionWideMaxW else M.ActionMaxW) }
+	table.insert(actionRows, row)
+	return row
 end
 
--- The question that stands in for a row of buttons (DANGER IS CONFIRMED IN
--- PLACE): its words, CANCEL and CONFIRM.
+-- A state: a small coloured dot, the section's caption -- whom it reaches --
+-- and its live line under it, in a well. The left of an action row.
+function build.state(holder: Instance, name: string, caption: string?): (TextLabel, Frame, Frame)
+	local well = Instance.new("Frame")
+	well.Name = name
+	well.BackgroundColor3 = LOOK.Well
+	well.BackgroundTransparency = LOOK.WellTransparency
+	well.BorderSizePixel = 0
+	well.Size = UDim2.new(1, 0, 0, M.RowTouch - 4)
+	well.ZIndex = Z + 1
+	well.Parent = holder
+	UIKit.corner(well, 9)
+	MenuKit.keyline(well, LOOK.WellEdge, 1)
+	local dot = MenuKit.frame(well, "Dot", Z + 2, LOOK.Muted, 0, 6)
+	dot.AnchorPoint = Vector2.new(0, 0.5)
+	dot.Position = UDim2.new(0, 9, 0.5, 0)
+	dot.Size = UDim2.fromOffset(10, 10)
+	if caption then
+		local cap = MenuKit.body(well, "Caption", 11, LOOK.Muted, Z + 2)
+		cap.Font = LOOK.BodyBoldFont
+		cap.Position = UDim2.fromOffset(26, 2)
+		cap.Size = UDim2.new(1, -32, 0, 13)
+		cap.TextXAlignment = Enum.TextXAlignment.Left
+		cap.TextTruncate = Enum.TextTruncate.AtEnd
+		cap.Text = caption
+	end
+	local words = MenuKit.body(well, "Words", 14, TEXT, Z + 2)
+	words.Position = UDim2.fromOffset(26, if caption then 15 else 0)
+	words.Size = UDim2.new(1, -32, 1, if caption then -17 else 0)
+	words.TextXAlignment = Enum.TextXAlignment.Left
+	words.TextScaled = true
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 14
+	fit.MinTextSize = TEXT_MIN
+	fit.Parent = words
+	return words, dot, well
+end
+
+-- The question that stands in for a row (DANGER IS CONFIRMED IN PLACE): its
+-- words where the row's state was, CANCEL and CONFIRM where its buttons were --
+-- the same height, so nothing under it moves.
 function build.question(holder: Instance, name: string, scope: string, yes: string): any
-	local block = build.column(holder, name, 4)
-	block.Visible = false
-	local words = build.line(block, "Question", 15, TEXT)
+	local row = build.action(holder, name, scope, { { "Cancel", "CANCEL" }, { "Confirm", yes } })
+	row.frame.Visible = false
+	row.inset = 0
+	local words = MenuKit.body(row.frame, "Question", 14, TEXT, Z + 1)
 	words.Font = LOOK.BodyBoldFont
-	local row = build.buttons(block, 2, 120, scope, { { "Cancel", "CANCEL" }, { "Confirm", yes } })
-	row[1].style("idle")
-	row[2].style("danger")
-	return { block = block, words = words, cancel = row[1], confirm = row[2] }
+	words.TextWrapped = true
+	words.TextScaled = true
+	words.TextXAlignment = Enum.TextXAlignment.Left
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 14
+	fit.MinTextSize = TEXT_MIN
+	fit.Parent = words
+	row.left = words
+	row.buttons[1].style("idle")
+	row.buttons[2].style("danger")
+	return { block = row.frame, words = words, cancel = row.buttons[1], confirm = row.buttons[2] }
 end
 
 -- A face beyond MenuKit's own: a locked control dark, the weather its own two
@@ -574,9 +664,30 @@ local function face(b: any, id: string)
 	end
 end
 
+-- An action row, `w` wide at the screen's row height: inline, the left takes
+-- what its buttons leave; else the left on its own row over them.
+local function placeAction(row: any, w: number, rowH: number)
+	local n = #row.buttons
+	local left: GuiObject? = row.left
+	local inset = row.inset
+	local inline = Model.actionInline(w, n)
+	local bw = if inline then Model.actionWidth(w, n, row.most) else math.floor((w - (n - 1) * COL_GAP) / n)
+	local leftW = if inline then w - n * (bw + COL_GAP) else w
+	if left then
+		left.Position = UDim2.fromOffset(0, inset)
+		left.Size = UDim2.fromOffset(leftW, rowH - inset * 2)
+	end
+	for i, b in ipairs(row.buttons) do
+		b.hit.Position = if inline then UDim2.fromOffset(leftW + COL_GAP + (i - 1) * (bw + COL_GAP), 0)
+			else UDim2.fromOffset((i - 1) * (bw + COL_GAP), rowH + ROW_GAP)
+		b.hit.Size = UDim2.fromOffset(bw, rowH)
+	end
+	row.frame.Size = UDim2.new(1, 0, 0, Model.actionRowHeight(w, n, rowH))
+end
+
 --==============================================================================
 -- THE FRAME OF IT: the tabs in the header row, the target bar, the plate and
--- its four pages, the player list over them, the log strip
+-- its five pages, the player list over them, and the answer
 --==============================================================================
 do
 	local strip = Instance.new("ScrollingFrame")
@@ -593,12 +704,12 @@ do
 	local list = Instance.new("UIListLayout")
 	list.FillDirection = Enum.FillDirection.Horizontal
 	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Padding = UDim.new(0, Model.Metrics.TabGap)
+	list.Padding = UDim.new(0, M.TabGap)
 	list.Parent = strip
 	ui.tabStrip = strip
 	ui.tabs = {}
 	for i, tab in ipairs(Model.Tabs) do
-		local b = MenuKit.button(strip, "Tab_" .. tab.id, Z + 2, tab.label, 15)
+		local b = floored(MenuKit.button(strip, "Tab_" .. tab.id, Z + 2, tab.label, 15))
 		b.hit.LayoutOrder = i
 		b.hit.Selectable = true
 		ui.tabs[tab.id] = b
@@ -659,9 +770,10 @@ do
 	plate.Size = UDim2.fromScale(1, 1)
 	ui.plate = plate
 	ui.page = {
-		player = build.list(pages, "Page_player", 8),
-		world = build.list(pages, "Page_world", 8),
-		announce = build.list(pages, "Page_announce", 8),
+		player = build.list(pages, "Page_player", SECTION_GAP),
+		world = build.list(pages, "Page_world", SECTION_GAP),
+		events = build.list(pages, "Page_events", SECTION_GAP),
+		announce = build.list(pages, "Page_announce", SECTION_GAP),
 	}
 	local spawnPage = Instance.new("Frame")
 	spawnPage.Name = "Page_spawn"
@@ -685,7 +797,7 @@ do
 	sheet.ZIndex = Z + 6
 	UIKit.corner(sheet, 9)
 	ui.sheet = sheet
-	local back = MenuKit.button(sheet, "Back", Z + 7, "BACK", 15)
+	local back = floored(MenuKit.button(sheet, "Back", Z + 7, "BACK", 15))
 	back.hit.LayoutOrder = 0
 	back.hit.Size = UDim2.new(0, 120, 0, MenuLayout.Config.Touch)
 	back.style("sky")
@@ -696,74 +808,81 @@ do
 	caption.TextXAlignment = Enum.TextXAlignment.Left
 	caption.Text = "CHOOSE A PLAYER IN THIS SERVER"
 
-	-- THE LOG STRIP.
-	local log = Instance.new("ScrollingFrame")
-	log.Name = "Log"
-	log.BackgroundColor3 = LOOK.Well
-	log.BackgroundTransparency = 0
-	log.BorderSizePixel = 0
-	log.ScrollBarThickness = 4
-	log.ScrollBarImageColor3 = LOOK.WellEdge
-	log.CanvasSize = UDim2.new()
-	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	log.ScrollingDirection = Enum.ScrollingDirection.Y
-	log.Selectable = false
-	log.ZIndex = Z + 1
-	log.Parent = body
-	UIKit.corner(log, 8)
-	MenuKit.keyline(log, LOOK.WellEdge, 1)
-	local logList = Instance.new("UIListLayout")
-	logList.SortOrder = Enum.SortOrder.LayoutOrder
-	logList.Parent = log
-	local logPad = Instance.new("UIPadding")
-	logPad.PaddingLeft = UDim.new(0, 8)
-	logPad.PaddingRight = UDim.new(0, 8)
-	logPad.PaddingTop = UDim.new(0, Model.Metrics.LogPad)
-	logPad.PaddingBottom = UDim.new(0, Model.Metrics.LogPad)
-	logPad.Parent = log
-	ui.log = log
-	ui.logLines = {}
-	for i = 1, 5 do
-		local l = MenuKit.body(log, "Entry" .. i, 13, LOOK.Muted, Z + 2)
-		l.LayoutOrder = i
-		l.Size = UDim2.new(1, 0, 0, Model.Metrics.LogLine)
-		l.TextXAlignment = Enum.TextXAlignment.Left
-		l.TextTruncate = Enum.TextTruncate.AtEnd
-		l.Text = ""
-		ui.logLines[i] = l
-	end
+	-- THE ANSWER (2026-10-12, item 11, in place of the log strip): the server's
+	-- words, one line over the page's foot, that fade by itself. A Frame and a
+	-- TextLabel -- neither Active nor Selectable, no button anywhere in it -- so
+	-- it never takes a press: the row under it works the whole time it shows.
+	local answer = Instance.new("Frame")
+	answer.Name = "Answer"
+	answer.BackgroundColor3 = NEUTRAL
+	answer.BorderSizePixel = 0
+	answer.Active = false
+	answer.Selectable = false
+	answer.Visible = false
+	answer.ZIndex = Z + 20
+	answer.Parent = body
+	UIKit.corner(answer, 9)
+	local answerEdge = MenuKit.keyline(answer, INK, 2)
+	local answerWords = Instance.new("TextLabel")
+	answerWords.Name = "Words"
+	answerWords.BackgroundTransparency = 1
+	answerWords.Active = false
+	answerWords.Selectable = false
+	answerWords.Position = UDim2.fromOffset(12, 0)
+	answerWords.Size = UDim2.new(1, -24, 1, 0)
+	answerWords.Font = LOOK.BodyBoldFont
+	answerWords.TextSize = 14
+	answerWords.TextColor3 = WHITE
+	answerWords.TextStrokeColor3 = INK
+	answerWords.TextStrokeTransparency = 0.55
+	answerWords.TextWrapped = true
+	answerWords.ZIndex = Z + 21
+	answerWords.Parent = answer
+	ui.answer, ui.answerWords, ui.answerEdge = answer, answerWords, answerEdge
 end
 
 --==============================================================================
--- THE LOG: the last five answers, newest first -- green done, red refused, and
--- grey for a question answered "no" here, where nothing was asked of anybody
+-- THE ANSWER: the server's words for the last press -- green done, red
+-- refused, grey for a question answered "no" here, where nothing was asked of
+-- anybody -- for M.AnswerSeconds, then faded out. A newer answer takes its
+-- place at once, and its own time.
 --==============================================================================
-local function paintLog()
-	for i = 1, 5 do
-		local entry = state.log[i]
-		local l = ui.logLines[i]
-		if entry then
-			l.Text = string.format("%s   %s", entry.at, entry.text)
-			l.TextColor3 = if entry.ok == true then GOOD elseif entry.ok == false then BAD else LOOK.Muted
-			l.Visible = true
-		else
-			-- Before the first answer, the strip says what it is for.
-			l.Text = if i == 1 then "The server's answers show here, newest first." else ""
-			l.TextColor3 = LOOK.Muted
-			l.Visible = i == 1
-		end
-	end
-	ui.log.CanvasPosition = Vector2.zero
-end
-
+local answerSeq = 0
 local function note(text: string, ok: boolean?)
-	table.insert(state.log, 1, { at = os.date("%H:%M:%S") :: string, text = text, ok = ok })
-	while #state.log > 5 do
-		table.remove(state.log)
+	answerSeq += 1
+	local mine = answerSeq
+	local pill: Frame, words: TextLabel, edge: UIStroke = ui.answer, ui.answerWords, ui.answerEdge
+	local r = ui.layout and ui.layout.answer
+	local most = if r then r.w else 400
+	local bounds = TextService:GetTextSize(text, 14, LOOK.BodyBoldFont, Vector2.new(math.max(40, most - 24), 1000))
+	local w = math.min(most, math.ceil(bounds.X) + 28)
+	local h = math.max(M.AnswerH, math.ceil(bounds.Y) + 10)
+	if r then
+		pill.Position = UDim2.fromOffset(r.x + math.floor((r.w - w) / 2), r.y + r.h - h)
 	end
-	paintLog()
+	pill.Size = UDim2.fromOffset(w, h)
+	words.Text = text
+	pill.BackgroundColor3 = if ok == true then GOOD elseif ok == false then BAD else NEUTRAL
+	pill.BackgroundTransparency = 0
+	edge.Transparency = 0
+	words.TextTransparency = 0
+	words.TextStrokeTransparency = 0.55
+	pill.Visible = true
+	task.delay(M.AnswerSeconds, function()
+		if mine ~= answerSeq then
+			return
+		end
+		local fade = TweenInfo.new(M.AnswerFade)
+		TweenService:Create(pill, fade, { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(edge, fade, { Transparency = 1 }):Play()
+		TweenService:Create(words, fade, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+		task.delay(M.AnswerFade, function()
+			if mine == answerSeq then
+				pill.Visible = false
+			end
+		end)
+	end)
 end
-paintLog()
 
 --==============================================================================
 -- THE TARGET: a UserId, always somebody in this server, you by default
@@ -816,29 +935,35 @@ end
 --==============================================================================
 -- PLAYER: ADD MONEY, ADD SPEED, RESET PROGRESS
 --==============================================================================
-local function grantCard(holder: Instance, key: string, title: string, money: boolean): any
-	local col = build.column(holder, key, 6)
-	build.heading(col, title)
+-- One card: the box beside its button, the quick chips, the full number (the
+-- limit while the box is empty).
+local function grantCard(holder: Instance, key: string, money: boolean): any
+	local col = build.column(holder, key, ROW_GAP)
 	local card = build.card(col, "Card")
 	local limit = attr(if money then "MaxMoney" else "MaxSpeed", 1e15)
-	local box = build.box(card, "Amount", "e.g. 1.5T, 250,000 or 1Qd", 40)
+	local row = build.action(card, "AmountRow", "half", { { if money then "AddMoney" else "AddSpeed",
+		if money then "ADD MONEY" else "ADD SPEED" } }, 112)
+	local box = build.box(row.frame, "Amount", if money then "Money: 1.5T, 250,000, 1Qd" else "Speed: 1.5T, 250,000, 1Qd")
+	row.left = box
+	local go = row.buttons[1]
 	local chips: { any } = {}
 	local specs: { { string } } = {}
 	for _, chip in ipairs(Model.chips(limit)) do
 		table.insert(specs, { "Chip" .. chip.label, chip.label })
 	end
-	local row = build.buttons(card, 5, 48, "half", specs, 32)
+	local quick = build.buttons(card, 5, M.GrantChipMinW, "half", specs)
 	for i, chip in ipairs(Model.chips(limit)) do
-		row[i].style("sky")
-		chips[i] = { button = row[i], value = chip.value }
+		quick[i].style("sky")
+		chips[i] = { button = quick[i], value = chip.value }
 	end
-	local full = build.line(card, "Full", 15, LOOK.Muted)
+	local full = build.line(card, "Full", 14, LOOK.Muted)
 	full.Font = LOOK.BodyBoldFont
-	local limitLine = build.line(card, "Limit", 12, LOOK.Muted)
-	limitLine.Text = string.format("LIMIT %s%s%s A REQUEST", if money then "$" else "", Model.commas(limit),
-		if money then "" else " SPEED")
-	local go = build.buttons(card, 1, 120, "half", { { if money then "AddMoney" else "AddSpeed",
-		if money then "ADD MONEY" else "ADD SPEED" } })[1]
+	full.AutomaticSize = Enum.AutomaticSize.None
+	full.TextScaled = true
+	local fullFit = Instance.new("UITextSizeConstraint")
+	fullFit.MaxTextSize = 14
+	fullFit.MinTextSize = TEXT_MIN
+	fullFit.Parent = full
 	if money then
 		go.style("go")
 	else
@@ -849,7 +974,9 @@ local function grantCard(holder: Instance, key: string, title: string, money: bo
 			box.Text = Model.commas(chip.value)
 		end)
 	end
-	return { column = col, box = box, full = full, go = go, money = money, limit = limit }
+	local limitText = string.format("LIMIT %s%s%s", if money then "$" else "", Model.commas(limit),
+		if money then "" else " SPEED")
+	return { column = col, box = box, full = full, go = go, money = money, limit = limit, limitText = limitText }
 end
 
 do
@@ -864,24 +991,42 @@ do
 	pair.Parent = page
 	local pairList = Instance.new("UIListLayout")
 	pairList.SortOrder = Enum.SortOrder.LayoutOrder
-	pairList.Padding = UDim.new(0, 8)
+	pairList.Padding = UDim.new(0, SECTION_GAP)
 	pairList.Parent = pair
 	ui.grantPair, ui.grantPairList = pair, pairList
-	ui.money = grantCard(pair, "Money", "ADD MONEY", true)
-	ui.speed = grantCard(pair, "Speed", "ADD SPEED", false)
+	ui.money = grantCard(pair, "Money", true)
+	ui.speed = grantCard(pair, "Speed", false)
 
-	-- RESET PROGRESS: its own red box at the bottom, behind the typed username.
-	local col = build.column(page, "Reset", 6)
-	build.heading(col, "RESET PROGRESS", Color3.fromRGB(255, 196, 188))
+	-- RESET PROGRESS: one red button, which opens the red box -- and in it the
+	-- username typed back unlocks RESET PROGRESS, as before.
+	local col = build.column(page, "Reset", ROW_GAP)
+	local opener = build.action(col, "Opener", "page", { { "OpenReset", "RESET PROGRESS\u{2026}" } }, 200)
+	-- White with its ink edge (MenuKit.body's): it stands on the dark plate, not a card.
+	local why = MenuKit.body(opener.frame, "Why", 12, WHITE, Z + 1)
+	why.TextWrapped = true
+	why.TextXAlignment = Enum.TextXAlignment.Left
+	why.Text = "Erases the target's progress and saves. It asks for their username first."
+	opener.left = why
+	opener.inset = 0
+	ui.openReset = opener.buttons[1]
+	face(ui.openReset, "danger")
+	ui.resetOpener = opener.frame
 	local card = build.card(col, "Danger", true)
-	ui.resetWho = build.line(card, "Who", 15, TEXT)
+	card.Visible = false
+	ui.resetCard = card
+	build.heading(card, "RESET PROGRESS", Color3.fromRGB(255, 196, 188))
+	ui.resetWho = build.line(card, "Who", 14, TEXT)
 	ui.resetWho.Font = LOOK.BodyBoldFont
-	build.line(card, "Erases", 13, TEXT).Text = "ERASES AND SAVES: cash, Speed, every plant and pod, the bag, bought "
+	build.line(card, "Erases", 12, TEXT).Text = "ERASES AND SAVES: cash, Speed, every plant and pod, the bag, bought "
 		.. "weapons, plot and mill upgrades, the Almanac and harvests, tutorial progress, offline earnings. KEPT: game "
 		.. "passes, Robux purchase records, the Walk Mode setting. This cannot be undone."
-	ui.typeCaption = build.line(card, "TypeCaption", 13, BAD)
-	ui.typedBox = build.box(card, "TypedUsername", "Username", 40)
-	ui.resetButton = build.buttons(card, 1, 120, "full", { { "ResetPlayerProgress", "RESET PROGRESS" } })[1]
+	ui.typeCaption = build.line(card, "TypeCaption", 12, BAD)
+	local typed = build.action(card, "Typed", "full", { { "CloseReset", "CANCEL" },
+		{ "ResetPlayerProgress", "RESET PROGRESS" } }, 150)
+	ui.typedBox = build.box(typed.frame, "TypedUsername", "Username")
+	typed.left = ui.typedBox
+	ui.closeReset, ui.resetButton = typed.buttons[1], typed.buttons[2]
+	ui.closeReset.style("idle")
 	ui.resetHint = build.line(card, "Hint", 12, LOOK.Muted)
 end
 
@@ -919,17 +1064,17 @@ do
 	ui.groupChips = {}
 	ui.groupOrder = {}
 	for i, g in ipairs(groups) do
-		local b = MenuKit.button(chips, "Group_" .. g.id, Z + 2, g.label, 13)
+		local b = floored(MenuKit.button(chips, "Group_" .. g.id, Z + 2, g.label, 13))
 		b.hit.LayoutOrder = i
 		b.hit.Selectable = true
-		b.hit.Size = UDim2.fromOffset(math.max(84, MenuKit.textWidth(g.label, 13) + 24), 30)
+		b.hit.Size = UDim2.fromOffset(math.max(84, MenuKit.textWidth(g.label, 13) + 24), M.ToolbarShort)
 		ui.groupChips[g.id] = b
 		ui.groupOrder[i] = g.id
 	end
 	ui.chipArrows = {}
 	for _, side in ipairs({ -1, 1 }) do
-		local arrow = MenuKit.button(toolbar, if side < 0 then "ChipsBack" else "ChipsOn", Z + 2,
-			if side < 0 then "<" else ">", 14)
+		local arrow = floored(MenuKit.button(toolbar, if side < 0 then "ChipsBack" else "ChipsOn", Z + 2,
+			if side < 0 then "<" else ">", 14))
 		arrow.hit.Selectable = true
 		arrow.hit.Visible = false
 		arrow.hit.Activated:Connect(function()
@@ -961,13 +1106,13 @@ do
 	grid.Parent = page
 	local layout = Instance.new("UIGridLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.CellPadding = UDim2.fromOffset(Model.Metrics.CardGap, Model.Metrics.CardGap)
+	layout.CellPadding = UDim2.fromOffset(M.CardGap, M.CardGap)
 	layout.Parent = grid
 	local gridPad = Instance.new("UIPadding")
-	gridPad.PaddingTop = UDim.new(0, Model.Metrics.GridInset)
-	gridPad.PaddingBottom = UDim.new(0, Model.Metrics.GridInset)
-	gridPad.PaddingLeft = UDim.new(0, Model.Metrics.GridInset)
-	gridPad.PaddingRight = UDim.new(0, Model.Metrics.GridInset)
+	gridPad.PaddingTop = UDim.new(0, M.GridInset)
+	gridPad.PaddingBottom = UDim.new(0, M.GridInset)
+	gridPad.PaddingLeft = UDim.new(0, M.GridInset)
+	gridPad.PaddingRight = UDim.new(0, M.GridInset)
 	gridPad.Parent = grid
 	ui.grid, ui.gridLayout = grid, layout
 
@@ -982,28 +1127,46 @@ do
 	MenuKit.cardFace(controls)
 	MenuKit.keyline(controls, LOOK.CardEdge, 1.5, LOOK.CardEdgeTransparency)
 	ui.controls = controls
-	local options = build.list(controls, "Options", 5)
+	local options = build.list(controls, "Options", ROW_GAP)
 	options.ZIndex = Z + 1
 	ui.options = options
-	ui.picked = build.line(options, "Picked", 15, TEXT)
-	ui.picked.Font = LOOK.LabelFont
-	local forms = build.buttons(options, 2, 90, "controls", { { "Pod", "POD" }, { "Grown", "GROWN PLANT" } }, 34)
+	local forms = build.buttons(options, 2, M.FormMinW, "controls", { { "Pod", "POD" }, { "Grown", "GROWN PLANT" } })
 	ui.pickPod, ui.pickGrown = forms[1], forms[2]
-	ui.sizeCaption = build.line(options, "SizeCaption", 12, LOOK.Muted)
-	local sizeSpecs: { { string } } = {}
-	for tier = 1, SeedData.TierCount do
-		table.insert(sizeSpecs, { "Size" .. tier, string.upper(SeedData.TierName(tier)) })
-	end
-	ui.sizeChips = build.buttons(options, 4, 64, "controls", sizeSpecs, 32)
-	ui.sizeRow = ui.sizeChips[1].hit.Parent
-	local qty = build.buttons(options, 3, 44, "controls", { { "Less", "\u{2212}" }, { "Count", "1" }, { "More", "+" } }, 36)
-	ui.less, ui.count, ui.more = qty[1], qty[2], qty[3]
+	-- THE SIZE (2026-10-12): stepped through the sizes the species comes in,
+	-- beside how many (relayout: placeSizeQty).
+	local sizeQty = Instance.new("Frame")
+	sizeQty.Name = "SizeAndCount"
+	sizeQty.BackgroundTransparency = 1
+	sizeQty.Size = UDim2.new(1, 0, 0, M.RowTouch)
+	sizeQty.LayoutOrder = nextIn(options)
+	sizeQty.Parent = options
+	ui.sizeQty = sizeQty
+	ui.sizeBack = floored(MenuKit.button(sizeQty, "SizeDown", Z + 1, "<", 15))
+	ui.sizeOn = floored(MenuKit.button(sizeQty, "SizeUp", Z + 1, ">", 15))
+	ui.sizeBack.hit.Selectable = true
+	ui.sizeOn.hit.Selectable = true
+	local sizeWell = MenuKit.frame(sizeQty, "Size", Z + 1, LOOK.Well, LOOK.WellTransparency, 9)
+	MenuKit.keyline(sizeWell, LOOK.WellEdge, 1)
+	ui.sizeWell = sizeWell
+	local sizeWord = MenuKit.text(sizeWell, "Word", 14, TEXT, Z + 2)
+	sizeWord.Position = UDim2.fromOffset(4, 0)
+	sizeWord.Size = UDim2.new(1, -8, 1, 0)
+	sizeWord.TextScaled = true
+	local sizeFit = Instance.new("UITextSizeConstraint")
+	sizeFit.MaxTextSize = 14
+	sizeFit.MinTextSize = TEXT_MIN
+	sizeFit.Parent = sizeWord
+	ui.sizeWord = sizeWord
+	ui.less = floored(MenuKit.button(sizeQty, "Less", Z + 1, "\u{2212}", 15))
+	ui.count = floored(MenuKit.button(sizeQty, "Count", Z + 1, "1", 15))
+	ui.more = floored(MenuKit.button(sizeQty, "More", Z + 1, "+", 15))
+	ui.less.hit.Selectable = true
+	ui.more.hit.Selectable = true
 	ui.less.style("sky")
 	ui.more.style("sky")
 	ui.count.style("idle")
 	ui.count.hit.Selectable = false
-	ui.room = build.line(options, "Room", 12, LOOK.Muted)
-	ui.preview = build.line(options, "Preview", 15, TEXT)
+	ui.preview = build.line(options, "Preview", 14, TEXT)
 	ui.preview.Font = LOOK.BodyBoldFont
 
 	-- SPAWN, or the question that stands in for it.
@@ -1013,7 +1176,7 @@ do
 	go.ZIndex = Z + 1
 	go.Parent = controls
 	ui.go = go
-	local spawnButton = MenuKit.button(go, "Spawn", Z + 2, "SPAWN", 18, { studs = true })
+	local spawnButton = floored(MenuKit.button(go, "Spawn", Z + 2, "SPAWN", 18, { studs = true }))
 	spawnButton.hit.Size = UDim2.fromScale(1, 1)
 	spawnButton.hit.Selectable = true
 	spawnButton.style("go")
@@ -1025,11 +1188,11 @@ do
 	giveRow.Visible = false
 	giveRow.Parent = go
 	ui.giveRow = giveRow
-	local cancel = MenuKit.button(giveRow, "Cancel", Z + 2, "CANCEL", 15)
+	local cancel = floored(MenuKit.button(giveRow, "Cancel", Z + 2, "CANCEL", 15))
 	cancel.hit.Size = UDim2.new(0.4, -3, 1, 0)
 	cancel.hit.Selectable = true
 	cancel.style("idle")
-	local give = MenuKit.button(giveRow, "Give", Z + 2, "GIVE", 16, { studs = true })
+	local give = floored(MenuKit.button(giveRow, "Give", Z + 2, "GIVE", 16, { studs = true }))
 	give.hit.AnchorPoint = Vector2.new(1, 0)
 	give.hit.Position = UDim2.fromScale(1, 0)
 	give.hit.Size = UDim2.new(0.6, -3, 1, 0)
@@ -1078,69 +1241,106 @@ do
 	end
 end
 
+-- SPAWN's size stepper beside how many, `w` wide (one over the other where
+-- narrower than ConsoleModel's SpawnRowMinW).
+local function placeSizeQty(w: number, rowH: number)
+	local arrow, countW = M.StepArrowW, M.CountW
+	local one = w >= M.SpawnRowMinW
+	local qtyW = arrow * 2 + countW + COL_GAP * 2
+	local stepW = if one then w - qtyW - COL_GAP else w
+	local qx = if one then stepW + COL_GAP else 0
+	local qy = if one then 0 else rowH + ROW_GAP
+	ui.sizeBack.hit.Position = UDim2.fromOffset(0, 0)
+	ui.sizeBack.hit.Size = UDim2.fromOffset(arrow, rowH)
+	ui.sizeWell.Position = UDim2.fromOffset(arrow + COL_GAP, 4)
+	ui.sizeWell.Size = UDim2.fromOffset(math.max(0, stepW - (arrow + COL_GAP) * 2), rowH - 8)
+	ui.sizeOn.hit.Position = UDim2.fromOffset(stepW - arrow, 0)
+	ui.sizeOn.hit.Size = UDim2.fromOffset(arrow, rowH)
+	ui.less.hit.Position = UDim2.fromOffset(qx, qy)
+	ui.less.hit.Size = UDim2.fromOffset(arrow, rowH)
+	ui.count.hit.Position = UDim2.fromOffset(qx + arrow + COL_GAP, qy)
+	ui.count.hit.Size = UDim2.fromOffset(countW, rowH)
+	ui.more.hit.Position = UDim2.fromOffset(qx + arrow + COL_GAP * 2 + countW, qy)
+	ui.more.hit.Size = UDim2.fromOffset(arrow, rowH)
+	ui.sizeQty.Size = UDim2.new(1, 0, 0, Model.spawnRowHeight(w, rowH))
+end
+
 --==============================================================================
--- WORLD: THE DAY AND THE NIGHT, THE WEATHER (EVERY ADMIN'S), THE MINI EVENTS
+-- WORLD: THE DAY AND THE NIGHT, THE WEATHER (EVERY ADMIN'S), THE MIST
+--
+-- Each section one card: its state -- captioned with whom it reaches -- beside
+-- the buttons that change it, and the weather's duration chips under its row.
 --==============================================================================
 do
 	local page = ui.page.world
-	local day = build.column(page, "DayNight", 6)
-	build.heading(day, "DAY & NIGHT \u{00B7} WHOLE SERVER")
-	local dayCard = build.card(day, "Card")
-	ui.phaseLabel, ui.phaseDot = build.state(dayCard, "Phase")
-	local dayRow = build.buttons(dayCard, 2, 140, "full", { { "StartNight", "START NIGHT" }, { "StartDay", "START DAY" } })
-	ui.startNight, ui.startDay = dayRow[1], dayRow[2]
+	local dayCard = build.card(page, "DayNight")
+	local dayRow = build.action(dayCard, "Phase", "full", { { "StartNight", "START NIGHT" }, { "StartDay", "START DAY" } })
+	ui.phaseLabel, ui.phaseDot, dayRow.left = build.state(dayRow.frame, "Phase", "DAY & NIGHT \u{00B7} WHOLE SERVER")
+	ui.startNight, ui.startDay = dayRow.buttons[1], dayRow.buttons[2]
 	face(ui.startNight, "night")
 	ui.startDay.style("done")
 
 	-- The weather: every admin account's since 2026-10-07 (the owner's alone
 	-- before), so every console shows it (ConsoleModel.sections); the server
 	-- checks the allowlist either way, and every change still asks in place.
-	local weather = build.column(page, "Weather", 6)
-	build.heading(weather, "WEATHER \u{00B7} THIS SERVER")
-	local wCard = build.card(weather, "Card")
-	ui.rainLabel, ui.rainDot = build.state(wCard, "Rain")
-	build.line(wCard, "DurationCaption", 12, LOOK.Muted).Text =
-		string.format("DURATION (SECONDS, %d TO %d)", WEATHER.MinSeconds, WEATHER.MaxSeconds)
-	ui.rainBox = build.box(wCard, "RainSeconds", string.format("Whole seconds, %d to %d", WEATHER.MinSeconds,
-		WEATHER.MaxSeconds), 40)
-	ui.rainBox.Text = tostring(WEATHER.DefaultSeconds)
-	local wRow = build.buttons(wCard, 3, 120, "full", { { "StartRain", "START RAIN" },
+	-- How long: a duration chip (2026-10-12) in place of the seconds box.
+	local wCard = build.card(page, "Weather")
+	local wRow = build.action(wCard, "Rain", "full", { { "StartRain", "START RAIN" },
 		{ "StartThunder", "THUNDERSTORM" }, { "EndRain", "STOP" } })
-	ui.startRain, ui.startThunder, ui.endRain = wRow[1], wRow[2], wRow[3]
+	ui.rainLabel, ui.rainDot, wRow.left = build.state(wRow.frame, "Rain", "WEATHER \u{00B7} THIS SERVER")
+	ui.startRain, ui.startThunder, ui.endRain = wRow.buttons[1], wRow.buttons[2], wRow.buttons[3]
 	face(ui.startRain, "rain")
 	face(ui.startThunder, "thunder")
 	face(ui.endRain, "danger")
 	ui.weatherRow = ui.startRain.hit.Parent
 	ui.weatherAsk = build.question(wCard, "WeatherQuestion", "full", "CONFIRM")
-	ui.weatherSection = weather
+	local rainSpecs: { { string } } = {}
+	for _, seconds in ipairs(Model.WeatherSeconds) do
+		table.insert(rainSpecs, { "Rain" .. seconds, Model.durationLabel(seconds) })
+	end
+	local rainChips = build.buttons(wCard, 4, M.ChipMinW, "full", rainSpecs)
+	ui.rainChips = {}
+	for i, seconds in ipairs(Model.WeatherSeconds) do
+		ui.rainChips[i] = { seconds = seconds, button = rainChips[i] }
+	end
+	ui.weatherSection = wCard
 
 	-- The Enchanted Mist (2026-10-11, the owner): START MIST NOW and END MIST
 	-- NOW for this server -- a normal Mist even while its schedule is off. Every
 	-- admin account's (the server checks the allowlist), each asking in place
 	-- like the weather's.
-	local mist = build.column(page, "Mist", 6)
-	build.heading(mist, "ENCHANTED MIST \u{00B7} THIS SERVER")
-	local mistCard = build.card(mist, "Card")
-	ui.mistLabel, ui.mistDot = build.state(mistCard, "MistStatus")
-	local mistRow = build.buttons(mistCard, 2, 140, "full", { { "StartMist", "START MIST NOW" },
+	local mistCard = build.card(page, "Mist")
+	local mistRow = build.action(mistCard, "Mist", "full", { { "StartMist", "START MIST NOW" },
 		{ "EndMist", "END MIST NOW" } })
-	ui.startMist, ui.endMist = mistRow[1], mistRow[2]
+	ui.mistLabel, ui.mistDot, mistRow.left = build.state(mistRow.frame, "MistStatus",
+		"ENCHANTED MIST \u{00B7} THIS SERVER")
+	ui.startMist, ui.endMist = mistRow.buttons[1], mistRow.buttons[2]
 	face(ui.startMist, "mist")
 	face(ui.endMist, "danger")
 	ui.mistRow = ui.startMist.hit.Parent
 	ui.mistAsk = build.question(mistCard, "MistQuestion", "full", "CONFIRM")
-	ui.mistSection = mist
+	ui.mistSection = mistCard
+end
 
-	local mini = build.column(page, "Events", 6)
-	build.heading(mini, "MINI EVENTS \u{00B7} EVERY SERVER")
-	local mCard = build.card(mini, "Card")
-	ui.miniLabel, ui.miniDot = build.state(mCard, "MiniStatus")
-	ui.miniSync = build.line(mCard, "MiniSync", 12, LOOK.Muted)
-	local modes = build.buttons(mCard, 2, 140, "full", {
+--==============================================================================
+-- EVENTS: THE MINI EVENTS, ON EVERY SERVER (their own tab since 2026-10-12)
+--==============================================================================
+do
+	local page = ui.page.events
+	local mCard = build.card(page, "Events")
+	local mRow = build.action(mCard, "Mini", "full", { { "StartGlobalEvent", "START EVENT" },
+		{ "EndGlobalEvent", "END EVENT" } })
+	ui.miniLabel, ui.miniDot, mRow.left = build.state(mRow.frame, "MiniStatus", "MINI EVENTS \u{00B7} EVERY SERVER")
+	ui.startMini, ui.endMini = mRow.buttons[1], mRow.buttons[2]
+	ui.startMini.style("go")
+	face(ui.endMini, "danger")
+	ui.miniRow = ui.startMini.hit.Parent
+	ui.miniAsk = build.question(mCard, "MiniQuestion", "full", "CONFIRM")
+	local modes = build.buttons(mCard, 5, M.ModeMinW, "full", {
 		{ "DiscoOnly", "DISCO ONLY" }, { "DiscoMill", "DISCO + MILL" },
 		{ "TicketDisco", "TICKET DISCO" }, { "TicketShowerOnly", "TICKET SHOWER ONLY" },
 		{ "PodRush", "POD RUSH" },
-	}, 38)
+	})
 	ui.miniChoices = {
 		{ verb = "party", button = modes[1] },
 		{ verb = "disco", button = modes[2] },
@@ -1148,19 +1348,20 @@ do
 		{ verb = "tickets", button = modes[4] },
 		{ verb = "podrush", button = modes[5] },
 	}
+	local miniSpecs: { { string } } = {}
+	for _, seconds in ipairs(Model.EventSeconds) do
+		table.insert(miniSpecs, { "Mini" .. seconds, Model.durationLabel(seconds) })
+	end
+	local miniChips = build.buttons(mCard, 4, M.ChipMinW, "full", miniSpecs)
+	ui.miniChips = {}
+	for i, seconds in ipairs(Model.EventSeconds) do
+		ui.miniChips[i] = { seconds = seconds, button = miniChips[i] }
+	end
 	ui.miniHelp = build.line(mCard, "ModeWords", 12, TEXT)
-	build.line(mCard, "DurationCaption", 12, LOOK.Muted).Text =
-		string.format("DURATION (SECONDS, %d TO %d)", MINI.MinSeconds, MINI.MaxSeconds)
-	ui.miniBox = build.box(mCard, "MiniSeconds", string.format("Whole seconds, %d to %d", MINI.MinSeconds,
-		MINI.MaxSeconds), 40)
-	ui.miniBox.Text = tostring(MINI.DefaultSeconds)
-	local mRow = build.buttons(mCard, 2, 140, "full", { { "StartGlobalEvent", "START EVENT" },
-		{ "EndGlobalEvent", "END EVENT" } })
-	ui.startMini, ui.endMini = mRow[1], mRow[2]
-	ui.startMini.style("go")
-	face(ui.endMini, "danger")
-	ui.miniRow = ui.startMini.hit.Parent
-	ui.miniAsk = build.question(mCard, "MiniQuestion", "full", "CONFIRM")
+	ui.miniSync = build.line(mCard, "MiniSync", 12, LOOK.Muted)
+	ui.miniSync.AutomaticSize = Enum.AutomaticSize.None
+	ui.miniSync.TextWrapped = false
+	ui.miniSync.TextTruncate = Enum.TextTruncate.AtEnd
 end
 
 --==============================================================================
@@ -1168,18 +1369,26 @@ end
 --==============================================================================
 do
 	local page = ui.page.announce
-	local col = build.column(page, "Announce", 6)
-	build.heading(col, "ANNOUNCE")
-	local card = build.card(col, "Card")
-	local scopeRow = build.buttons(card, 2, 140, "full", { { "ThisServer", "THIS SERVER" }, { "AllServers", "ALL SERVERS" } })
+	local card = build.card(page, "Announce")
+	local scopeRow = build.buttons(card, 2, M.ScopeMinW, "full", { { "ThisServer", "THIS SERVER" },
+		{ "AllServers", "ALL SERVERS" } })
 	ui.thisServer, ui.allServers = scopeRow[1], scopeRow[2]
-	ui.messageBox = build.box(card, "Message", string.format("Message, up to %d characters", ANNOUNCE.MaxChars), 84)
+	ui.messageBox = build.box(card, "Message", string.format("Message, up to %d characters", ANNOUNCE.MaxChars),
+		M.MessageH)
 	ui.messageBox.TextWrapped = true
 	ui.messageBox.TextYAlignment = Enum.TextYAlignment.Top
 	ui.messageBox.MultiLine = true
-	ui.counter = build.line(card, "Counter", 12, LOOK.Muted)
-	ui.counter.TextXAlignment = Enum.TextXAlignment.Right
-	ui.send = build.buttons(card, 1, 140, "full", { { "Send", "SEND TO THIS SERVER" } })[1]
+	local boxPad = ui.messageBox:FindFirstChildOfClass("UIPadding")
+	if boxPad then
+		boxPad.PaddingTop = UDim.new(0, 6)
+	end
+	-- The count beside SEND.
+	local sendRow = build.action(card, "SendRow", "full", { { "Send", "SEND TO THIS SERVER" } })
+	ui.counter = MenuKit.body(sendRow.frame, "Counter", 13, LOOK.Muted, Z + 1)
+	ui.counter.TextXAlignment = Enum.TextXAlignment.Left
+	sendRow.left = ui.counter
+	sendRow.inset = 0
+	ui.send = sendRow.buttons[1]
 	ui.send.style("done")
 	ui.sendRow = ui.send.hit.Parent
 	ui.allAsk = build.question(card, "AllQuestion", "full", "YES, ALL SERVERS")
@@ -1212,6 +1421,8 @@ local function relayout()
 	local hudScale = if HudLayout.isTenFoot() and camera then HudLayout.tenFootScale(camera.ViewportSize) else 1
 	local f = k / hudScale
 	local short = safe.Y - 16 < MenuLayout.Config.ShortBelow
+	-- ADMIN on a short screen, so the five tabs fit beside it (ConsoleModel.title).
+	modal.title.Text = Model.title(short)
 	-- Each group chip's width, in order: its label plus padding, never under 84.
 	local chipWidths: { number } = {}
 	for i, g in ipairs(groups) do
@@ -1224,11 +1435,8 @@ local function relayout()
 		rightLeft = hud.rightLeft / f,
 		keyboardTop = keyboardTop(),
 	}, GameConfig.Rail.OutlineThickness, MenuKit.titleWidth(menu, short), chipWidths)
+	ui.layout = L
 	menu.place(L.panel)
-	local function put(object: GuiObject, r: any)
-		object.Position = UDim2.fromOffset(r.x, r.y)
-		object.Size = UDim2.fromOffset(r.w, r.h)
-	end
 	put(ui.tabStrip, L.tabs)
 	for _, tab in ipairs(Model.Tabs) do
 		ui.tabs[tab.id].hit.Size = UDim2.fromOffset(L.tabW, L.tabs.h)
@@ -1248,8 +1456,10 @@ local function relayout()
 	ui.targetChange.AnchorPoint = Vector2.new(1, 0.5)
 	ui.targetChange.Position = UDim2.new(1, -8, 0.5, 0)
 	ui.targetChange.Size = UDim2.fromOffset(56, th - 8)
-	put(ui.pages, L.page)
-	put(ui.log, L.log)
+	-- The page: under the target bar on the tabs that act on a player, in the
+	-- bar's room too elsewhere (paint.tabs keeps it so on every tab change).
+	put(ui.pages, if Model.TargetTabs[state.tab] then L.page else L.pageFull)
+	local rowH = L.rowH
 
 	-- SPAWN, inside the page.
 	put(ui.toolbar, L.toolbar)
@@ -1257,12 +1467,12 @@ local function relayout()
 	ui.search.frame.AnchorPoint = Vector2.new(0, 0)
 	put(ui.search.frame, L.search)
 	-- Every group shows: wrapped into rows, or scrolling between the arrows.
-	local rowH = L.search.h
-	local places, _ = Model.chipPlaces(chipWidths, L.chips.w, rowH, L.chipsWrap)
+	local chipH = L.search.h
+	local places, _ = Model.chipPlaces(chipWidths, L.chips.w, chipH, L.chipsWrap)
 	local total = 0
 	for i, id in ipairs(ui.groupOrder) do
 		local chip = ui.groupChips[id].hit
-		chip.Size = UDim2.fromOffset(chipWidths[i], rowH)
+		chip.Size = UDim2.fromOffset(chipWidths[i], chipH)
 		chip.Position = UDim2.fromOffset(places[i][1], places[i][2])
 		total = math.max(total, places[i][1] + chipWidths[i])
 	end
@@ -1273,9 +1483,9 @@ local function relayout()
 	ui.groupStrip.CanvasPosition = Vector2.new(0, 0)
 	for side, arrow in pairs(ui.chipArrows) do
 		arrow.hit.Visible = L.chipArrows
-		arrow.hit.Size = UDim2.fromOffset(Model.Metrics.ChipArrowW, rowH)
+		arrow.hit.Size = UDim2.fromOffset(M.ChipArrowW, chipH)
 		arrow.hit.Position = UDim2.fromOffset(
-			if side < 0 then 0 else L.chips.x + L.chips.w + Model.Metrics.ChipGap, 0)
+			if side < 0 then 0 else L.chips.x + L.chips.w + M.ChipGap, 0)
 	end
 	put(ui.grid, L.grid)
 	ui.gridLayout.CellSize = UDim2.fromOffset(L.cardW, L.cardH)
@@ -1291,31 +1501,37 @@ local function relayout()
 		end
 	end
 	put(ui.controls, L.controls)
-	local goH = if L.panel.short then 40 else 48
 	ui.options.Position = UDim2.fromOffset(0, 0)
-	ui.options.Size = UDim2.new(1, 0, 1, -(goH + 8))
-	ui.go.Position = UDim2.new(0, CARD_PAD, 1, -(goH + 6))
-	ui.go.Size = UDim2.new(1, -CARD_PAD * 2, 0, goH)
+	ui.options.Size = UDim2.new(1, 0, 1, -(rowH + CARD_PAD + ROW_GAP))
+	ui.go.Position = UDim2.new(0, CARD_PAD, 1, -(rowH + CARD_PAD))
+	ui.go.Size = UDim2.new(1, -CARD_PAD * 2, 0, rowH)
 
 	-- PLAYER: money and Speed side by side, or one over the other.
 	local pageInner = L.page.w - PAGE_PAD * 2 - BAR
 	ui.grantPairList.FillDirection = if L.playerSplit then Enum.FillDirection.Horizontal else Enum.FillDirection.Vertical
-	local half = if L.playerSplit then math.floor((pageInner - 8) / 2) else pageInner
+	ui.grantPairList.Padding = UDim.new(0, if L.playerSplit then COL_GAP else SECTION_GAP)
+	local half = if L.playerSplit then math.floor((pageInner - COL_GAP) / 2) else pageInner
 	ui.money.column.Size = UDim2.new(0, half, 0, 0)
 	ui.speed.column.Size = UDim2.new(0, half, 0, 0)
 
-	-- Every row of buttons: as many abreast as its width allows.
+	-- Every row at the screen's row height: rows of buttons as many abreast as
+	-- their width allows, rows of state and action side by side or one over
+	-- the other -- the same rules ConsoleModel.pageHeight counts by.
 	local widths = {
+		page = pageInner,
 		full = pageInner - CARD_PAD * 2,
 		half = half - CARD_PAD * 2,
 		controls = L.controls.w - PAGE_PAD * 2 - BAR,
 	}
 	for _, g in ipairs(grids) do
 		local w = widths[g.scope] or widths.full
-		local cols = math.clamp(math.floor((w + 6) / (g.min + 6)), 1, g.max)
-		g.grid.CellSize = UDim2.fromOffset(math.max(1, math.floor((w - (cols - 1) * 6) / cols)),
-			g.grid.CellSize.Y.Offset)
+		local cols = Model.perRow(w, g.min, g.max)
+		g.grid.CellSize = UDim2.fromOffset(math.max(1, math.floor((w - (cols - 1) * COL_GAP) / cols)), rowH)
 	end
+	for _, row in ipairs(actionRows) do
+		placeAction(row, widths[row.scope] or widths.full, rowH)
+	end
+	placeSizeQty(widths.controls, rowH)
 	paint.all()
 end
 deck:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
@@ -1329,7 +1545,7 @@ end)
 -- One request at a time; the server allows one a second (an announcement
 -- excepted), so a press inside that second waits it out rather than being
 -- refused. Every button sends what ConsoleModel.args builds, through the one
--- RemoteFunction; what the server answered is the log.
+-- RemoteFunction; what the server answered is the answer line.
 --==============================================================================
 local function invoke(a: any): (boolean, any)
 	return pcall(function()
@@ -1386,6 +1602,14 @@ function paint.tabs()
 		page.Visible = state.open and id == state.tab and not state.listOpen
 	end
 	ui.sheet.Visible = state.open and state.listOpen
+	-- The target bar only on the tabs that act on a player (ConsoleModel.TargetTabs):
+	-- elsewhere the page takes its room.
+	local targeted = Model.TargetTabs[state.tab] == true
+	ui.targetBar.Visible = targeted
+	local L = ui.layout
+	if L then
+		put(ui.pages, if targeted then L.page else L.pageFull)
+	end
 	-- The weather for every admin account (2026-10-07).
 	local shown = Model.sections("world")
 	ui.weatherSection.Visible = table.find(shown, "weather") ~= nil
@@ -1426,7 +1650,7 @@ end
 function paint.player()
 	for _, g in ipairs({ ui.money, ui.speed }) do
 		local line, good = Model.fullLine(g.box.Text, g.limit, g.money)
-		g.full.Text = if g.box.Text == "" then "Type an amount: 1.5T, 250,000, 1Qd" else line
+		g.full.Text = if g.box.Text == "" then g.limitText else line
 		g.full.TextColor3 = if g.box.Text == "" then LOOK.Muted elseif good then GOOD else BAD
 		local can = good and not state.busy
 		if g.money then
@@ -1443,6 +1667,9 @@ function paint.player()
 	local match = typedMatches()
 	lockable(ui.resetButton, match and not state.busy, "danger", if state.busy then "…" else "RESET PROGRESS")
 	ui.resetHint.Text = if match then "Press RESET PROGRESS to erase and save." else "Locked until the username matches."
+	-- The red box shows only once its button has opened it.
+	ui.resetCard.Visible = state.resetOpen
+	ui.resetOpener.Visible = not state.resetOpen
 end
 
 -- The cards shown: the search over every group, or the chosen group.
@@ -1507,40 +1734,34 @@ function paint.spawn()
 	state.quantity = Model.clampQuantity(state.quantity, room)
 	ui.pickPod.style(if state.form == "pod" then "on" else "idle")
 	ui.pickGrown.style(if state.form == "plant" then "on" else "idle")
+	-- The size, stepped through the sizes the species comes in; a species of
+	-- one size shows it with both arrows off.
+	local down: number?, up: number? = nil, nil
 	if not species then
-		ui.picked.Text = "CHOOSE A SPECIES"
-		ui.picked.TextColor3 = LOOK.Muted
-		ui.sizeCaption.Text = "SIZE"
-		ui.sizeRow.Visible = false
-		ui.preview.Text = ""
+		ui.sizeWord.Text = "SIZE"
+		ui.preview.Text = "CHOOSE A SPECIES"
+		ui.preview.TextColor3 = LOOK.Muted
 	else
 		local s = species :: SeedData.Species
-		ui.picked.Text = string.upper(s.Name) .. "  \u{00B7}  " .. string.upper(s.Rarity)
-		ui.picked.TextColor3 = TEXT
 		local sizes = SpawnCatalog.sizesOf(s)
 		if not table.find(sizes, state.size) then
 			state.size = Model.defaultSize(s, state.size)
 		end
-		local fixed = SpawnCatalog.fixedSize(s)
-		ui.sizeRow.Visible = not fixed
-		if fixed then
+		if SpawnCatalog.fixedSize(s) then
 			local word = SpawnCatalog.sizeWord(s, state.size)
-			ui.sizeCaption.Text = if word then "SIZE: " .. string.upper(word) .. " (ITS ONE SIZE)" else "ONE SIZE"
+			ui.sizeWord.Text = if word then string.upper(word) else "ONE SIZE"
 		else
-			local pod = SpawnCatalog.podOf(s, state.size)
-			ui.sizeCaption.Text = "SIZE" .. (if pod and state.form == "pod" then "  \u{00B7}  " .. string.upper(pod.Id) else "")
-		end
-		for tier, chip in ipairs(ui.sizeChips) do
-			local ok = table.find(sizes, tier) ~= nil
-			chip.style(if not ok then "off" elseif tier == state.size then "on" else "idle")
+			ui.sizeWord.Text = string.upper(SeedData.TierName(state.size))
+			down, up = Model.sizeStep(sizes, state.size, -1), Model.sizeStep(sizes, state.size, 1)
 		end
 		local name = if p == player then nil else p.Name
 		ui.preview.Text = Model.preview(s, state.size, state.form, state.quantity, name)
+		ui.preview.TextColor3 = TEXT
 	end
-	ui.count.set(tostring(state.quantity))
-	ui.room.Text = if row.ready ~= true then "BAG: LOADING"
-		else string.format("MAX %d  \u{00B7}  %d FREE IN %s BAG", math.max(most, 0), tonumber(room) or 0,
-			if p == player then "YOUR" else string.upper(p.Name) .. "'S")
+	ui.sizeBack.style(if down then "sky" else "off")
+	ui.sizeOn.style(if up then "sky" else "off")
+	-- How many, out of the most the target's bag takes now.
+	ui.count.set(if row.ready ~= true then "\u{2026}" else string.format("%d/%d", state.quantity, math.max(most, 0)))
 	-- The button: the question for anybody else; else SPAWN, its wait or its resend.
 	local asking = state.asking == "give"
 	ui.giveRow.Visible = asking
@@ -1568,6 +1789,8 @@ function paint.spawn()
 		can = false
 	elseif screen:GetAttribute("Spawning") == false then
 		word = "SPAWNING IS OFF"
+	elseif species and row.ready ~= true then
+		word = "BAG: LOADING"
 	elseif species and most < 1 then
 		word = "BAG FULL"
 	end
@@ -1639,6 +1862,13 @@ function paint.world()
 	for _, choice in ipairs(ui.miniChoices) do
 		choice.button.style(if choice.verb == state.miniMode then "on" else "idle")
 	end
+	-- The duration chips: the one chosen lit.
+	for _, chip in ipairs(ui.rainChips) do
+		chip.button.style(if chip.seconds == state.rainSeconds then "on" else "idle")
+	end
+	for _, chip in ipairs(ui.miniChips) do
+		chip.button.style(if chip.seconds == state.miniSeconds then "on" else "idle")
+	end
 	local weatherAsk = state.asking == "weather"
 	ui.weatherAsk.block.Visible = weatherAsk
 	ui.weatherRow.Visible = not weatherAsk
@@ -1676,6 +1906,8 @@ local function mainButton(): GuiObject?
 		return if ui.giveRow.Visible then ui.giveCancel.hit else ui.spawnButton.hit
 	elseif which == "StartNight" then
 		return ui.startNight.hit
+	elseif which == "StartGlobalEvent" then
+		return ui.startMini.hit
 	elseif which == "Send" then
 		return ui.send.hit
 	end
@@ -1833,6 +2065,15 @@ ui.sheetBack.hit.Activated:Connect(function()
 	setList(false)
 end)
 
+-- A list scrolled to its foot (in the gui's own units): what was just opened
+-- at the bottom of it in view.
+local function toFoot(list: ScrollingFrame)
+	task.defer(function()
+		local k = UIKit.scaleOf(deck)
+		list.CanvasPosition = Vector2.new(0, math.max(0, list.AbsoluteCanvasSize.Y - list.AbsoluteWindowSize.Y) / k)
+	end)
+end
+
 --==============================================================================
 -- PLAYER'S BUTTONS
 --==============================================================================
@@ -1849,6 +2090,20 @@ for _, g in ipairs({ ui.money, ui.speed }) do
 	end)
 end
 ui.typedBox:GetPropertyChangedSignal("Text"):Connect(paint.player)
+-- RESET PROGRESS's red box: opened by its button, shut by CANCEL (its typing gone).
+ui.openReset.hit.Activated:Connect(function()
+	state.resetOpen = true
+	paint.all()
+	toFoot(ui.page.player)
+	selectIfPad(ui.typedBox)
+end)
+ui.closeReset.hit.Activated:Connect(function()
+	state.resetOpen = false
+	ui.typedBox.Text = ""
+	paint.all()
+	note("Nothing was reset.", nil)
+	selectIfPad(ui.openReset.hit)
+end)
 ui.resetButton.hit.Activated:Connect(function()
 	if state.busy or not typedMatches() then
 		return
@@ -1899,11 +2154,17 @@ ui.pickGrown.hit.Activated:Connect(function()
 	state.form = "plant"
 	paint.all()
 end)
-for tier, chip in ipairs(ui.sizeChips) do
-	chip.hit.Activated:Connect(function()
+-- The size stepper: only ever to a size the species comes in.
+for _, side in ipairs({ -1, 1 }) do
+	local arrow = if side < 0 then ui.sizeBack else ui.sizeOn
+	arrow.hit.Activated:Connect(function()
 		local species = state.species
-		if species and SpawnCatalog.allows(species, tier) then
-			state.size = tier
+		if not species then
+			return
+		end
+		local nextSize = Model.sizeStep(SpawnCatalog.sizesOf(species), state.size, side)
+		if nextSize and SpawnCatalog.allows(species, nextSize) then
+			state.size = nextSize
 			paint.all()
 		end
 	end)
@@ -1950,8 +2211,10 @@ ui.spawnButton.hit.Activated:Connect(function()
 	end
 	local p = currentTarget()
 	if p ~= player then
-		-- Anybody but yourself: the question first, in place of the button.
+		-- Anybody but yourself: the question first, in place of the button --
+		-- its words over it, in view.
 		setAsking("give", nil)
+		toFoot(ui.options)
 		selectIfPad(ui.giveCancel.hit)
 		return
 	end
@@ -1968,12 +2231,10 @@ end)
 
 --==============================================================================
 -- WORLD'S BUTTONS
+--
+-- Each question asks for the duration chosen on its chips, and its CONFIRM
+-- sends that one (state.askSeconds); a chip pressed while it is up closes it.
 --==============================================================================
-local function seconds(box: TextBox): number?
-	local cleaned = (string.gsub(box.Text, "[,%s_]", ""))
-	return tonumber(cleaned)
-end
-
 ui.startNight.hit.Activated:Connect(function()
 	task.spawn(send, Model.args.startNight(currentTarget().UserId))
 end)
@@ -1981,14 +2242,11 @@ ui.startDay.hit.Activated:Connect(function()
 	task.spawn(send, Model.args.startDay(currentTarget().UserId))
 end)
 local function askWeather(verb: string)
-	local secs = seconds(ui.rainBox)
-	if verb ~= "end" and not secs then
-		note("Not sent: type the duration in whole seconds.", false)
-		return
-	end
+	local secs = state.rainSeconds
 	ui.weatherAsk.words.Text = if verb == "end" then "Stop the weather on this server?"
 		else string.format("Start %s on this server for %s?", if verb == "thunder" then "a THUNDERSTORM" else "RAIN",
-			mmss(secs or 0))
+			mmss(secs))
+	state.askSeconds = secs
 	setAsking("weather", verb)
 	selectIfPad(ui.weatherAsk.cancel.hit)
 end
@@ -2007,9 +2265,20 @@ ui.weatherAsk.cancel.hit.Activated:Connect(function()
 end)
 ui.weatherAsk.confirm.hit.Activated:Connect(function()
 	local verb = state.askVerb or "end"
+	local secs = state.askSeconds
 	setAsking(nil, nil)
-	task.spawn(send, Model.args.weather(verb, if verb == "end" then nil else seconds(ui.rainBox)))
+	task.spawn(send, Model.args.weather(verb, if verb == "end" then nil else secs))
 end)
+for _, chip in ipairs(ui.rainChips) do
+	chip.button.hit.Activated:Connect(function()
+		state.rainSeconds = chip.seconds
+		if state.asking == "weather" then
+			setAsking(nil, nil)
+		else
+			paint.world()
+		end
+	end)
+end
 
 -- THE ENCHANTED MIST (2026-10-11): each asks in place, like the weather.
 local function askMist(verb: string)
@@ -2034,27 +2303,41 @@ ui.mistAsk.confirm.hit.Activated:Connect(function()
 	task.spawn(send, Model.args.mist(verb))
 end)
 
+--==============================================================================
+-- EVENTS' BUTTONS
+--==============================================================================
 for _, choice in ipairs(ui.miniChoices) do
 	choice.button.hit.Activated:Connect(function()
 		state.miniMode = choice.verb
-		-- A mode with its own length (POD RUSH's five minutes) puts it in the box.
+		-- A mode with its own length (POD RUSH's five minutes) picks it.
 		local own = tonumber(((MINI.Modes :: any)[choice.verb] or {}).Seconds)
 		if own then
-			ui.miniBox.Text = tostring(own)
+			state.miniSeconds = own
 		end
-		paint.all()
+		if state.asking == "mini" then
+			setAsking(nil, nil)
+		else
+			paint.all()
+		end
+	end)
+end
+for _, chip in ipairs(ui.miniChips) do
+	chip.button.hit.Activated:Connect(function()
+		state.miniSeconds = chip.seconds
+		if state.asking == "mini" then
+			setAsking(nil, nil)
+		else
+			paint.world()
+		end
 	end)
 end
 local function askMini(verb: string)
-	local secs = seconds(ui.miniBox)
-	if verb ~= "end" and not secs then
-		note("Not sent: type the duration in whole seconds.", false)
-		return
-	end
+	local secs = state.miniSeconds
 	local mode = (MINI.Modes :: any)[verb]
 	ui.miniAsk.words.Text = if verb == "end" then "End the global event on EVERY server?"
 		else string.format("Start %s on EVERY server for %s?", if mode then mode.Name else string.upper(verb),
-			mmss(secs or 0))
+			mmss(secs))
+	state.askSeconds = secs
 	setAsking("mini", verb)
 	selectIfPad(ui.miniAsk.cancel.hit)
 end
@@ -2070,8 +2353,9 @@ ui.miniAsk.cancel.hit.Activated:Connect(function()
 end)
 ui.miniAsk.confirm.hit.Activated:Connect(function()
 	local verb = state.askVerb or "end"
+	local secs = state.askSeconds
 	setAsking(nil, nil)
-	task.spawn(send, Model.args.miniEvent(verb, if verb == "end" then nil else seconds(ui.miniBox)))
+	task.spawn(send, Model.args.miniEvent(verb, if verb == "end" then nil else secs))
 end)
 
 --==============================================================================
@@ -2215,7 +2499,8 @@ screen:GetAttributeChangedSignal("Spawning"):Connect(paint.all)
 --
 -- ONE CENTRE PANEL AT A TIME: the console writes its name to OpenPanel when it
 -- opens and shuts itself on seeing another name there. It reopens on the tab
--- and the target it was left on, this session.
+-- and the target it was left on, this session -- with RESET PROGRESS's red box
+-- shut and its typing gone.
 --==============================================================================
 local setOpen: (boolean) -> ()
 
@@ -2226,6 +2511,11 @@ local function back()
 		setAsking(nil, nil)
 		note("Nothing was done.", nil)
 		selectIfPad(mainButton())
+	elseif state.resetOpen and state.tab == "player" then
+		state.resetOpen = false
+		ui.typedBox.Text = ""
+		paint.all()
+		selectIfPad(ui.openReset.hit)
 	else
 		setOpen(false)
 	end
@@ -2284,6 +2574,8 @@ setOpen = function(want: boolean)
 		end
 		state.listOpen = false
 		state.asking = nil
+		state.resetOpen = false
+		ui.typedBox.Text = ""
 		tick(false)
 		bindKeys(false)
 		modal.setOpen(false)

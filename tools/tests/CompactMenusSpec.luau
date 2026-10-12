@@ -578,8 +578,9 @@ local ok, err = pcall(function()
 		"no UIScale shrinks it: it is laid out in the safe area itself, and above the keyboard")
 	-- Its tabs, in the owner's order.
 	check(has(model, '{ id = "player", label = "PLAYER" },\n\t{ id = "spawn", label = "SPAWN" },\n'
-			.. '\t{ id = "world", label = "WORLD" },\n\t{ id = "announce", label = "ANNOUNCE" },'),
-		"four tabs in order -- PLAYER, SPAWN, WORLD, ANNOUNCE")
+			.. '\t{ id = "world", label = "WORLD" },\n\t{ id = "events", label = "EVENTS" },\n'
+			.. '\t{ id = "announce", label = "ANNOUNCE" },'),
+		"five tabs in order -- PLAYER, SPAWN, WORLD, EVENTS (its own since the compact console, 2026-10-12), ANNOUNCE")
 	-- Every command the server takes, still asked for: nothing dropped.
 	local actionBlock = string.match(service, "local ACTIONS: { %[string%]: boolean } = {(.-)\n}") or ""
 	local actions = {}

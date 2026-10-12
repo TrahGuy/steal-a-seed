@@ -10,16 +10,23 @@
 --             word for it), worked out EXACTLY in whole numbers ("1.1T" is
 --             1,100,000,000,000, never a float a hair off), junk refused with
 --             a line that says why; the quick chips 1M .. 1Qd and MAX
---   tabs      PLAYER, SPAWN, WORLD, ANNOUNCE; the sections each shows -- the
---             weather for every admin account since 2026-10-07 (the owner's
---             alone before), the Enchanted Mist since 2026-10-11; LB / RB's
---             step; the button a controller's selection starts on in each
+--   tabs      PLAYER, SPAWN, WORLD, EVENTS, ANNOUNCE (EVENTS its own tab since
+--             2026-10-12, item 11); the sections each shows -- the weather for
+--             every admin account since 2026-10-07 (the owner's alone before),
+--             the Enchanted Mist since 2026-10-11; which tabs show the target
+--             bar; LB / RB's step; the button a controller's selection starts
+--             on in each; the duration chips; SPAWN's size stepper
 --   requests  exactly what each button sends through the one RemoteFunction:
 --             the action and its three words, the same shapes the console sent
 --             before the redesign, and SPAWN's request table (AdminService)
---   layout    the panel (MenuLayout.panel), the tabs in the header row, the
---             target bar, the page, the log strip and SPAWN's grid beside its
---             controls -- rects in the panel's shell, for every screen
+--   layout    the panel (MenuLayout.panel), the title, the tabs in the header
+--             row, the target bar, the page (and the page without the bar),
+--             the fading answer's line over the page's foot, and SPAWN's grid
+--             beside its controls -- rects in the panel's shell, every screen
+--   rows      THE COMPACT PAGES (2026-10-12, the owner's item 11): every row a
+--             fixed height (a finger's 40 on a phone or a short screen), so a
+--             tab's height is known before it is drawn -- AdminConsoleSpec
+--             measures every listed screen with pageHeight
 --
 -- ADMIN-ONLY, LIKE THE CONSOLE. A child of AdminService, in ServerScriptService,
 -- which never replicates; AdminService clones it, with the console, into an
@@ -150,19 +157,33 @@ ConsoleModel.Tabs = {
 	{ id = "player", label = "PLAYER" },
 	{ id = "spawn", label = "SPAWN" },
 	{ id = "world", label = "WORLD" },
+	{ id = "events", label = "EVENTS" },
 	{ id = "announce", label = "ANNOUNCE" },
 } :: { Tab }
 
+-- The tabs that act on a player, and so show the target bar (2026-10-12): the
+-- rest take its room for their own rows.
+ConsoleModel.TargetTabs = { player = true, spawn = true } :: { [string]: boolean }
+
+-- The title in the header row: ADMIN on a short screen, where the five tabs
+-- need the room beside it (2026-10-12); ADMIN CONSOLE elsewhere.
+function ConsoleModel.title(short: boolean): string
+	return if short then "ADMIN" else "ADMIN CONSOLE"
+end
+
 -- The sections of a tab, top to bottom. The weather is every admin account's
 -- since 2026-10-07 (the owner's alone before), so every console shows it; the
--- Enchanted Mist (2026-10-11) likewise, under it.
+-- Enchanted Mist (2026-10-11) likewise, under it. The mini events have their
+-- own tab since 2026-10-12, so WORLD fits a phone.
 function ConsoleModel.sections(tabId: string): { string }
 	if tabId == "player" then
 		return { "money", "speed", "reset" }
 	elseif tabId == "spawn" then
 		return { "groups", "search", "grid", "form", "size", "quantity", "preview", "spawn" }
 	elseif tabId == "world" then
-		return { "daynight", "weather", "mist", "events" }
+		return { "daynight", "weather", "mist" }
+	elseif tabId == "events" then
+		return { "events" }
 	elseif tabId == "announce" then
 		return { "message", "scope", "send" }
 	end
@@ -186,8 +207,27 @@ ConsoleModel.MainButton = {
 	player = "AddMoney",
 	spawn = "Spawn",
 	world = "StartNight",
+	events = "StartGlobalEvent",
 	announce = "Send",
 } :: { [string]: string }
+
+--==============================================================================
+-- THE DURATION CHIPS (2026-10-12, item 11): segmented pickers in place of the
+-- seconds boxes, each inside its event's own limits (GameConfig.Weather,
+-- GameConfig.MiniEvent) with the default among them. A question asks for the
+-- one chosen, and its CONFIRM sends that one.
+--==============================================================================
+ConsoleModel.WeatherSeconds = { 60, 180, 300, 600 } :: { number }
+ConsoleModel.EventSeconds = { 60, 90, 180, 300 } :: { number }
+
+-- "1 MIN", "1:30", "10 MIN".
+function ConsoleModel.durationLabel(seconds: number): string
+	local whole = math.max(0, math.floor(seconds))
+	if whole % 60 == 0 then
+		return string.format("%d MIN", whole // 60)
+	end
+	return string.format("%d:%02d", whole // 60, whole % 60)
+end
 
 --==============================================================================
 -- WHAT EACH BUTTON SENDS
@@ -263,6 +303,19 @@ function ConsoleModel.clampQuantity(quantity: number, room: number?): number
 	return math.clamp(math.floor(quantity), 1, most)
 end
 
+-- SPAWN's size stepper (2026-10-12): the next size the species comes in, down
+-- (-1) or up (+1) from `current`, or nil at the end -- never one it lacks.
+function ConsoleModel.sizeStep(sizes: { number }, current: number, step: number): number?
+	local best: number? = nil
+	for _, size in ipairs(sizes) do
+		if (step > 0 and size > current and (best == nil or size < (best :: number)))
+			or (step < 0 and size < current and (best == nil or size > (best :: number))) then
+			best = size
+		end
+	end
+	return best
+end
+
 -- The size a species starts on in the console: the one it has, or the smallest.
 function ConsoleModel.defaultSize(species: SeedData.Species, wanted: number?): number
 	local sizes = SpawnCatalog.sizesOf(species)
@@ -289,35 +342,71 @@ end
 --
 -- In the shell's coordinates, as MenuLayout.blocks are. The tabs stand in the
 -- header row between the title and the close (a row that scrolls where it is
--- narrower than they are); under the header, the shared target bar; then the
--- page; then the log strip -- one line on a short screen, three elsewhere,
--- scrolling through the last five. SPAWN's grid stands beside its controls
--- wherever the page is SplitMinW wide (every landscape phone and every
--- desktop), its controls under it elsewhere.
+-- narrower than they are); under the header, the shared target bar on the
+-- tabs that act on a player; then the page, to the foot. THE LOG STRIP IS
+-- GONE (2026-10-12): the server's answer is one line over the page's foot that
+-- fades by itself. SPAWN's grid stands beside its controls wherever the page is
+-- SplitMinW wide (every landscape phone and every desktop), its controls under
+-- it elsewhere.
 --==============================================================================
 ConsoleModel.Metrics = {
 	MaxW = 900,
 	MaxH = 600,
 	TabMinShort = 84,
-	TabMinTall = 112,
+	TabMinTall = 100,
 	TabGap = 4,
 	TargetShort = 40,
 	TargetTall = 48,
-	LogLine = 18,
-	LogPad = 3,
-	LogLinesShort = 1,
-	LogLinesTall = 3,
 	Gap = 4,
+	-- THE COMPACT ROWS (2026-10-12, item 11). A control's height: a finger's
+	-- on a phone or a short screen, a little less on a desktop. Every button's
+	-- plate is 8 shorter than its target (MenuKit.button), so rows stand only
+	-- RowGap apart and still read as apart; side by side, ColGap.
+	RowTouch = 40,
+	RowDesk = 36,
+	PagePad = 4,
+	CardPad = 4,
+	RowGap = 2,
+	ColGap = 6,
+	SectionGap = 4,
+	-- A line of 14-px words, one of 12-px words, the mini events' two-line
+	-- help, the announcement's box.
+	LineH = 18,
+	SmallLineH = 16,
+	HelpH = 32,
+	MessageH = 60,
+	-- The fading answer: its line's height, how long it stays, then its fade.
+	AnswerH = 28,
+	AnswerSeconds = 3,
+	AnswerFade = 0.4,
+	-- A row of state and action: the state block's least width beside its
+	-- buttons (else it has its own row over them), a button's least and most.
+	StateMinW = 150,
+	ActionMinW = 92,
+	ActionMaxW = 128,
+	ActionWideMaxW = 220,
+	-- A chip's least width: a duration, a quick amount, a mini event, POD /
+	-- GROWN PLANT, THIS SERVER / ALL SERVERS.
+	ChipMinW = 64,
+	GrantChipMinW = 44,
+	ModeMinW = 100,
+	FormMinW = 60,
+	ScopeMinW = 120,
+	ScrollBar = 6,
+	-- SPAWN's size stepper beside how many: from this wide on one row.
+	SpawnRowMinW = 270,
+	StepArrowW = 36,
+	CountW = 40,
 	-- SPAWN: the controls' column, the grid's cards and the row over the grid.
 	SplitMinW = 520,
 	ControlsShort = 300,
 	ControlsTall = 340,
-	ToolbarShort = 30,
+	ToolbarShort = 40,
 	ToolbarTall = 36,
 	-- The group chips: their gap, and the arrows either end of the strip when
 	-- the chips only fit as one scrolling row.
 	ChipGap = 4,
-	ChipArrowW = 30,
+	ChipArrowW = 36,
 	CardMinShort = 120,
 	CardMinTall = 132,
 	CardMax = 180,
@@ -340,9 +429,14 @@ export type Layout = {
 	tabW: number,
 	tabsScroll: boolean,
 	target: Rect,
+	-- The page under the target bar, and the page that takes the bar's room
+	-- (the tabs that act on nobody).
 	page: Rect,
-	log: Rect,
-	logLines: number,
+	pageFull: Rect,
+	-- The fading answer's line, over the page's foot.
+	answer: Rect,
+	-- A control's height on this screen.
+	rowH: number,
 	-- SPAWN, inside `page`
 	spawnSplit: boolean,
 	toolbar: Rect,
@@ -399,17 +493,18 @@ function ConsoleModel.layout(s: Screen, outline: number, titleW: number, chipWid
 	local tabW = math.max(minTab, math.min(fit, 150))
 	local tabs = rect(x0, math.floor((p.header - C.Touch) / 2), room, C.Touch)
 
-	-- THE BAR, THE PAGE AND THE LOG, down the shell.
+	-- THE BAR AND THE PAGE, down the shell: the page to the foot.
 	local top = p.header + C.Gap
 	local innerW = math.max(0, w - p.pad * 2)
 	local bottom = h - p.pad
 	local targetH = if short then M.TargetShort else M.TargetTall
-	local lines = if short then M.LogLinesShort else M.LogLinesTall
-	local logH = lines * M.LogLine + M.LogPad * 2
 	local target = rect(p.pad, top, innerW, targetH)
-	local log = rect(p.pad, bottom - logH, innerW, logH)
 	local pageTop = top + targetH + M.Gap
-	local page = rect(p.pad, pageTop, innerW, math.max(0, bottom - logH - M.Gap - pageTop))
+	local page = rect(p.pad, pageTop, innerW, math.max(0, bottom - pageTop))
+	local pageFull = rect(p.pad, top, innerW, math.max(0, bottom - top))
+	local answer = rect(p.pad + M.PagePad, bottom - M.AnswerH - M.PagePad, math.max(0, innerW - M.PagePad * 2),
+		M.AnswerH)
+	local rowH = if short or s.compact then M.RowTouch else M.RowDesk
 
 	-- SPAWN: the grid beside its controls, or over them.
 	local split = page.w >= M.SplitMinW
@@ -468,8 +563,9 @@ function ConsoleModel.layout(s: Screen, outline: number, titleW: number, chipWid
 		tabsScroll = n * tabW + (n - 1) * M.TabGap > room,
 		target = target,
 		page = page,
-		log = log,
-		logLines = lines,
+		pageFull = pageFull,
+		answer = answer,
+		rowH = rowH,
 		spawnSplit = split,
 		toolbar = toolbar,
 		search = search,
@@ -485,6 +581,105 @@ function ConsoleModel.layout(s: Screen, outline: number, titleW: number, chipWid
 		previewH = previewH,
 		playerSplit = page.w >= M.PlayerSplitMinW,
 	}
+end
+
+--==============================================================================
+-- THE COMPACT PAGES' ROWS (2026-10-12, the owner's item 11)
+--
+-- Every row a fixed height, so a tab's height is worked out here exactly as
+-- the console builds it: a page is a list (PagePad above and below, its cards
+-- SectionGap apart), a card its rows (CardPad round them, RowGap apart).
+-- AdminConsoleSpec measures every listed screen with it. `w` is the page's
+-- inner width (inside its padding and scroll bar), `rowH` Layout.rowH.
+--==============================================================================
+-- How many `min` wide fit side by side in `w`, never more than `most`.
+function ConsoleModel.perRow(w: number, min: number, most: number): number
+	return math.clamp(math.floor((w + M.ColGap) / (min + M.ColGap)), 1, math.max(1, most))
+end
+
+-- A run of `n` chips (or buttons), `min` wide, at most `most` to a row.
+function ConsoleModel.chipsHeight(n: number, w: number, min: number, most: number, rowH: number): number
+	local rows = math.ceil(n / ConsoleModel.perRow(w, min, most))
+	return rows * rowH + (rows - 1) * M.RowGap
+end
+
+-- Whether a state block and `buttons` buttons share one row `w` wide.
+function ConsoleModel.actionInline(w: number, buttons: number): boolean
+	return w >= M.StateMinW + buttons * (M.ActionMinW + M.ColGap)
+end
+
+-- A row of state and action: one row, or the block over the buttons.
+function ConsoleModel.actionRowHeight(w: number, buttons: number, rowH: number): number
+	return if ConsoleModel.actionInline(w, buttons) then rowH else rowH * 2 + M.RowGap
+end
+
+-- An action row's buttons' width when inline: three fifths of the row shared
+-- between them, from ActionMinW to `most`.
+function ConsoleModel.actionWidth(w: number, buttons: number, most: number): number
+	return math.clamp(math.floor(w * 0.6 / buttons) - M.ColGap, M.ActionMinW, most)
+end
+
+-- A card holding these rows.
+function ConsoleModel.cardHeight(rows: { number }): number
+	local h = M.CardPad * 2
+	for i, r in ipairs(rows) do
+		h += r + (if i > 1 then M.RowGap else 0)
+	end
+	return h
+end
+
+-- SPAWN's size stepper and how many: one row, or one over the other.
+function ConsoleModel.spawnRowHeight(w: number, rowH: number): number
+	return if w >= M.SpawnRowMinW then rowH else rowH * 2 + M.RowGap
+end
+
+export type PageOpts = { split: boolean?, resetOpen: boolean? }
+
+-- A tab's height at page inner width `w` -- for SPAWN, the height its controls
+-- column needs at that column's inner width. Every question stands in for the
+-- row it asks about, the same height, so none of them changes it.
+function ConsoleModel.pageHeight(tabId: string, w: number, rowH: number, opts: PageOpts?): number
+	local o: PageOpts = opts or {}
+	local cardW = w - M.CardPad * 2
+	if tabId == "spawn" then
+		-- POD / GROWN PLANT; the size beside how many; the preview; SPAWN.
+		return M.PagePad * 2 + ConsoleModel.chipsHeight(2, w, M.FormMinW, 2, rowH) + M.RowGap
+			+ ConsoleModel.spawnRowHeight(w, rowH) + M.RowGap + M.LineH + M.RowGap + rowH + M.CardPad
+	end
+	local sections: { number } = {}
+	if tabId == "player" then
+		-- ADD MONEY and ADD SPEED (side by side when split): the box beside its
+		-- button, the quick chips, the full number. Then RESET PROGRESS's row.
+		local split = o.split == true
+		local half = if split then math.floor((w - M.ColGap) / 2) else w
+		local inner = half - M.CardPad * 2
+		local grant = ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(inner, 1, rowH),
+			ConsoleModel.chipsHeight(5, inner, M.GrantChipMinW, 5, rowH), M.LineH })
+		table.insert(sections, if split then grant else grant * 2 + M.SectionGap)
+		table.insert(sections, if o.resetOpen
+			then ConsoleModel.cardHeight({ M.LineH, M.SmallLineH * 3, M.SmallLineH, rowH, M.SmallLineH })
+			else ConsoleModel.actionRowHeight(w, 1, rowH))
+	elseif tabId == "world" then
+		-- Night and day; the weather with its durations; the Enchanted Mist.
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH) }))
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 3, rowH),
+			ConsoleModel.chipsHeight(#ConsoleModel.WeatherSeconds, cardW, M.ChipMinW, 4, rowH) }))
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH) }))
+	elseif tabId == "events" then
+		-- START / END EVENT, the five modes, the durations, the mode's help, the sync.
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH),
+			ConsoleModel.chipsHeight(5, cardW, M.ModeMinW, 5, rowH),
+			ConsoleModel.chipsHeight(#ConsoleModel.EventSeconds, cardW, M.ChipMinW, 4, rowH), M.HelpH, M.SmallLineH }))
+	elseif tabId == "announce" then
+		-- THIS SERVER / ALL SERVERS, the words, the count beside SEND.
+		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.chipsHeight(2, cardW, M.ScopeMinW, 2, rowH),
+			M.MessageH, ConsoleModel.actionRowHeight(cardW, 1, rowH) }))
+	end
+	local h = M.PagePad * 2
+	for i, s in ipairs(sections) do
+		h += s + (if i > 1 then M.SectionGap else 0)
+	end
+	return h
 end
 
 return ConsoleModel

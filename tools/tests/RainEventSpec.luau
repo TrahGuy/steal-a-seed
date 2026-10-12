@@ -975,13 +975,14 @@ local ok, err = pcall(function()
 	-- place); what the buttons send is ConsoleModel's (AdminConsoleSpec).
 	check(string.find(consoleSrc, '{ { "StartRain", "START RAIN" },\n\t\t{ "StartThunder", "THUNDERSTORM" }, { "EndRain", "STOP" } }',
 				1, true) ~= nil
-			and string.find(consoleSrc, "ui.rainBox.Text = tostring(WEATHER.DefaultSeconds)", 1, true) ~= nil
-			and string.find(consoleSrc, "Model.args.weather(verb, if verb == \"end\" then nil else seconds(ui.rainBox))", 1, true) ~= nil
+			and string.find(consoleSrc, "rainSeconds = WEATHER.DefaultSeconds,", 1, true) ~= nil
+			and string.find(consoleSrc, "Model.args.weather(verb, if verb == \"end\" then nil else secs)", 1, true) ~= nil
 			and string.find(consoleModelSrc, 'return args("Weather", verb, seconds, nil)', 1, true) ~= nil
-			and string.find(consoleSrc, 'ui.rainLabel, ui.rainDot = build.state(wCard, "Rain")', 1, true) ~= nil
+			and string.find(consoleSrc, 'ui.rainLabel, ui.rainDot, wRow.left = build.state(wRow.frame, "Rain", '
+				.. '"WEATHER \\u{00B7} THIS SERVER")', 1, true) ~= nil
 			and string.find(consoleSrc, 'setAsking("weather", verb)', 1, true) ~= nil,
-		"the console has a WEATHER section: START RAIN, THUNDERSTORM, STOP (each confirmed in place), an editable "
-			.. "duration starting at the default, and the state line")
+		"the console has a WEATHER section: START RAIN, THUNDERSTORM, STOP (each confirmed in place), duration chips "
+			.. "starting on the default (the compact console, 2026-10-12), and the state line")
 	check(W.DefaultSeconds == 180 and W.MinSeconds <= 20 and W.ToastDelaySeconds == 3,
 		"180 s is the default, adjustable from 20 s; the toast comes 3 s in")
 	local toastSrc = sourceOf(Scripts, "ActionToastUI")
