@@ -1,6 +1,8 @@
 # Steal a Seed — Session Handoff
 
-## THE QUEUE, ITEMS 16-18: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip, NOT PUBLISHED; THE FINAL FULL SUITE 155/155; the owner republishes)
+## THE QUEUE, ITEMS 16-18: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (LIVE as v1058; THE FINAL FULL SUITE 155/155)
+
+- **LIVE as v1058: items 16-18** -- the owner's publish at 15:02:57 UTC (Studio's log), of the bad12f3 tree (= origin/wip, nothing uncommitted in src). Every "NOT PUBLISHED" tag in the item 16B-18B entries below is now stale.
 
 - **Live now: v1057** (the owner's publish at 06:27 UTC, the berry hotfix 4f4a6a5; Studio's log). Everything below came after it.
 - **On origin/wip, unpublished:**
