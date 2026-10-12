@@ -329,66 +329,21 @@ local MIST_TAIL = math.max(GROUND.Lifetime[2], HUB.Grove.Lifetime[2], HUB.Edge.L
 local groundLast, hubLast = -math.huge, -math.huge
 
 --==============================================================================
--- THE MIST'S SOUND (2026-10-11, the owner's uploads): its bed, the
--- MistAmbience cue on the World bus as the rain's loop is (SOUND FX moves it,
--- MUSIC does not), at the look's own level -- in and out with it, full at once
--- for a late joiner -- and BEGINS and ENDS once for everyone, on the state's
--- own change, never at a join.
+-- THE MIST'S SOUND (2026-10-11, the owner's uploads): BEGINS and ENDS once for
+-- everyone, on the state's own change, never at a join.
 --
 -- ONE CLEAN MOMENT (2026-10-12, the owner: "when I trigger the enchanted mist,
--- sfx is overlapping"): BEGINS sounds alone, once a Mist (its event id), and
--- the bed waits for it to end and comes up over two seconds (BED_FADE); the server
--- keeps the berries' twinkle quiet meanwhile (EnchantedMistBerryService), and
--- an admin's start and end lines come without their ping (AdminAnnounce.quiet).
--- ENDS already stood alone, the bed fading out under it.
+-- sfx is overlapping"): BEGINS sounds alone, once a Mist (its event id); the
+-- server keeps the berries' twinkle quiet meanwhile (EnchantedMistBerryService),
+-- and an admin's start and end lines come without their ping
+-- (AdminAnnounce.quiet).
+--
+-- ITS BED IS THE MUSIC (2026-10-12, the owner's item 19: "the default
+-- background music is still overlapping"): Music.client plays the AMBIENCE as
+-- the Mist's music, after BEGINS and before ENDS (Music.MistTrack). It was a
+-- World-bus loop here, under the day and night beds; none is played here now.
 --==============================================================================
-local mistBedShown = -1
-local mistBed: Sound? = nil
--- When the bed may start (os.clock): BEGINS' end at a start, 0 at a join.
-local mistBedAfter = 0
 local mistBegunId: any = nil
-local BED_FADE = 2
--- RAIN OVER THE MIST (2026-10-12, the owner's sound audit: "RAIN MUSIC ONLY"):
--- while a Rain or a Thunderstorm falls -- the music's own test, opening or
--- active -- the bed fades out over BED_FADE and comes back the same way after,
--- if the Mist is still on. 0 is the bed at its level, 1 all the way out.
-local mistBedRained = 0
-local mistBedRainedAt = os.clock()
-
-local function stepMistBed()
-	local cue = SoundKit.cue("MistAmbience")
-	if not cue then
-		return
-	end
-	local clock = os.clock()
-	local rainState = Workspace:GetAttribute(GameConfig.Weather.Attributes.State)
-	local raining = rainState == "opening" or rainState == "active"
-	mistBedRained = math.clamp(mistBedRained + (if raining then 1 else -1) * (clock - mistBedRainedAt) / BED_FADE, 0, 1)
-	mistBedRainedAt = clock
-	if mistLevel <= 0 then
-		if mistBedShown >= 0 then
-			mistBedShown = -1
-			mistBed = nil
-			SoundKit.stop("MistAmbience")
-		end
-		return
-	end
-	if clock < mistBedAfter then
-		return
-	end
-	local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)
-	local want = (cue.volume or 0.5) * mistLevel * ramp * (1 - mistBedRained)
-	if mistBedShown < 0 then
-		mistBedShown = want
-		mistBed = SoundKit.play("MistAmbience", { volume = want })
-	elseif math.abs(want - mistBedShown) > 0.002 then
-		mistBedShown = want
-		local sound = mistBed
-		if sound and sound.Parent then
-			sound.Volume = want
-		end
-	end
-end
 
 local mistWas = Workspace:GetAttribute(MIST_STATE)
 table.insert(connections, Workspace:GetAttributeChangedSignal(MIST_STATE):Connect(function()
@@ -400,8 +355,6 @@ table.insert(connections, Workspace:GetAttributeChangedSignal(MIST_STATE):Connec
 		and Workspace:GetServerTimeNow() - started <= 5 and eventId ~= mistBegunId then
 		mistBegunId = eventId
 		SoundKit.play("MistBegins")
-		local begins = SoundKit.cue("MistBegins")
-		mistBedAfter = os.clock() + (if begins and begins.clip then begins.clip else 3.5)
 	elseif now ~= active and mistWas == active then
 		SoundKit.play("MistEnds")
 	end
@@ -481,7 +434,6 @@ local function stepMist(dt: number)
 		groveRing.Parent = nil
 		edgeRing.Parent = nil
 	end
-	stepMistBed()
 end
 
 --==============================================================================
@@ -886,7 +838,6 @@ local function cleanup()
 	edgeRing:Destroy()
 	clearClouds()
 	SoundKit.stop(AUDIO.RainAmbience)
-	SoundKit.stop("MistAmbience")
 	for _, spot in ipairs(strikeSpots) do
 		spot:Destroy()
 	end

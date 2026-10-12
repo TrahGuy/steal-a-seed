@@ -10147,6 +10147,25 @@ GameConfig.Music = {
 	RainFadeSeconds = 4.0,
 
 	--==========================================================================
+	-- THE ENCHANTED MIST'S BED, AS THE MUSIC (2026-10-12, the owner's item 19:
+	-- "the default background music is still overlapping when I trigger the
+	-- mist event" -- the Mist replaces the music)
+	--
+	-- The owner's AMBIENCE (299.57 s, the Mist's own length; RMS -15.6 dB to
+	-- BGM1's -14.7) while the Mist is on: ahead of night and day, under the
+	-- rain, the disco and the Pod Rush; the same Sound on the Music bus, at
+	-- the beds' level, so the MUSIC slider and mute move it. The day or night
+	-- bed fades out under BEGINS, and the Mist's starts as BEGINS ends, past
+	-- MistStart's seconds of quiet, on the Mist's own clock (a late joiner is on
+	-- the same bar); at the end it fades out under ENDS and the day or night bed
+	-- comes back after it. A rain over the Mist is rain music only; the Mist's
+	-- comes back after it. An id that cannot load here keeps the day/night bed.
+	--==========================================================================
+	MistTrack = "rbxassetid://91905968261795",
+	MistStart = 2.14,
+	MistFadeSeconds = 2.0,
+
+	--==========================================================================
 	-- THE DISCO'S BED (2026-10-03; every mode with Disco: TICKET DISCO, DISCO +
 	-- MILL and, from 2026-10-04, the pure DISCO ONLY)
 	--
@@ -11047,13 +11066,8 @@ GameConfig.Sfx = {
 		-- the same length to the millisecond: where it starts, where it stops
 		-- sounding (1% of its peak), its peak. Volume = designed / peak.
 		--======================================================================
-		-- 299.57 s, RMS -15.6 dB (BGM1's is -14.7), quiet for its first 2.14 s.
-		-- The Mist's bed, on the World bus as the rain's is (SOUND FX moves it,
-		-- MUSIC does not): 0.09 is about 12 dB under the music (0.32 of BGM1),
-		-- a bed, not a song. Weather.client fades it with the Mist's look.
-		MistAmbience = {
-			id = "rbxassetid://91905968261795", volume = 0.09, looped = true, start = 2.14, group = "World",
-		},
+		-- The Mist's AMBIENCE is not a cue since 2026-10-12 (item 19): it is the
+		-- music while the Mist is on (Music.MistTrack), never a second bed here.
 		-- Peaks at 98%; 3.48 s and still sounding at its end, so faded. Once for
 		-- everyone as the Mist starts. Designed 0.45.
 		MistBegins = { id = "rbxassetid://107597832765081", volume = 0.46, clip = 3.48, fadeOut = 0.4, group = "UI" },

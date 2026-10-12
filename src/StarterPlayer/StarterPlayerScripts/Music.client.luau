@@ -133,6 +133,36 @@ local function rainFalling(): boolean
 end
 
 --==============================================================================
+-- AND THE ENCHANTED MIST'S, WHILE IT IS ON (2026-10-12, the owner's item 19:
+-- "the default background music is still overlapping when I trigger the mist
+-- event" -- the Mist replaces the music)
+--
+-- Music.MistTrack while the Mist is active (its MistState): under the rain,
+-- the disco and the rush, ahead of night and day, on this same one Sound. The
+-- bed it replaces fades out under BEGINS and the Mist's starts as BEGINS ends,
+-- on the Mist's own clock (alignMist); when the Mist ends the next bed waits
+-- for ENDS. Probed and skipped like the rain's. Weather.client keeps BEGINS and
+-- ENDS, and no bed of its own.
+--==============================================================================
+local MIST = require(Shared:WaitForChild("EnchantedMistConfig"))
+local MIST_ATTR = MIST.Attributes
+local mistTracks: { string } = usable({ (MUSIC :: any).MistTrack })
+local mistOk: boolean? = nil
+local MIST_PROBE = "SeedMusicMistProbe"
+for _, stale in ipairs(SoundService:GetChildren()) do
+	if stale.Name == MIST_PROBE then
+		stale:Destroy()
+	end
+end
+-- How long BEGINS and ENDS sound alone (their cues' windows).
+local BEGINS_SECONDS = tonumber(((SoundKit.cue("MistBegins") or {}) :: any).clip) or 3.5
+local ENDS_SECONDS = tonumber(((SoundKit.cue("MistEnds") or {}) :: any).clip) or 2.0
+
+local function mistActive(): boolean
+	return Workspace:GetAttribute(MIST_ATTR.State) == MIST.States.Active
+end
+
+--==============================================================================
 -- AND A FOURTH, WHILE THE DISCO PLAYS (2026-10-03)
 --
 -- Music.DiscoTracks (the owner's disco songs), while a disco mode of the global
@@ -352,6 +382,10 @@ local function listFor(): { string }
 	if #rainTracks > 0 and rainOk ~= false and rainFalling() then
 		return rainTracks
 	end
+	-- The Enchanted Mist's next (2026-10-12, item 19): it replaces night and day.
+	if #mistTracks > 0 and mistOk ~= false and mistActive() then
+		return mistTracks
+	end
 	if #nightTracks > 0
 		and Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then
 		return nightTracks
@@ -433,8 +467,10 @@ sound.Volume = levelFor(current)
 --==============================================================================
 local swap = 0
 -- Declared here, written with the disco's clock below: a swap calls it, and a
--- local function written after applyPhase would be a nil global to it.
+-- local function written after applyPhase would be a nil global to it. The
+-- Mist's clock the same (2026-10-12).
 local alignDisco: () -> ()
+local alignMist: () -> ()
 
 local function fadeSound(to: number, seconds: number)
 	TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Sine), {
@@ -468,10 +504,25 @@ local function applyPhase()
 		then tonumber((MUSIC :: any).PodRushFadeSeconds) or 3.0
 		elseif want == rainTracks or current == rainTracks
 		then tonumber((MUSIC :: any).RainFadeSeconds) or 4.0
+		elseif want == mistTracks or current == mistTracks
+		then tonumber((MUSIC :: any).MistFadeSeconds) or 2.0
 		else tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0
+	-- BEGINS AND ENDS ALONE (2026-10-12, item 19): the Mist's bed waits for
+	-- BEGINS to end, and the bed after the Mist for ENDS; the one playing fades
+	-- out under them meanwhile. Nothing to wait for later in the Mist (a rain
+	-- ending) or when something else takes over while it is still on.
+	local hold = 0
+	if want == mistTracks then
+		local started = Workspace:GetAttribute(MIST_ATTR.StartedAt)
+		if type(started) == "number" then
+			hold = started + BEGINS_SECONDS - Workspace:GetServerTimeNow()
+		end
+	elseif current == mistTracks and not mistActive() then
+		hold = ENDS_SECONDS
+	end
 	local half = math.max(0.15, seconds * 0.5)
 	fadeSound(0, half)
-	task.delay(half, function()
+	task.delay(math.max(half, hold), function()
 		if swap ~= token or not sound.Parent then
 			return
 		end
@@ -484,6 +535,7 @@ local function applyPhase()
 		end
 		playTrack(want, 1)
 		alignDisco()
+		alignMist()
 		fadeSound(levelFor(want), half)
 	end)
 end
@@ -517,6 +569,36 @@ function alignDisco()
 		local length = sound.TimeLength
 		if length > 0 and swap == token and current == list then
 			sound.TimePosition = math.max(0, Workspace:GetServerTimeNow() - started) % length
+		end
+	end)
+end
+
+--==============================================================================
+-- THE MIST ON ITS OWN CLOCK (2026-10-12, item 19)
+--
+-- The track is the Mist's length: it runs from BEGINS' end, past its quiet
+-- first Music.MistStart seconds, so every client -- a late joiner, or one back
+-- from a rain -- is on the same bar. Dropped if anything else has started.
+--==============================================================================
+function alignMist()
+	local started = Workspace:GetAttribute(MIST_ATTR.StartedAt)
+	local list = current
+	if type(started) ~= "number" or list ~= mistTracks then
+		return
+	end
+	local token = swap
+	task.spawn(function()
+		local waited = 0
+		while sound.TimeLength <= 0 and waited < 10 do
+			waited += task.wait(0.1)
+			if swap ~= token or current ~= list or not sound.Parent then
+				return
+			end
+		end
+		local length = sound.TimeLength
+		if length > 0 and swap == token and current == list then
+			local into = math.max(0, Workspace:GetServerTimeNow() - started - BEGINS_SECONDS)
+			sound.TimePosition = ((tonumber((MUSIC :: any).MistStart) or 0) + into) % length
 		end
 	end)
 end
@@ -571,6 +653,32 @@ Workspace:GetAttributeChangedSignal(WEATHER_STATE):Connect(function()
 	applyPhase()
 end)
 probeRain()
+
+-- The Mist's probe, the rain's shape (2026-10-12, item 19); its state re-chooses
+-- the bed.
+local probingMist = false
+local function probeMist()
+	if #mistTracks == 0 or probingMist then
+		return
+	end
+	probingMist = true
+	probeBed(mistTracks[1], MIST_PROBE, function(loaded: boolean)
+		probingMist = false
+		if not loaded and mistOk ~= false then
+			warn(string.format("[Seed/Music] The Mist's bed %s did not load, so the day/night bed plays through "
+				.. "the Mist.", mistTracks[1]))
+		end
+		mistOk = loaded
+		applyPhase()
+	end)
+end
+Workspace:GetAttributeChangedSignal(MIST_ATTR.State):Connect(function()
+	if mistOk == false and mistActive() then
+		probeMist()
+	end
+	applyPhase()
+end)
+probeMist()
 
 -- The disco's probe, the rain's shape, for every song (2026-10-12): discoOk is
 -- true once one loads, false only when none does; nothing while the list is
@@ -661,8 +769,10 @@ if localPlayer then
 	end)
 end
 probeSprout()
--- Joined during a disco: the first track chosen above was the disco's.
+-- Joined during a disco: the first track chosen above was the disco's. Or
+-- during a Mist (2026-10-12): the Mist's, on its bar.
 alignDisco()
+alignMist()
 
 -- Through SoundKit rather than a tween of its own. The chase duck and the
 -- settings panel move this bus too, and all three have to aim at one number:

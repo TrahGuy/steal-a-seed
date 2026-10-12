@@ -82,8 +82,9 @@ local ok, err = pcall(function()
 	--==========================================================================
 	-- name, asset, the render's length (s), its measured peak (of full scale),
 	-- the designed level, the bus.
+	-- (The AMBIENCE, 91905968261795, is the Mist's MUSIC since 2026-10-12, item 19:
+	-- Music.MistTrack, section 2 -- not a row.)
 	local ROWS = {
-		{ "MistAmbience", "91905968261795", 299.574, 0.85, nil, "World" },
 		{ "MistBegins", "107597832765081", 3.48, 0.98, 0.45, "UI" },
 		{ "MistEnds", "105565685427294", 2.28, 0.26, 0.30, "UI" },
 		{ "MistBerryAppears", "93161571928576", 0.48, 0.21, 0.625, "World" },
@@ -136,7 +137,7 @@ local ok, err = pcall(function()
 			table.insert(bad, name .. ": " .. table.concat(why, ", "))
 		end
 	end
-	check(#bad == 0, "thirteen rows, each its own asset on its bus, its window inside the render, its volume the "
+	check(#bad == 0, "twelve rows, each its own asset on its bus, its window inside the render, its volume the "
 		.. "designed level over the measured peak", table.concat(bad, " | "))
 	local shared = {}
 	for name, cue in pairs(CUES) do
@@ -154,51 +155,68 @@ local ok, err = pcall(function()
 			and twinkle.volume * 0.21 * ((GameConfig.Sfx :: any).Mixer.World or 1) <= 1,
 		"the twinkle AT a berry, louder and wider (the owner, 2026-10-12: 2.5x, heard to 80 studs): it peaks clean "
 			.. "through the World bus", twinkle and twinkle.range)
-	local bed = CUES.MistAmbience
-	check(bed and bed.looped == true and bed.range == nil and bed.start and bed.start >= 2 and bed.start < 2.2,
-		"the bed loops, flat (the rain's bed's way), past its 2.14 s of quiet")
+	-- THE BED IS THE MUSIC (2026-10-12, the owner's item 19: "the mist replaces the music"): no cue plays the
+	-- AMBIENCE any more -- it is Music.MistTrack, so it can never sound twice.
+	local MUSIC = GameConfig.Music :: any
+	local ambienceCues = {}
+	for name, cue in pairs(CUES) do
+		if cue.id == "rbxassetid://91905968261795" then
+			table.insert(ambienceCues, name)
+		end
+	end
+	check(MUSIC.MistTrack == "rbxassetid://91905968261795" and #ambienceCues == 0 and CUES.MistAmbience == nil
+			and type(MUSIC.MistStart) == "number" and MUSIC.MistStart >= 2 and MUSIC.MistStart < 2.2
+			and type(MUSIC.MistFadeSeconds) == "number" and MUSIC.MistFadeSeconds > 0,
+		"the AMBIENCE is the Mist's music (Music.MistTrack), past its 2.14 s of quiet -- no cue plays it",
+		table.concat(ambienceCues, ", "))
 	local tick = CUES.MistReelTick
 	check(tick and tick.start == 0.05 and tick.clip and tick.clip <= 0.1 and (tick.jitter or 0) > 0,
 		"the tick: only its 0.052-0.124 s of sound, a little pitch jitter (it plays many in a row)")
 
 	--==========================================================================
-	say("2. The bed under the music")
+	say("2. The bed as the music (2026-10-12, the owner's item 19)")
 	--==========================================================================
-	-- RMS off the renders: AMBIENCE -15.6 dB, BGM1 -14.7 dB.
-	local bedDb = 20 * math.log10(bed.volume) - 15.6
-	local musicDb = 20 * math.log10(GameConfig.Music.Volume) - 14.7
-	check(bedDb <= musicDb - 9, string.format("AMBIENCE at %.1f dB, %.1f under BGM1 at the music's %.2f: a bed, not a "
-		.. "song", bedDb, musicDb - bedDb, GameConfig.Music.Volume))
+	-- On the Music bus at the beds' level: RMS off the renders, AMBIENCE -15.6 dB to BGM1's -14.7 -- as loud as
+	-- the music it replaces, within 1.5 dB.
+	local music = sourceOf(Scripts, "Music")
+	local function at(text)
+		return string.find(music, text, 1, true) or math.huge
+	end
+	local listStart = at("local function listFor(): { string }")
+	local rainAt, mistAt = at("rainOk ~= false and rainFalling() then"), at("mistOk ~= false and mistActive() then")
+	local nightAt, rushAt = at("and Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then"),
+		at("rushOk ~= false and rushPlaying() then")
+	check(math.abs(-15.6 - -14.7) <= 1.5 and listStart < rushAt and rushAt < rainAt and rainAt < mistAt
+			and mistAt < nightAt and nightAt < at("local function levelFor("),
+		"the Mist's bed in the music's own order: Sprout Dash, the disco = the Pod Rush, the rain, THE MIST, night, "
+			.. "day -- on the one Sound, the Music bus (its slider and mute), at the beds' level")
+	check(has(music, "hold = started + BEGINS_SECONDS - Workspace:GetServerTimeNow()")
+			and has(music, "elseif current == mistTracks and not mistActive() then\n\t\thold = ENDS_SECONDS")
+			and has(music, "task.delay(math.max(half, hold), function()")
+			and has(music, "local BEGINS_SECONDS = tonumber(((SoundKit.cue(\"MistBegins\") or {}) :: any).clip) or 3.5"),
+		"BEGINS alone: the bed it replaces fades out under it and the Mist's waits for its end; ENDS alone: the day "
+			.. "or night bed waits for it")
+	check(has(music, "local into = math.max(0, Workspace:GetServerTimeNow() - started - BEGINS_SECONDS)")
+			and has(music, "sound.TimePosition = ((tonumber((MUSIC :: any).MistStart) or 0) + into) % length")
+			and has(music, "\t\tplayTrack(want, 1)\n\t\talignDisco()\n\t\talignMist()\n")
+			and has(music, "alignDisco()\nalignMist()\n")
+			and has(music, "probeBed(mistTracks[1], MIST_PROBE, function(loaded: boolean)")
+			and has(music, "Workspace:GetAttributeChangedSignal(MIST_ATTR.State):Connect(function()"),
+		"on the Mist's own clock from BEGINS' end -- a late joiner, or the Mist's bed back after a rain, on the same "
+			.. "bar -- and an id that cannot load keeps the day/night bed")
 
 	--==========================================================================
 	say("3. The wiring")
 	--==========================================================================
 	local weather = sourceOf(Scripts, "Weather")
-	check(has(weather, "local want = (cue.volume or 0.5) * mistLevel")
-			and has(weather, "mistBed = SoundKit.play(\"MistAmbience\", { volume = want })")
-			and count(weather, "SoundKit.stop(\"MistAmbience\")") == 2
-			and has(weather, "\tend\n\tstepMistBed()\nend"),
-		"Weather.client: the bed at the Mist look's own level, in and out with it, stopped at nothing and at cleanup")
+	check(not has(weather, "MistAmbience") and not has(weather, "stepMistBed"),
+		"Weather.client plays no bed of its own any more: the music does (never twice)")
 	check(has(weather, "if now == active and mistWas ~= active and type(started) == \"number\"\n"
 				.. "\t\tand Workspace:GetServerTimeNow() - started <= 5 and eventId ~= mistBegunId then\n"
 				.. "\t\tmistBegunId = eventId\n\t\tSoundKit.play(\"MistBegins\")")
 			and has(weather, "elseif now ~= active and mistWas == active then\n\t\tSoundKit.play(\"MistEnds\")"),
 		"BEGINS once a Mist as it starts -- never twice for one event id, never for a state that arrives late -- and "
 			.. "ENDS once as it leaves")
-	-- ONE CLEAN MOMENT (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is overlapping"): the bed
-	-- waits for BEGINS to end and comes up over two seconds; a late joiner, who never hears BEGINS, has it at once.
-	check(has(weather, "mistBedAfter = os.clock() + (if begins and begins.clip then begins.clip else 3.5)")
-			and has(weather, "local mistBedAfter = 0\n")
-			and has(weather, "if clock < mistBedAfter then\n\t\treturn\n\tend")
-			and has(weather, "local ramp = math.clamp((clock - mistBedAfter) / BED_FADE, 0, 1)")
-			and has(weather, "local want = (cue.volume or 0.5) * mistLevel * ramp"),
-		"the bed comes up only as BEGINS ends, over two seconds; at once for a late joiner")
-	-- RAIN OVER THE MIST (2026-10-12, the owner's sound audit: "RAIN MUSIC ONLY"): the bed fades out while a Rain
-	-- or a Thunderstorm falls -- the music's own test -- and comes back after, if the Mist is still on.
-	check(has(weather, "local raining = rainState == \"opening\" or rainState == \"active\"")
-			and has(weather, "* (clock - mistBedRainedAt) / BED_FADE, 0, 1)")
-			and has(weather, "local want = (cue.volume or 0.5) * mistLevel * ramp * (1 - mistBedRained)"),
-		"the bed steps out under a Rain or a Thunderstorm and comes back after it")
 	local berryServer = sourceOf(Server, "EnchantedMistBerryService")
 	check(has(berryServer, "\t\tHooks.sound(\"MistBerryAppears\", root)\n")
 			and has(berryServer, "\tsound = function(name: string, at: BasePart)\n\t\tSoundKit.emit(name, at)\n")

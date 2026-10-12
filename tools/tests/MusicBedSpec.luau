@@ -99,6 +99,21 @@ for _, id in ipairs({ day[1], day[2], night[1] }) do
 		"well-formed id: " .. tostring(id))
 end
 
+-- THE ENCHANTED MIST'S BED, AS THE MUSIC (2026-10-12, the owner's item 19): its
+-- own one-track list, in no other list -- so the Mist's start and end always
+-- change the bed -- and Music.client's source shows the bed after the rain's.
+local mist = (MUSIC :: any).MistTrack
+local inOthers = seen[mist] ~= nil or table.find(night, mist) ~= nil
+	or table.find(idsOf((MUSIC :: any).RainTracks), mist) ~= nil
+	or table.find(idsOf((MUSIC :: any).DiscoTracks), mist) ~= nil
+local musicSrc = StarterPlayer.StarterPlayerScripts:FindFirstChild("Music")
+musicSrc = musicSrc and musicSrc.Source or ""
+check(mist == "rbxassetid://91905968261795" and not inOthers
+		and musicSrc:find("local mistTracks: { string } = usable({ (MUSIC :: any).MistTrack })", 1, true) ~= nil
+		and musicSrc:find("if #mistTracks > 0 and mistOk ~= false and mistActive() then\n\t\treturn mistTracks", 1,
+			true) ~= nil,
+	"the Mist's AMBIENCE is a bed of its own while the Mist is on, in no other list", tostring(mist))
+
 --==============================================================================
 -- 2. THE CROSSFADE IS THE SKY'S, BY VALUE
 --

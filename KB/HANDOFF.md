@@ -1,5 +1,32 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 19: THE MIST REPLACES THE MUSIC — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED, NOT PUBLISHED; MistAudioSpec 19/0, MusicBedSpec 30/0 (1 new), RainAudioSpec 39/0, SfxWiringSpec 202/0, SoundLevelSpec 28/0, EnchantedMistBerrySpec 73/0, DiscoDancersSpec 59/0, MiniEventSpec 90/0, MistLookSpec 17/0, PodRushSpec 98/0, RainEventSpec 98/0, SproutDashSpec 49/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A TIMELINE)
+
+The owner on v1058: "the default background music is still overlapping when I trigger the mist event". Their pick (option 1): THE MIST REPLACES THE MUSIC.
+
+**What it is now** (Music.client; GameConfig.Music.MistTrack, MistStart 2.14, MistFadeSeconds 2.0):
+- The Mist's AMBIENCE (91905968261795, 299.6 s, the Mist's length) is the MUSIC while the Mist is on. It is the same one Sound on the Music bus, at the beds' level, so the player's music level and mute move it.
+- The music's order: Sprout Dash, then the disco = the Pod Rush, then the rain, then THE MIST, then night, then day.
+- At the start: the day or night bed fades out under BEGINS; silence while BEGINS sounds alone; the Mist's bed starts as BEGINS ends, past its 2.14 s of quiet.
+- Its playhead follows the Mist's own clock (alignMist), so a late joiner, and the bed coming back after a rain, are on the same bar.
+- At the end: it fades out under ENDS, and the day or night bed comes back after ENDS.
+- A rain over the Mist is rain music only. When the rain ends mid-Mist, the Mist's bed comes back at its place on the clock.
+- An id that will not load here keeps the day/night bed (probed like the rain's).
+- The old World-bus copy is gone: the MistAmbience cue row, and Weather.client's bed with its rain fade. It can never play twice.
+- Weather.client keeps BEGINS and ENDS, once each, on the state's change. 16C's rules stand: BEGINS alone, the server's twinkle quiet for its first ~3.5 s, the stale-swap fix.
+
+**The Play** (guarded, throwaway store, desktop; the console's own Mist start and end and its rain; the client's music logged every 0.5 s: `output/item19-mist-music-2026-10-12/19_music_timeline.txt`):
+- 28.9 s: BEGINS. The day bed fades out, at 0 by 30.2. Silence until BEGINS ends.
+- 32.8 s: the Mist's bed at position 2.6, full by 33.3.
+- 43.4 s: rain. The Mist's bed fades out; the rain's is full by 47.6.
+- 57.8 s: the rain closes. The Mist's bed returns at position 29.6, exactly its clock (start + BEGINS + 2.14).
+- 71.7 s: ENDS. The Mist's bed fades out; the day bed returns at 74.0, after ENDS.
+- The Music bus stayed at the player's level (0.32) throughout. No second Sound ever played the AMBIENCE.
+
+**Not seen:** a phone (the emulator stood on desktop), a Thunderstorm (the rain's own path), a disco or Pod Rush over the Mist (above it in the order, as the rain is).
+
+**Files:** GameConfig (Music.MistTrack, MistStart, MistFadeSeconds; the MistAmbience cue removed), Music.client (the Mist's bed, its holds, alignMist, its probe), Weather.client (no bed). Specs: MistAudioSpec, MusicBedSpec.
+
 ## THE QUEUE, ITEMS 16-18: ALL DONE — 2026-10-12 (CLAUDE, TERMINAL)  (LIVE as v1058; THE FINAL FULL SUITE 155/155)
 
 - **LIVE as v1058: items 16-18** -- the owner's publish at 15:02:57 UTC (Studio's log), of the bad12f3 tree (= origin/wip, nothing uncommitted in src). Every "NOT PUBLISHED" tag in the item 16B-18B entries below is now stale.
