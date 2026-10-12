@@ -10991,9 +10991,12 @@ GameConfig.Sfx = {
 		-- Peaks at 26%; quiet after 1.94 s. Quieter than BEGINS. Designed 0.30.
 		MistEnds = { id = "rbxassetid://105565685427294", volume = 1.15, clip = 2.0, group = "UI" },
 		-- Peaks at 21%: a twinkle, two hits in 0.26 s. AT the berry, heard near it
-		-- only (a berry comes every 3 s). Designed 0.25.
+		-- (a berry comes every 3 s). Designed 0.625 since 2026-10-12, the owner:
+		-- "almost nothing to hear" -- 2.5x the 0.25 it was, peaking at 0.63 through
+		-- the World bus; heard to 80 studs (40 before), full within 20 (SoundKit's
+		-- quarter of the range).
 		MistBerryAppears = {
-			id = "rbxassetid://93161571928576", volume = 1.19, range = 40, clip = 0.4, fadeOut = 0.1, group = "World",
+			id = "rbxassetid://93161571928576", volume = 2.98, range = 80, clip = 0.4, fadeOut = 0.1, group = "World",
 		},
 		-- Peaks at 42%; the pop in its first 0.12 s. Heard fifty times a Mist.
 		-- Designed 0.30.

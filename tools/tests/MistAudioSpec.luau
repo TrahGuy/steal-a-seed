@@ -86,7 +86,7 @@ local ok, err = pcall(function()
 		{ "MistAmbience", "91905968261795", 299.574, 0.85, nil, "World" },
 		{ "MistBegins", "107597832765081", 3.48, 0.98, 0.45, "UI" },
 		{ "MistEnds", "105565685427294", 2.28, 0.26, 0.30, "UI" },
-		{ "MistBerryAppears", "93161571928576", 0.48, 0.21, 0.25, "World" },
+		{ "MistBerryAppears", "93161571928576", 0.48, 0.21, 0.625, "World" },
 		{ "MistBerryPicked", "105691434133252", 0.48, 0.42, 0.30, "UI" },
 		{ "MistBerriesFull", "101482706102921", 0.48, 0.79, 0.35, "UI" },
 		{ "MistHello", "96949680041955", 1.2, 0.94, 0.30, "UI" },
@@ -123,8 +123,13 @@ local ok, err = pcall(function()
 			if designed and math.abs(cue.volume - designed / peak) > 0.05 * (designed / peak) + 0.01 then
 				table.insert(why, string.format("volume %.2f, designed/peak %.2f", cue.volume, designed / peak))
 			end
-			if type(cue.volume) ~= "number" or cue.volume <= 0 or cue.volume > 2 then
-				table.insert(why, "volume " .. tostring(cue.volume))
+			-- Clean through its bus (2026-10-12, the twinkle made 2.5x louder): the
+			-- measured peak times the volume and the bus's level stays under full
+			-- scale, as the disco's level was checked.
+			local busLevel = (GameConfig.Sfx :: any).Mixer[bus] or 1
+			if type(cue.volume) ~= "number" or cue.volume <= 0 or cue.volume * peak * busLevel > 1 then
+				table.insert(why, string.format("volume %s peaks at %.2f through %s", tostring(cue.volume),
+					(tonumber(cue.volume) or 0) * peak * busLevel, bus))
 			end
 		end
 		if #why > 0 then
@@ -145,8 +150,10 @@ local ok, err = pcall(function()
 	end
 	check(#shared == 0, "no other row plays any of them", table.concat(shared, "; "))
 	local twinkle = CUES.MistBerryAppears
-	check(twinkle and twinkle.range and twinkle.range >= 30 and twinkle.range <= 60,
-		"the twinkle AT a berry is heard near it only (a berry comes every 3 s)", twinkle and twinkle.range)
+	check(twinkle and twinkle.range == 80 and twinkle.volume and twinkle.volume * 0.21 >= 0.6
+			and twinkle.volume * 0.21 * ((GameConfig.Sfx :: any).Mixer.World or 1) <= 1,
+		"the twinkle AT a berry, louder and wider (the owner, 2026-10-12: 2.5x, heard to 80 studs): it peaks clean "
+			.. "through the World bus", twinkle and twinkle.range)
 	local bed = CUES.MistAmbience
 	check(bed and bed.looped == true and bed.range == nil and bed.start and bed.start >= 2 and bed.start < 2.2,
 		"the bed loops, flat (the rain's bed's way), past its 2.14 s of quiet")

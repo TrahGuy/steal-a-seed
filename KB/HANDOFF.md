@@ -1,5 +1,13 @@
 # Steal a Seed — Session Handoff
 
+## THE BERRY TWINKLE, LOUDER AND WIDER — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MistAudioSpec 19/0, EnchantedMistBerrySpec 73/0, SoundLevelSpec 28/0; MUTANT 1/1 CAUGHT)
+
+The owner: the DEWBERRY APPEARS twinkle was "almost nothing to hear".
+- **Louder and wider:**
+  - 2.5x louder: designed level 0.25 -> 0.625, volume 1.19 -> 2.98.
+  - Heard to 80 studs (40 before), and at full volume within 20 (SoundKit's quarter of the range).
+  - Still a 3D one-shot AT the berry, and still quiet in the Mist's first 3.48 s (item 16C).
+- **Its peak through the World bus:** 0.21 x 2.98 x 1.0 = 0.63, under full scale. MistAudioSpec now holds every Mist row to that rule (peak x volume x bus <= 1) instead of a flat volume <= 2.
 ## ITEM 16 C2: THE SOUND AUDIT — ONE MUSIC BED AT A TIME — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK (the timelines as proof), NOT PUBLISHED; MusicBedSpec 29/0, MistAudioSpec 19/0, RainAudioSpec 39/0, SoundLevelSpec 28/0, DiscoDancersSpec 59/0, PodRushSpec 98/0, SproutDashSpec 49/0; MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY FOR THE AUDIT AND ONE FOR THE PROOF)
 
 The owner: "check the other sounds too, sometimes rain bgm is overlapping too". The rules:
