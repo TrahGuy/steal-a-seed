@@ -1,5 +1,38 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 16 E: MORE MIST — ROLLING GROUND MIST, BIG PUFFS, THE HUB'S SWIRL — 2026-10-12 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED: awaiting the owner's OK; MistLookSpec 17/0, MistAudioSpec 19/0, RainAudioSpec 39/0, RainEventSpec 98/0, EnchantedMistSpec 62/0, MosskeeperSpec 69/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY)
+
+The owner wanted "like a real mist moving around": a rolling ground fog, drifting mist puffs, and thicker mist at the hub. The rules:
+- client-side, while the Mist is active only;
+- pooled and culled, with fewer on phones;
+- little or none under Performance Mode or Reduced FX;
+- no Atmosphere or FogEnd change;
+- built-in textures first.
+
+**What it is.** Weather.client draws it; the numbers are in `EnchantedMistConfig.Look` and the rates come from `MistLook.mistRates`.
+- ROLLING GROUND MIST (`Look.Ground`): wide, flat layers at knee height in a 90-stud square around the camera. They roll downwind (`Look.Wind`: 30 degrees, 1.1 studs/s) at 7 a second, 2.5 on a touch screen.
+- THE PUFFS: the mint wisps, grown to 12-20 studs, float on the same wind (`Drift`). Each lasts 8-12 s.
+- THE HUB: a ring of mist around the Mosskeeper's grove (r 15-30) and a band along the deck's edge (r 42-48). Each ring turns slowly and carries its mist round (LockedToPart). They are drawn only within 240 studs of the hub.
+- The texture is the engine's own smoke (`rbxasset://textures/particles/smoke_main.dds`). It is the only built-in that reads as mist: the explosion smoke is near-black, and the rest are strips and rings.
+- The parts sit under the camera, so nothing replicates. The mist eases in and out with the Mist, and a late joiner gets it at once. None shows under Reduced FX or Performance Mode. A part is removed only after its last mist has faded. No Atmosphere, no fog distance.
+
+**The Play** (guarded, throwaway store; the Mist started through the console's 5- and 10-minute starts):
+- Probes: while the Mist runs, every emitter is at full rate.
+- With Performance Mode on, every rate is 0, and the ground and hub parts go after their 16-s tail. Switched off, everything comes back.
+- Rain over the Mist: both run together. The Mist's bed already pauses under rain.
+- Tuned in the Play:
+  - The first numbers (transparency 0.8-0.9 over a 150-stud square) read as nothing, because the smoke's own alpha peaks near 0.45.
+  - 0.5 at 9 a second washed the field out.
+  - Shipped: 0.6 at 7 a second. The near grass keeps its colour, so a berry still reads, and the fences, trees and horizon haze over. From above, the hub reads as mist around the grove and along the deck's rim.
+- Night: StartNight ends the Mist (its own rule: no Mist at night), and its mist then fades over its tail. So there is no Mist night to compose with.
+- Not seen on a phone, since the emulator can't be switched from here. A touch screen gets about a third of the ground mist and of the rings.
+
+**Captures** (output/more-mist-2026-10-12/):
+- `16E_strength_compare.png`: the field and the plots, too strong vs shipped.
+- `16E_more_mist_sheet.png`: the plots, field, hub, from above, Performance Mode on, and rain over the Mist. These were taken at the stronger 0.5/0.55 tuning; the shipped hub rings are a touch fainter.
+
+**Files:** EnchantedMistConfig (Look: Wisps, Wind, Ground, Hub), MistLook (mistRates), Weather.client. Spec: MistLookSpec.
+
 ## ITEM 16 D: THE MYSTERIOUS POD'S DRAW — EVERY DRAW IN TURN, 5 s A REEL, THE DIMMER, SKIP — 2026-10-12 (CLAUDE, TERMINAL)  (PUSHED ON wip IN TWO COMMITS with the owner's OK, with the twinkle commit 457f6a0, NOT PUBLISHED; MysteryPodSpec 39/0, MistAudioSpec 19/0, HudLayoutSpec 1470/0, TutorialSpotlightSpec 51/0, InvitePanelSpec 395/0, MistCreaturesSpec 11/0; MUTANTS 14/14 CAUGHT; TWO GUARDED PLAYS)
 
 The owner (via the peer):

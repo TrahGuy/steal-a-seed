@@ -9,7 +9,8 @@
 -- anything, and a player who joins mid-event is right on their first frame.
 -- The sky's cloud layer and the overcast light are WorldClock's (Lighting has
 -- one owner); its icon over the hotbar is BoostIconsUI's. Since 2026-10-11 it
--- also draws the Enchanted Mist's wisps and fireflies (THE ENCHANTED MIST).
+-- also draws the Enchanted Mist's wisps and fireflies (THE ENCHANTED MIST),
+-- and since 2026-10-12 its rolling ground mist and the hub's swirl (MORE MIST).
 --
 --==============================================================================
 -- THE RAIN, OVER THE CAMERA, EVERYWHERE
@@ -237,6 +238,97 @@ local mistLevel = MistLook.wanted(Workspace:GetAttribute(MIST_STATE))
 local shownWisps, shownFireflies = -1, -1
 
 --==============================================================================
+-- MORE MIST (2026-10-12, the owner's item 16E: "like a real mist moving
+-- around"), the same way as the wisps -- the engine's own smoke on parts
+-- under the camera, never replicated, eased with the Mist, a touch screen's
+-- lower rates and none under Reduced FX or Performance Mode
+-- (MistLook.mistRates). No Atmosphere and no fog distance: particles only.
+--
+--   THE PUFFS        the wisps, grown big and faint, float off on the Wind.
+--   GROUND MIST      wide, flat, faint layers at knee height round the camera,
+--                    rolling slowly downwind (Look.Ground).
+--   THE HUB          a ring of mist round the Mosskeeper's grove and a band
+--                    along the deck's edge, each turning slowly and carrying
+--                    its mist round (LockedToPart) -- only while the camera is
+--                    within Look.Hub.Range of the hub.
+--
+-- A part goes only once its last mist has faded (MIST_TAIL after the last
+-- rate), so nothing is cut off mid-air.
+--==============================================================================
+local WIND = MIST.Wind
+local windDir = Vector3.new(math.cos(math.rad(WIND.Degrees)), 0, math.sin(math.rad(WIND.Degrees)))
+wisps.Acceleration = windDir * MIST.Wisps.Drift + Vector3.new(0, 0.04, 0)
+
+local GROUND = MIST.Ground
+local groundAnchor = sheet("MistGround", GROUND.Area)
+local groundMist = Instance.new("ParticleEmitter")
+groundMist.Name = "MistGround"
+groundMist.Texture = GROUND.Texture
+groundMist.Rate = 0
+groundMist.Lifetime = NumberRange.new(GROUND.Lifetime[1], GROUND.Lifetime[2])
+-- Downwind at the wind's own pace: the anchor faces it (placeMist).
+groundMist.Speed = NumberRange.new(WIND.Speed * 0.6, WIND.Speed)
+groundMist.EmissionDirection = Enum.NormalId.Front
+groundMist.SpreadAngle = Vector2.new(25, 2)
+groundMist.Size = NumberSequence.new(GROUND.Size[1], GROUND.Size[2])
+groundMist.Squash = NumberSequence.new(GROUND.Squash)
+groundMist.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(0.25, GROUND.Transparency),
+	NumberSequenceKeypoint.new(0.75, GROUND.Transparency),
+	NumberSequenceKeypoint.new(1, 1),
+})
+groundMist.Color = ColorSequence.new(GROUND.Colour)
+groundMist.LightEmission = GROUND.Glow
+groundMist.LightInfluence = 0
+-- Level layers: a flat smear tipped only a little.
+groundMist.Rotation = NumberRange.new(-6, 6)
+groundMist.RotSpeed = NumberRange.new(-2, 2)
+groundMist.Parent = groundAnchor
+
+local HUB = MIST.Hub
+local HUB_AT = GameConfig.Map.EventHub.Centre
+	+ Vector3.new(0, GameConfig.Map.GroundY + GameConfig.Map.EventHub.FloorY + HUB.Above, 0)
+local function hubRing(name: string, ring: any): (BasePart, ParticleEmitter)
+	local part = sheet(name, ring.Radius * 2)
+	local mist = Instance.new("ParticleEmitter")
+	mist.Name = name
+	mist.Texture = HUB.Texture
+	mist.Rate = 0
+	-- A flat ring: from Inner of the way out to the edge.
+	mist.Shape = Enum.ParticleEmitterShape.Disc
+	mist.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	mist.ShapePartial = ring.Inner
+	-- Carried round as the ring turns: the swirl.
+	mist.LockedToPart = true
+	mist.Lifetime = NumberRange.new(ring.Lifetime[1], ring.Lifetime[2])
+	mist.Speed = NumberRange.new(0.1, 0.4)
+	mist.EmissionDirection = Enum.NormalId.Top
+	mist.SpreadAngle = Vector2.new(30, 30)
+	mist.Size = NumberSequence.new(ring.Size[1], ring.Size[2])
+	mist.Squash = NumberSequence.new(-0.8)
+	mist.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.3, ring.Transparency),
+		NumberSequenceKeypoint.new(0.7, ring.Transparency),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	mist.Color = ColorSequence.new(HUB.Colour, HUB.Far)
+	mist.LightEmission = HUB.Glow
+	mist.LightInfluence = 0
+	mist.Rotation = NumberRange.new(-10, 10)
+	mist.RotSpeed = NumberRange.new(-4, 4)
+	mist.Parent = part
+	return part, mist
+end
+local groveRing, groveMist = hubRing("MistGrove", HUB.Grove)
+local edgeRing, edgeMist = hubRing("MistDeckEdge", HUB.Edge)
+local shownGround, shownGrove, shownEdge = -1, -1, -1
+-- The longest any of it lives, and when any of it was last let out (os.clock).
+local MIST_TAIL = math.max(GROUND.Lifetime[2], HUB.Grove.Lifetime[2], HUB.Edge.Lifetime[2])
+local groundLast, hubLast = -math.huge, -math.huge
+
+--==============================================================================
 -- THE MIST'S SOUND (2026-10-11, the owner's uploads): its bed, the
 -- MistAmbience cue on the World bus as the rain's loop is (SOUND FX moves it,
 -- MUSIC does not), at the look's own level -- in and out with it, full at once
@@ -350,6 +442,44 @@ local function stepMist(dt: number)
 	elseif wispAnchor.Parent ~= nil and mistLevel <= 0 then
 		wispAnchor.Parent = nil
 		fireflyAnchor.Parent = nil
+	end
+	-- MORE MIST: the ground mist round the camera, the hub's rings while near.
+	local nearHub = camera ~= nil and (camera.CFrame.Position - HUB_AT).Magnitude <= HUB.Range
+	local groundRate, groveRate, edgeRate =
+		MistLook.mistRates(mistLevel, UserInputService.TouchEnabled, StatusText.reducedMotion(), nearHub)
+	if groundRate ~= shownGround or groveRate ~= shownGrove or edgeRate ~= shownEdge then
+		shownGround, shownGrove, shownEdge = groundRate, groveRate, edgeRate
+		groundMist.Rate = groundRate
+		groveMist.Rate = groveRate
+		edgeMist.Rate = edgeRate
+	end
+	local clock = os.clock()
+	if groundRate > 0 then
+		groundLast = clock
+	end
+	if groveRate > 0 or edgeRate > 0 then
+		hubLast = clock
+	end
+	if camera and clock - groundLast <= MIST_TAIL then
+		if groundAnchor.Parent ~= camera then
+			groundAnchor.Parent = camera
+		end
+		local at = mistGround(camera) + Vector3.new(0, GROUND.Above, 0)
+		groundAnchor.CFrame = CFrame.lookAt(at, at + windDir)
+	elseif groundAnchor.Parent ~= nil then
+		groundAnchor.Parent = nil
+	end
+	if camera and clock - hubLast <= MIST_TAIL then
+		if groveRing.Parent ~= camera then
+			groveRing.Parent = camera
+			edgeRing.Parent = camera
+		end
+		-- Turned in doubles first: a clock-sized angle quantizes in CFrame.Angles.
+		groveRing.CFrame = CFrame.new(HUB_AT) * CFrame.Angles(0, (math.rad(HUB.Grove.Turn) * clock) % TAU, 0)
+		edgeRing.CFrame = CFrame.new(HUB_AT) * CFrame.Angles(0, (math.rad(HUB.Edge.Turn) * clock) % TAU, 0)
+	elseif groveRing.Parent ~= nil then
+		groveRing.Parent = nil
+		edgeRing.Parent = nil
 	end
 	stepMistBed()
 end
@@ -751,6 +881,9 @@ local function cleanup()
 	farAnchor:Destroy()
 	wispAnchor:Destroy()
 	fireflyAnchor:Destroy()
+	groundAnchor:Destroy()
+	groveRing:Destroy()
+	edgeRing:Destroy()
 	clearClouds()
 	SoundKit.stop(AUDIO.RainAmbience)
 	SoundKit.stop("MistAmbience")

@@ -91,6 +91,32 @@ local ok, err = pcall(function()
 	check(w == LOOK.Wisps.Rate and f == LOOK.Fireflies.Rate and tw < w and tf < f and rw == 0 and rf == 0
 			and nw == 0 and nf == 0,
 		"the wisps and fireflies: fewer on a touch screen, none under Reduced FX or with no Mist")
+	-- MORE MIST (2026-10-12, the owner's item 16E): the ground mist round the
+	-- camera and the hub's two rings, the same rules, the rings only near it.
+	local G, H = LOOK.Ground, LOOK.Hub
+	local g, gr, ed = MistLook.mistRates(1, false, false, true)
+	local tg, tgr, ted = MistLook.mistRates(1, true, false, true)
+	local fg, fgr, fed = MistLook.mistRates(1, false, false, false)
+	local rg, rgr, red = MistLook.mistRates(1, false, true, true)
+	local ng, ngr, ned = MistLook.mistRates(0, false, false, true)
+	local hg, hgr, hed = MistLook.mistRates(0.5, false, false, true)
+	check(g == G.Rate and gr == H.Grove.Rate and ed == H.Edge.Rate and tg < g and tgr < gr and ted < ed
+			and fg == g and fgr == 0 and fed == 0 and rg + rgr + red == 0 and ng + ngr + ned == 0
+			and hg == g / 2 and hgr == gr / 2 and hed == ed / 2,
+		"MORE MIST: the ground mist and the hub's rings ease with the Mist, fewer on a touch screen, none under "
+			.. "Reduced FX, the rings only near the hub")
+	local W = LOOK.Wisps
+	check(W.Size[1] >= 10 and W.Lifetime[1] >= 8 and W.Lifetime[2] <= 12 and W.Transparency >= 0.55
+			and (W.Drift or 0) > 0 and LOOK.Wind.Speed > 0 and LOOK.Wind.Speed <= 2,
+		"the wisps are big, see-through puffs floating past on a gentle wind, 8-12 s each")
+	-- Tuned in the Play's captures (2026-10-12): thicker than 0.55 washed the
+	-- field out (a berry on the grass got hard to see), much fainter read as
+	-- nothing at all.
+	check(G.Above <= 2 and G.Transparency >= 0.55 and G.Transparency <= 0.75 and G.Squash < 0 and G.Area <= 200
+			and H.Range <= 300 and H.Grove.Turn ~= 0 and H.Edge.Radius >= GameConfig.Map.HubRadius
+			and H.Grove.Transparency >= 0.55 and H.Edge.Transparency >= 0.55,
+		"the ground mist stays at knee height and flat, round the camera only, never so thick the field washes out; "
+			.. "the hub's swirl turns, its band along the deck's edge, drawn only near the hub")
 
 	--==========================================================================
 	say("2. Readable, and nothing invented")
@@ -100,13 +126,15 @@ local ok, err = pcall(function()
 			and luma(L.Ambient) >= luma(NIGHT.Ambient) and luma(L.OutdoorAmbient) >= luma(NIGHT.OutdoorAmbient)
 			and L.Ambient.B > L.Ambient.G and L.Ambient.R > L.Ambient.G * 0.95,
 		"a blue-violet night, never darker than the plain night the plots are tuned for")
-	local textures = { LOOK.Wisps.Texture, LOOK.Fireflies.Texture, LOOK.Glints.Texture }
+	local textures = { LOOK.Wisps.Texture, LOOK.Fireflies.Texture, LOOK.Glints.Texture, LOOK.Ground.Texture,
+		LOOK.Hub.Texture }
 	local engine = true
 	for _, t in ipairs(textures) do
 		engine = engine and type(t) == "string" and string.sub(t, 1, 11) == "rbxasset://"
 	end
 	check(engine and (L :: any).Fog == nil and (LOOK :: any).Fog == nil and (LOOK :: any).Sound == nil,
-		"the engine's own particle textures, no fog and no sound: no upload invented")
+		"the engine's own particle textures (the ground mist and the hub's swirl too), no fog setting and no sound: "
+			.. "no upload invented")
 
 	--==========================================================================
 	say("3. The owners")
@@ -123,6 +151,15 @@ local ok, err = pcall(function()
 			and string.find(weather, "StatusText.reducedMotion()", 1, true) ~= nil
 			and string.find(weather, "\n\tstepMist(dt)\n", 1, true) ~= nil,
 		"Weather.client draws the wisps and fireflies over the camera, eased, Reduced FX respected")
+	check(string.find(weather, "MistLook.mistRates(mistLevel, UserInputService.TouchEnabled, StatusText.reducedMotion(), "
+				.. "nearHub)", 1, true) ~= nil
+			and string.find(weather, "local nearHub = camera ~= nil and (camera.CFrame.Position - HUB_AT).Magnitude <= "
+				.. "HUB.Range", 1, true) ~= nil
+			and string.find(weather, "mist.LockedToPart = true", 1, true) ~= nil
+			and string.find(weather, "groundAnchor.CFrame = CFrame.lookAt(at, at + windDir)", 1, true) ~= nil
+			and not string.find(weather, "FogEnd", 1, true) and not string.find(weather, "Atmosphere", 1, true),
+		"MORE MIST (2026-10-12): Weather.client rolls the ground mist downwind round the camera and turns the hub's "
+			.. "rings only near it, eased and Reduced FX respected -- particles only, no Atmosphere and no fog distance")
 	local berries = strip(Scripts:WaitForChild("EnchantedMistBerries").Source)
 	check(string.find(berries, "LOOK.Glints", 1, true) ~= nil and string.find(berries, "StatusText.reducedMotion()", 1, true)
 			~= nil,

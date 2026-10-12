@@ -440,9 +440,12 @@ EnchantedMistConfig.Mystery = {
 -- LIGHT (WorldClock): toward the night sky -- ClockTime 0, its moon and stars
 -- -- but lighter and more violet than the plain night the plots are tuned for
 -- (WorldCycle.Night: Brightness 1.1, ambients 58,66,96 / 66,78,116), so the
--- road, the berries and the far biomes keep reading. No fog of any kind.
--- WISPS and FIREFLIES (Weather.client), GLINTS (EnchantedMistBerries.client):
--- decoration, off under Reduced FX, a touch screen's lower rates. Every
+-- road, the berries and the far biomes keep reading. No fog setting of any
+-- kind: no Atmosphere, no fog distance.
+-- WISPS, FIREFLIES, and since 2026-10-12 (item 16E) the ROLLING GROUND MIST
+-- and the HUB'S SWIRL -- all particles (Weather.client) -- and GLINTS
+-- (EnchantedMistBerries.client): decoration, off under Reduced FX, a touch
+-- screen's lower rates. Every
 -- texture is the engine's own particle (rbxasset://), never an upload. Its
 -- sound (the owner's uploads, 2026-10-11) is GameConfig.Sfx's Mist cues.
 --==============================================================================
@@ -463,22 +466,70 @@ EnchantedMistConfig.Look = {
 		FadeSeconds = 4,
 		FadeOutSeconds = 6,
 	},
-	-- Soft mint wisps low over the ground round the camera: big, faint, slow,
-	-- and SELF-LIT (Glow, no light influence) -- lit by the night they read as
-	-- dark smudges (the first Play's captures).
+	-- Soft mint wisps round the camera: SELF-LIT (Glow, no light influence) --
+	-- lit by the night they read as dark smudges (the first Play's captures).
+	-- MORE MIST (2026-10-12, the owner's item 16E: "like a real mist moving
+	-- around"): grown into big, very see-through PUFFS floating past on the
+	-- Wind -- Drift is its push, the drag holds it to a slow float -- each
+	-- fading in and out over 8-12 s.
 	Wisps = {
-		Rate = 8,
-		ReducedRate = 3,
-		Area = 110,
-		Above = 0.4,
+		Rate = 6,
+		ReducedRate = 2.5,
+		Area = 120,
+		Above = 1.5,
 		Texture = "rbxasset://textures/particles/smoke_main.dds",
 		Colour = Color3.fromRGB(150, 255, 210),
 		Far = Color3.fromRGB(186, 168, 255),
-		Size = { 6, 11 },
-		Transparency = 0.7,
-		Glow = 0.6,
-		Lifetime = { 7, 10 },
-		Speed = { 0.3, 0.9 },
+		Size = { 12, 20 },
+		Transparency = 0.6,
+		Glow = 0.4,
+		Lifetime = { 8, 12 },
+		Speed = { 0.2, 0.5 },
+		Drift = 0.35,
+	},
+	-- The wind the ground mist and the puffs drift on: a heading in degrees,
+	-- round from +X toward +Z, and studs a second.
+	Wind = { Degrees = 30, Speed = 1.1 },
+	-- ROLLING GROUND MIST (item 16E): wide, faint layers at knee height round
+	-- the camera, rolling slowly downwind -- the engine's smoke drawn wide and
+	-- flat (Squash) and kept level (little Rotation), faintly self-lit so the
+	-- night does not draw it dark. Low and see-through, so the berries, the
+	-- prompts and the road read through it; only round the camera, so the far
+	-- biomes stay clear. A touch screen's at ReducedRate; none under Reduced FX
+	-- (MistLook.mistRates). Tuned in the Play's captures (2026-10-12): fainter
+	-- (0.9 over a 150-stud square) read as nothing, 0.5 at 9 a second washed the
+	-- field out; this keeps the near grass's colour, so a berry reads, and
+	-- hazes the fences, the trees and the horizon. The smoke's own alpha peaks
+	-- near 0.45, so Transparency 0.6 is about a fifth opaque at its middle.
+	Ground = {
+		Rate = 7,
+		ReducedRate = 2.5,
+		Area = 90,
+		Above = 1.1,
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Colour = Color3.fromRGB(222, 216, 255),
+		Size = { 20, 32 },
+		Squash = -0.6,
+		Transparency = 0.6,
+		Glow = 0.35,
+		Lifetime = { 12, 16 },
+	},
+	-- THICKER AT THE HUB (item 16E): a slow swirl round the Mosskeeper's grove
+	-- and a band along the deck's edge (Map.HubRadius 46), each a ring of the
+	-- same smoke (Radius, Inner: the ring's inside as a share of it) that turns
+	-- Turn degrees a second, carrying its mist round -- drawn only while the
+	-- camera is within Range of the hub's centre.
+	Hub = {
+		Range = 240,
+		Above = 1.4,
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Colour = Color3.fromRGB(176, 255, 222),
+		Far = Color3.fromRGB(196, 182, 255),
+		Glow = 0.45,
+		Grove = { Radius = 30, Inner = 0.5, Rate = 7, ReducedRate = 2.5, Size = { 10, 18 }, Transparency = 0.58,
+			Lifetime = { 8, 12 }, Turn = 6 },
+		Edge = { Radius = 48, Inner = 0.88, Rate = 9, ReducedRate = 3, Size = { 12, 20 }, Transparency = 0.6,
+			Lifetime = { 9, 13 }, Turn = -3 },
 	},
 	-- Sparkles drifting a few studs up: fireflies and glinting leaves.
 	Fireflies = {

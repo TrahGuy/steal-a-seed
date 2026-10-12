@@ -11,7 +11,9 @@
 --     number, `mist`, laid over the day/night blend and under the rain and
 --     the disco, with a soft violet tone of its own;
 --   * the WISPS and FIREFLIES are Weather.client's (the weather's FX owner):
---     two emitters that follow the camera, low over the ground;
+--     two emitters that follow the camera, low over the ground; and since
+--     2026-10-12 (item 16E) the ROLLING GROUND MIST round the camera and the
+--     HUB'S SWIRL round the grove and the deck's edge, all particles;
 --   * the berries' GLINTS are EnchantedMistBerries.client's.
 --
 -- This file is the numbers' arithmetic those owners share (the numbers are
@@ -97,6 +99,23 @@ function MistLook.rates(level: number, touch: boolean, reduced: boolean): (numbe
 	end
 	local W, F = LOOK.Wisps, LOOK.Fireflies
 	return (if touch then W.ReducedRate else W.Rate) * level, (if touch then F.ReducedRate else F.Rate) * level
+end
+
+-- MORE MIST (2026-10-12, item 16E): the ground mist's rate round the camera
+-- and the hub's two rings' (the grove's swirl, the deck's edge) at `level` --
+-- none under Reduced FX or with no Mist, a touch screen's lower rates, the
+-- rings only while the camera is `nearHub` (LOOK.Hub.Range).
+function MistLook.mistRates(level: number, touch: boolean, reduced: boolean, nearHub: boolean): (number, number, number)
+	if reduced or level <= 0 then
+		return 0, 0, 0
+	end
+	local G, H = LOOK.Ground, LOOK.Hub
+	local ground = (if touch then G.ReducedRate else G.Rate) * level
+	if not nearHub then
+		return ground, 0, 0
+	end
+	return ground, (if touch then H.Grove.ReducedRate else H.Grove.Rate) * level,
+		(if touch then H.Edge.ReducedRate else H.Edge.Rate) * level
 end
 
 return MistLook
