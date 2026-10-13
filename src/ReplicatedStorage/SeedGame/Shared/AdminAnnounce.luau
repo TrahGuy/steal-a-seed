@@ -65,6 +65,9 @@ end
 --   mistready                   a player's Mysterious Pods made ready
 --   burst                       a burst of Dewberries dropped
 --   misteligible                the Enchanted Mist made eligible
+-- REBIRTHS (2026-10-13, the owner's item 9):
+--   rebirths (+ amount)         rebirths added to a player's count; never a
+--                               reset to 0 (silent, as a progress reset is)
 -- `own` when the admin gave to themselves; `target` the player's name otherwise.
 export type What = {
 	kind: string,
@@ -151,6 +154,16 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return string.format(W.MistReadyOwn, admin)
 		end
 		return string.format(W.MistReady, admin, what.target or W.Somebody)
+	elseif kind == "rebirths" then
+		local n = what.amount
+		if not n or n <= 0 then
+			return nil
+		end
+		local rebirths = if n == 1 then W.OneRebirth else string.format(W.Rebirths, n)
+		if what.own then
+			return string.format(W.RebirthsOwn, admin, rebirths)
+		end
+		return string.format(W.RebirthsGiven, admin, what.target or W.Somebody, rebirths)
 	elseif kind == "burst" then
 		return string.format(W.Burst, admin)
 	elseif kind == "misteligible" then

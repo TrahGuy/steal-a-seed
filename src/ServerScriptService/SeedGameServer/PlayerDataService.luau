@@ -624,10 +624,11 @@ function PlayerDataService.PublishDewberries(player: Player)
 end
 
 --==============================================================================
--- REBIRTH (2026-10-08): the count and when it last happened. RebirthService is
--- the only caller -- it decides, this keeps the save dirty-flagged, the count
--- published for every client (the panel, the displays' income) and the
--- player-list column current.
+-- REBIRTH (2026-10-08): the count and when it last happened. RebirthService and
+-- (2026-10-13, item 9: the count raised or set to 0, nothing else) the admin
+-- console's AdminService are the callers -- they decide, this keeps the save
+-- dirty-flagged, the count published for every client (the panel, the
+-- displays' income) and the player-list column current.
 --==============================================================================
 function PlayerDataService.UpdateRebirth(player: Player, change: (Profile) -> boolean): boolean
 	local entry = entries[player]

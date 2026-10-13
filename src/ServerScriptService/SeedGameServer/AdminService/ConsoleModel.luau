@@ -181,7 +181,8 @@ end
 -- since 2026-10-12 too, so WORLD fits a phone.
 function ConsoleModel.sections(tabId: string): { string }
 	if tabId == "player" then
-		return { "money", "speed", "reset" }
+		return { "money", "speed", "rebirth", "reset" }
+		-- (REBIRTHS shares RESET PROGRESS's row; its card opens under it.)
 	elseif tabId == "spawn" then
 		return { "groups", "search", "grid", "form", "size", "quantity", "preview", "spawn" }
 	elseif tabId == "world" then
@@ -275,6 +276,14 @@ ConsoleModel.args = {
 	end,
 	reset = function(targetId: number, typed: string): Args
 		return args("ResetPlayerProgress", targetId, nil, typed)
+	end,
+	-- REBIRTHS (2026-10-13, the owner's item 9): how many to add to the count;
+	-- the count back to 0, the target's username its confirm.
+	addRebirths = function(targetId: number, n: number): Args
+		return args("AddRebirths", targetId, n, nil)
+	end,
+	resetRebirths = function(targetId: number, confirmName: string): Args
+		return args("ResetRebirths", targetId, nil, confirmName)
 	end,
 	-- The whole server's: the target rides along as it always did, and the
 	-- server never reads it.
@@ -684,7 +693,7 @@ function ConsoleModel.spawnRowHeight(w: number, rowH: number): number
 	return if w >= M.SpawnRowMinW then rowH else rowH * 2 + M.RowGap
 end
 
-export type PageOpts = { split: boolean?, resetOpen: boolean? }
+export type PageOpts = { split: boolean?, resetOpen: boolean?, rebirthOpen: boolean? }
 
 -- A tab's height at page inner width `w` -- for SPAWN, the height its controls
 -- column needs at that column's inner width. Every question stands in for the
@@ -700,16 +709,26 @@ function ConsoleModel.pageHeight(tabId: string, w: number, rowH: number, opts: P
 	local sections: { number } = {}
 	if tabId == "player" then
 		-- ADD MONEY and ADD SPEED (side by side when split): the box beside its
-		-- button, the quick chips, the full number. Then RESET PROGRESS's row.
+		-- button, the quick chips, the full number. Then REBIRTHS, then RESET
+		-- PROGRESS's row.
 		local split = o.split == true
 		local half = if split then math.floor((w - M.ColGap) / 2) else w
 		local inner = half - M.CardPad * 2
 		local grant = ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(inner, 1, rowH),
 			ConsoleModel.chipsHeight(5, inner, M.GrantChipMinW, 5, rowH), M.LineH })
 		table.insert(sections, if split then grant else grant * 2 + M.SectionGap)
+		-- RESET PROGRESS's red box; or the row it shares (2026-10-13, item 9) with
+		-- REBIRTHS -- the count beside REBIRTHS... and RESET PROGRESS... -- and,
+		-- while it is open, the rebirth card under it: the box beside ADD and +1,
+		-- then CLOSE and SET TO 0 (its question in the same row's place).
+		local shared = ConsoleModel.actionRowHeight(w, 2, rowH)
+		if o.rebirthOpen and not o.resetOpen then
+			shared += M.RowGap + ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH),
+				ConsoleModel.actionRowHeight(cardW, 2, rowH) })
+		end
 		table.insert(sections, if o.resetOpen
 			then ConsoleModel.cardHeight({ M.LineH, M.SmallLineH * 3, M.SmallLineH, rowH, M.SmallLineH })
-			else ConsoleModel.actionRowHeight(w, 1, rowH))
+			else shared)
 	elseif tabId == "world" then
 		-- Night and day; the weather with its durations; the Enchanted Mist.
 		table.insert(sections, ConsoleModel.cardHeight({ ConsoleModel.actionRowHeight(cardW, 2, rowH) }))

@@ -11,7 +11,8 @@
 -- Mist for this server -- and (2026-10-12, the owner's item 12) the Mist's
 -- tools: its length, MAKE ELIGIBLE NOW, a BERRY BURST, MOSSKEEPER SAYS, and
 -- for a player their Dewberries, their Dewberry progress, a Mysterious Pod and
--- MAKE READY NOW.
+-- MAKE READY NOW -- and (2026-10-13, the owner's item 9) a player's rebirth
+-- count raised, or set back to 0.
 -- Nothing else, and nobody else.
 --
 --==============================================================================
@@ -81,7 +82,10 @@
 --      sender -- their username, a pod waiting to be made ready)
 --   7. for cash and Speed, a finite whole number from 1 to the limit -- the
 --      save's own (2026-10-07: GameConfig.Save.MaxCash and MaxSpeedScore); for
---      a reset, the target's username typed back, and a profile that is saving
+--      a reset, the target's username typed back, and a profile that is saving;
+--      for rebirths (2026-10-13), a whole number from 1 to MaxRebirths to add,
+--      and for setting them back to 0 the target's username, the console's
+--      confirm
 --
 -- Cash and Speed go through the faucets' own one-off payers,
 -- EconomyService.PayReward and TreadmillService.PayReward -- the ones the Biome
@@ -170,6 +174,10 @@ AdminService.Config = {
 	-- How long a request's answer is remembered, so the same request sent twice
 	-- -- a double press, a resend -- is answered again and never given twice.
 	SpawnAnswerSeconds = 300,
+	-- REBIRTHS (2026-10-13, the owner's item 9): the most an admin adds in one
+	-- request, and the count no admin give goes past. The 100 titles end at
+	-- 100; a rebirth's price stops at GameConfig.Rebirth.PriceCap.
+	MaxRebirths = 1000,
 }
 
 local GUI_NAME = "SeedAdmin"
@@ -219,6 +227,11 @@ local ACTIONS: { [string]: boolean } = {
 	MistProgress = true,
 	MistPod = true,
 	MistReady = true,
+	-- 2026-10-13, the owner's item 9, for a player in this server: their rebirth
+	-- count raised by a whole number (the count only), or set back to 0 behind
+	-- their username.
+	AddRebirths = true,
+	ResetRebirths = true,
 }
 
 -- The mini event's verbs: each start verb names its mode, and "end".
@@ -1440,6 +1453,80 @@ local function mistReady(admin: any, target: Player): Reply
 end
 
 --==============================================================================
+-- REBIRTHS (2026-10-13, the owner's item 9: "ADD raises only the count, never
+-- wiping money or plants; RESET sets it to 0")
+--
+-- The COUNT and nothing else. ADD never runs a rebirth: no cash spent, no mill
+-- put back, no plant touched, the rebirth cooldown left as it was (RebirthAt).
+-- RESET sets the count to 0, behind the console's question and checked here
+-- by the target's username, as RESET PROGRESS is. Both through
+-- PlayerDataService.UpdateRebirth -- the save dirty-flagged, the count
+-- published, the player list current -- so everything that reads the count
+-- follows it at once: training and income (each worked out from it), the title
+-- over the name, its effects and the aura, the plot owner's fence
+-- (RebirthService follows the published count), the panel's next price and the
+-- HUD's "!". An ADD is said to everybody, folded per admin and player (item
+-- 10); a reset says nothing, as a progress reset says nothing.
+--==============================================================================
+local function rebirthWords(n: number): string
+	return if n == 1 then "1 rebirth" else commas(n) .. " rebirths"
+end
+
+local function addRebirths(admin: any, target: Player, amount: any): Reply
+	local cap = AdminService.Config.MaxRebirths
+	local n = wholeIn(amount, 1, cap)
+	if not n then
+		return refuse(string.format("Enter a whole number of rebirths from 1 to %s. Nothing changed.", commas(cap)))
+	end
+	local before, after = 0, 0
+	local changed = PlayerDataService.UpdateRebirth(target, function(p: any): boolean
+		before = GameConfig.rebirthCount(p.Rebirths)
+		after = math.min(cap, before + n)
+		if after <= before then
+			return false
+		end
+		p.Rebirths = after
+		return true
+	end)
+	if not changed then
+		return refuse(string.format("Nothing added: %s already has %s, the most an admin gives.", target.Name,
+			rebirthWords(before)))
+	end
+	local added = after - before
+	record(admin, target, "AddRebirths", added, n)
+	local f = foldGive(admin, target, { kind = "rebirths", amount = added })
+	announce(admin, { kind = "rebirths", amount = f.amount, own = target == admin,
+		target = AdminAnnounce.nameOf(target) }, userIdOf(target))
+	local message = string.format("Added %s to %s: %s now.", rebirthWords(added), target.Name, rebirthWords(after))
+	if added < n then
+		message = string.format("Added %s to %s -- the %s limit stopped the rest of %s.", rebirthWords(added),
+			target.Name, commas(cap), commas(n))
+	end
+	return { ok = true, message = message, added = added }
+end
+
+local function resetRebirths(admin: any, target: Player, typed: any): Reply
+	if not confirmMatches(typed, target) then
+		return refuse(string.format("Confirm with %s's username to set their rebirths to 0. Nothing changed.",
+			target.Name))
+	end
+	local before = 0
+	local changed = PlayerDataService.UpdateRebirth(target, function(p: any): boolean
+		before = GameConfig.rebirthCount(p.Rebirths)
+		if before == 0 then
+			return false
+		end
+		p.Rebirths = 0
+		return true
+	end)
+	if not changed then
+		return refuse(string.format("%s has no rebirths. Nothing changed.", target.Name))
+	end
+	record(admin, target, "ResetRebirths", before, nil)
+	return { ok = true, message = string.format("%s's rebirths were set from %s to 0.", target.Name, commas(before)) }
+end
+
+--==============================================================================
 -- ONE REQUEST
 --
 -- The whole of the server's side of the console, and the only thing the
@@ -1524,6 +1611,13 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	elseif action == "MistReady" then
 		return mistReady(sender, target)
 	end
+	-- REBIRTHS (2026-10-13, item 9): the third word how many to add; RESET's
+	-- fourth, the target's username.
+	if action == "AddRebirths" then
+		return addRebirths(sender, target, amount)
+	elseif action == "ResetRebirths" then
+		return resetRebirths(sender, target, confirmName)
+	end
 	return grant(sender, target, action, amount)
 end
 
@@ -1563,6 +1657,7 @@ function AdminService.ProvideConsole(player: any): ScreenGui?
 	gui.DisplayOrder = 60
 	gui:SetAttribute("MaxMoney", AdminService.Config.MaxMoney)
 	gui:SetAttribute("MaxSpeed", AdminService.Config.MaxSpeed)
+	gui:SetAttribute("MaxRebirths", AdminService.Config.MaxRebirths)
 	-- How the console DRAWS its controls (2026-10-04; SPAWN 2026-10-07): SPAWN
 	-- locked while its switch is off, and the countdowns the server's own waits
 	-- run on. Display only: Handle still decides every press. (An IsOwner here

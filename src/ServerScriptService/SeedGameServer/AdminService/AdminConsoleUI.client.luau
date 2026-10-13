@@ -17,8 +17,11 @@
 --               server's Roster). You by default.
 --   PLAYER      ADD MONEY and ADD SPEED: a box that takes K, M, B, T and Qd
 --               beside its button, quick chips (1M, 1B, 1T, 1Qd, MAX), and the
---               full number before anything is sent; RESET PROGRESS behind one
---               red button, and then behind the typed username
+--               full number before anything is sent; REBIRTHS (2026-10-13, the
+--               owner's item 9): the target's count beside +1 and SET TO 0
+--               (behind its question), and a box for any number to add -- the
+--               count only, never a rebirth; RESET PROGRESS behind one red
+--               button, and then behind the typed username
 --   SPAWN       group chips and a search over a grid of species cards (each
 --               with its picture); POD or GROWN PLANT; the size, stepped
 --               through the sizes it really comes in; how many, up to the
@@ -76,7 +79,8 @@
 -- Every control is a GuiButton or a text box, and every one is Selectable. LB
 -- and RB step through the tabs and put the selection on the tab's main button
 -- (ConsoleModel.MainButton); B steps back -- out of the player list, then out
--- of a question, then out of the red box, then out of the console -- and
+-- of a question, then out of the red box or the rebirth card, then out of the
+-- console -- and
 -- Escape closes it, both bound only while it is open. The grid's cards take a
 -- press only when the list was not being scrolled (MenuKit.tap). One centre
 -- panel at a time: the console writes its name to OpenPanel and steps aside
@@ -346,6 +350,8 @@ local state = {
 	askText = nil :: string?,
 	-- RESET PROGRESS's red box: shut until its button opens it.
 	resetOpen = false,
+	-- The rebirth card (2026-10-13, item 9): shut until REBIRTHS... opens it.
+	rebirthOpen = false,
 	-- SPAWN's choices.
 	group = "",
 	search = "",
@@ -1010,20 +1016,45 @@ do
 	ui.money = grantCard(pair, "Money", true)
 	ui.speed = grantCard(pair, "Speed", false)
 
-	-- RESET PROGRESS: one red button, which opens the red box -- and in it the
-	-- username typed back unlocks RESET PROGRESS, as before.
+	-- REBIRTHS AND RESET PROGRESS, ONE ROW (2026-10-13, the owner's item 9):
+	-- the target's rebirth count (their published one) beside REBIRTHS... and
+	-- RESET PROGRESS... -- the row RESET PROGRESS had alone, so a phone's
+	-- PLAYER still fits with no scroll (item 11). REBIRTHS... opens the rebirth
+	-- card under it: a box for any number to add beside ADD and +1, then CLOSE
+	-- and SET TO 0, which asks first, in its row's place. The count only: never
+	-- a rebirth, never their cash or plants (AdminService). RESET PROGRESS...
+	-- opens the red box, and in it the username typed back unlocks RESET
+	-- PROGRESS, as before.
 	local col = build.column(page, "Reset", ROW_GAP)
-	local opener = build.action(col, "Opener", "page", { { "OpenReset", "RESET PROGRESS\u{2026}" } }, 200)
-	-- White with its ink edge (MenuKit.body's): it stands on the dark plate, not a card.
-	local why = MenuKit.body(opener.frame, "Why", 12, WHITE, Z + 1)
-	why.TextWrapped = true
-	why.TextXAlignment = Enum.TextXAlignment.Left
-	why.Text = "Erases the target's progress and saves. It asks for their username first."
-	opener.left = why
-	opener.inset = 0
-	ui.openReset = opener.buttons[1]
+	local opener = build.action(col, "Opener", "page", { { "OpenRebirths", "REBIRTHS\u{2026}" },
+		{ "OpenReset", "RESET PROGRESS\u{2026}" } }, 170)
+	local rDot
+	ui.rebirthLine, rDot, opener.left = build.state(opener.frame, "RebirthCount", "REBIRTHS")
+	rDot.BackgroundColor3 = GOLD
+	ui.openRebirths, ui.openReset = opener.buttons[1], opener.buttons[2]
+	ui.openRebirths.style("sky")
 	face(ui.openReset, "danger")
 	ui.resetOpener = opener.frame
+	local rCard = build.card(col, "Rebirths")
+	rCard.Visible = false
+	ui.rebirthCard = rCard
+	local addRow = build.action(rCard, "RebirthAdd", "full", { { "AddRebirths", "ADD" }, { "AddRebirthOne", "+1" } })
+	ui.rebirthBox = build.box(addRow.frame, "RebirthAmount",
+		string.format("Rebirths to add: 1 to %s", Model.commas(attr("MaxRebirths", 1000))))
+	addRow.left = ui.rebirthBox
+	ui.rebirthAdd, ui.rebirthOne = addRow.buttons[1], addRow.buttons[2]
+	local rRow = build.action(rCard, "RebirthRow", "full", { { "CloseRebirths", "CLOSE" },
+		{ "AskRebirthReset", "SET TO 0\u{2026}" } })
+	local only = MenuKit.body(rRow.frame, "Only", 12, LOOK.Muted, Z + 1)
+	only.TextWrapped = true
+	only.TextXAlignment = Enum.TextXAlignment.Left
+	only.Text = "The count only: never a rebirth, never their cash or plants."
+	rRow.left = only
+	rRow.inset = 0
+	ui.closeRebirths, ui.rebirthReset = rRow.buttons[1], rRow.buttons[2]
+	ui.closeRebirths.style("idle")
+	ui.rebirthRow = rRow.frame
+	ui.rebirthAsk = build.question(rCard, "RebirthQuestion", "full", "SET TO 0")
 	local card = build.card(col, "Danger", true)
 	card.Visible = false
 	ui.resetCard = card
@@ -1781,6 +1812,22 @@ function paint.player()
 			g.go.set(if state.busy then "…" else "ADD SPEED")
 		end
 	end
+	-- REBIRTHS: the target's count as the server published it; in the card, +1
+	-- while under the limit, ADD for a good number, SET TO 0 while there is one
+	-- to clear -- its question in its row's place while it asks.
+	local p = currentTarget()
+	local count = GameConfig.rebirthCount(p:GetAttribute(GameConfig.Rebirth.Attributes.Rebirths))
+	local most = attr("MaxRebirths", 1000)
+	ui.rebirthLine.Text = string.format("%s: %s REBIRTH%s", if p == player then "YOU" else string.upper(p.DisplayName),
+		Model.commas(count), if count == 1 then "" else "S")
+	ui.rebirthCard.Visible = state.rebirthOpen and not state.resetOpen
+	lockable(ui.rebirthOne, count < most and not state.busy, "go", if state.busy then "…" else "+1")
+	lockable(ui.rebirthReset, count > 0 and not state.busy, "danger", "SET TO 0\u{2026}")
+	local adding = Model.parseAmount(ui.rebirthBox.Text, most)
+	lockable(ui.rebirthAdd, adding ~= nil and count < most and not state.busy, "go", if state.busy then "…" else "ADD")
+	local resetting = state.asking == "rebirthreset"
+	ui.rebirthAsk.block.Visible = resetting
+	ui.rebirthRow.Visible = not resetting
 	local match = typedMatches()
 	lockable(ui.resetButton, match and not state.busy, "danger", if state.busy then "…" else "RESET PROGRESS")
 	ui.resetHint.Text = if match then "Press RESET PROGRESS to erase and save." else "Locked until the username matches."
@@ -2302,6 +2349,11 @@ ui.typedBox:GetPropertyChangedSignal("Text"):Connect(paint.player)
 -- RESET PROGRESS's red box: opened by its button, shut by CANCEL (its typing gone).
 ui.openReset.hit.Activated:Connect(function()
 	state.resetOpen = true
+	-- One box open at a time: the rebirth card (and its question) shut.
+	state.rebirthOpen = false
+	if state.asking == "rebirthreset" then
+		state.asking = nil
+	end
 	paint.all()
 	toFoot(ui.page.player)
 	selectIfPad(ui.typedBox)
@@ -2320,6 +2372,57 @@ ui.resetButton.hit.Activated:Connect(function()
 	local typed = ui.typedBox.Text
 	ui.typedBox.Text = ""
 	task.spawn(send, Model.args.reset(currentTarget().UserId, typed))
+end)
+-- REBIRTHS (2026-10-13, item 9): REBIRTHS... opens and shuts the card, CLOSE
+-- shuts it; +1 and ADD go at once, the count only; SET TO 0 asks first, in its
+-- row's place, and its yes sends the target's username.
+ui.openRebirths.hit.Activated:Connect(function()
+	state.rebirthOpen = not state.rebirthOpen
+	if state.asking == "rebirthreset" then
+		state.asking = nil
+	end
+	paint.all()
+	if state.rebirthOpen then
+		toFoot(ui.page.player)
+		selectIfPad(ui.rebirthBox)
+	end
+end)
+ui.closeRebirths.hit.Activated:Connect(function()
+	state.rebirthOpen = false
+	ui.rebirthBox.Text = ""
+	paint.all()
+	selectIfPad(ui.openRebirths.hit)
+end)
+ui.rebirthBox:GetPropertyChangedSignal("Text"):Connect(paint.player)
+ui.rebirthOne.hit.Activated:Connect(function()
+	task.spawn(send, Model.args.addRebirths(currentTarget().UserId, 1))
+end)
+ui.rebirthAdd.hit.Activated:Connect(function()
+	local amount, why = Model.parseAmount(ui.rebirthBox.Text, attr("MaxRebirths", 1000))
+	if not amount then
+		note("Not sent: " .. (why or "type how many rebirths to add."), false)
+		return
+	end
+	task.spawn(send, Model.args.addRebirths(currentTarget().UserId, amount))
+end)
+ui.rebirthReset.hit.Activated:Connect(function()
+	local p = currentTarget()
+	local count = GameConfig.rebirthCount(p:GetAttribute(GameConfig.Rebirth.Attributes.Rebirths))
+	ui.rebirthAsk.words.Text = if p == player
+		then string.format("Set your rebirths (%s) to 0?", Model.commas(count))
+		else string.format("Set %s's rebirths (%s) to 0?", p.DisplayName .. " (@" .. p.Name .. ")", Model.commas(count))
+	setAsking("rebirthreset", nil)
+	selectIfPad(ui.rebirthAsk.cancel.hit)
+end)
+ui.rebirthAsk.cancel.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	note("No rebirths were changed.", nil)
+	selectIfPad(ui.rebirthReset.hit)
+end)
+ui.rebirthAsk.confirm.hit.Activated:Connect(function()
+	local p = currentTarget()
+	setAsking(nil, nil)
+	task.spawn(send, Model.args.resetRebirths(p.UserId, p.Name))
 end)
 
 --==============================================================================
@@ -2791,6 +2894,8 @@ local function tick(want: boolean)
 		paint.world()
 		paint.spawn()
 		paint.mist()
+		-- The target's rebirth count, as the server publishes it (item 9).
+		paint.player()
 		task.delay(1, step)
 	end
 	step()
@@ -2840,6 +2945,11 @@ local function back()
 		ui.typedBox.Text = ""
 		paint.all()
 		selectIfPad(ui.openReset.hit)
+	elseif state.rebirthOpen and state.tab == "player" then
+		state.rebirthOpen = false
+		ui.rebirthBox.Text = ""
+		paint.all()
+		selectIfPad(ui.openRebirths.hit)
 	else
 		setOpen(false)
 	end
@@ -2899,7 +3009,9 @@ setOpen = function(want: boolean)
 		state.listOpen = false
 		state.asking = nil
 		state.resetOpen = false
+		state.rebirthOpen = false
 		ui.typedBox.Text = ""
+		ui.rebirthBox.Text = ""
 		tick(false)
 		bindKeys(false)
 		modal.setOpen(false)

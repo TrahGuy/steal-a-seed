@@ -288,6 +288,9 @@ local ok, err = pcall(function()
 		{ Model.args.announce("server", "Hello", false), "Announce|server|Hello|false" },
 		{ Model.args.spawn(5551, req, "SpecTarget"), "Spawn|5551|{request}|SpecTarget" },
 		{ Model.args.spawn(5551, req, nil), "Spawn|5551|{request}|nil" },
+		-- REBIRTHS (2026-10-13, item 9): how many to add; back to 0 behind the username.
+		{ Model.args.addRebirths(5551, 5), "AddRebirths|5551|5|nil" },
+		{ Model.args.resetRebirths(5551, "SpecTarget"), "ResetRebirths|5551|nil|SpecTarget" },
 	}
 	local mapped, off = true, {}
 	for _, c in ipairs(cases) do
@@ -547,7 +550,8 @@ local ok, err = pcall(function()
 	local builders = { "Model.args.addMoney(", "Model.args.addSpeed(", "Model.args.reset(", "Model.args.startNight(",
 		"Model.args.startDay(", "Model.args.weather(", "Model.args.miniEvent(", "Model.args.announce(",
 		"Model.args.spawn(", "Model.spawnRequest(", "Model.args.mist(", "Model.args.mistBerries(",
-		"Model.args.mistProgress(", "Model.args.mistPod(", "Model.args.mistReady(" }
+		"Model.args.mistProgress(", "Model.args.mistPod(", "Model.args.mistReady(", "Model.args.addRebirths(",
+		"Model.args.resetRebirths(" }
 	local missing = {}
 	for _, b in ipairs(builders) do
 		if not has(run, b) then
@@ -662,6 +666,27 @@ local ok, err = pcall(function()
 			and has(run, "ui.resetCard.Visible = state.resetOpen"),
 		"RESET PROGRESS still waits for the username typed back, locked till it matches -- now behind one red button "
 			.. "that only opens its box")
+	-- REBIRTHS (2026-10-13, the owner's item 9): the count beside REBIRTHS... in RESET PROGRESS's own row, so a
+	-- phone's PLAYER still fits; the card opens under it; +1 and ADD send the count only; SET TO 0 asks first and
+	-- its yes sends the target's username.
+	local resetRebirth = handler("ui.rebirthReset")
+	local rowW, rowH = 500, Model.Metrics.RowTouch
+	local closed = Model.pageHeight("player", rowW, rowH, {})
+	local opened = Model.pageHeight("player", rowW, rowH, { rebirthOpen = true })
+	local cardW = rowW - Model.Metrics.CardPad * 2
+	local card = Model.cardHeight({ Model.actionRowHeight(cardW, 2, rowH), Model.actionRowHeight(cardW, 2, rowH) })
+	check(has(run, '{ { "OpenRebirths", "REBIRTHS\\u{2026}" },') and has(run, '{ "OpenReset", "RESET PROGRESS\\u{2026}" } }')
+			and not sends(handler("ui.openRebirths")) and not sends(handler("ui.closeRebirths"))
+			and has(handler("ui.rebirthOne"), "task.spawn(send, Model.args.addRebirths(currentTarget().UserId, 1))")
+			and has(handler("ui.rebirthAdd"), 'Model.parseAmount(ui.rebirthBox.Text, attr("MaxRebirths", 1000))')
+			and has(resetRebirth, 'setAsking("rebirthreset", nil)') and not sends(resetRebirth)
+			and has(handler("ui.rebirthAsk.confirm"), "task.spawn(send, Model.args.resetRebirths(p.UserId, p.Name))")
+			and has(run, 'build.question(rCard, "RebirthQuestion", "full", "SET TO 0")')
+			and has(run, "GameConfig.rebirthCount(p:GetAttribute(GameConfig.Rebirth.Attributes.Rebirths))")
+			and opened == closed + Model.Metrics.RowGap + card,
+		"REBIRTHS: the target's count in RESET PROGRESS's row (no taller), the card opening under it; +1 and ADD send "
+			.. "the count only, and SET TO 0 asks first, its yes sending the target's username",
+		string.format("closed %d, opened %d, card %d", closed, opened, card))
 	local beforeAsk = string.match(handler("ui.spawnButton"), "^(.-)setAsking%(\"give\", nil%)") or "send"
 	check(has(handler("ui.spawnButton"), "if p ~= player then") and has(handler("ui.spawnButton"), 'setAsking("give", nil)')
 			and not sends(beforeAsk)

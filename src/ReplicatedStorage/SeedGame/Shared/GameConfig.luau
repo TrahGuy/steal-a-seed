@@ -8120,6 +8120,12 @@ GameConfig.AdminAnnounce = {
 		MistReadyOwn = "%s made their Mysterious Pods ready!",
 		Burst = "%s dropped a Dewberry burst!",
 		MistEligible = "%s made the Enchanted Mist eligible!",
+		-- REBIRTHS (2026-10-13, the owner's item 9): rebirths added, folded per
+		-- admin and player; a reset to 0 says nothing.
+		OneRebirth = "a rebirth",
+		Rebirths = "%d rebirths",
+		RebirthsGiven = "%s gave %s %s!",
+		RebirthsOwn = "%s gave themselves %s!",
 	},
 }
 

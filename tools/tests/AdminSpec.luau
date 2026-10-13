@@ -1405,6 +1405,79 @@ local ok, err = pcall(function()
 		"the reset asks for the username to be typed, and stays locked until it matches")
 	check(string.find(ui, "while true", 1, true) == nil and string.find(ui, "Heartbeat", 1, true) == nil,
 		"no loop and no per-frame work")
+
+	--==========================================================================
+	-- REBIRTHS (2026-10-13, the owner's item 9: "ADD raises only the count,
+	-- never wiping money or plants; RESET sets it to 0"), on the real
+	-- PlayerDataService, simulated players only. In a function of its own, held
+	-- in a table so the optimiser cannot inline it: this body is at Luau's 200
+	-- locals.
+	--==========================================================================
+	out.itemNine = function()
+	say("\n-- rebirths (item 9) --")
+	local AdminAnnounce = require(Shared.AdminAnnounce)
+	local REBIRTHS = GameConfig.Rebirth.Attributes.Rebirths
+	local reborn, rp = join("SpecReborn", 90000000101, { Cash = 5000, Speed = 700, Rebirths = 3, RebirthAt = 123,
+		MillTier = 4 })
+	local nobody = join("SpecNobody", 90000000102, { Cash = 0, Speed = 0 })
+	local trailBefore = #admin.Audit()
+	local r = admin.Handle(nobody, "AddRebirths", reborn.UserId, 1)
+	local r0 = admin.Handle(adminA, "ResetRebirths", reborn.UserId, nil, nil)
+	check(not r.ok and not r0.ok and rp.Rebirths == 3 and #admin.Audit() == trailBefore,
+		"somebody off the allowlist adds nothing; a reset without the username is refused; nothing changed", r0.message)
+	r = admin.Handle(adminA, "AddRebirths", reborn.UserId, 2)
+	local entry = admin.Audit()[#admin.Audit()]
+	check(r.ok and rp.Rebirths == 5 and reborn:GetAttribute(REBIRTHS) == 5 and rp.Cash == 5000 and rp.Speed == 700
+			and rp.MillTier == 4 and rp.RebirthAt == 123 and entry.action == "AddRebirths" and entry.amount == 2
+			and entry.asked == 2 and entry.target == reborn.UserId,
+		"ADD 2: the count 3 to 5, published and recorded; cash, Speed, the mill and the rebirth cooldown untouched -- "
+			.. "never a rebirth", r.message)
+	local wrong = {}
+	for _, bad in ipairs({ 0, -1, 1.5, 0 / 0, math.huge, "5", false, admin.Config.MaxRebirths + 1 }) do
+		local reply = admin.Handle(adminA, "AddRebirths", reborn.UserId, bad)
+		if reply.ok or rp.Rebirths ~= 5 then
+			table.insert(wrong, tostring(bad))
+		end
+	end
+	check(#wrong == 0, "0, a negative, a fraction, NaN, infinity, a string, a boolean and one past the limit: refused, "
+		.. "the count kept", table.concat(wrong, ", "))
+	rp.Rebirths = admin.Config.MaxRebirths - 1
+	r = admin.Handle(adminA, "AddRebirths", reborn.UserId, 5)
+	local capped = rp.Rebirths == admin.Config.MaxRebirths and r.ok and r.added == 1
+		and string.find(r.message, "limit stopped the rest", 1, true) ~= nil
+	r = admin.Handle(adminA, "AddRebirths", reborn.UserId, 1)
+	check(capped and not r.ok and rp.Rebirths == admin.Config.MaxRebirths,
+		"the limit stops an ADD and says so; at it, nothing more is added", r.message)
+	rp.Rebirths = 5
+	r = admin.Handle(adminA, "ResetRebirths", reborn.UserId, nil, "SomebodyElse")
+	local kept = not r.ok and rp.Rebirths == 5
+	r = admin.Handle(adminB, "ResetRebirths", reborn.UserId, nil, "  specreborn ")
+	entry = admin.Audit()[#admin.Audit()]
+	check(kept and r.ok and rp.Rebirths == 0 and reborn:GetAttribute(REBIRTHS) == nil and rp.Cash == 5000
+			and rp.MillTier == 4 and entry.action == "ResetRebirths" and entry.amount == 5 and entry.admin == ADMIN_B,
+		"RESET: a wrong username refused; the right one (any case, spaces trimmed) sets the count to 0 -- published, "
+			.. "recorded with what it was -- and nothing else", r.message)
+	r = admin.Handle(adminA, "ResetRebirths", reborn.UserId, nil, "SpecReborn")
+	check(not r.ok and string.find(r.message, "has no rebirths", 1, true) ~= nil, "a reset at 0 is refused", r.message)
+	local adminSource = Server.AdminService.Source
+	local resetBody = string.match(adminSource, "\nlocal function resetRebirths%(.-\nend\n") or ""
+	local addBody = string.match(adminSource, "\nlocal function addRebirths%(.-\nend\n") or ""
+	check(AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 5, target = "Rin" }) == "Nicky gave Rin 5 rebirths!"
+			and AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 1, own = true })
+				== "Nicky gave themselves a rebirth!"
+			and AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 0, target = "Rin" }) == nil
+			and resetBody ~= "" and not string.find(resetBody, "announce(", 1, true)
+			and string.find(addBody, 'foldGive(admin, target, { kind = "rebirths", amount = added })', 1, true) ~= nil,
+		"an ADD is said to everybody (\"Nicky gave Rin 5 rebirths!\"), folded per admin and player; a reset says nothing")
+	check(string.find(addBody, "PlayerDataService.UpdateRebirth(", 1, true) ~= nil
+			and string.find(resetBody, "PlayerDataService.UpdateRebirth(", 1, true) ~= nil
+			and not string.find(addBody .. resetBody, "AddCash", 1, true)
+			and not string.find(addBody .. resetBody, "SetMillTier", 1, true)
+			and not string.find(addBody .. resetBody, "RebirthAt", 1, true),
+		"both write the count through UpdateRebirth and nothing else: no cash, no mill, no cooldown")
+	end
+	out.itemNine()
+	out.itemNine = nil
 end)
 
 for _, p in ipairs(joined) do

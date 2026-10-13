@@ -1,5 +1,38 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 9 (BACKLOG 2026-10-12): REBIRTHS ON THE ADMIN CONSOLE'S PLAYER TAB — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; AdminSpec 137/0 (8 new), AdminConsoleSpec 64/0 (1 new, 2 request shapes), AdminAnnounceSpec 43/0, AdminMistSpec 69/0, RebirthSpec 93/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "add a rebirth section for admin console to reset it or to add"; their answers: "ADD raises only the count, never wiping money or plants; RESET sets it to 0".
+
+**On the server** (AdminService, two new actions):
+- AddRebirths: a whole number from 1 to Config.MaxRebirths (1000), the count stopping at 1000 and saying so.
+- ResetRebirths: the count to 0, confirmed by the target's username (confirmMatches, as RESET PROGRESS), refused at 0.
+- The COUNT only, through PlayerDataService.UpdateRebirth (the save dirty-flagged, the count published, the player list current). No cash spent, no mill reset, no plant touched, the rebirth cooldown (RebirthAt) left.
+- The same door as every action: the allowlist, the one-a-second limit, the target in this server with a loaded profile, the audit and its log line.
+- Every reader of the count was checked before building, and all follow it at once: training and income (each worked out from the count), the title over the name, TitleFX and the aura (RebirthService and the clients follow the published attribute), the owner's fence, the player list, the panel's next price and the HUD's "!".
+- Said to everybody: an ADD, folded per admin and player (AdminAnnounce kind "rebirths": "Nicky gave Rin 5 rebirths!"). A reset says nothing, as a progress reset says nothing. (The owner's later rule, the next commit: an action on the admin themself says nothing at all.)
+
+**The console** (AdminConsoleUI, ConsoleModel):
+- RESET PROGRESS's row now holds the target's count ("YOU: 3 REBIRTHS") beside REBIRTHS... and RESET PROGRESS.... A card of its own made PLAYER scroll on every listed phone (+22 to +81 px; item 11's rule: only MIST may), so it shares the row.
+- REBIRTHS... opens the card under it: a box (1 to 1,000) beside ADD and +1; then "The count only: never a rebirth, never their cash or plants." beside CLOSE and SET TO 0....
+- SET TO 0... asks first, in its row's place ("Set your rebirths (3) to 0?"), and its yes sends the target's username. B steps out of the card; a target change or a tab change closes the question; the red box and the card close each other.
+- The old "Erases the target's progress..." line beside RESET PROGRESS... gave way to the count; the red box still says it all.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1169 x 716, the Studio account's test profile only):
+- PLAYER showed "YOU: 0 REBIRTHS".
+- +1, then ADD 2: "Added 2 rebirths to nicnicniccoal: 3 rebirths now." The notice "nicnicniccoal gave themselves 3 rebirths!" (the two folded; silent after the next commit). The GARDENER title on the head; the Rebirths attribute and the player list's column at 3. Cash kept climbing.
+- SET TO 0...: the question, then "nicnicniccoal's rebirths were set from 3 to 0." No notice. Title, attribute and column gone or 0.
+- The audit's three log lines. No script errors.
+- Captures: output/item9-admin-rebirths-2026-10-13/ (01-05). Cleared: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Seen in passing** (not changed): PlayerDataService.ResetProgress KEEPS the rebirth count, but RESET PROGRESS's red box lists only passes, purchases and Walk Mode as kept. SET TO 0 now clears the count when wanted.
+
+**A spec lesson**: AdminSpec's body sits at Luau's 200 locals. Studio compiles at O2, whose inliner pulled an immediately-called function back into it, so the new section lives in a table field (out.itemNine). luau-compile -O2 reproduces this offline.
+
+**Not seen**: a phone (AdminConsoleSpec holds every listed screen's height), a controller, another admin's target.
+
+**Files**: AdminService/init.luau, AdminService/AdminConsoleUI.client.luau, AdminService/ConsoleModel.luau, Shared/AdminAnnounce.luau, Shared/GameConfig.luau (AdminAnnounce words), PlayerDataService.luau (comment), tools/tests/AdminSpec.luau, AdminConsoleSpec.luau, AdminAnnounceSpec.luau, AGENTS.md.
+
 ## WHAT'S NEW: "SELL BUTTON AND OBBY SIGN" ON TOP, THE 4 OCT ENTRY DROPPED — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, c126394, NOT PUBLISHED; UpdateLogSpec 22/0; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "yes push it, drop the 4 oct entry", on the peer's proposal for item 8's line.

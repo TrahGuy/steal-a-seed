@@ -579,13 +579,14 @@ local ok, err = pcall(function()
 			.. "schedule, nightfall, nest stock or a purchase", table.concat(sayers, ","))
 	local adminSrc = Server:WaitForChild("AdminService").Source
 	local _, calls = string.gsub(adminSrc, "\n%s*announce%(admin, ", "")
-	check(calls == 13, "AdminService says a line from thirteen places, each right after its record (seven of item "
-		.. "10's; since item 12 the Mist's eligible, burst, Dewberries, progress, pod and ready -- AdminMistSpec)", calls)
+	check(calls == 14, "AdminService says a line from fourteen places, each right after its record (seven of item "
+		.. "10's; since item 12 the Mist's eligible, burst, Dewberries, progress, pod and ready -- AdminMistSpec; since "
+		.. "item 9 rebirths added -- AdminSpec)", calls)
 	-- SILENT LINES (2026-10-12, the owner: "when I trigger the enchanted mist, sfx is overlapping"): the Mist's
 	-- start and end ring BEGINS and ENDS alone, so their lines come without the notice's ping.
 	local loud = {}
 	for _, kind in ipairs({ "rain", "thunder", "weatherend", "night", "day", "mini", "spawn", "money", "speed",
-		"dewberries", "progress", "mistpod", "mistready", "burst", "misteligible" }) do
+		"dewberries", "progress", "mistpod", "mistready", "burst", "misteligible", "rebirths" }) do
 		if AdminAnnounce.quiet(kind) then
 			table.insert(loud, kind)
 		end
