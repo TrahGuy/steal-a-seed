@@ -290,8 +290,8 @@ end
 
 local drawn = ""
 
-local function draw(name: string, message: string)
-	local key = table.concat({ name, message, tostring(maxWidth), tostring(style.size) }, "\0")
+local function draw(name: string, message: string, badge: string?)
+	local key = table.concat({ name, message, badge or "", tostring(maxWidth), tostring(style.size) }, "\0")
 	if key == drawn then
 		return
 	end
@@ -303,7 +303,15 @@ local function draw(name: string, message: string)
 	end
 	table.clear(nameRainbows)
 
-	local head = widthOf(name) + widthOf(":") + style.gap
+	-- THE SENDER'S NAME BADGE (2026-10-13, GameConfig.NameBadges): in the name's
+	-- box, against its last letter -- about its capitals' height, its foot on
+	-- their baseline -- so the colon follows the badge.
+	local side, top, gap = 0, 0, 0
+	if badge then
+		side, top, gap = GameConfig.nameBadgeBox("Comic", style.size)
+	end
+	local badgeW = if badge then gap + side else 0
+	local head = widthOf(name) + badgeW + widthOf(":") + style.gap
 	local lines = flow(message, maxWidth - head, maxWidth)
 	for i, text in ipairs(lines) do
 		local row = Instance.new("Frame")
@@ -330,16 +338,17 @@ local function draw(name: string, message: string)
 			-- its own text, so nothing in it sizes itself from its parent.
 			--==================================================================
 			local measured = UIKit.comicBounds(name, style.size)
+			local lettersW, lettersH = math.ceil(measured.X), math.ceil(measured.Y)
 			local box = Instance.new("Frame")
 			box.Name = "Name"
 			box.BackgroundTransparency = 1
-			box.Size = UDim2.fromOffset(math.ceil(measured.X), math.ceil(measured.Y))
+			box.Size = UDim2.fromOffset(lettersW + badgeW, lettersH)
 			box.LayoutOrder = 1
 			box.Active = false
 			box.Parent = row
 			local glow = run(box, "Glow", name, 0)
 			glow.AutomaticSize = Enum.AutomaticSize.None
-			glow.Size = UDim2.fromScale(1, 1)
+			glow.Size = UDim2.fromOffset(lettersW, lettersH)
 			glow.ZIndex = 1
 			local edge = glow:FindFirstChildOfClass("UIStroke") :: UIStroke
 			edge.Color = WHITE
@@ -350,13 +359,26 @@ local function draw(name: string, message: string)
 			glowRainbow.Parent = edge
 			local letters = run(box, "Letters", name, 0)
 			letters.AutomaticSize = Enum.AutomaticSize.None
-			letters.Size = UDim2.fromScale(1, 1)
+			letters.Size = UDim2.fromOffset(lettersW, lettersH)
 			letters.ZIndex = 2
 			local fill = Instance.new("UIGradient")
 			fill.Color = RAINBOW
 			fill.Parent = letters
 			table.insert(nameRainbows, fill)
 			table.insert(nameRainbows, glowRainbow)
+			if badge then
+				local mark = Instance.new("ImageLabel")
+				mark.Name = "Badge"
+				mark.BackgroundTransparency = 1
+				mark.Image = GameConfig.NameBadges.Images[badge]
+				mark.ScaleType = Enum.ScaleType.Fit
+				mark.Size = UDim2.fromOffset(side, side)
+				-- Its top under the line's top; the name's box is one line tall.
+				mark.Position = UDim2.fromOffset(lettersW + gap, math.floor(top + 0.5))
+				mark.ZIndex = 2
+				mark.Active = false
+				mark.Parent = box
+			end
 			run(row, "Colon", ":", 2)
 			local gap = Instance.new("Frame")
 			gap.Name = "Gap"
@@ -473,7 +495,7 @@ local starting = true
 
 -- THE QUEUE, as the server published it: decoded once per change, every field
 -- checked, at most 16 kept. Text in, text out -- nothing in it is run.
-type Entry = { id: string, text: string, from: string, s: number, e: number }
+type Entry = { id: string, text: string, from: string, badge: string?, s: number, e: number }
 local queueRaw: string? = nil
 local entries: { Entry } = {}
 
@@ -501,6 +523,8 @@ local function readQueue(): { Entry }
 				id = v.i,
 				text = v.t,
 				from = if type(v.f) == "string" and v.f ~= "" then v.f else ANNOUNCE.Title,
+				-- The sender's name badge, when it is one (GameConfig.NameBadges).
+				badge = GameConfig.nameBadgeKey(v.b),
 				s = v.s,
 				e = v.e,
 			})
@@ -548,7 +572,7 @@ local function paint(): boolean
 		-- Measured in the comic face, so drawn once it has loaded (the loader
 		-- below paints again then); the chime does not wait for it.
 		if faceReady then
-			draw(current.from, current.text)
+			draw(current.from, current.text, current.badge)
 		end
 		-- One chime per broadcast: a new id, never one this client has already
 		-- heard, never the one already up when it started.

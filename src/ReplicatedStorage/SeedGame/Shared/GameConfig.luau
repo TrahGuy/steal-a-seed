@@ -8232,6 +8232,10 @@ GameConfig.Pass = {
 		Tag = "SeedVipName",
 		Colour = Color3.fromRGB(255, 208, 64),
 		Outline = Color3.fromRGB(62, 38, 0),
+		-- A name badge's wearer who is not a VIP (NameBadges): the same name in
+		-- white, with the badge's own dark outline round it.
+		PlainColour = Color3.fromRGB(255, 255, 255),
+		PlainOutline = Color3.fromRGB(30, 26, 43),
 		TextSize = 15,
 		Size = Vector2.new(220, 20),
 		Rise = 2.4,
@@ -8247,6 +8251,81 @@ GameConfig.Pass = {
 function GameConfig.vipPrefix(prefixText: string): string
 	local tag = GameConfig.Pass.VipChat
 	return string.format('<font color="%s">%s</font> %s', tag.Colour, tag.Text, prefixText)
+end
+
+--==============================================================================
+-- NAME BADGES (2026-10-13, the owner's request): a small square picture right
+-- AFTER a name -- against its last letter, about its capitals' height, its top
+-- a touch over theirs and its foot on their baseline. Shown on the name over
+-- the head (VipService builds it, NameBadgeUI places it) and on every broadcast
+-- and admin line its SENDER makes (AnnouncementUI, ActionToastUI).
+--
+-- One a person: a personal badge wins over VIP's. Decided on the server by
+-- UserId (never a name) and by VIP ownership, real or gifted (PassService.IsVip,
+-- published as Pass.VipAttribute). A client only draws the key it is handed.
+-- Not in chat or the player list: neither shows a picture.
+--
+-- The pictures are the owner's uploads (CrazyCozy Games, 2026-10-13 08:39 UTC),
+-- from Codex's dev-badge set.
+--==============================================================================
+GameConfig.NameBadges = {
+	-- By UserId, each resolved 2026-10-13 through the engine: name to id, and id
+	-- back to the same name.
+	Personal = {
+		-- nicnicniccoal, the owner.
+		[4119740186] = "owner",
+		-- Teambarnze825, Michael's admin account (the owner, 2026-10-13: Michael's
+		-- badge on that account only).
+		[11607308004] = "michael",
+	},
+	Images = {
+		owner = "rbxassetid://134108586814210",
+		michael = "rbxassetid://107958688128648",
+		vip = "rbxassetid://106551880162131",
+	},
+	-- The key on the player (VipService publishes it); nil for none.
+	Attribute = "NameBadge",
+	-- Where each face's capitals stand in their line, as shares of the size:
+	-- their top under the line's top, and their height. Measured as drawn,
+	-- edges and all, in Studio Play at 15-26 px (2026-10-13).
+	Caps = {
+		LuckiestGuy = { Top = 0, Height = 0.74 },
+		Comic = { Top = 0.23, Height = 0.585 },
+	},
+	-- The square's side, as a share of the capitals' height, held to
+	-- MinPx..MaxPx. Its foot sits on their baseline, so the extra raises its top
+	-- a little over theirs. The gap after the last letter is a share of the side.
+	Side = 1.12,
+	MinPx = 10,
+	MaxPx = 28,
+	Gap = 0.15,
+}
+
+-- The badge a player wears: their own by UserId, else VIP's, else none. Pure,
+-- for the specs. The server's callers hand it the UserId and the VIP answer.
+function GameConfig.nameBadgeFor(userId: any, vip: any): string?
+	local personal = if type(userId) == "number" then GameConfig.NameBadges.Personal[userId] else nil
+	if personal then
+		return personal
+	end
+	return if vip == true then "vip" else nil
+end
+
+-- A key as it arrives (an attribute, a payload, another server's message): the
+-- key when it is one, else nil.
+function GameConfig.nameBadgeKey(value: any): string?
+	return if type(value) == "string" and GameConfig.NameBadges.Images[value] ~= nil then value else nil
+end
+
+-- The square after a name in `face` ("LuckiestGuy" or "Comic") drawn at `size`:
+-- its side; its top, measured down from the line's top; and the gap after the
+-- last letter. All in px.
+function GameConfig.nameBadgeBox(face: string, size: number): (number, number, number)
+	local B = GameConfig.NameBadges
+	local caps = B.Caps[face] or B.Caps.Comic
+	local capH = size * caps.Height
+	local side = math.clamp(math.floor(capH * B.Side + 0.5), B.MinPx, B.MaxPx)
+	return side, size * caps.Top + capH - side, math.max(1, math.floor(side * B.Gap + 0.5))
 end
 
 --==============================================================================

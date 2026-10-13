@@ -78,6 +78,11 @@ export type Post = {
 	-- No icon at all (2026-10-13, the owner: an admin's line has no gear): the
 	-- headline stands alone, centred, with no icon's room kept beside it.
 	bare: boolean?,
+	-- An admin's line (2026-10-13, NAME BADGES): the sender's name as it stands
+	-- in the title, and their badge's key (GameConfig.NameBadges), drawn right
+	-- after the name. Both or neither.
+	name: string?,
+	badge: string?,
 	-- How long it stays up, when the default for its kind is wrong for it.
 	seconds: number?,
 	-- Asked before it goes up and while it is up; false takes it down at once.
@@ -454,6 +459,13 @@ function Notice.readServerNotice(payload: any): Post?
 			and string.match(payload.icon, "^[%w_]+$") ~= nil
 		then payload.icon
 		else nil
+	-- The sender's name badge (2026-10-13): a short key, with the name it follows
+	-- -- only when that name stands in the title. The renderer draws only a key
+	-- GameConfig.NameBadges knows.
+	local badged = type(payload.badge) == "string" and #payload.badge <= 16
+		and string.match(payload.badge, "^[%w_]+$") ~= nil
+		and type(payload.name) == "string" and payload.name ~= "" and #payload.name <= 40
+		and string.find(title, payload.name, 1, true) ~= nil
 	return {
 		kind = "info",
 		title = title,
@@ -463,6 +475,8 @@ function Notice.readServerNotice(payload: any): Post?
 		quiet = if payload.quiet == true then true else nil,
 		-- An admin's line (2026-10-13): no icon at all.
 		bare = if payload.bare == true then true else nil,
+		name = if badged then payload.name else nil,
+		badge = if badged then payload.badge else nil,
 	}
 end
 

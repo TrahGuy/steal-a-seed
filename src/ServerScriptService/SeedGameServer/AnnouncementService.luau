@@ -228,7 +228,8 @@ end
 -- already been up that long); the last stays ShowSeconds. Nothing is ever
 -- drawn over another, and nothing is dropped once it is in.
 --==============================================================================
-type Entry = { id: string, text: string, from: string, startAt: number, endAt: number }
+-- `badge`: the sender's name badge key (GameConfig.NameBadges), or nil.
+type Entry = { id: string, text: string, from: string, badge: string?, startAt: number, endAt: number }
 local queue: { Entry } = {}
 
 local function trim(now: number)
@@ -252,14 +253,14 @@ end
 local function publishQueue()
 	local list = {}
 	for _, e in ipairs(queue) do
-		table.insert(list, { i = e.id, t = e.text, f = e.from, s = e.startAt, e = e.endAt })
+		table.insert(list, { i = e.id, t = e.text, f = e.from, b = e.badge, s = e.startAt, e = e.endAt })
 	end
 	board:SetAttribute(ATTR.Queue, HttpService:JSONEncode(list))
 end
 
 -- Queued, or false when MaxWaiting are already waiting. Also how many were
 -- ahead of it and in how many seconds it comes up.
-local function showHere(id: string, text: string, from: string): (boolean, number, number)
+local function showHere(id: string, text: string, from: string, badge: string?): (boolean, number, number)
 	local now = showClock()
 	trim(now)
 	local ahead = #queue
@@ -272,7 +273,8 @@ local function showHere(id: string, text: string, from: string): (boolean, numbe
 		last.endAt = math.min(last.endAt, math.max(last.startAt + ANNOUNCE.MinShowSeconds, now))
 		startAt = last.endAt
 	end
-	local entry = { id = id, text = text, from = from, startAt = startAt, endAt = startAt + ANNOUNCE.ShowSeconds }
+	local entry = { id = id, text = text, from = from, badge = badge, startAt = startAt,
+		endAt = startAt + ANNOUNCE.ShowSeconds }
 	table.insert(queue, entry)
 	publishQueue()
 	-- The newest, on the single-slot attributes (the name before the id).
@@ -322,6 +324,19 @@ local function senderName(sender: any): string
 	return nameOk(display) or nameOk(username) or ANNOUNCE.Title
 end
 AnnouncementService.SenderName = senderName
+
+-- The sender's name badge (2026-10-13, GameConfig.NameBadges): their own by
+-- UserId, else VIP's (PassService publishes it as Pass.VipAttribute), else nil.
+-- Drawn after their name on the line, in this server and every other.
+local function senderBadge(sender: any): string?
+	local userId, vip = nil, false
+	pcall(function()
+		userId = sender.UserId
+		vip = sender:GetAttribute(GameConfig.Pass.VipAttribute) == true
+	end)
+	return GameConfig.nameBadgeFor(userId, vip)
+end
+AnnouncementService.SenderBadge = senderBadge
 
 local function forgetOld(now: number)
 	for id, expires in pairs(seen) do
@@ -429,7 +444,8 @@ function AnnouncementService.Send(sender: any, scope: any, text: any, confirmed:
 
 	local id = HttpService:GenerateGUID(false)
 	local from = senderName(sender)
-	local queued, ahead, startsIn = showHere(id, shown, from)
+	local badge = senderBadge(sender)
+	local queued, ahead, startsIn = showHere(id, shown, from, badge)
 	if not queued then
 		-- Filled while the filter answered.
 		mine[key] = nil
@@ -448,6 +464,7 @@ function AnnouncementService.Send(sender: any, scope: any, text: any, confirmed:
 		id = id,
 		text = shown,
 		from = from,
+		badge = badge,
 		sentAt = now,
 		expiresAt = now + AnnouncementService.Config.TtlSeconds,
 	})
@@ -498,7 +515,9 @@ function AnnouncementService.Receive(data: any): string
 	if seen[id] then
 		return "duplicate"
 	end
-	if not (showHere(id, words, from)) then
+	-- The sender's badge, when it is one (an older server sends none); never a
+	-- reason to refuse the rest.
+	if not (showHere(id, words, from, GameConfig.nameBadgeKey(data.badge))) then
 		return "busy"
 	end
 	seen[id] = expiresAt

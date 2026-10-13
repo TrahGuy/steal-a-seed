@@ -1,5 +1,68 @@
 # Steal a Seed — Session Handoff
 
+## NAME BADGES: THE OWNER'S, MICHAEL'S AND EVERY VIP'S, AFTER THE NAME OVER THE HEAD AND ON THEIR BROADCASTS AND ADMIN LINES — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NameBadgeSpec 26/0 (new); AnnouncementSpec 63/0, AdminAnnounceSpec 44/0, NoticeSpec 105/0 (pins updated); HudLayoutSpec 1499/0, AdminSpec 137/0, AdminMistSpec 69/0, PodRushSpec 98/0, SecretToastSpec 61/0, PassBenefitsSpec 31/0; THE WHOLE SUITE 161/161 (with 6a06b75's two spec fixes); MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
+
+The owner's request, NAME BADGES, relayed by the coordinator. The pictures are the owner's own uploads (CrazyCozy Games, 2026-10-13 08:39 UTC, from Codex's dev-badge set), each checked in Studio (Image type 1, the group, IsLoaded true, fetch Success):
+- 134108586814210, the DEV letters, for the owner;
+- 107958688128648, the wrench and sprout, for Michael;
+- 106551880162131, the crown, for every VIP, real or gifted.
+
+**Who wears which** (GameConfig.NameBadges, nameBadgeFor), decided on the server by UserId (never a name) and then by VIP (PassService.IsVip, published as the Vip attribute). One a person: a personal badge wins over VIP's.
+- The owner's final mapping: nicnicniccoal 4119740186 wears the owner's badge, and Teambarnze825 11607308004 (Michael's admin account) wears Michael's.
+- teambarne (1348070831, resolved but not on the allowlist) was dropped on the owner's word: "remove teambarne, its not an admin".
+- No admin changes.
+
+**The format** (the owner's reference: "DEVELOPERACT" + a square badge): the square right after the name, against its last letter, about the capitals' height, its top a touch over theirs and its foot on their baseline (GameConfig.nameBadgeBox).
+- Each face's capitals were measured as drawn in Studio Play at 15-26 px: LuckiestGuy top 0, height 0.74 of the size; Comic Neue top 0.23, height 0.585. A first measure "at 120 px" was really at 100: TextSize stops there.
+- The side is 1.12 of the capitals' height, held to 10..28 px in code. The gap is 0.15 of the side.
+
+**Where**:
+1. **The name over the head.** VipService builds the name for a VIP (gold, as before) and now for any badge wearer: a wearer who is no VIP gets the same name in white, and the engine's own name, which can carry no picture, is hidden. It also publishes the key on the player (NameBadge).
+   - The square sits in room kept on the name's right, sized for a name as tall as the billboard's box. In Play a billboard draws the gold name at 19.8 px (TextBounds), not the 15-px cap a ScreenGui keeps.
+   - The new NameBadgeUI.client puts it against the last letter as each screen draws it: the name's TextBounds, on their change and once a second. The first draw changed them without a signal: 104 x 15, then 131.7 x 19.8.
+   - It lives in the name's own billboard: the same constant size and the same 100-stud reach as the name.
+2. **Broadcasts.** The sender's badge rides in the queue entry (`b`) and in the cross-server message (`badge`); another server keeps a key it knows and drops one it doesn't, never refusing the broadcast. AnnouncementUI draws it in the name's box, so the colon follows it: "Name▣: message".
+3. **Admin lines** ("Name▣ made it night!" and the rest).
+   - AdminService.TellEveryone sends the name as it stands in the line and the badge (AdminService.BadgeOf).
+   - MiniEventService's two lines (started, ended) carry the admin's badge in the shared event record (`byBadge`, `endedByBadge`; optional, so old records stay valid).
+   - ActionToastUI keeps no-break room in place of the space after the name (the gap, the square, about a space), so a wrap never parts them, and lays the badge over it, located as the Secret word is (Notice.wordSpan).
+4. **Not** chat or the player list (neither shows a picture). VIP keeps its gold name and [VIP] chat tag.
+
+**Specs**: NameBadgeSpec (new) covers:
+- who wears which, with simulated UserIds from 90,000,000,000 for the VIP and no-badge cases;
+- the uploads and the square's geometry;
+- VipService.dress for gold, white and none;
+- NameBadgeUI's centring and its once-a-second look;
+- the broadcast through Receive and the queue;
+- the notice;
+- AdminService.BadgeOf;
+- the event record;
+- the toast's kept room, measured in the comic face.
+
+**Mutants**: 6/6 caught. They were:
+- VIP's badge beating a personal one;
+- the foot off the baseline;
+- a badge without VIP drawing nothing;
+- Receive dropping the badge;
+- a name not in the title kept;
+- an over-long record key accepted.
+
+**The Plays** (guarded, SeedTest_20261013, desktop). Studio's viewport was 237 px tall that day, so for the captures the client's HUD ScreenGuis were switched off on that client only and the camera aimed at the heads; the game keeps both. Captures are in output/name-badges-2026-10-13/ (each with a zoom):
+- **01 the owner's tag:** the gold name, the DEV badge after its last letter.
+- **02 two stand-in bodies** (clones of the player's, dressed by the real VipService.dress):
+  - a simulated VIP (90,000,000,001): the gold name with the crown;
+  - Michael's entry looked up by Teambarnze825's id, not a VIP: the white name with the wrench and sprout.
+- **03 a broadcast:** the queue's own shape from the server, the DEV badge between the name and the colon.
+- **04 an admin line:** "nicnicniccoal▣ made it night!" in the shape TellEveryone sends.
+
+The first Play found the badge placed on the last letter (stale TextBounds) and too small (the 100-px metrics); both were fixed and played again, and a third Play recaptured the admin line after its gap was tightened. No script errors. Cleared after: probe 383 / 0 differ / 0 ZZ / marker absent.
+
+**Files**:
+- Shared/GameConfig.luau (NameBadges, Pass.VipName.PlainColour/PlainOutline), Shared/Notice.luau;
+- ServerScriptService/SeedGameServer/VipService.luau, AnnouncementService.luau, AdminService/init.luau, MiniEventService.luau;
+- StarterPlayerScripts/NameBadgeUI.client.luau (new), AnnouncementUI.client.luau, ActionToastUI.client.luau;
+- tools/tests/NameBadgeSpec.luau (new), AnnouncementSpec, AdminAnnounceSpec, NoticeSpec.
+
 ## THE NARROW COMIC NEUE PASS: THE MOSSKEEPER'S TALK, THE BROADCAST, THE REWARD CARDS AND THE GUIDE'S CARD — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, ff1a2e0, NOT PUBLISHED; AnnouncementSpec 63/0, MosskeeperTalkSpec 36/0, RewardSplashSpec 21/0, OfflineEarningsSpec 27/0, InviteRewardsSpec 173/0, HudLayoutSpec 1499/0 (checks updated or added); NoticeSpec 105/0, SecretToastSpec 61/0, MosskeeperSpec 69/0, MosskeeperMoodsSpec 23/0, TutorialSpec 121/0, TutorialSpotlightSpec 51/0, TutorialPodSpec 263, InviteHudSpec 438/0, InvitePanelSpec 395/0, AdminAnnounceSpec 44/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "just change the npc dialogue, notifications, broadcast, and toasts". The notices and the Secret toast were done in 3afb373. "Comic Neue everywhere" stays in the backlog, not queued.

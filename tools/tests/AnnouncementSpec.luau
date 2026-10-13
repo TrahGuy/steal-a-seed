@@ -539,7 +539,7 @@ local ok, err = pcall(function()
 			and string.find(ui, "{ size = 22, outline = UIKit.comicInk(22),", 1, true) ~= nil
 			and string.find(ui, "{ size = 17, outline = UIKit.comicInk(17),", 1, true) ~= nil
 			and string.find(ui, "UIKit.comic(restartTitle)\n\tUIKit.comic(restartBody)", 1, true) ~= nil
-			and string.find(ui, "if faceReady then\n\t\t\tdraw(current.from, current.text)", 1, true) ~= nil
+			and string.find(ui, "if faceReady then\n\t\t\tdraw(current.from, current.text, current.badge)", 1, true) ~= nil
 			and string.find(ui, "\tfaceReady = true\n\tdrawn = \"\"\n\trefresh()", 1, true) ~= nil
 			and string.find(ui, "Enum.Font.", 1, true) == nil and string.find(ui, "GetTextSize", 1, true) == nil,
 		"the broadcast and the restart notice in the comic face, measured in it, the ink by size, drawn once it loads")

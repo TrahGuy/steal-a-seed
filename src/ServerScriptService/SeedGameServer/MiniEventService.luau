@@ -139,6 +139,10 @@ export type Record = {
 	-- says; a record from before has neither.
 	byShown: string?,
 	endedByShown: string?,
+	-- Their name badges (2026-10-13, GameConfig.NameBadges), drawn after those
+	-- names; decided where they acted. A record from before has neither.
+	byBadge: string?,
+	endedByBadge: string?,
 }
 
 export type Ticket = {
@@ -165,9 +169,11 @@ export type Event = {
 	endsAt: number,
 	endingAt: number?,
 	byName: string,
-	-- Who started it, for the admin's line (2026-10-12, item 10).
+	-- Who started it, for the admin's line (2026-10-12, item 10), and their name
+	-- badge (2026-10-13).
 	by: number?,
 	byShown: string?,
+	byBadge: string?,
 	announced: boolean,
 	nextDropAt: number,
 	nextCountAt: number,
@@ -236,6 +242,17 @@ local function userIdOf(who: any): number?
 		return id
 	end
 	return nil
+end
+
+-- An admin's name badge (2026-10-13, GameConfig.NameBadges): their own by
+-- UserId, else VIP's (PassService publishes it as Pass.VipAttribute), else nil.
+-- Decided where they act; the record carries it to every server.
+local function badgeOf(who: any): string?
+	local vip = false
+	pcall(function()
+		vip = who:GetAttribute(GameConfig.Pass.VipAttribute) == true
+	end)
+	return GameConfig.nameBadgeFor(userIdOf(who), vip)
 end
 
 local function mmss(seconds: number): string
@@ -1318,6 +1335,7 @@ local function startLocal(record: Record, now: number, source: string)
 		byName = record.byName,
 		by = record.by,
 		byShown = record.byShown,
+		byBadge = record.byBadge,
 		-- Learned too late to announce (a new server, a late read): silently.
 		announced = now > announceAt + G.AnnounceGraceSeconds,
 		-- The first ticket a moment in, so the shower has begun by the time the
@@ -1372,6 +1390,14 @@ function MiniEventService.ValidRecord(r: any): boolean
 			return false
 		end
 	end
+	-- Their name badges (2026-10-13): optional, and short. A key this server
+	-- does not know is drawn as none (GameConfig.nameBadgeKey), never refused.
+	for _, field in ipairs({ "byBadge", "endedByBadge" }) do
+		local badge = r[field]
+		if badge ~= nil and (type(badge) ~= "string" or #badge > 16) then
+			return false
+		end
+	end
 	if type(r.endedIds) ~= "table" or #r.endedIds > G.EndedKept * 2 then
 		return false
 	end
@@ -1423,8 +1449,10 @@ local function reconcile(now: number, source: string)
 		local shown = if ended and r then r.endedByShown else nil
 		local line = if shown then AdminAnnounce.line(shown, { kind = "miniend", mode = event.mode }) else nil
 		if line and r then
+			-- Their name badge after their name (2026-10-13).
+			local badge = GameConfig.nameBadgeKey(r.endedByBadge)
 			broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(r.endedBy or 0, "miniend"),
-				bare = true }, nil)
+				name = if badge then shown else nil, badge = badge, bare = true }, nil)
 		end
 	end
 end
@@ -1545,8 +1573,10 @@ function MiniEventService.Step(now: number)
 			local shown = event.byShown
 			local line = if shown then AdminAnnounce.line(shown, { kind = "mini", mode = event.mode }) else nil
 			if line then
+				-- Their name badge after their name (2026-10-13).
+				local badge = GameConfig.nameBadgeKey(event.byBadge)
 				broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(event.by or 0, "mini"),
-					bare = true }, nil)
+					name = if badge then shown else nil, badge = badge, bare = true }, nil)
 			end
 		end
 		if hasTickets(event) then
@@ -1719,6 +1749,7 @@ local function startGlobal(by: any, mode: string, seconds: number): (boolean, st
 			by = byId,
 			byName = byName,
 			byShown = string.sub(AdminAnnounce.nameOf(by), 1, 40),
+			byBadge = badgeOf(by),
 			state = "running",
 			endedAt = nil,
 			endedBy = nil,
@@ -1774,6 +1805,7 @@ local function endGlobal(by: any): (boolean, string, boolean)
 		record.endedBy = byId
 		record.endedByName = byName
 		record.endedByShown = string.sub(AdminAnnounce.nameOf(by), 1, 40)
+		record.endedByBadge = badgeOf(by)
 		record.endedIds = carryEnded(p, p.id)
 		ended = record
 		return record

@@ -99,6 +99,9 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- A no-break space: the room kept after a sender's name for their badge.
+local NBSP = "\u{00A0}"
+
 -- COMIC NEUE ANGULAR (2026-10-13, the owner: every notice in the face nearest
 -- their reference, a thumbnail in Comic Sans MS Bold -- white letters with a
 -- thick black outline). The headline and the detail line are white in
@@ -338,13 +341,52 @@ local function build(post: Notice.Post, key: string): Drawn
 	local glyph = if bare then 0 else iconSize + 8
 	local closeW = if post.dismissible == true then iconSize + 6 else 0
 	local room = width - glyph - closeW * 2
-	local hs = headSize(post.title, room)
-	local headW = math.min(room, textWidth(post.title, hs))
+	--==========================================================================
+	-- THE SENDER'S NAME BADGE (2026-10-13, NAME BADGES): an admin's line names
+	-- its sender first, and the server sends their badge with it. The badge
+	-- stands right after the name. Room for it is kept in the headline as
+	-- no-break spaces, so the name and its badge never part across a wrap, and
+	-- the picture is laid over that room (Notice.wordSpan finds the name, as it
+	-- finds the Secret word): about the capitals' height, its foot on their
+	-- baseline.
+	--==========================================================================
+	local badge = if bare then GameConfig.nameBadgeKey(post.badge) else nil
+	local badgeName = if badge then post.name else nil
+	local title = post.title
+	if badge and badgeName then
+		local at = string.find(post.title, badgeName, 1, true)
+		if at then
+			local after = at + #badgeName
+			local function kept(size: number): string
+				local side, _, gap = GameConfig.nameBadgeBox("Comic", size)
+				-- Measured between two letters: spaces alone measure nothing.
+				local space = textWidth("A A", size) - textWidth("AA", size)
+				-- The room takes the place of the space after the name: the gap,
+				-- the square, then about a space before the next word.
+				local pad = NBSP
+				while textWidth("A" .. pad .. "A", size) - textWidth("AA", size) < gap + side + space / 2
+					and #pad < 40 do
+					pad ..= NBSP
+				end
+				local rest = string.sub(post.title, after)
+				if string.sub(rest, 1, 1) == " " then
+					rest = string.sub(rest, 2)
+				end
+				return string.sub(post.title, 1, after - 1) .. pad .. rest
+			end
+			title = kept(metrics.head)
+			title = kept(headSize(title, room))
+		else
+			badge = nil
+		end
+	end
+	local hs = headSize(title, room)
+	local headW = math.min(room, textWidth(title, hs))
 	-- A headline still wider than the room at the smallest size wraps onto a
 	-- second line (2026-10-02, the Rain toast's): the row grows to hold it, so
 	-- the words never run out under the icon.
-	local wrapped = textWidth(post.title, hs) > room
-	local headH = if wrapped then UIKit.comicBounds(post.title, hs, room).Y else hs
+	local wrapped = textWidth(title, hs) > room
+	local headH = if wrapped then UIKit.comicBounds(title, hs, room).Y else hs
 	-- The Secret toast's word (2026-10-05) stands wherever the sentence puts it
 	-- -- "A SECRET EGG SPAWNED ON ..." -- so its headline is broken into lines
 	-- here rather than by the engine, and the word's place on its line is known.
@@ -355,6 +397,20 @@ local function build(post: Notice.Post, key: string): Drawn
 		end)
 		if found.line then
 			span = found
+			headW = found.width
+			wrapped = #found.lines > 1
+			headH = if wrapped then UIKit.comicBounds(table.concat(found.lines, "\n"), hs).Y else hs
+		end
+	end
+	-- The name's place, for its badge: broken into lines here, as the Secret
+	-- word's headline is, so the badge's line and left edge are known.
+	local badgeSpan: Notice.WordSpan? = nil
+	if badge and badgeName then
+		local found = Notice.wordSpan(title, badgeName, room, function(text: string): number
+			return textWidth(text, hs)
+		end)
+		if found.line then
+			badgeSpan = found
 			headW = found.width
 			wrapped = #found.lines > 1
 			headH = if wrapped then UIKit.comicBounds(table.concat(found.lines, "\n"), hs).Y else hs
@@ -399,6 +455,31 @@ local function build(post: Notice.Post, key: string): Drawn
 	local headEdge = UIKit.stroke(head, Notice.Outline, UIKit.comicInk(hs))
 	track(d, head, "TextTransparency")
 	track(d, headEdge, "Transparency")
+
+	-- THE SENDER'S NAME BADGE, over the room kept after the name.
+	if badgeSpan and badge then
+		local side, top, gap = GameConfig.nameBadgeBox("Comic", hs)
+		local line = badgeSpan.line :: number
+		head.TextWrapped = false
+		head.Text = table.concat(badgeSpan.lines, "\n")
+		-- Each line's band: the text stands centred in the row, one line height
+		-- per line.
+		local lineH = headH / #badgeSpan.lines
+		local lineTop = (rowH - headH) / 2 + (line - 1) * lineH
+		local mark = Instance.new("ImageLabel")
+		mark.Name = "Badge"
+		mark.BackgroundTransparency = 1
+		mark.Image = GameConfig.NameBadges.Images[badge]
+		mark.ScaleType = Enum.ScaleType.Fit
+		mark.Size = UDim2.fromOffset(side, side)
+		-- The headline label is 2 px wider than its widest line, the lines
+		-- centred in it: 1 px in.
+		mark.Position = UDim2.fromOffset(math.floor(1 + badgeSpan.x + badgeSpan.w + gap + 0.5),
+			math.floor(lineTop + top + 0.5))
+		mark.Active = false
+		mark.Parent = head
+		track(d, mark, "ImageTransparency")
+	end
 
 	--==========================================================================
 	-- THE WORD "SECRET" (2026-10-01): italic, silver, a strong dark outline and a

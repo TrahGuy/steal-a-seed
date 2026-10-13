@@ -450,28 +450,45 @@ end
 -- in every server it reaches. TellEveryone is a seam, like TellPlayer: a spec
 -- records the lines instead of the wire.
 --==============================================================================
-function AdminService.TellEveryone(title: string, key: string, quiet: boolean?)
+-- `sender`: the admin's name as it stands in the line and their name badge
+-- (2026-10-13, GameConfig.NameBadges), drawn after the name.
+function AdminService.TellEveryone(title: string, key: string, quiet: boolean?,
+	sender: { name: string, badge: string? }?)
 	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
 	local remotes = if seedGame then seedGame:FindFirstChild("Remotes") else nil
 	local event = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if event and event:IsA("RemoteEvent") then
 		pcall(function()
 			event:FireAllClients(Notice.ServerNotice, { title = title, key = key, bare = true,
-				quiet = if quiet then true else nil })
+				quiet = if quiet then true else nil,
+				name = if sender and sender.badge then sender.name else nil,
+				badge = if sender then sender.badge else nil })
 		end)
 	end
+end
+
+-- An admin's name badge: their own by UserId, else VIP's (PassService publishes
+-- it as Pass.VipAttribute), else nil.
+function AdminService.BadgeOf(admin: any): string?
+	local vip = false
+	pcall(function()
+		vip = admin:GetAttribute(GameConfig.Pass.VipAttribute) == true
+	end)
+	return GameConfig.nameBadgeFor(userIdOf(admin), vip)
 end
 
 -- The last give per admin, action and player, for a burst to fold into.
 local folds: { [string]: AdminAnnounce.Fold } = {}
 
 local function announce(admin: any, what: AdminAnnounce.What, targetId: number?)
-	local line = AdminAnnounce.line(AdminAnnounce.nameOf(admin), what)
+	local shown = AdminAnnounce.nameOf(admin)
+	local line = AdminAnnounce.line(shown, what)
 	if line then
 		-- The Mist's start and end without the ping: BEGINS and ENDS are their
-		-- sound (2026-10-12, AdminAnnounce.quiet).
+		-- sound (2026-10-12, AdminAnnounce.quiet). The admin's name badge after
+		-- their name (2026-10-13).
 		AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId),
-			AdminAnnounce.quiet(what.kind))
+			AdminAnnounce.quiet(what.kind), { name = shown, badge = AdminService.BadgeOf(admin) })
 	end
 end
 

@@ -608,8 +608,8 @@ local ok, err = pcall(function()
 		"the Mist's start and end lines are quiet (BEGINS and ENDS are their sound); every other admin line keeps "
 			.. "its ping", table.concat(loud, ", "))
 	check(has(adminSrc, "AdminService.TellEveryone(line, AdminAnnounce.key(userIdOf(admin) or 0, what.kind, targetId),\n"
-			.. "\t\t\tAdminAnnounce.quiet(what.kind))")
-			and has(adminSrc, "quiet = if quiet then true else nil })"),
+			.. "\t\t\tAdminAnnounce.quiet(what.kind), { name = shown, badge = AdminService.BadgeOf(admin) })")
+			and has(adminSrc, "quiet = if quiet then true else nil,"),
 		"and AdminService sends that quiet with the line, which the notice reads (Notice.readServerNotice)")
 end)
 

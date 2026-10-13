@@ -370,7 +370,7 @@ do
 	local oddIn = Notice.readServerNotice({ title = "Nicky gave Rin $1M", bare = "yes" })
 	local adminSrc = sourceOf(ServerScriptService:FindFirstChild("SeedGameServer"), "AdminService") or ""
 	local miniSrc = sourceOf(ServerScriptService:FindFirstChild("SeedGameServer"), "MiniEventService") or ""
-	local _, miniBare = string.gsub(miniSrc, "\n%s*bare = true }, nil%)", "")
+	local _, miniBare = string.gsub(miniSrc, "badge = badge, bare = true }, nil%)", "")
 	check(bareIn and bareIn.bare == true and plainIn and plainIn.bare == nil and oddIn and oddIn.bare == nil
 			and toast:find("local bare = post.bare == true", 1, true) ~= nil
 			and toast:find("local glyph = if bare then 0 else iconSize + 8", 1, true) ~= nil
