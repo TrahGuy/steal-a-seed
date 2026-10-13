@@ -52,7 +52,7 @@ Otherwise the recipient is noted (Gift.NoteSeconds, 600) and the gift's prompt o
 - The noted recipient's profile gets a GiftedPasses row { Pass, From, Receipt, At } AND the receipt's id in their Receipts, in one step, then their save. It is acknowledged only once that save holds; a retry finds the id and only saves again.
 - The recipient is told "Buyer gifted you VIP!", everybody else "Buyer gifted Friend VIP!".
 - If the recipient has gone or isn't saving by then, or nobody was noted (a restart, or a note older than 10 minutes): the pass is the buyer's own, a row on their profile (From = their own id). They are told why: "Friend left before the gift arrived, so VIP is yours." / "The gift couldn't be delivered, so VIP is yours." This is what a Mysterious Pod gift does.
-- THE RACE (the backlog's default; the owner decides any make-good): whoever gets the row already had the pass by the receipt. The row is still written, so no purchase goes unrecorded; the log says RACE, and the buyer is told "...your gift is on record."
+- THE RACE (the owner's decision, 2026-10-13: leave it as built -- the gift stays on record, the buyer is told, nothing is given back): whoever gets the row already had the pass by the receipt. The row is still written, so no purchase goes unrecorded; the log says RACE, and the buyer is told "...your gift is on record."
 
 **A gifted row IS the pass** (PassService): every answer counts "the real pass OR a gifted row", read off the profile on each ask.
 - The faucet's ×2 and VIP's ×1.1, the Bag's +12, the hatch's 0.75, VIP's gold name and [VIP] tag (VipService, VipChat).
