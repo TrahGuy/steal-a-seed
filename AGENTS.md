@@ -145,6 +145,9 @@ src/
                                 down to the nearest in the next, edges that hold; wire() writes
                                 NextSelection* by groups (a header, then a scrolling page); scrollInto()
                                 keeps the selection inside a list's window. The Shop uses it (ShopPadSpec)
+    Shared/PadScroll.luau       the right stick in a menu (2026-10-13): its dead zone and speed ramp, one
+                                frame's scroll (push up, go up; never past an end), and which list it
+                                moves -- the one around the selection, else the panel's biggest (PadStickSpec)
     Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
                                 screen's sidebars and its top row (BIOMES, PLOT, OBBY, ADMIN,
                                 the clock's chip at the row's right end; the three buttons are
@@ -597,6 +600,9 @@ src/StarterPlayer/StarterPlayerScripts/
     EquipBestPad.client.luau    the EQUIP BEST pad on THIS player's own plot only (2026-10-13): stand on it
                                 1 s and it sends the Garden menu's own EQUIP BEST verb; GardenUI says the
                                 answer. Nobody else sees it
+    PadStick.client.luau        while any panel is open (PadInput.panelOpen), the right stick is bound at
+                                High over the camera's Medium and sunk -- the camera stays still -- and it
+                                scrolls the list PadScroll picks; released with the panel (2026-10-13)
     EventsUI.client.luau        EVENTS (2026-10-04): the owner's POSTED Roblox experience events, read on
                                 the client (SocialService) when the panel opens -- rows soonest first,
                                 details with Back, NOTIFY ME through Roblox's own RSVP prompt, LIVE NOW

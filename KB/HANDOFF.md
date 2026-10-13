@@ -1,5 +1,21 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 3 (BACKLOG 2026-10-12): THE RIGHT STICK IN A MENU — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PadStickSpec 18/0 (new); ControllerSpec 64/0, ShopPadSpec 22/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, THE BIND)
+
+Michael on console: "In menus the right stick should lock for scrolling. I can see character is still looking around."
+
+**What it is** (Shared/PadScroll.luau, StarterPlayerScripts/PadStick.client.luau):
+- While any panel is open (PadInput.panelOpen: OpenPanel names one, or a modal's dimmer shows -- the Shop, the Bag, Garden, the Index, Rebirth, Mosskeeper's talk, the admin console...), the right stick (Thumbstick2) is bound on ContextActionService at High (3000), above the camera's own Thumbstick2 bind at Medium, and SUNK in every state: the camera stays still.
+- Every frame while it is pushed past the dead zone (0.22), it scrolls the list PadScroll.pick chooses: the nearest list around the selected control that can move the way it is pushed, else the panel's biggest such list on screen; up and down, and across for a list that scrolls across (ScrollingDirection honoured). Speed: a square ramp to 1100 canvas px/s at full tilt; never past either end; a long frame counts at most 0.1 s.
+- Released with the panel: it follows PadInput.PanelChanged and the OpenPanel attribute, and a frame watch unbinds the moment no panel is open, whatever missed a signal. The left stick and the D-pad are never bound and the selection is never moved.
+- The first spec run caught that a list reports a pixel past its window on an axis it does not scroll: PadScroll.limit now counts only the axes its ScrollingDirection scrolls, and nothing under 2 px.
+
+**The Play** (guarded, the throwaway SeedTest_20261013, desktop; ContextActionService:GetBoundActionInfo read from a Client exec): not bound at rest; bound with the Shop open; released by B's path (OpenPanel cleared); still bound when another panel took the mutex, released when all shut; after a death the Shop stayed open (ResetOnSpawn false) and the bind with it, released when it shut.
+
+**Not seen:** real stick input (Studio cannot make it), so the scroll itself and the camera not turning are held by PadStickSpec (the numbers, the pick on real lists, the bind's priority and Sink) and by the bind's state in Play. No captures: nothing on screen changes. Michael confirms on console.
+
+**Files:** Shared/PadScroll.luau (new), StarterPlayerScripts/PadStick.client.luau (new), tools/tests/PadStickSpec.luau (new), AGENTS.md (structure).
+
 ## ITEM 2 (BACKLOG 2026-10-12): THE SHOP ON A CONTROLLER — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ShopPadSpec 22/0 (new); CashFormatSpec 26/0, CompactMenusSpec 46/0, ControllerSpec 64/0, MysteryShopSpec 14/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RarityCardsSpec 60/0, RobuxPriceSpec 22/0, ServerBoostSpec 65/0, SpeedShoeSpec 19/0, SproutDashSpec 49/0, StoreSpec 28/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0, HotbarSpec 38/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, A LIVE WALK)
 
 Michael on console: "shop navigation on console is busted". No specifics came, so the owner's call was to audit and fix now.
