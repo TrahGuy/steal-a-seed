@@ -38,8 +38,20 @@ word.
 | project | port | pinned? |
 | --- | --- | --- |
 | **Steal a Seed** | **34872** | **yes — `114075467877655`** |
+| Clear a Garden | 34872, one at a time | yes — `114673261531200` |
 | Cloud Cafe Tycoon | 34873 | no |
 | Tetris Arena / BlockArena | 34872 | no |
+
+**Shared with Clear a Garden (2026-10-13).**
+- `D:\KAPE\Clear a Garden` also serves on 34872, pinned to its own place.
+- The reason: the owner's Rojo panel is SuperbulletRojo, bundled in the Superbullet AI Game Builder
+  plugin, and it keeps forcing the default port. A sync on any other port drops after about 13 s.
+- Only one of the two servers can run at a time.
+- **Before Steal a Seed work:** run `curl -s localhost:34872/api/rojo`. If it names
+  "Clear a Garden", stop that server (ask the owner if its Studio is open) and run
+  `rojo serve --port 34872` here.
+- The two place pins keep each project out of the other's place. Stopping a server changes no
+  files, saves or live game.
 
 **Only one process can bind 34872 at a time**, so the live risk is sequential rather than
 simultaneous: stop this server, start BlockArena's on the same port, and a Studio that auto-reconnects
