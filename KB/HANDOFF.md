@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 3 (BACKLOG 2026-10-12): THE RIGHT STICK IN A MENU — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PadStickSpec 18/0 (new); ControllerSpec 64/0, ShopPadSpec 22/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, THE BIND)
+## ITEM 3 (BACKLOG 2026-10-12): THE RIGHT STICK IN A MENU — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, 5386d2f, NOT PUBLISHED; PadStickSpec 18/0 (new); ControllerSpec 64/0, ShopPadSpec 22/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, THE BIND)
 
 Michael on console: "In menus the right stick should lock for scrolling. I can see character is still looking around."
 
@@ -16,7 +16,7 @@ Michael on console: "In menus the right stick should lock for scrolling. I can s
 
 **Files:** Shared/PadScroll.luau (new), StarterPlayerScripts/PadStick.client.luau (new), tools/tests/PadStickSpec.luau (new), AGENTS.md (structure).
 
-## ITEM 2 (BACKLOG 2026-10-12): THE SHOP ON A CONTROLLER — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ShopPadSpec 22/0 (new); CashFormatSpec 26/0, CompactMenusSpec 46/0, ControllerSpec 64/0, MysteryShopSpec 14/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RarityCardsSpec 60/0, RobuxPriceSpec 22/0, ServerBoostSpec 65/0, SpeedShoeSpec 19/0, SproutDashSpec 49/0, StoreSpec 28/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0, HotbarSpec 38/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, A LIVE WALK)
+## ITEM 2 (BACKLOG 2026-10-12): THE SHOP ON A CONTROLLER — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK as part of 5386d2f, NOT PUBLISHED; ShopPadSpec 22/0 (new); CashFormatSpec 26/0, CompactMenusSpec 46/0, ControllerSpec 64/0, MysteryShopSpec 14/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RarityCardsSpec 60/0, RobuxPriceSpec 22/0, ServerBoostSpec 65/0, SpeedShoeSpec 19/0, SproutDashSpec 49/0, StoreSpec 28/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0, HotbarSpec 38/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, A LIVE WALK)
 
 Michael on console: "shop navigation on console is busted". No specifics came, so the owner's call was to audit and fix now.
 
@@ -37,7 +37,7 @@ Michael on console: "shop navigation on console is busted". No specifics came, s
 
 **Files:** Shared/PadGraph.luau (new), Shared/MysteryShopBanner.luau (padControls, sheetOpen, BackAction; the sheets on a controller), StarterPlayerScripts/ShopUI.client.luau (the wiring, the scroll, PadFirst, LB / RB), tools/tests/ShopPadSpec.luau (new), AGENTS.md (structure).
 
-## ITEM 1 (BACKLOG 2026-10-12): THE EQUIP BEST PAD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; EquipBestPadSpec 27/0 (new); SfxWiringSpec 202/0, UsabilityAudioSpec 95/0, SoundLevelSpec 28/0, PlantGlowSpec 69/0, GardenPlanSpec 18/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 1 (BACKLOG 2026-10-12): THE EQUIP BEST PAD — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK as part of 5386d2f, NOT PUBLISHED; EquipBestPadSpec 27/0 (new); SfxWiringSpec 202/0, UsabilityAudioSpec 95/0, SoundLevelSpec 28/0, PlantGlowSpec 69/0, GardenPlanSpec 18/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 Michael on console: getting to EQUIP BEST through the menus is cumbersome. The owner's queue (KB/BACKLOG-CONSOLE-FEEDBACK-2026-10-12.md, the decisions of 2026-10-13): a step pad, NOT at the entrance ("dont put the step pad on the entrance"), on the left grass strip, halfway along the bed, following the plot at every level.
 
