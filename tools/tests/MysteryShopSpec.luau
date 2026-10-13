@@ -365,7 +365,13 @@ local ok, err = pcall(function()
 			and not string.find(banner, "%.robux") and not has(banner, "GetProductInfo")
 			and has(banner, "MistOddsView.card(slot, entry, z + 2, CARD_H, moving, fx, cardViews)")
 			and has(banner, "oddsView = MistOddsView.build(oddsHolder, z + 42)")
-			and has(banner, "channel:FireServer(SHOP.GiftAction, { bundle = giftFor.key, recipient = other.UserId })"),
+			-- The gift sheet serves the passes too since 2026-10-13 (a GiftSpec):
+			-- a bundle's names only those PolicyService allows, its pick the
+			-- bundle's key.
+			and has(banner, "channel:FireServer(spec.action, spec.payload(other))")
+			and has(banner, "action = SHOP.GiftAction,")
+			and has(banner, "return { bundle = item.key, recipient = other.UserId }")
+			and has(banner, "return other:GetAttribute(SHOP.PolicyAttribute) == true"),
 		"the Shop's banner, first on the page: the six inside with their odds and ODDS's full page before any buy, "
 			.. "this player's live prices only, offer and GIFT shown only on PolicyService's yes")
 

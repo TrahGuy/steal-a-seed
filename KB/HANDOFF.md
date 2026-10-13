@@ -1,5 +1,62 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE 4 GIFT PRODUCT IDS ARE THE OWNER'S TO CREATE)
+
+The owner: "make the passes giftable". Their decision: as written; the same prices as the passes; the owner creates the four gift products, and the code ships with the ids unset until they arrive.
+
+**The products** (GameConfig.Store.PassGifts):
+- One GIFT Developer Product per pass at the pass's own price: ×2 MONEY 199, +12 BAG SLOTS 149, FASTER HATCH 129, VIP 249.
+- `forPass` names the pass. Not `pass`: StoreService skips any row with that field as a Game Pass.
+- Product ids are 0 until the owner creates them. StoreService indexes them with every other id (the duplicate check) and hands their receipts to PassGiftService (SetPassGiftGrant), on the same ledger.
+
+**Asking** (PassGiftService, new; GameEvent Pass.Gift.Action { pass, recipient }; one ask a second). Refused before any prompt when:
+- the gift product isn't created (NO_GIFT);
+- the recipient isn't here, or is the buyer (NO_PLAYER);
+- their profile isn't saving (NOT_SAVING);
+- they already have the pass, real or gifted (ALREADY: "Friend already has VIP.", said in the sheet). PassService.CheckOwns asks Roblox again first.
+Otherwise the recipient is noted (Gift.NoteSeconds, 600) and the gift's prompt opens.
+
+**The receipt:**
+- The noted recipient's profile gets a GiftedPasses row { Pass, From, Receipt, At } AND the receipt's id in their Receipts, in one step, then their save. It is acknowledged only once that save holds; a retry finds the id and only saves again.
+- The recipient is told "Buyer gifted you VIP!", everybody else "Buyer gifted Friend VIP!".
+- If the recipient has gone or isn't saving by then, or nobody was noted (a restart, or a note older than 10 minutes): the pass is the buyer's own, a row on their profile (From = their own id). They are told why: "Friend left before the gift arrived, so VIP is yours." / "The gift couldn't be delivered, so VIP is yours." This is what a Mysterious Pod gift does.
+- THE RACE (the backlog's default; the owner decides any make-good): whoever gets the row already had the pass by the receipt. The row is still written, so no purchase goes unrecorded; the log says RACE, and the buyer is told "...your gift is on record."
+
+**A gifted row IS the pass** (PassService): every answer counts "the real pass OR a gifted row", read off the profile on each ask.
+- The faucet's ×2 and VIP's ×1.1, the Bag's +12, the hatch's 0.75, VIP's gold name and [VIP] tag (VipService, VipChat).
+- The Shop's OWNED, through the new attribute PassesOwned.
+- On the server only PassService asks Roblox who owns a pass; the spec scans every server script.
+- A row is never taken away and a progress reset keeps it. A renamed pass's row is kept but counts for nothing until its key returns. At most Save.MaxGiftedPasses (32) rows.
+
+**The Shop** (ShopUI, MysteryShopBanner):
+- GIFT on each pass card, only while its gift product is created: beside BUY on a desktop tile, under BUY on a phone's row (that shelf's rows then stand 96 tall). And in the pass's details.
+- It opens the Mysterious Pod's own gift sheet (MysteryShopBanner.giftTo with a GiftSpec), listing everybody here.
+- A controller reaches GIFT after BUY. GIFT stays on a pass the player owns: they can still give it.
+
+**Icons:** KB/PASS-GIFT-ICONS-CODEX-PROMPT.md, a Codex brief for the four gift icons (each pass's own icon with the approved gift ribbon and bow).
+
+**The Play** (guarded, a SEPARATE throwaway store SeedTest_gift_20261013, desktop 1065 x 716; two gated test hosts, deleted after; made-up gift ids only in that client's memory, never on disk):
+- GIFT beside BUY on all four pass tiles. GIFT VIP's sheet: "Who is it for?" and, alone in the server, "Nobody else is in this server to gift to."
+- A gift landing through the real PassGiftService.Grant, no note, so the buyer's own: the row on the test profile, From = the player's own id.
+- This Studio account owns all four real passes, so that was the RACE path: logged, and the notice "The gift couldn't be delivered. You have VIP already: your gift is on record." That notice wrapped onto the Shop; fixed in the item 5 follow-up above.
+- The phone row at half scale (the TenFoot canvas): BUY 6..50 and GIFT 56..90 in a 96 row. The details: OWNED and GIFT.
+- Captures: output/item6-pass-gifts-2026-10-13/ (01-05).
+
+**Not seen:**
+- A real purchase and receipt: Studio cannot buy, and the gift products don't exist yet.
+- Two players in one server. The gift to another player, the refusals and the race are held by PassGiftSpec, over the real PassService and PassGiftService.
+- A phone. A console.
+
+**For the owner:** create the four gift products (the names, prices and descriptions the coordinator relayed) and their icons (the Codex brief), then send the ids. Until then no GIFT shows.
+
+**Files:**
+- GameConfig (Store.PassGifts, Pass.OwnedAttribute, Pass.Gift, Save.MaxGiftedPasses).
+- ServerScriptService/SeedGameServer: PassGiftService.luau (new), PassService.luau, StoreService.luau, PlayerDataService.luau (UpdateGiftedPasses; the reset keeps them), ProfileSchema.luau (GiftedPasses).
+- Shared: ShopCatalog.luau (giftFor, entry.gift), MysteryShopBanner.luau (GiftSpec, giftTo), MenuKit.luau (tap excludes several buttons), MenuLayout.luau (Shop.GiftW, GiftRowH).
+- StarterPlayerScripts/ShopUI.client.luau.
+- tools/tests: PassGiftSpec.luau (new), MysteryShopSpec.luau, ShopPadSpec.luau.
+- AGENTS.md (structure); KB/PASS-GIFT-ICONS-CODEX-PROMPT.md (new).
+
 ## ITEM 5 FOLLOW-UP: A NOTICE THAT WRAPS, OVER AN OPEN PANEL — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HudLayoutSpec 1498/0; ActionRefusalSpec 74/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, MiniEventSpec 90/0, NoticeSpec 100/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RainEventSpec 98/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, SourceIconsSpec 21/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0; MUTANT 1/1 CAUGHT; SEEN IN ITEM 6'S GUARDED PLAY)
 
 Found in item 6's guarded Play: a long headline over the open Shop ("The gift couldn't be delivered. You have VIP already: your gift is on record.") wrapped to three lines and came down over the Shop's title strip. Item 5's slim line hung from a top worked out for ONE line.

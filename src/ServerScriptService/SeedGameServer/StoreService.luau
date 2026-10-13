@@ -103,6 +103,10 @@ local function allItems(): { any }
 	for _, item in ipairs(STORE.MysteryPods or {}) do
 		table.insert(list, item)
 	end
+	-- A pass as a gift (2026-10-13, backlog item 6): Developer Products.
+	for _, item in ipairs(STORE.PassGifts or {}) do
+		table.insert(list, item)
+	end
 	return list
 end
 
@@ -112,6 +116,14 @@ end
 local mysteryGrant: ((Player, any, string) -> boolean)? = nil
 function StoreService.SetMysteryGrant(fn: (Player, any, string) -> boolean)
 	mysteryGrant = fn
+end
+
+-- WHO GRANTS A PASS AS A GIFT (2026-10-13, backlog item 6): PassGiftService,
+-- which requires this file, hands its grant in as it starts. Until then such a
+-- receipt stays open.
+local passGiftGrant: ((Player, any, string) -> boolean)? = nil
+function StoreService.SetPassGiftGrant(fn: (Player, any, string) -> boolean)
+	passGiftGrant = fn
 end
 
 -- WHO GRANTS A SKIP REBIRTH (2026-10-12, the owner's item 18): RebirthService,
@@ -351,6 +363,20 @@ local function grant(player: Player, item: any, purchaseId: string): boolean
 		local fn = mysteryGrant
 		if not fn then
 			warn(string.format("[Seed/StoreService] %q arrived before MysteryShopService started; will retry",
+				tostring(item.key)))
+			return false
+		end
+		return fn(player, item, purchaseId)
+	elseif item.kind == "passgift" then
+		--======================================================================
+		-- A PASS AS A GIFT (2026-10-13, backlog item 6): granted by
+		-- PassGiftService -- a gifted-pass row on the noted recipient's profile
+		-- with this receipt's id, saved there first; on the buyer's own if the
+		-- recipient has gone. False leaves the receipt open.
+		--======================================================================
+		local fn = passGiftGrant
+		if not fn then
+			warn(string.format("[Seed/StoreService] %q arrived before PassGiftService started; will retry",
 				tostring(item.key)))
 			return false
 		end

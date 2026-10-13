@@ -71,6 +71,9 @@ export type Entry = {
 	spinKey: string?,
 	-- A pass's multiplier, for its owned check.
 	multiplier: number?,
+	-- A pass's GIFT product id while it is created (2026-10-13, backlog item 6:
+	-- Store.PassGifts); nil while it is 0, and the card shows no GIFT.
+	gift: number?,
 	-- The card's studded background (2026-10-04, GameConfig.BagLook.Studs): its
 	-- shelf's (`studs` on GameConfig.Store.Sections), a Spin Ticket pack the
 	-- premium violet, the featured pack (BagLook.StudsFeatured) the rainbow.
@@ -177,6 +180,18 @@ local function productEntry(item: any): Entry
 	}
 end
 
+-- A pass's GIFT product id (Store.PassGifts, by `forPass`), or nil while it
+-- is not created.
+function ShopCatalog.giftFor(passKey: string): number?
+	for _, gift in ipairs((STORE :: any).PassGifts or {}) do
+		if tostring(gift.forPass) == passKey then
+			local id = tonumber(gift.product) or 0
+			return if id > 0 then id else nil
+		end
+	end
+	return nil
+end
+
 local function passEntry(item: any): Entry
 	local id = tonumber(item.pass) or 0
 	local mul = tonumber(item.multiplier) or 1
@@ -197,6 +212,8 @@ local function passEntry(item: any): Entry
 		fallback = nil,
 		art = CARDS[tostring(item.key)],
 		multiplier = mul,
+		-- Only a pass that exists can be given (2026-10-13).
+		gift = if id > 0 then ShopCatalog.giftFor(tostring(item.key)) else nil,
 	}
 end
 

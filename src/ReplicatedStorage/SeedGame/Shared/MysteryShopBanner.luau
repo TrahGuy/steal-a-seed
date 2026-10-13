@@ -93,6 +93,20 @@ end
 -- close the whole Shop (MenuKit.bindBack binds at 3000).
 MysteryShopBanner.BackAction = "SeedMysterySheet"
 
+-- A GIFT, WHATEVER IS GIVEN (2026-10-13, backlog item 6: the passes use this
+-- sheet too): the sheet's title; which players here are offered; the GameEvent
+-- action and payload a pick sends; and the server's answer -- its action, and
+-- the words for a refusal's code (the answer's own `words` win, where the
+-- server names somebody).
+export type GiftSpec = {
+	title: string,
+	eligible: (Player) -> boolean,
+	action: string,
+	payload: (Player) -> { [string]: any },
+	reply: string,
+	refused: { [string]: string },
+}
+
 export type Banner = {
 	frame: Frame,
 	setOpen: (boolean) -> (),
@@ -100,6 +114,9 @@ export type Banner = {
 	padControls: () -> { GuiObject },
 	-- A sheet is up (it holds the selection; the page's wiring waits).
 	sheetOpen: () -> boolean,
+	-- The gift sheet for anything else given (a pass's GIFT), opened from
+	-- `from` -- which the selection goes back to on a controller.
+	giftTo: (GiftSpec, GuiObject) -> (),
 }
 
 function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: number, order: number): Banner
@@ -267,7 +284,23 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		lastPress = now
 		return true
 	end
-	local openGift: (any, GuiObject) -> ()
+	local openGift: (GiftSpec, GuiObject) -> ()
+	-- A bundle's gift: among the players here PolicyService allows (a paid
+	-- random item), by its bundle's key.
+	local function podGift(item: any): GiftSpec
+		return {
+			title = string.upper(string.format("%s %s", W.Gift, (string.gsub(item.label, "^Gift: ", "")))),
+			eligible = function(other: Player): boolean
+				return other:GetAttribute(SHOP.PolicyAttribute) == true
+			end,
+			action = SHOP.GiftAction,
+			payload = function(other: Player): { [string]: any }
+				return { bundle = item.key, recipient = other.UserId }
+			end,
+			reply = SHOP.GiftReply,
+			refused = W.Refused :: any,
+		}
+	end
 
 	for i, count in ipairs(COUNTS) do
 		local item = mineBy[count]
@@ -345,7 +378,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		giftButton.hit.Activated:Connect(function()
 			if giftItem and pressOnce() then
 				SoundKit.play("CardClick")
-				openGift(giftItem, giftButton.hit)
+				openGift(podGift(giftItem), giftButton.hit)
 			end
 		end)
 	end
@@ -482,7 +515,9 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end
 	end)
 
-	-- GIFT: who it is for, among the players here PolicyService allows.
+	-- GIFT: who it is for, among the players here it is offered to (a bundle:
+	-- those PolicyService allows; since 2026-10-13 a pass's GIFT on the Shop's
+	-- cards too, through giftTo: anybody here).
 	local giftBack, giftPanel, giftShut, giftClose = sheet("MysteryGift", 330)
 	local giftTitle = MenuKit.heading(giftPanel, "Title", 22, WHITE, z + 43)
 	giftTitle.Position = UDim2.fromOffset(14, 10)
@@ -527,10 +562,11 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	nobody.Visible = false
 	local remotes = game:GetService("ReplicatedStorage"):WaitForChild("SeedGame"):WaitForChild("Remotes")
 	local channel = remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
-	local giftFor: any = nil
-	openGift = function(item: any, from: GuiObject)
-		giftFor = item
-		giftTitle.Text = string.upper(string.format("%s %s", W.Gift, (string.gsub(item.label, "^Gift: ", ""))))
+	-- What the sheet is giving now (a GiftSpec), or nil.
+	local giftFor: GiftSpec? = nil
+	openGift = function(spec: GiftSpec, from: GuiObject)
+		giftFor = spec
+		giftTitle.Text = spec.title
 		status.Text = ""
 		for _, child in ipairs(list:GetChildren()) do
 			if child:IsA("GuiButton") then
@@ -539,7 +575,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end
 		local any = false
 		for i, other in ipairs(Players:GetPlayers()) do
-			if other ~= player and other:GetAttribute(SHOP.PolicyAttribute) == true then
+			if other ~= player and spec.eligible(other) then
 				any = true
 				local row = MenuKit.button(list, "Player" .. i, z + 44,
 					string.format("%s (@%s)", other.DisplayName, other.Name), 15)
@@ -548,12 +584,12 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 				row.hit.LayoutOrder = i
 				UIKit.clicks(row.hit)
 				row.hit.Activated:Connect(function()
-					if not giftFor or not pressOnce() then
+					if giftFor ~= spec or not pressOnce() then
 						return
 					end
 					SoundKit.play("CardClick")
 					status.Text = ""
-					channel:FireServer(SHOP.GiftAction, { bundle = giftFor.key, recipient = other.UserId })
+					channel:FireServer(spec.action, spec.payload(other))
 				end)
 			end
 		end
@@ -572,13 +608,17 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end)
 	end
 	channel.OnClientEvent:Connect(function(action: any, reply: any)
-		if action ~= SHOP.GiftReply or type(reply) ~= "table" or not giftBack.Visible then
+		local spec = giftFor
+		if not spec or action ~= spec.reply or type(reply) ~= "table" or not giftBack.Visible then
 			return
 		end
 		if reply.ok == true then
 			giftShut()
 		else
-			status.Text = (W.Refused :: any)[tostring(reply.code)] or ""
+			-- The server's own words where it names somebody ("Friend already has
+			-- VIP."), else this gift's words for the code.
+			status.Text = if type(reply.words) == "string" and reply.words ~= "" then reply.words
+				else spec.refused[tostring(reply.code)] or ""
 		end
 	end)
 
@@ -628,6 +668,9 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		padControls = padControls,
 		sheetOpen = function(): boolean
 			return upSheet ~= nil
+		end,
+		giftTo = function(spec: GiftSpec, from: GuiObject)
+			openGift(spec, from)
 		end,
 	}
 end

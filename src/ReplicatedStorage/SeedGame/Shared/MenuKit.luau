@@ -921,13 +921,19 @@ end
 -- with no press under way) press once. Answers a function that forgets the
 -- press, for a list being rebuilt.
 --==============================================================================
-function MenuKit.tap(button: GuiButton, scroller: ScrollingFrame?, onTap: (by: string) -> (), exclude: GuiObject?)
+function MenuKit.tap(button: GuiButton, scroller: ScrollingFrame?, onTap: (by: string) -> (),
+	exclude: (GuiObject | { GuiObject })?)
 	local press: PressGesture.Press? = nil
 	local handled = false
 	local lastEnded = 0
 	local function canvas(): Vector2
 		return if scroller then scroller.CanvasPosition else Vector2.zero
 	end
+	-- One button standing on this one, or several (a pass card's BUY and GIFT,
+	-- 2026-10-13).
+	local others: { GuiObject } = if typeof(exclude) == "Instance" then { exclude :: GuiObject }
+		elseif type(exclude) == "table" then exclude :: { GuiObject }
+		else {}
 	button.InputBegan:Connect(function(input: InputObject)
 		local kind = input.UserInputType
 		local by = if kind == Enum.UserInputType.Touch then "touch"
@@ -937,13 +943,14 @@ function MenuKit.tap(button: GuiButton, scroller: ScrollingFrame?, onTap: (by: s
 			return
 		end
 		-- A press on a button standing on this one (a card's BUY) is that button's.
-		local other = exclude
-		if other and other.Visible then
-			local at, size = other.AbsolutePosition, other.AbsoluteSize
-			local x, y = input.Position.X, input.Position.Y
-			if x >= at.X and x <= at.X + size.X and y >= at.Y and y <= at.Y + size.Y then
-				press = nil
-				return
+		for _, other in ipairs(others) do
+			if other.Visible then
+				local at, size = other.AbsolutePosition, other.AbsoluteSize
+				local x, y = input.Position.X, input.Position.Y
+				if x >= at.X and x <= at.X + size.X and y >= at.Y and y <= at.Y + size.Y then
+					press = nil
+					return
+				end
 			end
 		end
 		press = PressGesture.begin(by, Vector2.new(input.Position.X, input.Position.Y), canvas(), os.clock(), false)

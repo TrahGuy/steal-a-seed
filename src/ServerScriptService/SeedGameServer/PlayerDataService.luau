@@ -589,6 +589,26 @@ function PlayerDataService.UpdateDewberries(player: Player, change: (Profile) ->
 	return false
 end
 
+--==============================================================================
+-- GIFTED PASSES (2026-10-13, backlog item 6; ProfileSchema GiftedPasses)
+--
+-- `change` adds a gift's row -- and, for a gift to another player, its
+-- receipt's id in their Receipts -- in one resumption, and answers whether it
+-- changed anything; only then is the profile marked for saving.
+-- PassGiftService is the only caller, and has PassService publish after.
+--==============================================================================
+function PlayerDataService.UpdateGiftedPasses(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		return true
+	end
+	return false
+end
+
 -- The counts as player attributes, nil at 0.
 function PlayerDataService.PublishDewberries(player: Player)
 	local entry = entries[player]
@@ -1408,7 +1428,8 @@ end
 -- KEPT: Receipts, the record that stops a Robux purchase being granted a second
 -- time; CreatedAt, when this save first existed; WalkMode, a setting rather than
 -- progress; NextItem, so no item id is ever handed out twice. Game passes are not in the profile at all -- PassService asks
--- Roblox -- so nothing here can touch them. Everything else is the schema's
+-- Roblox -- so nothing here can touch them; a GIFTED pass is (GiftedPasses,
+-- 2026-10-13), and is kept with the other paid things. Everything else is the schema's
 -- default, HighestBiomeOrder included: the one deliberate exception to "nothing
 -- in the game lowers it".
 --
@@ -1447,6 +1468,9 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		MysteryPodsOwed = math.max(0, math.floor(tonumber(profile.MysteryPodsOwed) or 0)),
 		-- Nor SKIP REBIRTHs bought and not yet done (2026-10-12, item 18).
 		SkipRebirthsOwed = math.max(0, math.floor(tonumber(profile.SkipRebirthsOwed) or 0)),
+		-- Nor a pass somebody was gifted (2026-10-13, backlog item 6): it is the
+		-- pass, paid for.
+		GiftedPasses = table.clone(profile.GiftedPasses or {}),
 		-- The one-time hatch bonus stays claimed and its like reminder keeps its
 		-- state (2026-10-01): a reset must not make the bonus claimable again.
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,

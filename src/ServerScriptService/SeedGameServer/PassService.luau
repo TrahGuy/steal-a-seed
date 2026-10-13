@@ -22,9 +22,9 @@
 -- here.
 --
 --==============================================================================
--- OWNERSHIP IS NEVER SAVED
+-- OWNERSHIP OF THE REAL PASS IS NEVER SAVED
 --
--- Deliberately no ProfileSchema field. If a pass were mirrored into the save,
+-- Deliberately no ProfileSchema field for it. If a pass were mirrored into the save,
 -- there would be two answers to "do they own it" -- ours and Roblox's -- and
 -- they would drift the first time a refund, a chargeback or a failed save
 -- happened. Roblox is the record; this service caches it for a session and
@@ -32,6 +32,17 @@
 --
 -- The cost of that is one web call per pass per join, which is why the result
 -- is cached rather than asked per payout tick.
+--
+--==============================================================================
+-- A GIFTED PASS IS SAVED, BECAUSE NOBODY ELSE HAS IT (2026-10-13, backlog
+-- item 6)
+--
+-- A pass bought for another player is a Developer Product (PassGiftService):
+-- Roblox records the purchase, never a pass. So the receipt's grant writes a
+-- row on the recipient's profile (ProfileSchema.GiftedPasses), and that row is
+-- the only record there is. Every answer here counts "owns the real pass OR
+-- has a gifted row" -- read off the profile on each ask, so nothing can drift
+-- from it -- and a row is never taken away.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -41,6 +52,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+
+-- Only for the gifted rows on a profile (A GIFTED PASS IS SAVED, above).
+local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 
 local PassService = {}
 --==============================================================================
@@ -54,6 +68,7 @@ local STORE = GameConfig.Store
 local ATTRIBUTE = GameConfig.Pass.MultiplierAttribute
 local BAG_ATTRIBUTE = GameConfig.Pass.BagSlotsAttribute
 local VIP_ATTRIBUTE = GameConfig.Pass.VipAttribute
+local OWNED_ATTRIBUTE = GameConfig.Pass.OwnedAttribute
 
 --==============================================================================
 -- A SLOW RE-ASK, FOR THE PURCHASE WE ARE NOT TOLD ABOUT
@@ -163,15 +178,46 @@ function PassService.benefits(rows: { any }): Benefits
 	return out
 end
 
-local function benefitsOf(player: Player): Benefits
-	local rows = {}
+-- The passes this player was gifted, by key (A GIFTED PASS IS SAVED): the
+-- profile's own rows, so empty until it has loaded.
+local function giftedKeys(player: Player): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	local profile = PlayerDataService.Get(player) :: any
+	local rows = if profile then profile.GiftedPasses else nil
+	if type(rows) == "table" then
+		for _, row in ipairs(rows) do
+			if type(row) == "table" and type(row.Pass) == "string" then
+				out[row.Pass] = true
+			end
+		end
+	end
+	return out
+end
+
+-- Every pass this player has -- the real one or a gift -- by key. A key this
+-- build does not sell is left out, so it is worth nothing.
+local function ownedKeys(player: Player): { [string]: boolean }
+	local out = giftedKeys(player)
+	for key in pairs(out) do
+		if not passes[key] then
+			out[key] = nil
+		end
+	end
 	local mine = owned[player]
 	if mine then
 		for key, isOwned in pairs(mine) do
 			if isOwned and passes[key] then
-				table.insert(rows, passes[key])
+				out[key] = true
 			end
 		end
+	end
+	return out
+end
+
+local function benefitsOf(player: Player): Benefits
+	local rows = {}
+	for key in pairs(ownedKeys(player)) do
+		table.insert(rows, passes[key])
 	end
 	return PassService.benefits(rows)
 end
@@ -189,7 +235,8 @@ end
 --
 -- A client can overwrite its own copy locally. That changes what their own HUD
 -- prints and nothing else -- the server never reads it back, and the faucet is
--- computed from `owned`, which only this file writes.
+-- computed from `owned`, which only this file writes, and the profile's gifted
+-- rows, which only PassGiftService writes.
 --==============================================================================
 local function publish(player: Player)
 	if player.Parent then
@@ -199,6 +246,13 @@ local function publish(player: Player)
 		-- for the HUD and VipChat; VipService hears Changed.
 		player:SetAttribute(BAG_ATTRIBUTE, GameConfig.Save.MaxHeld + worth.bagSlots)
 		player:SetAttribute(VIP_ATTRIBUTE, worth.vip)
+		-- Every pass they have, real or gifted (2026-10-13): the Shop's OWNED.
+		local keys = {}
+		for key in pairs(ownedKeys(player)) do
+			table.insert(keys, key)
+		end
+		table.sort(keys)
+		player:SetAttribute(OWNED_ATTRIBUTE, if #keys > 0 then table.concat(keys, ",") else nil)
 		PassService.Changed:Fire(player)
 	end
 end
@@ -274,13 +328,33 @@ local function refresh(player: Player, force: boolean?)
 	end
 end
 
+-- A GIFTED PASS ARRIVES WITH THE PROFILE (2026-10-13): the save loads seconds
+-- after the join, and nothing else tells this file, so it looks every
+-- PROFILE_POLL seconds -- up to PROFILE_WAIT -- and publishes once it is there.
+local PROFILE_POLL = 0.5
+local PROFILE_WAIT = 300
+
+local function publishWithProfile(player: Player, mine: { [string]: boolean })
+	local waited = 0
+	while owned[player] == mine and waited < PROFILE_WAIT do
+		if PlayerDataService.Get(player) then
+			publish(player)
+			return
+		end
+		task.wait(PROFILE_POLL)
+		waited += PROFILE_POLL
+	end
+end
+
 local function remember(player: Player)
-	owned[player] = {}
+	local mine = {}
+	owned[player] = mine
 	-- Published before the first web call so the client never reads nil, and so
 	-- a player whose check is still in flight shows the base rate rather than a
 	-- blank. It is corrected the moment the answer lands.
 	publish(player)
 	task.spawn(refresh, player, true)
+	task.spawn(publishWithProfile, player, mine)
 end
 
 local function forget(player: Player)
@@ -291,9 +365,45 @@ end
 --==============================================================================
 -- THE PUBLIC ANSWERS
 --==============================================================================
+-- The real pass or a gift of it (2026-10-13).
 function PassService.Owns(player: Player, key: string): boolean
+	return ownedKeys(player)[key] == true
+end
+
+--==============================================================================
+-- THE GIFTS' QUESTIONS (2026-10-13, backlog item 6; PassGiftService)
+--==============================================================================
+-- A pass's row in Store.Items.Passes, or nil.
+function PassService.Row(key: string): any
+	return passes[key]
+end
+
+-- Whether `player` has the pass `key`, asking Roblox again first when the
+-- cache says no -- a join check that failed, or a pass bought on the website a
+-- moment ago -- so a gift is refused BEFORE its prompt. Yields; a failed call
+-- leaves the cached answer.
+function PassService.CheckOwns(player: Player, key: string): boolean
+	if PassService.Owns(player, key) then
+		return true
+	end
+	local item = passes[key]
 	local mine = owned[player]
-	return (mine ~= nil) and mine[key] == true
+	if not (item and mine) then
+		return false
+	end
+	local answer = askOne(player, key, item)
+	if answer and owned[player] == mine and not mine[key] then
+		mine[key] = true
+		publish(player)
+		log(string.format("%s owns %q", player.Name, key))
+	end
+	return PassService.Owns(player, key)
+end
+
+-- After a gifted row lands: the attributes, and VipService's Changed (publish
+-- skips a player who has gone).
+function PassService.Refresh(player: Player)
+	publish(player)
 end
 
 --==============================================================================

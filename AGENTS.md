@@ -527,6 +527,10 @@ src/
                                 title over the name, the celebration sent to everyone near
     BatHintService.luau         the one-time "bats are sold at Marigold's" hint for a player with
                                 no bat, the first time a guardian chases them (2026-10-08)
+    PassGiftService.luau        a pass as a GIFT (2026-10-13): one GIFT developer product per pass
+                                (GameConfig.Store.PassGifts); the recipient noted before the prompt,
+                                refused if they have the pass; the receipt's row on THEIR profile
+                                (GiftedPasses), which PassService counts as the pass (PassGiftSpec)
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     Music.client.luau           the background bed; ids in GameConfig.Music

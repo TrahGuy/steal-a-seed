@@ -57,6 +57,10 @@ local ProfileSchema = {}
 export type MysteryRecord = { Species: string, Size: number?, PoolVersion: number, SizesVersion: number,
 	ReadyAt: number }
 
+-- One gifted pass (GiftedPasses, 2026-10-13): the pass's key, the buyer's
+-- UserId, the receipt's id, and when it arrived (os.time).
+export type GiftedPass = { Pass: string, From: number, Receipt: string, At: number }
+
 export type Profile = {
 	Tutorial: TutorialData.Progress,
 	--==========================================================================
@@ -104,6 +108,19 @@ export type Profile = {
 	-- rebirth's (RebirthService.SkipOwed). Kept by a progress reset: paid for.
 	-- Old saves: 0.
 	SkipRebirthsOwed: number,
+	--==========================================================================
+	-- GIFTED PASSES (2026-10-13, the owner's backlog item 6)
+	--
+	-- A pass another player bought this player as a gift (a Developer Product:
+	-- Roblox has no record of it, so this is the record). One row per gift that
+	-- arrived -- the pass's key, who paid (a UserId: the player's own when a gift
+	-- fell back to its buyer), the receipt's id and when -- written with the
+	-- receipt's id in Receipts in the same step (PassGiftService). PassService
+	-- counts a row as the pass itself. A second row of one pass is a gift that
+	-- arrived after the pass did (the race): kept, so no purchase goes
+	-- unrecorded. Kept by a progress reset: paid for. Old saves: none.
+	--==========================================================================
+	GiftedPasses: { GiftedPass },
 	--==========================================================================
 	-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01; GameConfig.HatchBonus)
 	--
@@ -506,6 +523,7 @@ function ProfileSchema.Default(): Profile
 		RainOwed = 0,
 		MysteryPodsOwed = 0,
 		SkipRebirthsOwed = 0,
+		GiftedPasses = {},
 		HatchBonusClaimed = false,
 		BatHintShown = false,
 		LikeReminder = "",
@@ -1221,6 +1239,26 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.RainOwed = math.floor(number(raw.RainOwed, 0, 0, SAVE.MaxRainOwed))
 	p.MysteryPodsOwed = math.floor(number(raw.MysteryPodsOwed, 0, 0, SAVE.MaxMysteryPodsOwed))
 	p.SkipRebirthsOwed = math.floor(number(raw.SkipRebirthsOwed, 0, 0, SAVE.MaxSkipRebirthsOwed))
+	-- Gifted passes (2026-10-13): whole rows only, in order, capped. A pass key
+	-- this build does not sell is KEPT -- a paid record must not vanish because
+	-- a pass was renamed -- and PassService simply does not count it.
+	if type(raw.GiftedPasses) == "table" then
+		for _, rec in ipairs(raw.GiftedPasses) do
+			if #p.GiftedPasses >= SAVE.MaxGiftedPasses then
+				break
+			end
+			if type(rec) == "table" and type(rec.Pass) == "string" and #rec.Pass > 0 and #rec.Pass <= 32
+				and string.match(rec.Pass, "^[%w_]+$") ~= nil
+				and type(rec.Receipt) == "string" and #rec.Receipt > 0 and #rec.Receipt <= 128 then
+				table.insert(p.GiftedPasses, {
+					Pass = rec.Pass,
+					From = math.floor(number(rec.From, 0, 0, 2 ^ 53)),
+					Receipt = rec.Receipt,
+					At = math.floor(number(rec.At, 0, 0, MAX_TIME)),
+				})
+			end
+		end
+	end
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.BatHintShown = raw.BatHintShown == true

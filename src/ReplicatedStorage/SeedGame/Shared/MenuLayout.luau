@@ -315,6 +315,10 @@ MenuLayout.Shop = {
 	TileH = 122,
 	RowFrom = 300,
 	BuyW = 112,
+	-- A pass's GIFT (2026-10-13, backlog item 6): GiftW wide beside its BUY on a
+	-- tile; under its BUY on a row, whose shelf's rows then stand GiftRowH tall.
+	GiftW = 76,
+	GiftRowH = 96,
 	OddsW = 156,
 	-- ONE PAGE (2026-10-06): each shelf's heading over its cards, HeadingGap
 	-- between them, SectionGap between one shelf's last row and the next heading.

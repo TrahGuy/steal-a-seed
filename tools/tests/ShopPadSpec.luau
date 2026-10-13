@@ -268,7 +268,7 @@ local ok, err = pcall(function()
 			and has(bannerSrc, "if shopOpen and from and from.Visible and MenuKit.onPad() then\n\t\t\t\tGuiService.SelectedObject = from")
 			and has(bannerSrc, "holdPad(oddsBack, oddsButton.hit, function(): GuiObject?")
 			and has(bannerSrc, "holdPad(giftBack, from, function(): GuiObject?")
-			and has(bannerSrc, "openGift(giftItem, giftButton.hit)"),
+			and has(bannerSrc, "openGift(podGift(giftItem), giftButton.hit)"),
 		"a sheet takes B and the selection when it comes up, and however it shuts gives B back and the selection to "
 			.. "the button that opened it (not when the whole Shop shut it)")
 	check(has(kitSrc, "end, false, 3000, Enum.KeyCode.ButtonB)") and has(focusSrc, "local BACK_PRIORITY = 2500"),

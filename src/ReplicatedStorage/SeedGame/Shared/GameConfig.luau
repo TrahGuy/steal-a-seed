@@ -7972,6 +7972,26 @@ GameConfig.Store = {
 		{ key = "giftmysterypod50", label = "Gift: Mysterious Pod x50", robux = 1299, product = 3718126289,
 			kind = "mysterypod", count = 50, gift = true, icon = "rbxassetid://74491754237004" },
 	},
+	--==========================================================================
+	-- A PASS AS A GIFT (2026-10-13, the owner's backlog item 6: "make the passes
+	-- giftable"). Roblox cannot gift a Game Pass, so each pass has a GIFT
+	-- Developer Product, at the pass's own price unless the owner says
+	-- otherwise. Buying one gives the chosen player the pass's benefits as a
+	-- gifted pass (ProfileSchema.GiftedPasses), which PassService counts as the
+	-- pass itself. `forPass` is the pass's key in Items.Passes -- NOT `pass`,
+	-- which would make StoreService take the row for a Game Pass and skip it.
+	-- The ids are the owner's to create; 0 until then, and a pass with no live
+	-- gift shows no GIFT button (PassGiftService, ShopUI).
+	--==========================================================================
+	PassGifts = {
+		{ key = "giftx2money", forPass = "x2money", label = "Gift: \u{00D7}2 MONEY", robux = 199, product = 0,
+			kind = "passgift" },
+		{ key = "giftbagslots", forPass = "bagslots", label = "Gift: +12 BAG SLOTS", robux = 149, product = 0,
+			kind = "passgift" },
+		{ key = "giftfasterhatch", forPass = "fasterhatch", label = "Gift: FASTER HATCH", robux = 129, product = 0,
+			kind = "passgift" },
+		{ key = "giftvip", forPass = "vip", label = "Gift: VIP", robux = 249, product = 0, kind = "passgift" },
+	},
 }
 
 --==============================================================================
@@ -8113,6 +8133,52 @@ GameConfig.Pass = {
 	--==========================================================================
 	BagSlotsAttribute = "BagSlots",
 	VipAttribute = "Vip",
+	-- Every pass the player has, the real one or a gift, as the passes' keys
+	-- joined with commas ("vip,x2money"), sorted; nil for none (2026-10-13,
+	-- backlog item 6). The Shop's OWNED reads it, so a gifted pass is never
+	-- bought again. The client's eyes only, like the two above.
+	OwnedAttribute = "PassesOwned",
+	--==========================================================================
+	-- A PASS AS A GIFT (2026-10-13, backlog item 6; Store.PassGifts,
+	-- PassGiftService). GIFT on a pass's card asks who it is for; the server
+	-- answers on Reply ({ ok, code, words? }) and opens the gift's prompt only
+	-- after noting the recipient. A note stands NoteSeconds: a receipt later
+	-- than that is the buyer's own. One ask per player per Cooldown.
+	--==========================================================================
+	Gift = {
+		Action = "PassGift",
+		Reply = "PassGiftResult",
+		NoteSeconds = 600,
+		Cooldown = 1,
+		Words = {
+			Gift = "GIFT",
+			-- The sheet's title: "GIFT VIP".
+			Title = "GIFT %s",
+			-- Everybody here: the buyer, the recipient, the pass.
+			Gifted = "%s gifted %s %s!",
+			-- The recipient's own line.
+			GiftedYou = "%s gifted you %s!",
+			-- The buyer's, when the recipient left before the receipt: the pass
+			-- is theirs (or, if they had it, the gift is kept on record).
+			GiftLeft = "%s left before the gift arrived, so %s is yours.",
+			GiftLeftHad = "%s left before the gift arrived. You have %s already: your gift is on record.",
+			-- No recipient noted at all (the server restarted, or the note was
+			-- older than NoteSeconds).
+			GiftUnsent = "The gift couldn't be delivered, so %s is yours.",
+			GiftUnsentHad = "The gift couldn't be delivered. You have %s already: your gift is on record.",
+			-- The buyer's, when the recipient came to have the pass between the
+			-- prompt and the receipt: the gift is kept on record (the owner's
+			-- call on any make-good).
+			AlreadyHad = "%s had %s by the time your gift arrived. Your gift is on record.",
+			Refused = {
+				NO_GIFT = "This gift isn't on sale yet.",
+				NO_PLAYER = "That player isn't in this server any more.",
+				NOT_SAVING = "That player's progress isn't saving right now.",
+				-- The server fills in the name and the pass.
+				ALREADY = "%s already has %s.",
+			},
+		},
+	},
 	-- THE VIP'S GOLD NAME (VipService): the engine's own name tag hidden, the
 	-- player's DisplayName in gold where it stood, in the HUD's outlined type,
 	-- at a player name's size (ADMIN's phone size, 15, which matches the
@@ -11872,6 +11938,11 @@ GameConfig.Save = {
 	-- SKIP REBIRTHs bought and not yet done (2026-10-12, item 18): a receipt
 	-- that would pass this stays open.
 	MaxSkipRebirthsOwed = 100,
+	-- Gifted passes on one profile (2026-10-13, backlog item 6;
+	-- ProfileSchema.GiftedPasses): one record per gift that arrived, a second of
+	-- the same pass included. A gift that would pass this is not granted, and
+	-- its receipt stays open.
+	MaxGiftedPasses = 32,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================

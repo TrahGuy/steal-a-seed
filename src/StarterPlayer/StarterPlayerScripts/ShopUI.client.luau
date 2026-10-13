@@ -24,9 +24,15 @@
 --
 -- The buy button keeps the approved face: lime, a white capsule, the Robux mark
 -- and this player's price. Its other faces: SOON (a product not created yet:
--- refuses), OFF SALE, OWNED (a pass this account has), and OPENING (a purchase
--- prompt is up -- every other button waits until it closes, so two prompts are
--- never asked for at once).
+-- refuses), OFF SALE, OWNED (a pass this account has, or was gifted), and
+-- OPENING (a purchase prompt is up -- every other button waits until it closes,
+-- so two prompts are never asked for at once).
+--
+-- GIFT (2026-10-13, the owner's backlog item 6): a pass's card carries a second
+-- button, GIFT, once its gift product is created -- beside BUY on a tile, under
+-- it on a phone's row (that shelf's rows stand taller) -- and its details have
+-- one too. It opens the Mysterious Pod's own gift sheet for everybody here; the
+-- server (PassGiftService) refuses before any prompt when they have the pass.
 --
 -- WHERE IT STANDS is MenuLayout's: between the rails on a desktop (they stay
 -- pressable), the whole safe area on a phone -- and then the rail layer steps
@@ -92,6 +98,10 @@ local CARD_GAP = SH.CardGap
 local GRID_INSET = SH.GridInset
 local ROW_H = SH.RowH
 local BUY_W = SH.BuyW
+-- A pass's GIFT (2026-10-13, backlog item 6): beside its BUY on a tile; under
+-- it on a row, whose shelf's rows stand SH.GiftRowH tall for it.
+local GIFT_W = SH.GiftW
+local GIFT = GameConfig.Pass.Gift
 -- How long OPENING may stand with no word from Roblox before the buttons free.
 local PROMPT_PATIENCE = 30
 
@@ -214,6 +224,25 @@ local busyToken = 0
 -- Passes this account owns (UserOwnsGamePassAsync; true is never taken back).
 local owned: { [number]: boolean } = {}
 
+-- A pass this player has: the account's own, or one the server says they have
+-- -- a GIFTED pass included (2026-10-13, backlog item 6: PassService's
+-- Pass.OwnedAttribute) -- so a gift reads OWNED and is never bought again.
+local function ownsPass(entry: ShopCatalog.Entry): boolean
+	if owned[entry.id] then
+		return true
+	end
+	local list = player:GetAttribute(GameConfig.Pass.OwnedAttribute)
+	if type(list) ~= "string" then
+		return false
+	end
+	for key in string.gmatch(list, "[^,]+") do
+		if key == entry.key then
+			return true
+		end
+	end
+	return false
+end
+
 --==============================================================================
 -- THE HEADER'S CONTROLS
 --==============================================================================
@@ -271,13 +300,17 @@ pageList.Parent = grid
 -- first on the page above every shelf; its odds and gift sheets over the body.
 local podBanner = MysteryShopBanner.build(grid, body, Z + 1, -1)
 
-type Section = { frame: Frame, label: TextLabel, shelf: Frame, cells: UIGridLayout }
+-- `gifts`: a shelf with a pass's GIFT on it (2026-10-13), whose rows stand
+-- SH.GiftRowH tall on a phone so GIFT fits under BUY.
+type Section = { frame: Frame, label: TextLabel, shelf: Frame, cells: UIGridLayout, gifts: boolean }
 local sections: { [string]: Section } = {}
 -- One card's size, from MenuLayout.shopCards (relayout); every shelf's grid takes it.
 local cardW, cardH = 240, ROW_H
+-- Cards are rows (a phone's two columns) rather than tiles (relayout).
+local rows = true
 
 local function shapeSection(section: Section)
-	section.cells.CellSize = UDim2.fromOffset(cardW, cardH)
+	section.cells.CellSize = UDim2.fromOffset(cardW, if rows and section.gifts then SH.GiftRowH else cardH)
 	section.cells.CellPadding = UDim2.fromOffset(CARD_GAP, CARD_GAP)
 end
 
@@ -313,7 +346,7 @@ local function sectionFor(category: ShopCatalog.Category): Section
 	cells.SortOrder = Enum.SortOrder.LayoutOrder
 	cells.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	cells.Parent = shelf
-	local section: Section = { frame = frame, label = label, shelf = shelf, cells = cells }
+	local section: Section = { frame = frame, label = label, shelf = shelf, cells = cells, gifts = false }
 	sections[category.id] = section
 	shapeSection(section)
 	return section
@@ -452,6 +485,10 @@ type Card = {
 	titleFit: UITextSizeConstraint,
 	benefit: TextLabel,
 	buy: Price,
+	-- A pass's GIFT (2026-10-13), while its gift product is created; and whether
+	-- the card stands on a shelf with a GIFT on it (its row SH.GiftRowH tall).
+	gift: MenuKit.Button?,
+	tall: boolean,
 	priceState: string,
 	priceValue: number?,
 	priced: boolean,
@@ -487,7 +524,7 @@ local function paintPrice(p: Price, card: Card)
 		token.Visible = true
 		price.Text = "SOON"
 		price.TextColor3 = SHOP.SoonText
-	elseif entry.kind == "pass" and owned[entry.id] then
+	elseif entry.kind == "pass" and ownsPass(entry) then
 		face("done")
 		capsule.Visible = false
 		word.Visible = true
@@ -620,7 +657,7 @@ local function buy(card: Card)
 		SoundKit.play("Denied")
 		return
 	end
-	if entry.kind == "pass" and owned[entry.id] then
+	if entry.kind == "pass" and ownsPass(entry) then
 		SoundKit.play("Denied")
 		return
 	end
@@ -714,19 +751,28 @@ end)
 -- the list presses neither.
 --==============================================================================
 local openDetail: (string) -> ()
-local rows = true
 
 local function shapeCard(card: Card)
+	local gift = card.gift
 	if rows then
-		card.icon.Position = UDim2.fromOffset(8, (cardH - 42) / 2)
+		-- A shelf with a pass's GIFT stands SH.GiftRowH tall: BUY, then GIFT under it.
+		local h = if card.tall then SH.GiftRowH else cardH
+		card.icon.Position = UDim2.fromOffset(8, (h - 42) / 2)
 		card.icon.Size = UDim2.fromOffset(42, 42)
 		local textW = cardW - 58 - BUY_W - 14
 		card.title.Position = UDim2.fromOffset(58, 5)
 		card.title.Size = UDim2.fromOffset(textW, 21)
 		card.benefit.Position = UDim2.fromOffset(58, 27)
-		card.benefit.Size = UDim2.fromOffset(textW, cardH - 30)
-		card.buy.hit.Position = UDim2.fromOffset(cardW - BUY_W - 8, (cardH - 44) / 2)
-		card.buy.hit.Size = UDim2.fromOffset(BUY_W, 44)
+		card.benefit.Size = UDim2.fromOffset(textW, h - 30)
+		if gift then
+			card.buy.hit.Position = UDim2.fromOffset(cardW - BUY_W - 8, 6)
+			card.buy.hit.Size = UDim2.fromOffset(BUY_W, 44)
+			gift.hit.Position = UDim2.fromOffset(cardW - BUY_W - 8, 56)
+			gift.hit.Size = UDim2.fromOffset(BUY_W, h - 62)
+		else
+			card.buy.hit.Position = UDim2.fromOffset(cardW - BUY_W - 8, (h - 44) / 2)
+			card.buy.hit.Size = UDim2.fromOffset(BUY_W, 44)
+		end
 	else
 		card.icon.Position = UDim2.fromOffset(8, 8)
 		card.icon.Size = UDim2.fromOffset(56, 56)
@@ -736,13 +782,46 @@ local function shapeCard(card: Card)
 		card.benefit.Position = UDim2.fromOffset(72, 34)
 		card.benefit.Size = UDim2.fromOffset(textW, 32)
 		card.buy.hit.Position = UDim2.fromOffset(8, cardH - 50)
-		card.buy.hit.Size = UDim2.fromOffset(cardW - 16, 44)
+		-- A pass with GIFT: BUY, then GIFT beside it.
+		card.buy.hit.Size = UDim2.fromOffset(cardW - 16 - (if gift then GIFT_W + 6 else 0), 44)
+		if gift then
+			gift.hit.Position = UDim2.fromOffset(cardW - 8 - GIFT_W, cardH - 50)
+			gift.hit.Size = UDim2.fromOffset(GIFT_W, 44)
+		end
 	end
 end
 
 local liveCount, soonCount = 0, 0
 -- Every card's shine handle, switched on and off with the panel.
 local cardShines: { any } = {}
+
+--==============================================================================
+-- GIFT (2026-10-13, the owner's backlog item 6: "make the passes giftable"):
+-- the Mysterious Pod's own sheet (MysteryShopBanner.giftTo) asks who it is for
+-- among everybody here; the server -- PassGiftService -- refuses before any
+-- prompt when they have the pass already, notes them, and opens the gift's
+-- prompt. Whatever is bought, the receipt decides. `from` is the button the
+-- selection goes back to on a controller.
+--==============================================================================
+local function giftPass(entry: ShopCatalog.Entry, from: GuiObject)
+	if entry.kind ~= "pass" or not entry.gift then
+		SoundKit.play("Denied")
+		return
+	end
+	SoundKit.play("CardClick")
+	podBanner.giftTo({
+		title = string.format(GIFT.Words.Title, entry.title),
+		eligible = function(_other: Player): boolean
+			return true
+		end,
+		action = GIFT.Action,
+		payload = function(other: Player): { [string]: any }
+			return { pass = entry.key, recipient = other.UserId }
+		end,
+		reply = GIFT.Reply,
+		refused = GIFT.Words.Refused :: any,
+	}, from)
+end
 
 local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 	local made = cards[entry.key]
@@ -813,6 +892,13 @@ local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 		MenuKit.ink(benefit, Color3.new(1, 1, 1))
 	end
 	local p = priceButton(face, Z + 4)
+	-- A pass's GIFT, only while its gift product is created (2026-10-13).
+	local gift: MenuKit.Button? = nil
+	if entry.kind == "pass" and entry.gift then
+		local g = MenuKit.button(face, "Gift", Z + 4, GIFT.Words.Gift, 14, { studs = true })
+		g.style("sky")
+		gift = g
+	end
 	local card: Card = {
 		entry = entry,
 		holder = holder,
@@ -822,6 +908,8 @@ local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 		titleFit = titleFit,
 		benefit = benefit,
 		buy = p,
+		gift = gift,
+		tall = false,
 		priceState = "loading",
 		priceValue = nil,
 		priced = false,
@@ -834,10 +922,16 @@ local function cardFor(entry: ShopCatalog.Entry, shelf: Frame): Card
 	MenuKit.tap(face, grid, function()
 		SoundKit.play("CardClick")
 		openDetail(entry.key)
-	end, p.hit)
+	end, if gift then { p.hit, gift.hit } else p.hit)
 	MenuKit.tap(p.hit, grid, function()
 		buy(card)
 	end)
+	if gift then
+		local g = gift
+		MenuKit.tap(g.hit, grid, function()
+			giftPass(entry, g.hit)
+		end)
+	end
 	-- Priced the moment it exists, as the old shelves were -- except a Spin
 	-- Ticket pack, which Roblox is not asked about until this player may buy.
 	if entry.kind == "pass" then
@@ -861,9 +955,19 @@ end
 -- Every shelf's cards exist from the start (they are a few frames each), so
 -- every live price is asked for at once, as it always was.
 for _, category in ipairs(ShopCatalog.categories(false)) do
-	local shelf = sectionFor(category).shelf
+	local section = sectionFor(category)
+	local made: { Card } = {}
 	for _, entry in ipairs(ShopCatalog.entries(category.id)) do
-		cardFor(entry, shelf)
+		local card = cardFor(entry, section.shelf)
+		table.insert(made, card)
+		if card.gift then
+			-- A row on this shelf stands taller for GIFT (shapeSection).
+			section.gifts = true
+		end
+	end
+	for _, card in ipairs(made) do
+		card.tall = section.gifts
+		shapeCard(card)
 	end
 end
 if liveCount == 0 then
@@ -924,6 +1028,13 @@ detailOdds.style("sky")
 detailOdds.hit.Position = UDim2.fromOffset(158, 0)
 detailOdds.hit.Size = UDim2.fromOffset(160, 44)
 detailOdds.hit.Activated:Connect(openOdds)
+-- A pass's GIFT (2026-10-13), beside BUY where a spin pack's REWARDS & ODDS
+-- stands (a pass never shows that).
+local detailGift = MenuKit.button(detailRow, "DetailGift", Z + 11, GIFT.Words.Gift, 14)
+detailGift.style("sky")
+detailGift.hit.Position = UDim2.fromOffset(158, 0)
+detailGift.hit.Size = UDim2.fromOffset(120, 44)
+detailGift.hit.Visible = false
 
 paintDetail = function()
 	local key = detailKey
@@ -936,6 +1047,7 @@ paintDetail = function()
 	detailBenefit.Text = entry.benefit
 	detailWords.Text = entry.detail
 	detailOdds.hit.Visible = entry.kind == "spin" or entry.odds == true
+	detailGift.hit.Visible = entry.kind == "pass" and entry.gift ~= nil
 	paintPrice(detailBuy, card)
 end
 
@@ -1004,6 +1116,13 @@ MenuKit.tap(detailBuy.hit, nil, function()
 	local card = if key then cards[key] else nil
 	if card then
 		buy(card)
+	end
+end)
+MenuKit.tap(detailGift.hit, nil, function()
+	local key = detailKey
+	local card = if key then cards[key] else nil
+	if card then
+		giftPass(card.entry, detailGift.hit)
 	end
 end)
 
@@ -1222,6 +1341,9 @@ player:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribute):Connect(fu
 		end
 	end
 end)
+-- A pass the server says this player has -- a gift the moment it lands
+-- (2026-10-13) -- reads OWNED at once.
+player:GetAttributeChangedSignal(GameConfig.Pass.OwnedAttribute):Connect(repaintPrices)
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)
 	local found = if remotes then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20) else nil
@@ -1288,6 +1410,7 @@ local function padGroups(): { { GuiObject } }
 		add(page, back.hit)
 		add(page, detailBuy.hit)
 		add(page, detailOdds.hit)
+		add(page, detailGift.hit)
 		return { head, page }
 	end
 	for _, object in ipairs(podBanner.padControls()) do
@@ -1301,6 +1424,11 @@ local function padGroups(): { { GuiObject } }
 				if card and card.holder.Visible then
 					add(page, card.face)
 					add(page, card.buy.hit)
+					-- A pass's GIFT after its BUY (2026-10-13).
+					local gift = card.gift
+					if gift then
+						add(page, gift.hit)
+					end
 				end
 			end
 		end
