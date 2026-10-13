@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 7 (BACKLOG 2026-10-12): THE OBBY PILL BECOMES SELL — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PlotTeleportSpec 82/0 (14 new SELL checks), HudLayoutSpec 1498/0, ObbyViewSpec 112/0, TutorialSpotlightSpec 51/0 (checks updated); ObbySpec 69/0, TutorialSpec 121/0, ActionRefusalSpec 74/0, EventHubSpec 53/0, DebugTeleportSpec 8/0, BatHintSpec 19/0, ControllerSpec 64/0, FirstMinuteSpec 117/0, MetricsSpec 66/0, PhoneMenuSpec 29/0, UsabilityAudioSpec 95/0, StorageDoorsSpec 128/0, TutorialPodSpec 263 checks; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 7 (BACKLOG 2026-10-12): THE OBBY PILL BECOMES SELL — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, 933a91d, NOT PUBLISHED; the landing at the SELL ALL board approved as built; PlotTeleportSpec 82/0 (14 new SELL checks), HudLayoutSpec 1498/0, ObbyViewSpec 112/0, TutorialSpotlightSpec 51/0 (checks updated); ObbySpec 69/0, TutorialSpec 121/0, ActionRefusalSpec 74/0, EventHubSpec 53/0, DebugTeleportSpec 8/0, BatHintSpec 19/0, ControllerSpec 64/0, FirstMinuteSpec 117/0, MetricsSpec 66/0, PhoneMenuSpec 29/0, UsabilityAudioSpec 95/0, StorageDoorsSpec 128/0, TutorialPodSpec 263 checks; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "change the obby navigation pill to SELL, and teleport to marigold". Their default: the pill shows under today's rules (Safe Zone, not on the course).
 
