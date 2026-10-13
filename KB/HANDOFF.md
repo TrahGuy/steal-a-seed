@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## PERFORMANCE MODE: ULTRA, A THIRD LEVEL THAT HIDES YOUR OWN PLANTS TOO — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; OtherPlantsSpec 75/0 (new checks); HudLayoutSpec 1499/0 (one pin updated); MysteryPodSpec 39/0, PlantGlowSpec 69/0, PlantLabelSpec 39/0, ReachPointSpec 53/0; MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
+## PERFORMANCE MODE: ULTRA, A THIRD LEVEL THAT HIDES YOUR OWN PLANTS TOO — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, fb09f41, NOT PUBLISHED (v1060 is live); OtherPlantsSpec 75/0 (new checks); HudLayoutSpec 1499/0 (one pin updated); MysteryPodSpec 39/0, PlantGlowSpec 69/0, PlantLabelSpec 39/0, ReachPointSpec 53/0; MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
 
 The owner: "insert a level 3 switch on performance mode, when turned level 3, owned plants will be hidden too". Their picks:
 - "tap cycles 3 steps";
