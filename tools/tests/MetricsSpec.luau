@@ -88,12 +88,15 @@ local function fresh(config)
 	Metrics.useStaffCheck(function(p)
 		return staff[p] == true
 	end)
-	local base = { Enabled = true, ExcludeStaff = true, StaffValidation = false, PerMinute = 1000,
-		CohortSince = 5000, Obby = false }
+	local base = { Enabled = true, ExcludeStaff = true, StaffValidation = false, PerMinuteBase = 1000,
+		PerMinutePerPlayer = 0, ReserveShare = 0.25, CohortSince = 5000, Obby = false }
 	for k, v in pairs(config or {}) do
 		base[k] = v
 	end
 	Metrics.configure(base)
+	Metrics.useHeadcount(function()
+		return 0
+	end)
 end
 
 local function count(pred)
@@ -331,7 +334,7 @@ end)
 local _, failures = Metrics.health()
 check(calm and failures >= 4, "an analytics outage throws into nobody's gameplay; the failures are only counted",
 	failures)
-fresh({ PerMinute = 5 })
+fresh({ PerMinuteBase = 5, ReserveShare = 0 })
 local flood = newPlayer("flood")
 for _ = 1, 12 do
 	Metrics.chestClaimed(flood, "income")
@@ -342,6 +345,71 @@ check(#sent == 5 and droppedCount == 7, "the per-server budget holds: 5 of 12 go
 now += 60
 Metrics.chestClaimed(flood, "income")
 check(#sent == 6, "and it refills with time")
+
+--==============================================================================
+-- 5b. THE BUDGET'S SIZE AND ORDER (2026-10-13, the owner's analytics pass)
+--==============================================================================
+say("\n-- the budget's size and order --")
+fresh({ PerMinuteBase = 100, PerMinutePerPlayer = 15 })
+local heads = 0
+Metrics.useHeadcount(function()
+	return heads
+end)
+local capEmpty = Metrics.capNow()
+heads = 8
+local capEight = Metrics.capNow()
+check(capEmpty == 100 and capEight == 220, "the minute's cap follows the server: base + per player x the players here",
+	capEmpty .. " / " .. capEight)
+local live = GameConfig.Metrics
+local under = live.PerMinuteBase ~= nil and live.PerMinutePerPlayer ~= nil and live.PerMinute == nil
+for n = 0, 100 do
+	under = under and live.PerMinuteBase + live.PerMinutePerPlayer * n <= 120 + 20 * n
+end
+check(under and live.ReserveShare > 0 and live.ReserveShare < 1,
+	"the game's own numbers stay under Roblox's 120 + 20 x CCU at every server size, with a reserve")
+
+fresh({ PerMinuteBase = 8, ReserveShare = 0.25 })
+local order = newPlayer("in order")
+Metrics.profileReady(order, { CreatedAt = 6000 }, true, true)
+for _ = 1, 12 do
+	Metrics.chestClaimed(order, "income")
+end
+local chests = count(function(e) return e.name == "BonusChestClaimed" end)
+Metrics.milestone(order, "train", progress({ train = true }))
+Metrics.milestone(order, "speed", progress({ train = true, speed = true }))
+Metrics.milestone(order, "steal", progress({ train = true, speed = true, steal = true }))
+local stepsDone = count(function(e) return e.name == "TutorialStepDone" end)
+local by = Metrics.droppedBy()
+check(chests == 5 and (by.other or 0) == 7,
+	"the rest -- here the chest -- stops at the reserve (a quarter of the cap), so the steps below find room",
+	chests .. " / " .. tostring(by.other))
+check(stepsDone == 2 and (by.tutorial or 0) == 1,
+	"tutorial events spend what is left, down to nothing, and only then are dropped", stepsDone .. " / " .. tostring(by.tutorial))
+check(onboardingSteps(order) == "1,2" and by.onboarding == nil,
+	"and an onboarding step is NEVER dropped: step 2 went out with the bucket empty", onboardingSteps(order))
+
+fresh()
+local retry = newPlayer("retried")
+Metrics.profileReady(retry, { CreatedAt = 6000 }, true, true)
+throwing = true
+Metrics.milestone(retry, "steal", progress({ steal = true }))
+throwing = false
+Metrics.milestone(retry, "bank", progress({ steal = true, bank = true }))
+check(onboardingSteps(retry) == "1,2,3",
+	"a step lost on the way (an AnalyticsService error) is tried again by the next milestone, never lost for the session",
+	onboardingSteps(retry))
+Metrics.milestone(retry, "hatch", progress({ steal = true, bank = true, hatch = true }))
+Metrics.milestone(retry, "place", progress({ steal = true, bank = true, hatch = true, place = true }))
+throwing = true
+Metrics.income(retry)
+throwing = false
+Metrics.income(retry)
+local soon = onboardingSteps(retry)
+now += 31
+Metrics.income(retry)
+Metrics.income(retry)
+check(soon == "1,2,3,4,5" and onboardingSteps(retry) == "1,2,3,4,5,6",
+	"and the last, first income: tried again 30 s later rather than every tick, then sent once", onboardingSteps(retry))
 
 --==============================================================================
 -- 6. THE OBBY
@@ -482,7 +550,7 @@ check(GameConfig.Metrics.CohortSince >= 1790467200 and GameConfig.Metrics.Exclud
 say("\n-- the dry run --")
 Metrics.reset()
 Metrics.useSink(nil)
-Metrics.configure({ Enabled = true, ExcludeStaff = true, StaffValidation = false, PerMinute = 1000,
+Metrics.configure({ Enabled = true, ExcludeStaff = true, StaffValidation = false, PerMinuteBase = 1000,
 	CohortSince = 5000, Obby = false })
 Metrics.useStaffCheck(function()
 	return false
@@ -503,6 +571,7 @@ Metrics.useSink(nil)
 Metrics.configure(nil)
 Metrics.useStaffCheck(nil)
 Metrics.useClock(nil)
+Metrics.useHeadcount(nil)
 Metrics.reset()
 
 say(string.format("\nMetricsSpec: %d passed, %d failed", pass, fail))

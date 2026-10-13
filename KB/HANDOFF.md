@@ -1,5 +1,23 @@
 # Steal a Seed — Session Handoff
 
+## ANALYTICS: THE ONBOARDING FUNNEL'S BUDGET, ORDER AND A VERIFIED RUN — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MetricsSpec 66/0 (6 new); MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A FRESH STORE)
+
+The owner's Creator Hub onboarding funnel (data of 2026-10-13 09:00; 1,348 users; total conversion 31.6%): Session Ready 1,348; First Pod Stolen 858 (63.65%, the biggest drop); First Pod Banked 723 (84.27%); step 4 (labelled "First Pod Planted" there) 520 (71.92%); First Plant Placed 427 (82.12%); First Plant Income 426 (99.77%). A tester reported funnel completions "close to 0%" today; not confirmed (the owner was asked for the day-by-day chart).
+
+**A. The budget** (Metrics.luau, GameConfig.Metrics):
+- It was ONE flat bucket of 60 calls a minute per server, under even an empty server's Roblox allowance (120 + 20 x CCU, create.roblox.com production/analytics/event-types). Since 10-09 raids, the Pod Rush, the wheel, the obby and the Mist send too, so a busy server could spend it and drop ANY event, onboarding steps included.
+- And a dropped onboarding step was marked as sent BEFORE the send, so it was never tried again that session; a later step could then go out with the earlier one missing (the MarkBeforeSend mutant shows it: "1,3").
+- Now: the cap is PerMinuteBase 100 + PerMinutePerPlayer 15 x the players here (under 120 + 20 x CCU at every size). Priorities: "onboarding" is never dropped (at most six per player); "tutorial" (TutorialStepDone / Completed / Skipped) may spend the bucket to nothing; "other" (raids, wheel, obby, Pod Rush, chest, validation) stops below ReserveShare 0.25 of the cap. A step is marked sent only once it went out: one lost to an AnalyticsService error is retried by the next milestone; step 6 (income) at most every 30 s. Never yields, never throws (unchanged).
+- Metrics.capNow(), Metrics.droppedBy(), Metrics.useHeadcount() (for specs) are new.
+
+**B. Verified in a guarded Play** (a FRESH throwaway store SeedTest_funnel_20261013; a gated ZZ host lifted the staff exclusion for that dry run only and was deleted after; Studio's DRY sink): the brand-new profile got isNew = true and step 1 at join (PlayerDataService's profileReady, status == "new"). Then AddSpeed (train, speed), a real Greenhollow nest TryTake, CarryService.Bank, a Bag hatch (planted straight into a free bed) and the first income tick: Metrics.recent() held, in order: ONBOARDING 1 "Session Ready"; TutorialStepDone train, speed; ONBOARDING 2 "First Pod Stolen"; TutorialStepDone steal; GuardianRaid 1; ONBOARDING 3 "First Pod Banked"; TutorialStepDone bank; GuardianRaid 2; GuardianRaidEnded banked; ONBOARDING 4 "First Plant Hatched"; TutorialStepDone hatch; ONBOARDING 5 "First Plant Placed"; TutorialStepDone place; TutorialCompleted; ONBOARDING 6 "First Plant Income". 16 events, 0 dropped, 0 failures, cap 115 with one player.
+
+**C. Every route to a first steal and bank** (read 2026-10-13): every pod a player can take -- a nest's, a loose one, a Secret's, a Rain nest's, any during the Mist or a Pod Rush -- has the one Take prompt (CarryService attachPrompt) calling CarryService.TryTake, which records `steal` (CarryService:1138) on success; every carry home ends in the one bank() (the red line; CarryService.Bank), which records `bank` (CarryService:2050). Pods that never pass through the hands (the starter pod, a wheel prize, a Mosskeeper Mysterious Pod, an admin SPAWN, a purchase) go to the Bag and record neither, by design. No route skips RecordTutorial: nothing to fix.
+
+**Reported, not changed:** Creator Hub labels step 4 "First Pod Planted" ("name last changed 10/10"), the code sends "First Plant Hatched" since the 10-09 swap. Not renamed: a rename starts a new series. Whether the old budget caused the "close to 0%" day is not known from here; it could only drop events on a server busy enough to spend 60 calls in a minute.
+
+**Files:** ServerScriptService/SeedGameServer/Metrics.luau, GameConfig (Metrics: PerMinuteBase, PerMinutePerPlayer, ReserveShare; PerMinute gone), tools/tests/MetricsSpec.luau, KB/ANALYTICS.md.
+
 ## ITEM 3 (BACKLOG 2026-10-12): THE RIGHT STICK IN A MENU — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, 5386d2f, NOT PUBLISHED; PadStickSpec 18/0 (new); ControllerSpec 64/0, ShopPadSpec 22/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, THE BIND)
 
 Michael on console: "In menus the right stick should lock for scrolling. I can see character is still looking around."

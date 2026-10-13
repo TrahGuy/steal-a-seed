@@ -89,6 +89,27 @@ and the plant is placed after the hatch). Step 4 was "First Pod Planted" (`place
 Plant Hatched" (`hatch`). **Before and after the update cannot be compared at steps 4 and 5**: read the
 funnel from the first server version with the swap. Steps 1-3 and 6 keep their meaning.
 
+**Creator Hub still labels step 4 "First Pod Planted"** (seen 2026-10-13; the dashboard says "name last
+changed 10/10"), while the code has sent "First Plant Hatched" for step 4 since the swap. The label is
+the dashboard's, not ours: step 4 counts the first HATCH. Never rename a step to match it. A rename
+starts a new series.
+
+**Verified 2026-10-13** (a guarded Play on a fresh throwaway store, the staff exclusion lifted for that
+dry run only, Studio's DRY sink): a brand-new profile got `isNew = true` and step 1 at join. Training,
+a real Greenhollow nest take (`CarryService.TryTake`), the red line's bank (`CarryService.Bank`), a hatch
+from the Bag (`PlantService.HatchFromBag`, which planted it straight into a free bed) and the first income
+sent steps 2, 3, 4, 5 and 6 in that order. They came with `TutorialStepDone` for train, speed, steal,
+bank, hatch and place, `TutorialCompleted`, and the raid funnel's two steps. Nothing was dropped and
+nothing failed.
+
+**Every route to a first steal and bank records them** (checked 2026-10-13): every pod a player can take
+-- a nest's, a loose one, a Secret's, a Rain nest's, any pod during the Enchanted Mist or a Pod Rush --
+goes through the one Take prompt to `CarryService.TryTake`, which records `steal` on success. Every
+carry home ends in the one `bank` (the red line), which records `bank`. Pods that never pass through
+the hands go straight to the Bag: the starter pod, a wheel prize, a Mysterious Pod from Mosskeeper, an
+admin SPAWN or a purchase. These record neither, by design. Such a pod's hatch waits in the chain until
+a real steal and bank catch up.
+
 **Why this order.** It is the guide's real order: steal → bank → hatch → place. The guide's first two
 steps, train and reach 1,000 Speed, are not in the funnel. A player can steal without training, so
 those two are not sequential. They are counted separately as `TutorialStepDone`. "Tutorial completed"
@@ -240,7 +261,8 @@ This can't be done locally.
    `MetricsValidation` never feeds any other chart.
 
 If nothing appears, open **Monitoring → Error Report**, which also lists event-tracking errors.
-`Metrics.health()` on the server reports calls dropped by the budget and sink failures.
+`Metrics.health()` on the server reports calls dropped by the budget and sink failures, and
+`Metrics.droppedBy()` reports the drops by priority.
 
 ## 5. Limits and delays
 
@@ -251,11 +273,34 @@ If nothing appears, open **Monitoring → Error Report**, which also lists event
 | Steps per funnel | Up to 100 | 6 onboarding, 2 raid, 4 obby |
 | Custom fields | 3 per event | Biome, band and outcome at most |
 | Field combinations | 8,000 before grouping as "Other" | About 170 for raids |
-| Rate | 120 + 20 × concurrent players per minute | A few per raid. `Metrics` also caps each server at 60 a minute and drops, never queues, anything over |
+| Rate | 120 + 20 × concurrent players per minute (Economy, Funnel and Custom events) | `Metrics` caps each server at 100 + 15 × its players a minute and drops, never queues, anything over: see THE BUDGET below |
 | Onboarding | Once per user; skipped steps credited; repeats ignored | Order enforced in code |
 | Recurring funnel sessions | Last 10 unique session IDs per user per funnel | One GUID per raid |
 | Delay | Charts up to 24 hours; D7 and D30 need 7 and 30 days | — |
 | Retention | Custom data rolls off 90 days after the last data received | — |
+
+### THE BUDGET (2026-10-13)
+
+Until 2026-10-13 every server shared one flat bucket of 60 calls a minute. That was under even an empty
+server's Roblox allowance of 120. Since 10-09, raids, the Pod Rush, the wheel, the obby and the Mist all
+send events, so a busy server could empty the bucket and drop **any** event, onboarding steps included.
+Worse, a dropped onboarding step was marked as sent and never tried again that session. A later step
+could then go out with an earlier one missing.
+
+Now (`GameConfig.Metrics`):
+- **The cap follows the server:** `PerMinuteBase` 100 + `PerMinutePerPlayer` 15 × the players there.
+  That stays under Roblox's 120 + 20 × CCU at every server size.
+- **Priorities:**
+  - An onboarding step is never dropped. There are at most six per player.
+  - A tutorial event (`TutorialStepDone`, `TutorialCompleted`, `TutorialSkipped`) may spend the bucket
+    down to nothing.
+  - Everything else (raids, the wheel, the obby, the Pod Rush, the chest, validation) stops while less
+    than `ReserveShare` (25%) of the cap is left.
+- **A step is marked sent only once it went out.** One lost to an AnalyticsService error is tried again by
+  the next milestone. Step 6 (first income) is retried at most every 30 s, not on every income tick.
+
+Whether the budget was the cause of the "close to 0%" day reported on 2026-10-13 is not known from here.
+It could only drop events on a server busy enough to spend 60 calls in a minute.
 
 ## 6. Turning it off
 

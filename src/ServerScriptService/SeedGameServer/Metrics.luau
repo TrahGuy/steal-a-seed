@@ -185,15 +185,40 @@ end
 --==============================================================================
 -- THE BUDGET: a per-server bucket, refilled continuously. A call over it is
 -- dropped and counted, never queued -- nothing waits, nothing arrives late.
+--
+-- SIZED BY THE SERVER, AND IN AN ORDER (2026-10-13, the owner's analytics
+-- pass). The minute's cap is PerMinuteBase + PerMinutePerPlayer x the players
+-- here now, under Roblox's own 120 + 20 x CCU (GameConfig.Metrics, THE BUDGET).
+-- Until then it was a flat 60, and a busy server -- raids, the Pod Rush, the
+-- wheel, the obby, the Mist -- could spend it and drop anything. Now each call
+-- names its priority:
+--
+--   "onboarding"  never dropped: it takes a token when there is one and goes
+--                 out when there is not (once per player, six at most)
+--   "tutorial"    may spend the bucket down to nothing
+--   "other"       stops while less than ReserveShare of the cap is left, so the
+--                 two above always find room
 --==============================================================================
 local clock: () -> number = os.clock
+local headcount: () -> number = function(): number
+	return #Players:GetPlayers()
+end
 local tokens = 0
 local refilledAt = -math.huge
 local dropped = 0
 local failures = 0
+local droppedBy: { [string]: number } = {}
 
-local function spend(): boolean
-	local cap = math.max(1, tonumber(setting("PerMinute")) or 60)
+-- The minute's cap for this server now.
+function Metrics.capNow(): number
+	local base = tonumber(setting("PerMinuteBase")) or 100
+	local per = tonumber(setting("PerMinutePerPlayer")) or 15
+	local here = tonumber(headcount()) or 0
+	return math.max(1, base + per * math.max(0, here))
+end
+
+local function spend(priority: string): boolean
+	local cap = Metrics.capNow()
 	local now = clock()
 	if refilledAt == -math.huge then
 		tokens, refilledAt = cap, now
@@ -201,8 +226,14 @@ local function spend(): boolean
 		tokens = math.min(cap, tokens + (now - refilledAt) * cap / 60)
 		refilledAt = now
 	end
-	if tokens < 1 then
+	if priority == "onboarding" then
+		tokens = math.max(0, tokens - 1)
+		return true
+	end
+	local floor = if priority == "tutorial" then 0 else cap * (tonumber(setting("ReserveShare")) or 0.25)
+	if tokens < floor + 1 then
 		dropped += 1
+		droppedBy[priority] = (droppedBy[priority] or 0) + 1
 		return false
 	end
 	tokens -= 1
@@ -247,9 +278,10 @@ local function audience(player: any): string?
 	return "count"
 end
 
--- One call into the sink, budgeted and fenced. Returns whether it went out.
-local function send(kind: string, player: any, ...: any): boolean
-	if not spend() then
+-- One call into the sink, budgeted by its priority (THE BUDGET) and fenced.
+-- Returns whether it went out.
+local function send(kind: string, priority: string, player: any, ...: any): boolean
+	if not spend(priority) then
 		return false
 	end
 	local out = sink() :: any
@@ -261,7 +293,7 @@ local function send(kind: string, player: any, ...: any): boolean
 end
 
 local function validation(player: any, stands: string)
-	send("custom", player, Metrics.Events.Validation, 1, { [F1] = stands })
+	send("custom", "other", player, Metrics.Events.Validation, 1, { [F1] = stands })
 end
 
 --==============================================================================
@@ -285,7 +317,9 @@ type State = {
 	-- even if a caller ever sends one twice.
 	seen: { [string]: boolean },
 	hatchedThisSession: boolean,
-	incomeLogged: boolean,
+	-- When step 6 was last tried (it is tried again, at most every 30 s, until it
+	-- has gone out: income lands every tick).
+	incomeTriedAt: number?,
 	skipLogged: boolean,
 	raid: Raid?,
 }
@@ -295,7 +329,7 @@ local states: { [any]: State } = setmetatable({}, { __mode = "k" }) :: any
 local function stateOf(player: any): State
 	local s = states[player]
 	if not s then
-		s = { cohort = false, onboarded = {}, seen = {}, hatchedThisSession = false, incomeLogged = false,
+		s = { cohort = false, onboarded = {}, seen = {}, hatchedThisSession = false, incomeTriedAt = nil,
 			skipLogged = false, raid = nil }
 		states[player] = s
 	end
@@ -336,20 +370,25 @@ end
 -- already sent this session is not sent again; one sent in an earlier session
 -- may be, and Roblox counts only a user's first instance of a step.
 --==============================================================================
+-- MARKED ONLY ONCE IT WENT OUT (2026-10-13). It used to be marked before the
+-- send, so a step lost on the way (the budget then, an AnalyticsService error
+-- now) was never tried again that session; now the next milestone's walk
+-- tries it again, and the budget never drops it at all.
 local function onboard(player: any, index: number)
 	local row = Metrics.Onboarding[index]
 	local s = states[player]
-	if s then
-		if s.onboarded[index] then
-			return
-		end
-		s.onboarded[index] = true
+	if s and s.onboarded[index] then
+		return
 	end
 	local who = audience(player)
+	local went = true
 	if who == "count" then
-		send("onboarding", player, row.step, row.name)
+		went = send("onboarding", "onboarding", player, row.step, row.name)
 	elseif who == "validate" then
 		validation(player, "onboarding " .. row.step)
+	end
+	if s and went then
+		s.onboarded[index] = true
 	end
 end
 
@@ -395,14 +434,14 @@ function Metrics.milestone(player: any, milestone: string, progress: any)
 		end
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.TutorialStep, 1, { [F1] = milestone })
+			send("custom", "tutorial", player, Metrics.Events.TutorialStep, 1, { [F1] = milestone })
 			-- THE FIRST LOOP, train through place (2026-10-08; the hatch before the
 			-- place since 2026-10-09): Version 2's whole guide, the same six steps,
 			-- so the series keeps its meaning and nothing is renumbered.
 			-- The guide's step 7, `travel`, goes out as its own TutorialStepDone
 			-- above and never sends this a second time.
 			if TutorialData.InFirstLoop(milestone) and TutorialData.FirstLoopDone(progress) then
-				send("custom", player, Metrics.Events.TutorialCompleted, 1)
+				send("custom", "tutorial", player, Metrics.Events.TutorialCompleted, 1)
 			end
 		elseif who == "validate" then
 			validation(player, "tutorial " .. milestone)
@@ -415,10 +454,15 @@ end
 function Metrics.income(player: any)
 	pcall(function()
 		local s = states[player]
-		if not s or not s.cohort or not s.hatchedThisSession or s.incomeLogged then
+		if not s or not s.cohort or not s.hatchedThisSession or s.onboarded[6] then
 			return
 		end
-		s.incomeLogged = true
+		local t = clock()
+		local tried = s.incomeTriedAt
+		if tried and t - tried < 30 then
+			return
+		end
+		s.incomeTriedAt = t
 		onboard(player, 6)
 	end)
 end
@@ -433,7 +477,7 @@ function Metrics.tutorialSkipped(player: any, skipped: boolean)
 		s.skipLogged = true
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.TutorialSkipped, 1)
+			send("custom", "tutorial", player, Metrics.Events.TutorialSkipped, 1)
 		elseif who == "validate" then
 			validation(player, "tutorial skipped")
 		end
@@ -467,9 +511,9 @@ function Metrics.raidEnded(player: any, outcome: string)
 		local who = audience(player)
 		if who == "count" then
 			if why == "banked" then
-				send("funnel", player, Metrics.RaidFunnel, raid.session, 2, "Pod Banked")
+				send("funnel", "other", player, Metrics.RaidFunnel, raid.session, 2, "Pod Banked")
 			end
-			send("custom", player, Metrics.Events.RaidEnded, seconds,
+			send("custom", "other", player, Metrics.Events.RaidEnded, seconds,
 				{ [F1] = raid.biome, [F2] = raid.band, [F3] = why })
 		elseif who == "validate" then
 			validation(player, "raid " .. why)
@@ -498,7 +542,7 @@ function Metrics.raidStarted(player: any, biomeId: string?, speed: number?)
 		s.raid = raid
 		local who = audience(player)
 		if who == "count" then
-			send("funnel", player, Metrics.RaidFunnel, raid.session, 1, "Pod Stolen",
+			send("funnel", "other", player, Metrics.RaidFunnel, raid.session, 1, "Pod Stolen",
 				{ [F1] = raid.biome, [F2] = raid.band })
 		elseif who == "validate" then
 			validation(player, "raid stolen")
@@ -525,7 +569,7 @@ function Metrics.chestClaimed(player: any, rewardId: string)
 		end
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.ChestClaimed, 1, { [F1] = reward })
+			send("custom", "other", player, Metrics.Events.ChestClaimed, 1, { [F1] = reward })
 		elseif who == "validate" then
 			validation(player, "chest " .. reward)
 		end
@@ -547,7 +591,7 @@ function Metrics.podRushEnded(player: any, count: number, level: string)
 		local banked = if type(count) == "number" and count == count then math.clamp(math.floor(count), 0, 9999) else 0
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.PodRushEnded, banked, { [F1] = level })
+			send("custom", "other", player, Metrics.Events.PodRushEnded, banked, { [F1] = level })
 		elseif who == "validate" then
 			validation(player, "pod rush " .. level)
 		end
@@ -598,7 +642,7 @@ function Metrics.obbyStarted(player: any)
 		}
 		runs[player] = run
 		if audience(player) == "count" then
-			send("funnel", player, Metrics.ObbyFunnel, run.session, 1, "Run Started")
+			send("funnel", "other", player, Metrics.ObbyFunnel, run.session, 1, "Run Started")
 		end
 	end)
 end
@@ -623,9 +667,9 @@ function Metrics.obbyCheckpoint(player: any, which: string)
 		if audience(player) == "count" then
 			local step = CHECKPOINT_STEP[which]
 			if step then
-				send("funnel", player, Metrics.ObbyFunnel, run.session, step, "Checkpoint " .. (step - 1))
+				send("funnel", "other", player, Metrics.ObbyFunnel, run.session, step, "Checkpoint " .. (step - 1))
 			end
-			send("custom", player, Metrics.Events.ObbyCheckpoint, 1, { [F1] = which })
+			send("custom", "other", player, Metrics.Events.ObbyCheckpoint, 1, { [F1] = which })
 		end
 	end)
 end
@@ -661,9 +705,9 @@ function Metrics.obbyEnded(player: any, how: string)
 		local seconds = math.max(0, math.floor((clock() - run.startedAt) * 10 + 0.5) / 10)
 		if audience(player) == "count" then
 			if why == "completed" and run.reached.main2 then
-				send("funnel", player, Metrics.ObbyFunnel, run.session, 4, "Finished")
+				send("funnel", "other", player, Metrics.ObbyFunnel, run.session, 4, "Finished")
 			end
-			send("custom", player, Metrics.Events.ObbyEnded, seconds,
+			send("custom", "other", player, Metrics.Events.ObbyEnded, seconds,
 				{ [F1] = why, [F2] = run.route, [F3] = fallsBucket(run.falls) })
 		end
 	end)
@@ -688,7 +732,7 @@ function Metrics.wheelSpinEarned(player: any, count: number)
 		end
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.WheelSpinEarned, 1, { [F1] = tostring(n) })
+			send("custom", "other", player, Metrics.Events.WheelSpinEarned, 1, { [F1] = tostring(n) })
 		elseif who == "validate" then
 			validation(player, "wheel spin earned " .. n)
 		end
@@ -704,7 +748,7 @@ function Metrics.wheelSpun(player: any, prizeId: string, source: string)
 		local from = if source == "bought" then "bought" else "earned"
 		local who = audience(player)
 		if who == "count" then
-			send("custom", player, Metrics.Events.WheelSpun, 1, { [F1] = prizeId, [F2] = from })
+			send("custom", "other", player, Metrics.Events.WheelSpun, 1, { [F1] = prizeId, [F2] = from })
 		elseif who == "validate" then
 			validation(player, "wheel " .. prizeId .. " " .. from)
 		end
@@ -741,10 +785,19 @@ function Metrics.useClock(fn: (() -> number)?)
 	clock = fn or os.clock
 end
 
+-- How many players the budget sizes itself for (a spec's stand-in), or the
+-- server's own count again.
+function Metrics.useHeadcount(fn: (() -> number)?)
+	headcount = fn or function(): number
+		return #Players:GetPlayers()
+	end
+end
+
 function Metrics.reset()
 	table.clear(states)
 	table.clear(runs)
 	table.clear(recorded)
+	table.clear(droppedBy)
 	tokens, refilledAt, dropped, failures = 0, -math.huge, 0, 0
 end
 
@@ -756,6 +809,12 @@ end
 -- Calls dropped by the budget, and sink calls that errored (and were ignored).
 function Metrics.health(): (number, number)
 	return dropped, failures
+end
+
+-- The budget's drops by priority ("tutorial", "other"; "onboarding" is never
+-- dropped), a copy.
+function Metrics.droppedBy(): { [string]: number }
+	return table.clone(droppedBy)
 end
 
 Players.PlayerRemoving:Connect(function(player)

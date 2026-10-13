@@ -8202,10 +8202,27 @@ GameConfig.Metrics = {
 	-- be watched arriving in Creator Hub's View Events without adding a single
 	-- count to a real report. Off for launch.
 	StaffValidation = false,
-	-- Per server: at most this many analytics calls a minute. Roblox allows
-	-- 120 + 20 x players; the game sends a handful per raid, so this is a ceiling
-	-- for a bug, not a budget anybody should meet.
-	PerMinute = 60,
+	--==========================================================================
+	-- THE BUDGET (2026-10-13, the owner's analytics pass; Metrics, THE BUDGET)
+	--
+	-- Roblox allows 120 + 20 x CCU AnalyticsService calls a minute per server
+	-- (Economy, Funnel and Custom events -- create.roblox.com, production/
+	-- analytics/event-types). The game keeps under that with room to spare:
+	-- PerMinuteBase + PerMinutePerPlayer x the players in the server now. Until
+	-- 2026-10-13 it was a flat 60 -- under even an empty server's 120 -- while
+	-- raids, the Pod Rush, the wheel, the obby and the Mist had all started
+	-- sending, so a busy server could spend it and drop ANY event, onboarding
+	-- steps included.
+	--
+	-- WHO GOES FIRST when it runs short: an onboarding step is NEVER dropped (once
+	-- per player, six at most); a tutorial event may spend the budget down to
+	-- nothing; every other event -- raids, the wheel, the obby, the Pod Rush, the
+	-- chest -- stops while less than ReserveShare of the minute's budget is left,
+	-- so the two above always find room.
+	--==========================================================================
+	PerMinuteBase = 100,
+	PerMinutePerPlayer = 15,
+	ReserveShare = 0.25,
 	-- SPEED BANDS against the biome's BiomeData.RecommendedSpeed: under 80% is
 	-- "below", 80% to under 125% "near", 125% and up "above". A biome that
 	-- recommends nothing (Greenhollow) is "none".
