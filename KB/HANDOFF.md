@@ -1,5 +1,18 @@
 # Steal a Seed — Session Handoff
 
+## WHAT'S NEW: "SELL BUTTON AND OBBY SIGN" ON TOP, THE 4 OCT ENTRY DROPPED — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; UpdateLogSpec 22/0; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "yes push it, drop the 4 oct entry", on the peer's proposal for item 8's line.
+- A second 13 Oct entry at the very top, so it carries the NEW tag: "SELL button and OBBY sign" (the peer's wording, approved by the owner in principle; the title is still to be shown to them). Its lines: "The SELL button takes you straight to Marigold's stall." and "A big OBBY sign shows the way to the obby." (item 8, 7b93f68).
+- "Gifts and controller fixes" gets "Shop and Index text is easier to read." back, in place of the SELL line.
+- "A fresh new look" (4 Oct) is gone. Six entries, Shown 6 unchanged. If the owner publishes after 13 Oct, both 13 Oct entries' dates and ids move together; the comment over them says so.
+
+**Checks**: UpdateLogSpec 22/0: every bullet at most 2 lines on the narrowest card and 1 on a desktop's; every title and date whole; the six cards (1000 px) scroll in the 460-px panel.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1065 x 716): the panel's top, the new entry with its NEW tag over "Gifts and controller fixes". No script errors. Capture: output/whats-new-2026-10-13/04-panel-top-sell-obby.png. Cleared: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Files**: src/ReplicatedStorage/SeedGame/Shared/UpdateLog.luau.
+
 ## ITEM 8 (BACKLOG 2026-10-12): "OBBY" OVER THE ARCH, FOR EVERYBODY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ObbySignSpec 10/0 (NEW); ObbySpec 69/0, ObbyViewSpec 112/0, FloatingSignSpec 49/0, EventHubSpec 53/0, EnchantedMistSpec 62/0; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner's option 1: a floating billboard "OBBY" with "Floating Garden" under it, above the Floating Garden's entrance arch. With the OBBY pill gone (item 7, SELL), this is how players find the obby.

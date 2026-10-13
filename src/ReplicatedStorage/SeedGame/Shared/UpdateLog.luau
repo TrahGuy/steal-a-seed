@@ -17,10 +17,10 @@
 --
 -- No remote and no server: the words ship with a publish, like any config.
 --
--- THE OWNER APPROVED THE FOUR NEWEST ENTRIES ON 2026-10-13 (the two below them
--- are the 2026-10-05 draft, kept). Every line was checked against the code and
--- KB/HANDOFF.md's record of the publish that carried it; a date is the owner's
--- day (UTC+8) of that publish.
+-- THE OWNER APPROVED THE FIVE NEWEST ENTRIES ON 2026-10-13 (the one below them
+-- is the 2026-10-05 draft, kept; its 4 Oct partner dropped, the owner's call).
+-- Every line was checked against the code and KB/HANDOFF.md's record of the
+-- publish that carried it; a date is the owner's day (UTC+8) of that publish.
 --
 -- Pure helpers, for UpdateLogUI and UpdateLogSpec:
 --   dayOf(date)     a date's UTC midnight in seconds, or nil if unreadable
@@ -46,8 +46,17 @@ export type Entry = {
 -- THE ENTRIES, NEWEST FIRST (the owner approved the wording, 2026-10-13)
 --==============================================================================
 UpdateLog.Entries = {
-	-- The day the owner publishes it: a publish after 13 Oct moves this date
-	-- and the id's together.
+	-- The day the owner publishes them: a publish after 13 Oct moves these two
+	-- dates and their ids together.
+	{
+		id = "2026-10-13-sell-obby",
+		date = "13 Oct 2026",
+		title = "SELL button and OBBY sign",
+		bullets = {
+			"The SELL button takes you straight to Marigold's stall.",
+			"A big OBBY sign shows the way to the obby.",
+		},
+	},
 	{
 		id = "2026-10-13-gifts-controller",
 		date = "13 Oct 2026",
@@ -57,7 +66,7 @@ UpdateLog.Entries = {
 			"Stand on the EQUIP BEST pad on your plot to plant your best.",
 			"The Shop now works with a controller.",
 			"With a menu open, the right stick scrolls it.",
-			"The SELL button takes you straight to Marigold's stall.",
+			"Shop and Index text is easier to read.",
 		},
 	},
 	{
@@ -103,17 +112,6 @@ UpdateLog.Entries = {
 			"Every plot has a TOP CREATURES board beside its upgrade sign.",
 			"It shows the owner's two best creatures and what they earn.",
 			"Everyone can see every plot's board.",
-		},
-	},
-	{
-		id = "2026-10-04-new-look",
-		date = "4 Oct 2026",
-		title = "A fresh new look",
-		bullets = {
-			"Menus have a fresh look with white studded headers.",
-			"Walk Mode is now a simple ON/OFF switch.",
-			"The day and night clock shows a moon or a sun.",
-			"Shop, MY PLANTS and Bag cards are colourful and studded.",
 		},
 	},
 } :: { Entry }
