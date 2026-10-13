@@ -1731,8 +1731,9 @@ end
 -- plant held at arm's length in front of the camera. So the hatch asks for the
 -- hand a second later, and the Tool is theirs the whole time.
 --
--- EVERY OTHER CALLER IS UNCHANGED: nil means equip now, which is what a pickup
--- and a rejoin have always done.
+-- EVERY OTHER CALLER IS UNCHANGED: nil means equip now, which is what the
+-- world's PICK UP has always done. A rebuild -- a join, a respawn -- passes -1
+-- since 2026-10-13 (the owner: players spawn empty-handed; restoreOne).
 --
 -- `revealAt` is the hatch's too (2026-09-29): the server time the plant may be
 -- shown, written on the Tool until then and taken off when it comes. A pickup
@@ -3228,6 +3229,12 @@ local function givePodTool(player: Player, species: SeedData.Species, tier: numb
 	return tool
 end
 
+-- NEVER INTO THE HANDS (2026-10-13, the owner: "everytime players spawn, they
+-- carry a plant"): every plant put back goes into the Bag only -- on a join and
+-- after every death alike (GiveHatched's -1). The hatch and the world's PICK UP
+-- still hand theirs over; the restore's gates are unchanged.
+local INTO_BAG = -1
+
 local function restoreOne(player: Player, species: SeedData.Species, tier: number,
 	hatched: boolean, item: string?, hatchAt: number?): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -3236,16 +3243,10 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 	end
 	if hatched then
 		-- A plant whose roll a death interrupted is still a secret (see Sealed):
-		-- it comes back hidden, and into the hands no sooner than it may be shown.
+		-- it comes back hidden, in the Bag like every plant put back.
 		local sealedUntil = Sealed.take(player, species.Id, tier)
 		-- One answer: GiveHatched's reason is for a hatch, not a rebuild.
-		local given: boolean
-		if sealedUntil then
-			given = CarryService.GiveHatched(player, species, tier,
-				math.max(sealedUntil - workspace:GetServerTimeNow(), 0.05), sealedUntil, nil, item)
-		else
-			given = CarryService.GiveHatched(player, species, tier, nil, nil, nil, item)
-		end
+		local given = CarryService.GiveHatched(player, species, tier, INTO_BAG, sealedUntil, nil, item)
 		return given
 	end
 	return givePodTool(player, species, tier, item, hatchAt) ~= nil

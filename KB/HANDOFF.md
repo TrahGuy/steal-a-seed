@@ -1,5 +1,25 @@
 # Steal a Seed — Session Handoff
 
+## PLAYERS SPAWN EMPTY-HANDED: A JOIN AND A RESPAWN PUT PLANTS IN THE BAG ONLY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HeldRestoreSpec 63/0 (2 new); HatchInBagSpec 43/0, InventoryModelSpec 56/0, HotbarSpec 38/0, PodHatchSpec 22/0, ContextSlotSpec 8/0, MysteryPodSpec 39/0, InviteRewardsSpec 172/0, PlacementCircleSpec 23/0; MUTANT 1/1 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "everytime players spawn, they carry a plant, can we fix it also?"
+
+**The cause**: CarryService's rebuild (restoreOne, on a join and after every death or reset) called GiveHatched with no `equipAfter`. That means "equip now", so each restored plant was put in the hands and the player spawned holding the last one. A plant whose hatch roll a death interrupted was equipped once its reveal passed. The block's own comment already said "NOT EQUIPPED".
+
+**The fix**: restoreOne passes -1 (INTO_BAG), GiveHatched's existing "into the Bag only" path, on both of its paths. A sealed plant still comes back hidden, in the Bag. Unchanged: the restore's gates (the armed gate, no empty snapshot, the patience); the hatch (its reveal's wait) and the world's PICK UP (equip now) still hand theirs over; MY PLANTS' pickup stays Bag-only.
+
+**Nothing else equips on spawn** (checked): LoadoutUI equips only on a slot press, and on a new body it only rebinds; InviteRewardUI equips only on its PLACE IT press; WeaponShopService.RefreshTools never equips; StarterPack Tools are never equipped by the engine.
+
+**Specs**: HeldRestoreSpec section 28 wraps GiveHatched and plays a join and a respawn through the real watchers: all four rebuild calls ask for the Bag (< 0), and both plants come back. Its old stand-in bodies have no Humanoid, which is why no spec saw this. Source pins hold the hatch's and PICK UP's equips. Mutant: the rebuild passing nil again, caught.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1169 x 716):
+- Join: nothing in the hands, 4 plants in the Backpack.
+- Killed (Health 0), respawned 3 s later: nothing in the hands, the same 4 in the Backpack and on the hotbar.
+- No script errors.
+- Captures: output/spawn-empty-handed-2026-10-13/ (01 join, 02 respawn). Cleared: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Files**: ServerScriptService/SeedGameServer/CarryService.luau, tools/tests/HeldRestoreSpec.luau.
+
 ## ADMIN LINES BARE, NO BACKING, NOTHING SAID FOR AN ADMIN'S OWN, REBIRTHS IN RESET'S KEPT LIST — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NoticeSpec 105/0 (2 new), AdminAnnounceSpec 44/0 (1 new), AdminMistSpec 69/0, AdminSpec 137/0, AdminConsoleSpec 64/0, HudLayoutSpec 1498/0, MiniEventSpec 90/0, SourceIconsSpec 21/0 and 9 more notice specs green; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 Four owner asks, from item 9's Play and the peer:

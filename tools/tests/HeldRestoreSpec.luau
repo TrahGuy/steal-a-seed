@@ -836,6 +836,48 @@ local ok, err = pcall(function()
 				and idsIn(newPack, newBodyModel).b1 == 1,
 			"B3: and the respawn brings back both: the one the void ate, and the new one")
 	end
+
+	--== 28. A JOIN AND A RESPAWN PUT PLANTS IN THE BAG, NEVER THE HANDS =========
+	-- 2026-10-13, the owner: "everytime players spawn, they carry a plant". The
+	-- rebuild asks GiveHatched for no hand at all (equipAfter < 0); the hatch and
+	-- the world's PICK UP still hand theirs over.
+	do
+		local asked: { any } = {}
+		local give = CarryService.GiveHatched
+		CarryService.GiveHatched = function(...)
+			table.insert(asked, (select(4, ...)))
+			return give(...)
+		end
+		local joinedCalls, gaveBack = 0, 0
+		local okRun, errRun = pcall(function()
+			local p, pack, body = spawnWith("SpawnsEmptyHanded", -228, { { Id = "nubkin", Tier = 1, Hatched = true,
+				Item = "e1" }, { Id = "petalpip", Tier = 3, Hatched = true, Item = "e2" } })
+			joinedCalls = #asked
+			local newPack, newBodyModel = respawnAfter(p, pack, body)
+			gaveBack = plantsIn(newPack) + plantsIn(newBodyModel)
+		end)
+		CarryService.GiveHatched = give
+		if not okRun then
+			error(errRun)
+		end
+		local handed = {}
+		for _, v in ipairs(asked) do
+			if not (type(v) == "number" and v < 0) then
+				table.insert(handed, tostring(v))
+			end
+		end
+		check(joinedCalls == 2 and #asked == 4 and #handed == 0 and gaveBack == 2,
+			("spawn: a join and a respawn rebuild both plants into the Bag, never the hands (%d calls; asked %s)")
+				:format(#asked, table.concat(handed, ",")))
+		local plantSrc = game:GetService("ServerScriptService").SeedGameServer.PlantService.Source
+		local carrySrc = game:GetService("ServerScriptService").SeedGameServer.CarryService.Source
+		check(string.find(plantSrc, "CarryService.GiveHatched(player, species, tier, equipAfter,", 1, true) ~= nil
+				and string.find(plantSrc, "if bagOnly then -1 else nil, nil, true, entry.item)", 1, true) ~= nil
+				and string.find(carrySrc, "CarryService.GiveHatched(player, species, tier, INTO_BAG, sealedUntil, nil, item)",
+					1, true) ~= nil and string.find(carrySrc, "local INTO_BAG = -1", 1, true) ~= nil,
+			"spawn: the hatch passes its reveal's wait and the world's PICK UP equips now, as before; the rebuild's "
+				.. "one call (a sealed plant too) asks for the Bag")
+	end
 end)
 
 ;(PlayerDataService :: any).IsReady = real.IsReady
