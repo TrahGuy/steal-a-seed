@@ -35,7 +35,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
-local TextService = game:GetService("TextService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.SeedGame.Shared
@@ -264,11 +263,12 @@ local ok, err = pcall(function()
 	check(whole.line == 1 and whole.at == 15 and whole.x == 140, "a whole word only: never inside SECRETS", whole.at)
 	check(S("A HIDDEN EGG", "SECRET", 1000, m10).line == nil, "no such word: no place (the renderer draws plain)")
 
-	-- The real fonts, at the sizes and stack widths the renderer uses. The
-	-- metrics are ActionToastUI's (held to its source below).
+	-- The real face (the comic one since 2026-10-13), measured as the renderer
+	-- measures it, at the sizes and stack widths it uses. The metrics are
+	-- ActionToastUI's (held to its source below).
 	local FULL = { head = 26, headMin = 18, icon = 24 }
 	local SMALL = { head = 21, headMin = 16, icon = 20 }
-	local PHONE = { head = 18, headMin = 14, icon = 17 }
+	local PHONE = { head = 14, headMin = 12, icon = 14 }
 	local TOPBAR = 58
 	local function screen(w, h, touch)
 		return {
@@ -280,11 +280,10 @@ local ok, err = pcall(function()
 			insetTop = TOPBAR,
 		}
 	end
-	local HEAD = Enum.Font.LuckiestGuy
+	local UIKit = require(Shared.UIKit)
 	local function width(text, size)
-		return TextService:GetTextSize(text, size, HEAD, Vector2.new(10000, 10000)).X
+		return UIKit.comicBounds(text, size).X
 	end
-	local italic = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
 	local names = { W.Biome.Label }
 	for _, biome in ipairs(BiomeData.Biomes) do
 		table.insert(names, biome.DisplayName)
@@ -322,26 +321,19 @@ local ok, err = pcall(function()
 			if #span.lines > 1 then
 				table.insert(wrappedOn, string.format("%s %s (%d px, room %d)", entry[1], name, hs, room))
 			end
-			-- The italic face is drawn centred on the headline's own word: how far
-			-- past it either side, against the space between the words.
-			local params = Instance.new("GetTextBoundsParams")
-			params.Text = "SECRET"
-			params.Font = italic
-			params.Size = hs
-			params.Width = 10000
-			local okB, bounds = pcall(TextService.GetTextBoundsAsync, TextService, params)
-			if okB then
-				local over = (bounds.X - span.w) / 2
-				local gap = width("A SECRET", hs) - width("A", hs) - width("SECRET", hs)
-				spill = math.max(spill, over - math.max(gap, 0))
-			end
+			-- The word is drawn centred on the headline's own word, in the
+			-- headline's own face (2026-10-13): how far its drawn width strays
+			-- from the room the headline keeps for it.
+			spill = math.max(spill, math.abs(width(T.Word, hs) - span.w))
 		end
 	end
 	check(#bad == 0, string.format("every biome's headline fits on %d screens at the renderer's sizes: the word on the "
 		.. "first line, at most two lines, each within the stack", #screens), table.concat(bad, "; "))
 	say("        wrapped: " .. (if #wrappedOn == 0 then "none" else table.concat(wrappedOn, "; ")))
-	check(spill <= 2,
-		"the italic SECRET overhangs the headline's own word by no more than the space beside it (+2 px)",
+	local toastFace = sourceOf(StarterPlayer.StarterPlayerScripts, "ActionToastUI")
+	check(spill <= 0.5 and string.find(toastFace, "secret.FontFace = FACE", 1, true) ~= nil
+			and string.find(toastFace, "secret.Size = UDim2.fromOffset(span.w + 4, lineH)", 1, true) ~= nil,
+		"the SECRET word, in the headline's own comic face, fills the room the headline keeps for it (no overhang)",
 		string.format("%.1f px", spill))
 
 	--==========================================================================

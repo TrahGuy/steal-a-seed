@@ -11,8 +11,9 @@
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
 --     print(run("NoticeSpec"))
 --
--- Not here: how a notice LOOKS on a screen (Play captures do that), and where it
--- stands (HudLayoutSpec places the toast rect and the notice stack).
+-- Not here: how a notice LOOKS on a screen (Play captures do that; its face and
+-- ink are pinned in the wiring), and where it stands (HudLayoutSpec places the
+-- toast rect and the notice stack).
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -332,6 +333,36 @@ do
 			and toast:find("Notice.soundFor(sounds, post, now)", 1, true) ~= nil,
 		"a missing cue plays nothing; the throttle picks every sound")
 	check(toast:find("local now = Notice.now()", 1, true) ~= nil, "the rules run on the renderer's own clock")
+	-- THE COMIC FACE (2026-10-13, the owner's reference: white letters, a thick
+	-- black outline): every word in UIKit.ComicFace, measured only in that face
+	-- (UIKit.comicBounds, never an Enum.Font or GetTextSize), white over a thick
+	-- ink line; and no notice built before the face has loaded.
+	local _, faces = string.gsub(toast, "%.FontFace = FACE\n", "")
+	check(toast:find("local FACE = UIKit.ComicFace", 1, true) ~= nil and faces == 3
+			and not toast:find("Enum.Font.", 1, true) and not toast:find("GetTextSize", 1, true)
+			and not toast:find("TextService", 1, true)
+			and toast:find("head.TextColor3 = WHITE", 1, true) ~= nil
+			and toast:find("UIKit.stroke(head, Notice.Outline, UIKit.comicInk(hs))", 1, true) ~= nil
+			and toast:find("UIKit.stroke(line, Notice.Outline, UIKit.comicInk(ds))", 1, true) ~= nil,
+		"every word in the comic face (the headline, the detail, the Secret word), white over a thick ink line, "
+			.. "measured in that face only", string.format("%d faces", faces))
+	local gate = toast:find("if not faceReady then", 1, true)
+	local valid = toast:find("if not Notice.valid(post) or gui.Parent == nil then", 1, true)
+	check(gate ~= nil and valid ~= nil and gate < valid and toast:find("table.insert(early, post)", 1, true) ~= nil
+			and toast:find("faceReady = true", 1, true) ~= nil,
+		"no notice is built before the face has loaded: one posted sooner waits for it, in order")
+	local UIKit = require(Shared:WaitForChild("UIKit"))
+	local direct = Instance.new("GetTextBoundsParams")
+	direct.Text, direct.Font, direct.Size, direct.Width = "TELEPORT RECHARGING", UIKit.ComicFace, 26, 100000
+	local want = game:GetService("TextService"):GetTextBoundsAsync(direct)
+	local got = UIKit.comicBounds("TELEPORT RECHARGING", 26)
+	local wrapped = UIKit.comicBounds("TELEPORT RECHARGING", 26, 150)
+	check(got == want and wrapped.Y > got.Y
+			and UIKit.ComicFace.Family == "rbxasset://fonts/families/ComicNeueAngular.json"
+			and UIKit.comicInk(26) == 3 and UIKit.comicInk(21) == 2.5 and UIKit.comicInk(18) == 2
+			and UIKit.comicInk(14) == 1.5 and UIKit.comicInk(11) == 1.5,
+		"the comic face is Comic Neue Angular, measured as the engine draws it (wrapping where asked); its ink "
+			.. "thick, never under 1.5 px", string.format("%s / %s", tostring(got), tostring(want)))
 	local chest = sourceOf(scripts, "BonusChestUI") or ""
 	check(chest:find("Notice.post(", 1, true) ~= nil and not chest:find("showCard", 1, true)
 			and not chest:find("SoundKit.play(\"SellAll\")", 1, true),

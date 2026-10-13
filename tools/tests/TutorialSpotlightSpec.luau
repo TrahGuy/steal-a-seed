@@ -507,8 +507,10 @@ local ok, err = pcall(function()
 	end
 
 	-- THE LOCKED CHEST'S WORDS (the owner's words, 2026-10-08): on every listed
-	-- phone a notice's detail line (GothamBold 12, ActionToastUI's PHONE size)
-	-- holds them in the two lines it allows, across the toast rect's width.
+	-- phone a notice's detail line (the comic face since 2026-10-13, at
+	-- ActionToastUI's PHONE size, 11) holds them in the two lines it allows,
+	-- across the toast rect's width.
+	local UIKit = require(Shared:WaitForChild("UIKit"))
 	local chestSrc = sourceOf(Client:FindFirstChild("BonusChestUI"))
 	local lockedTitle, lockedDetail = string.match(chestSrc, 'LOCKED = { title = "([^"]+)", detail = "([^"]+)" }')
 	local chestProblems, phonesMeasured = {}, 0
@@ -517,8 +519,8 @@ local ok, err = pcall(function()
 			phonesMeasured += 1
 			local L = HudLayout.solve(c.input)
 			local width = math.max(160, L.toast.w)
-			local b = TextService:GetTextSize(lockedDetail or "", 12, Enum.Font.GothamBold, Vector2.new(width, 10000))
-			if b.Y > 12 * 2.6 then
+			local b = UIKit.comicBounds(lockedDetail or "", 11, width)
+			if b.Y > 11 * 2.6 then
 				table.insert(chestProblems, string.format("%s: %d px tall in %d px", c.tag, b.Y, width))
 			end
 		end

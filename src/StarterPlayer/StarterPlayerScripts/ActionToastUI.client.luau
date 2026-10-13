@@ -25,11 +25,12 @@
 --==============================================================================
 -- THE LOOK (2026-09-27): TEXT, NOT A PILL
 --
--- No plate behind it. A headline in the kind's colour, in the HUD's display
--- face with a dark outline; under it, when there is one, a smaller warm-white
--- line with the next step; to the headline's left a small icon drawn from
--- frames -- a ring with a bar through it, a tick, a diamond with "!", an "i".
--- The outline is what carries it over bright grass, pale sky and the night.
+-- No plate behind it. A white headline with a thick dark outline (since
+-- 2026-10-13 in the comic face, COMIC NEUE ANGULAR below); under it, when there
+-- is one, a smaller warm-white line with the next step; to the headline's left
+-- a small icon drawn from frames in the kind's colour -- a ring with a bar
+-- through it, a tick, a diamond with "!", an "i". The outline is what carries
+-- it over bright grass, pale sky and the night.
 --
 --==============================================================================
 -- THE MOTION
@@ -78,7 +79,6 @@
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TextService = game:GetService("TextService")
 local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
@@ -98,8 +98,16 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local HEAD_FONT = Enum.Font.LuckiestGuy
-local DETAIL_FONT = Enum.Font.GothamBold
+-- COMIC NEUE ANGULAR (2026-10-13, the owner: every notice in the face nearest
+-- their reference, a thumbnail in Comic Sans MS Bold -- white letters with a
+-- thick black outline). The headline and the detail line are white in
+-- UIKit.ComicFace under a thick ink line (UIKit.comicInk); the kind's colour
+-- stays on the icon. It is no Enum.Font, so every word here is measured with
+-- UIKit.comicBounds, and no notice is built before the face has loaded (show).
+local FACE = UIKit.ComicFace
+local WHITE = Color3.new(1, 1, 1)
+local faceReady = false
+local early: { Notice.Post } = {}
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -258,14 +266,14 @@ local function track(d: Drawn, target: Instance, prop: string)
 	table.insert(d.fades, { target = target, prop = prop, base = (target :: any)[prop] })
 end
 
-local function textWidth(text: string, size: number, font: Enum.Font): number
-	return TextService:GetTextSize(text, size, font, Vector2.new(10000, 10000)).X
+local function textWidth(text: string, size: number): number
+	return UIKit.comicBounds(text, size).X
 end
 
 -- The headline's size: as large as the screen allows, stepped down to fit.
 local function headSize(title: string, room: number): number
 	local size = metrics.head
-	while size > metrics.headMin and textWidth(title, size, HEAD_FONT) > room do
+	while size > metrics.headMin and textWidth(title, size) > room do
 		size -= 1
 	end
 	return size
@@ -343,29 +351,25 @@ local function build(post: Notice.Post, key: string): Drawn
 	local closeW = if post.dismissible == true then iconSize + 6 else 0
 	local room = width - iconSize - 8 - closeW * 2
 	local hs = headSize(post.title, room)
-	local headW = math.min(room, textWidth(post.title, hs, HEAD_FONT))
+	local headW = math.min(room, textWidth(post.title, hs))
 	-- A headline still wider than the room at the smallest size wraps onto a
 	-- second line (2026-10-02, the Rain toast's): the row grows to hold it, so
 	-- the words never run out under the icon.
-	local wrapped = textWidth(post.title, hs, HEAD_FONT) > room
-	local headH = if wrapped
-		then TextService:GetTextSize(post.title, hs, HEAD_FONT, Vector2.new(room, 10000)).Y
-		else hs
+	local wrapped = textWidth(post.title, hs) > room
+	local headH = if wrapped then UIKit.comicBounds(post.title, hs, room).Y else hs
 	-- The Secret toast's word (2026-10-05) stands wherever the sentence puts it
 	-- -- "A SECRET EGG SPAWNED ON ..." -- so its headline is broken into lines
 	-- here rather than by the engine, and the word's place on its line is known.
 	local span: Notice.WordSpan? = nil
 	if post.kind == "secret" then
 		local found = Notice.wordSpan(post.title, GameConfig.Secret.Toast.Word, room, function(text: string): number
-			return textWidth(text, hs, HEAD_FONT)
+			return textWidth(text, hs)
 		end)
 		if found.line then
 			span = found
 			headW = found.width
 			wrapped = #found.lines > 1
-			headH = if wrapped
-				then TextService:GetTextSize(table.concat(found.lines, "\n"), hs, HEAD_FONT, Vector2.new(10000, 10000)).Y
-				else hs
+			headH = if wrapped then UIKit.comicBounds(table.concat(found.lines, "\n"), hs).Y else hs
 		end
 	end
 	local rowW = iconSize + 8 + headW
@@ -391,15 +395,15 @@ local function build(post: Notice.Post, key: string): Drawn
 	head.Position = UDim2.new(1, 0, 0.5, 1)
 	head.Size = UDim2.fromOffset(headW + 2, rowH)
 	head.BackgroundTransparency = 1
-	head.Font = HEAD_FONT
+	head.FontFace = FACE
 	head.TextSize = hs
 	head.TextWrapped = wrapped
-	head.TextColor3 = style.tint
+	head.TextColor3 = WHITE
 	head.TextXAlignment = Enum.TextXAlignment.Center
 	head.Text = post.title
 	head.Parent = row
 	d.headLabel = head
-	local headEdge = UIKit.stroke(head, Notice.Outline, 2, 0.1)
+	local headEdge = UIKit.stroke(head, Notice.Outline, UIKit.comicInk(hs))
 	track(d, head, "TextTransparency")
 	track(d, headEdge, "Transparency")
 
@@ -437,13 +441,15 @@ local function build(post: Notice.Post, key: string): Drawn
 		secret.Position = UDim2.fromOffset(1 + span.x + span.w / 2, centreY)
 		secret.Size = UDim2.fromOffset(span.w + 4, lineH)
 		secret.BackgroundTransparency = 1
-		secret.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
+		-- In the comic face too (2026-10-13; it has no italic), so the word fills
+		-- exactly the room the headline keeps for it; the silver sweep stays.
+		secret.FontFace = FACE
 		secret.TextSize = hs
-		secret.TextColor3 = Color3.fromRGB(255, 255, 255)
+		secret.TextColor3 = WHITE
 		secret.TextXAlignment = Enum.TextXAlignment.Center
 		secret.Text = word
 		secret.Parent = head
-		local edge = UIKit.stroke(secret, Notice.Outline, 2.5, 0)
+		local edge = UIKit.stroke(secret, Notice.Outline, UIKit.comicInk(hs) + 0.5)
 		track(d, secret, "TextTransparency")
 		track(d, edge, "Transparency")
 		local sweep = Instance.new("UIGradient")
@@ -471,10 +477,10 @@ local function build(post: Notice.Post, key: string): Drawn
 	if post.detail and post.detail ~= "" then
 		-- Up to two lines, stepped down a size before it would need a third.
 		local ds = metrics.detail
-		local bounds = TextService:GetTextSize(post.detail, ds, DETAIL_FONT, Vector2.new(width, 10000))
+		local bounds = UIKit.comicBounds(post.detail, ds, width)
 		while ds > metrics.detailMin and bounds.Y > ds * 2.6 do
 			ds -= 1
-			bounds = TextService:GetTextSize(post.detail, ds, DETAIL_FONT, Vector2.new(width, 10000))
+			bounds = UIKit.comicBounds(post.detail, ds, width)
 		end
 		local line = Instance.new("TextLabel")
 		line.Name = "Detail"
@@ -482,7 +488,7 @@ local function build(post: Notice.Post, key: string): Drawn
 		line.Position = UDim2.new(0.5, 0, 0, rowH + metrics.gap)
 		line.Size = UDim2.fromOffset(width, bounds.Y + 2)
 		line.BackgroundTransparency = 1
-		line.Font = DETAIL_FONT
+		line.FontFace = FACE
 		line.TextSize = ds
 		line.TextWrapped = true
 		line.TextColor3 = Notice.DetailColour
@@ -490,7 +496,7 @@ local function build(post: Notice.Post, key: string): Drawn
 		line.Text = post.detail
 		line.Parent = body
 		d.detailLabel = line
-		local lineEdge = UIKit.stroke(line, Notice.Outline, 1.5, 0.15)
+		local lineEdge = UIKit.stroke(line, Notice.Outline, UIKit.comicInk(ds))
 		track(d, line, "TextTransparency")
 		track(d, lineEdge, "Transparency")
 		total += metrics.gap + bounds.Y + 2
@@ -865,6 +871,13 @@ local function applyOvers()
 end
 
 local function show(post: Notice.Post)
+	-- THE FACE FIRST (2026-10-13): measuring in the comic face waits for it the
+	-- first time, and nothing here may wait halfway through a notice. One posted
+	-- before the face has loaded waits for it, in order (the loader, below).
+	if not faceReady then
+		table.insert(early, post)
+		return
+	end
 	if not Notice.valid(post) or gui.Parent == nil then
 		return
 	end
@@ -1210,6 +1223,18 @@ end)
 -- THE TWO WAYS A NOTICE ARRIVES
 --==============================================================================
 Notice.setRenderer(show)
+
+-- The comic face's loader: one measure waits for it; then whatever was posted
+-- meanwhile goes up, oldest first.
+task.spawn(function()
+	UIKit.comicBounds("A", FULL.head)
+	faceReady = true
+	local waited = table.clone(early)
+	table.clear(early)
+	for _, post in ipairs(waited) do
+		show(post)
+	end
+end)
 
 -- The Secret egg toast's biome names: the biomes' own, and the weather's
 -- biome's label. Anything else has no name to show (Notice.secretPost).

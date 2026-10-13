@@ -111,7 +111,12 @@ src/
                                 face's foot (footColours), native stand-in icons where no upload
                                 exists yet (calendarIcon for EVENTS, cycleIcon for the clock), and the
                                 colourful studded card backgrounds (studCard: BagLook.Studs, cropped
-                                with the card's aspect, never stretched or tiled, a solid fallback)
+                                with the card's aspect, never stretched or tiled, a solid fallback).
+                                COMIC TYPE (2026-10-13): ComicFace (Comic Neue Angular, Regular, no
+                                Enum.Font), comicInk (a thick line by size) and comicBounds (measure
+                                it ONLY so: GetTextBoundsAsync, which waits for the face the first
+                                time; GetTextSize cannot measure it). The notices and the odds cards'
+                                chances use it; the owner queued every other font after items 8-9
     Shared/MenuLayout.luau      the compact menus' arithmetic: panel (between the rails / the safe
                                 area), one header row, card grids -- numbers only (CompactMenusSpec)
     Shared/MenuKit.luau         the compact menus' pieces in BagLook: modal, chooser, search,

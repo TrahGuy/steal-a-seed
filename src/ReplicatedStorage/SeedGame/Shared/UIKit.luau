@@ -38,6 +38,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local TextService = game:GetService("TextService")
 
 --==============================================================================
 -- THERE IS NO CARD LOOP ANY MORE
@@ -280,6 +281,26 @@ UIKit.ComicFace = Font.new("rbxasset://fonts/families/ComicNeueAngular.json", En
 
 function UIKit.comicInk(size: number): number
 	return math.max(1.5, math.floor(size * 0.22 + 0.5) / 2)
+end
+
+-- The bounds of `text` in comic type `size` px tall, wrapped at `width` when
+-- one is given. GetTextSize cannot measure a FontFace; GetTextBoundsAsync waits
+-- for the face the first time and answers at once after that. Should it fail,
+-- LuckiestGuy's bounds stand in: wider, so nothing measured so runs past its
+-- room.
+function UIKit.comicBounds(text: string, size: number, width: number?): Vector2
+	local params = Instance.new("GetTextBoundsParams")
+	params.Text = text
+	params.Font = UIKit.ComicFace
+	params.Size = size
+	params.Width = width or 100000
+	local ok, bounds = pcall(function()
+		return TextService:GetTextBoundsAsync(params)
+	end)
+	if ok and typeof(bounds) == "Vector2" then
+		return bounds
+	end
+	return TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(width or 100000, 100000))
 end
 
 --==============================================================================

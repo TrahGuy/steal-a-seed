@@ -107,10 +107,11 @@ export type Shown = {
 --==============================================================================
 -- HOW EACH KIND LOOKS AND SOUNDS
 --
--- `tint` is the headline and the icon. The detail line is always the same warm
--- white, so a long sentence never has to be read in red. Every tint is bright
--- enough to read over the field's grass and the night sky alike; the black
--- outline under all of it does the rest.
+-- `tint` is the icon. The headline is white since 2026-10-13 (the owner's
+-- comic-face reference, ActionToastUI) and the detail line the same warm white,
+-- so no sentence has to be read in red. Every tint is bright enough to read
+-- over the field's grass and the night sky alike; the black outline under all
+-- of it does the rest.
 --
 -- `sound` is a SoundKit cue: the owner's four dedicated notice recordings
 -- (GameConfig.Sfx.Cues, THE NOTICES), each on its own row -- so a notice's

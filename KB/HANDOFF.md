@@ -1,5 +1,31 @@
 # Steal a Seed — Session Handoff
 
+## COMIC NEUE ANGULAR (b): EVERY TOP-CENTRE NOTICE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NoticeSpec 103/0 (3 new), SecretToastSpec 61/0 (its model now the comic face), TutorialSpotlightSpec 51/0 (the locked chest's line measured in it), HudLayoutSpec 1498/0, CompactMenusSpec 48/0, ActionRefusalSpec 74/0 and 11 more green; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: every top-centre notice in COMIC NEUE ANGULAR, their reference's look: white letters, a thick black outline. That is ActionToastUI's whole stack: the headline and the detail line; the event, refusal, admin-console and gift notices; the slim line above an open panel.
+
+**Now** (ActionToastUI):
+- Every word in UIKit.ComicFace: the headline, the detail line and the Secret toast's word (that word was GothamSSm heavy italic; the face has no italic; its silver sweep stays).
+- White over a thick ink line, UIKit.comicInk (26 px: 3; 21: 2.5; 14: 1.5; never under 1.5). The kind's colour stays on the icon (Notice.Styles' `tint` comment says so).
+- Measured only in that face: UIKit.comicBounds (new; GetTextBoundsAsync, which waits for the face the first time and answers at once after). No Enum.Font, no GetTextSize left in the toast.
+- THE FACE FIRST: a notice posted before the face has loaded waits for it, in order, so no measure ever waits halfway through building one.
+- Widths: Comic Neue runs 6-19% narrower than LuckiestGuy and about 10% narrower than GothamBold (measured in Studio). Nothing newly wraps; no Secret headline wraps on the seven listed screens.
+
+**Glyphs** (the font file read with fontTools): digits, %, NBSP, ·, —, ×, …, curly quotes and • are all there. It lacks ⓘ and the arrows, as FredokaOne does. The notice icons are drawn from frames, so nothing in a notice draws a box. Missing anywhere in src (for the everything pass): ✓ → ← ✖ ● ★ ⚡ ◈ ✦ − ▼ and five emoji, all in panels, the HUD switch and mill boards.
+
+**Left for the owner's everything pass** (their own renderers, unchanged here): AnnouncementUI (an admin's typed line, the restart notice), AlertUI (the chase alarm), RewardSplash, InviteRewardUI, OfflineUI's card, Mosskeeper's bubble, the guide's card, REBORN! and the Pod Rush tracker. Also the dismissible notice's close "X" (UIKit.outlined).
+
+**The Play** (guarded, SeedTest_20261013, desktop 1169 x 716; the world drew blank because Studio was covered, the UI did not):
+- A real refusal (SELL_CHASED): the red icon, "STILL BEING CHASED", "Wait for the chase to end.", both white in the face with their ink.
+- A server-worded line, the admin console's kind.
+- Over the open Shop: the slim line on its backing above the panel's top edge, never on it.
+- No script errors.
+- Captures: output/comic-notices-2026-10-13/ (01 refusal, 02 close-up, 03 server line, 04 slim line). Cleared: probe 381 / 0 differ / 0 ZZ / marker absent.
+
+**Not seen**: a phone (HudLayoutSpec and CompactMenusSpec hold the sizes; the face only narrows), a TV.
+
+**Files**: Shared/UIKit.luau (comicBounds), StarterPlayerScripts/ActionToastUI.client.luau, Shared/Notice.luau (comment), tools/tests/NoticeSpec.luau, SecretToastSpec.luau, TutorialSpotlightSpec.luau, AGENTS.md.
+
 ## COMIC NEUE ANGULAR (a): THE ODDS CARDS' PERCENTAGES, READABLE ON EVERY CARD — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, a906c35, the tint kept, NOT PUBLISHED; MysteryPodSpec 39/0 (the light-card check replaced), MysteryShopSpec 16/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, CompactMenusSpec 48/0, EnchantedMistSpec 62/0, MistLookSpec 17/0; MUTANTS 3/3 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: the odds cards' percentages in COMIC NEUE ANGULAR, the face nearest their reference (a thumbnail in Comic Sans MS Bold: white letters, a thick black outline). Folded into the faint "17%" pink and "5%" gold on the white pearl cards.
