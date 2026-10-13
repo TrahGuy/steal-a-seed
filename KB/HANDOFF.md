@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE OWNER'S 4 GIFT PRODUCT IDS WIRED AFTER, IN THEIR OWN COMMIT)
+## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK with its ids, d3ca5f9, NOT PUBLISHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE OWNER'S 4 GIFT PRODUCT IDS WIRED AFTER, IN THEIR OWN COMMIT)
 
 The owner: "make the passes giftable". Their decision: as written; the same prices as the passes; the owner creates the four gift products, and the code ships with the ids unset until they arrive.
 
@@ -57,7 +57,7 @@ Otherwise the recipient is noted (Gift.NoteSeconds, 600) and the gift's prompt o
 - tools/tests: PassGiftSpec.luau (new), MysteryShopSpec.luau, ShopPadSpec.luau.
 - AGENTS.md (structure); KB/PASS-GIFT-ICONS-CODEX-PROMPT.md (new).
 
-## ITEM 5 FOLLOW-UP: A NOTICE THAT WRAPS, OVER AN OPEN PANEL — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HudLayoutSpec 1498/0; ActionRefusalSpec 74/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, MiniEventSpec 90/0, NoticeSpec 100/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RainEventSpec 98/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, SourceIconsSpec 21/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0; MUTANT 1/1 CAUGHT; SEEN IN ITEM 6'S GUARDED PLAY)
+## ITEM 5 FOLLOW-UP: A NOTICE THAT WRAPS, OVER AN OPEN PANEL — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, d3ca5f9, NOT PUBLISHED; HudLayoutSpec 1498/0; ActionRefusalSpec 74/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, MiniEventSpec 90/0, NoticeSpec 100/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RainEventSpec 98/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, SourceIconsSpec 21/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0; MUTANT 1/1 CAUGHT; SEEN IN ITEM 6'S GUARDED PLAY)
 
 Found in item 6's guarded Play: a long headline over the open Shop ("The gift couldn't be delivered. You have VIP already: your gift is on record.") wrapped to three lines and came down over the Shop's title strip. Item 5's slim line hung from a top worked out for ONE line.
 
