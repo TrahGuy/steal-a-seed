@@ -61,11 +61,11 @@
 -- ABOVE AN OPEN PANEL, NEVER ON IT (2026-10-13, the owner's pick for backlog
 -- item 5: "A DEWBERRY APPEARED!" had come down over the Shop's MYSTERIOUS POD).
 -- With a centre panel open the one line is SLIM -- the headline alone, on a
--- solid dark backing -- and its foot stands just above the panel's top edge:
--- in the gap under the top bar where there is one, reaching up into the top
--- bar's band where there is not (a phone's panel takes the whole safe area).
--- Only a screen with no room even there puts it at the screen's foot instead.
--- It never stands over the panel.
+-- solid dark backing -- and it stands on its foot just above the panel's top
+-- edge, a headline that wraps growing up: in the gap under the top bar where
+-- there is one, reaching up into the top bar's band where there is not (a
+-- phone's panel takes the whole safe area). Only a screen with no room even
+-- there puts it at the screen's foot instead. It never stands over the panel.
 --
 -- DisplayOrder 49: over every panel (the owner: a notice draws over an open
 -- panel's title strip) and over the prompts and the hatch timers; under the
@@ -172,6 +172,11 @@ local width = 340
 -- and how far its backing stands proud of the headline.
 local slim = false
 local SLIM_PAD = 3
+-- The headline height place() last made room for over a panel: a taller one
+-- arriving (a headline that wraps) has its room asked again (show).
+local slimNeed = 0
+-- Where the stack stands, worked out again (below; show asks it too).
+local place: () -> ()
 -- Hanging from the top (a phone) rather than standing on the belt; where the
 -- stack's top edge is, in this gui's space; and the least depth it is allowed.
 local fromTop = false
@@ -993,6 +998,12 @@ local function show(post: Notice.Post)
 		end
 	end
 	restack(d)
+	-- ABOVE AN OPEN PANEL (2026-10-13): a headline taller than the line its
+	-- room was worked out for (it wrapped) has the room asked again -- over the
+	-- panel if it fits there, else the screen's foot.
+	if slim and d.rowH > slimNeed then
+		place()
+	end
 	-- Arriving where an "over" stands, it starts out given way.
 	if meetsOver(d, oversNow()) then
 		d.yielded = true
@@ -1060,7 +1071,7 @@ local function panelTop(): number?
 	return top
 end
 
-local function place()
+place = function()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
@@ -1084,23 +1095,33 @@ local function place()
 	-- put the first out the moment it arrived.
 	-- With a panel open, one line over its title strip (the owner, 2026-10-12).
 	maxShown = if panelOpen() then 1 elseif fromTop then most else count
-	-- ABOVE AN OPEN PANEL (2026-10-13): the slim line, its foot just above the
-	-- panel's top edge -- up into the top bar's band when it must -- or, with no
-	-- room even there, at the screen's foot. Never over the panel.
+	-- ABOVE AN OPEN PANEL (2026-10-13): the slim line STANDS on its foot just
+	-- above the panel's top edge, so a headline that wraps grows up from there --
+	-- into the top bar's band when it must -- or, with no room even there for
+	-- the tallest notice standing, on the screen's foot. Never over the panel.
+	-- (It hung from a top worked out for one line, and a gift's three-line
+	-- headline came down over the Shop's title strip, 2026-10-13.)
 	local shellTop = panelTop()
 	slim = shellTop ~= nil
 	if shellTop then
 		local k = HudLayout.scaleOf(gui)
 		local slimH = math.max(metrics.icon, metrics.head + 4)
+		local need = slimH
+		for _, d in ipairs(drawn) do
+			if not d.leaving then
+				need = math.max(need, d.rowH)
+			end
+		end
+		slimNeed = need
 		-- The screen's own top: AbsolutePosition's origin stands under the top
 		-- bar's inset, so the top bar's band is above 0 here.
 		local screenTop = (-GuiService:GetGuiInset().Y - gui.AbsolutePosition.Y) / k
-		local y = shellTop - CONFIG_GAP - slimH - SLIM_PAD
-		if y < screenTop + SLIM_PAD then
-			y = gui.AbsoluteSize.Y / k - CONFIG_GAP - slimH - SLIM_PAD
+		local foot = shellTop - CONFIG_GAP - SLIM_PAD
+		if foot - need - SLIM_PAD < screenTop then
+			foot = gui.AbsoluteSize.Y / k - CONFIG_GAP - SLIM_PAD
 		end
-		area = { x = area.x, y = y, w = area.w, h = slimH }
-		fromTop = true
+		area = { x = area.x, y = foot - slimH, w = area.w, h = slimH }
+		fromTop = false
 		maxShown = 1
 	end
 	-- On the belt the column stands on its bottom edge; at the top it hangs from

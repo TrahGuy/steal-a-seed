@@ -1,5 +1,20 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 5 FOLLOW-UP: A NOTICE THAT WRAPS, OVER AN OPEN PANEL — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HudLayoutSpec 1498/0; ActionRefusalSpec 74/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, MiniEventSpec 90/0, NoticeSpec 100/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RainEventSpec 98/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, SourceIconsSpec 21/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0; MUTANT 1/1 CAUGHT; SEEN IN ITEM 6'S GUARDED PLAY)
+
+Found in item 6's guarded Play: a long headline over the open Shop ("The gift couldn't be delivered. You have VIP already: your gift is on record.") wrapped to three lines and came down over the Shop's title strip. Item 5's slim line hung from a top worked out for ONE line.
+
+**Now** (StarterPlayerScripts/ActionToastUI.client.luau):
+- The slim line STANDS on its foot just above the panel's top edge, so a headline that wraps grows up, into the top bar's band.
+- The room it asks for is the tallest standing notice's. A taller one arriving asks again (`place()` from `show`).
+- Only with no room above even then does it go to the screen's foot.
+
+**Measured in the Play** (desktop 1065 x 716, the gui's space under the 58 px inset): a one-line notice at y -9..21 and a three-line one at y -37..21, the Shop's top edge at 32. Captures: output/item5-readability-2026-10-13/16 (before), 17 and 18 (after).
+
+**Not seen:** a phone. There a three-line headline may not fit above a full-screen panel, and the code puts it at the screen's foot; not seen.
+
+**Files:** StarterPlayerScripts/ActionToastUI.client.luau, tools/tests/HudLayoutSpec.luau.
+
 ## ITEM 5 (BACKLOG 2026-10-12): TEXT YOU CAN READ — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, f488ae2, NOT PUBLISHED; HudLayoutSpec 1498/0, CompactMenusSpec 48/0 (2 new), MysteryShopSpec 16/0 (2 new); ActionRefusalSpec 74/0, BoostIconsSpec 43/0, CardZoomSpec 12/0, ContextSlotSpec 8/0, ControllerSpec 64/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, HatchRollSpec 166/0, HotbarSpec 38/0, InviteHudSpec 438/0, MiniEventSpec 90/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, MysteryPodSpec 39/0, NoticeSpec 100/0, PadStickSpec 18/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, PodGuideSpec 29/0, RainEventSpec 98/0, RarityCardsSpec 60/0, RarityFXSpec 72/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, ShopPadSpec 22/0, SourceIconsSpec 21/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0, WheelSpec 163/0; MUTANTS 4/4 CAUGHT; THREE GUARDED PLAYS, DESKTOP ONLY)
 
 The owner: "some texts is not readable due to color overlap", with a screenshot of the Shop's Mysterious Pod banner. Their pick for the notice (2026-10-13): option 1, above the panel's top edge, a slim strip on a dark backing where there is no gap.

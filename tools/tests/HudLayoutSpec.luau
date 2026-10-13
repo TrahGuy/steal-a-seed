@@ -2952,9 +2952,14 @@ check(toastSrc:find("for _, open in ipairs(PadInput.openPanels()) do", 1, true) 
 		and toastSrc:find('open.dimmer:FindFirstChild("Shell", true)', 1, true) ~= nil
 		and toastSrc:find("if top == nil or y < (top :: number) then", 1, true) ~= nil
 		and toastSrc:find("slim = shellTop ~= nil", 1, true) ~= nil
-		and toastSrc:find("local y = shellTop - CONFIG_GAP - slimH - SLIM_PAD", 1, true) ~= nil
+		-- Standing on its foot (2026-10-13, after a gift's three-line headline came down over the Shop): a
+		-- headline that wraps grows up; the room is the tallest standing notice's, asked again when one arrives.
+		and toastSrc:find("local foot = shellTop - CONFIG_GAP - SLIM_PAD", 1, true) ~= nil
+		and toastSrc:find("need = math.max(need, d.rowH)", 1, true) ~= nil
 		and toastSrc:find("local screenTop = (-GuiService:GetGuiInset().Y - gui.AbsolutePosition.Y) / k", 1, true) ~= nil
-		and toastSrc:find("if y < screenTop + SLIM_PAD then\n\t\t\ty = gui.AbsoluteSize.Y / k - CONFIG_GAP - slimH - SLIM_PAD", 1, true) ~= nil
+		and toastSrc:find("if foot - need - SLIM_PAD < screenTop then\n\t\t\tfoot = gui.AbsoluteSize.Y / k - CONFIG_GAP - SLIM_PAD", 1, true) ~= nil
+		and toastSrc:find("area = { x = area.x, y = foot - slimH, w = area.w, h = slimH }\n\t\tfromTop = false", 1, true) ~= nil
+		and toastSrc:find("if slim and d.rowH > slimNeed then\n\t\tplace()", 1, true) ~= nil
 		and toastSrc:find("detail.Visible = not slim", 1, true) ~= nil
 		and toastSrc:find("d.backing.Visible = slim", 1, true) ~= nil
 		and toastSrc:find("d.height = if slim then d.rowH else d.fullHeight", 1, true) ~= nil
