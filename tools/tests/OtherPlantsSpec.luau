@@ -206,6 +206,15 @@ local ok, err = pcall(function()
 	check(not H(with("planted", false)) and not H(with("inPlot", false)),
 		"not tagged Planted (a pod on the road, a carried one, a viewport clone), or not in a plot: never")
 	check(H(with("owner", -2)) == true, "a Studio test player's negative id is a real owner")
+	-- ULTRA (2026-10-13): this player's own grown plants too; their pods never.
+	local mineUltra = with("owner", ME)
+	mineUltra.hideOwn = true
+	local podUltra = table.clone(mineUltra)
+	podUltra.stage = CreatureModel.STAGE_POD
+	local othersShown = with("showOthers", true)
+	othersShown.hideOwn = true
+	check(H(mineUltra) == true and not H(podUltra) and not H(othersShown) and H(with("hideOwn", true)) == true,
+		"ULTRA: this player's own grown plants hidden too, their pods in the beds never; others' by the preference")
 	check(PlantVisibility.showOthers(viewer) == true, "the preference starts ON (no attribute)")
 	PlantVisibility.setShowOthers(viewer, false)
 	check(PlantVisibility.showOthers(viewer) == false and holder:GetAttribute(PREF) == false, "OFF is the attribute false")
@@ -368,6 +377,16 @@ local ok, err = pcall(function()
 	local again = PlantVisibility.census()
 	check(again.tracked == 4 and again.hidden == 3, "a second start keeps one watcher, the same answer",
 		string.format("%d/%d", again.tracked, again.hidden))
+	-- ULTRA (2026-10-13): this player's own grown plant hides too; their pod stays.
+	local minePod = plant(plantsB, CreatureModel.STAGE_POD)
+	PlantVisibility.setHideOwn(viewer, true)
+	settle()
+	check(mine:GetAttribute(MARK) == true and minePod:GetAttribute(MARK) == nil and grownA:GetAttribute(MARK) == true,
+		"ULTRA: this player's own grown plant hidden too, their pod in the bed shown, the others' still hidden")
+	PlantVisibility.setHideOwn(viewer, false)
+	settle()
+	check(mine:GetAttribute(MARK) == nil and grownA:GetAttribute(MARK) == true,
+		"back to ON: their own plant shown again, the others' still hidden")
 	PlantVisibility.stop()
 	settle()
 	check(PlantVisibility.census().tracked == 0 and grownA:GetAttribute(MARK) == nil and partsA.body.LocalTransparencyModifier == 0,
@@ -404,10 +423,18 @@ local ok, err = pcall(function()
 		"CashPop: no pop over a hidden plant, and one in the air over it is put away")
 	local ui2 = src(SPS, "OtherPlantsUI")
 	check(ui2:find("PlantVisibility.start(player)", 1, true) ~= nil
-		and ui2:find("PerformanceMode.set(player, not PerformanceMode.isOn(player))", 1, true) ~= nil
+		and ui2:find("local nextLevel = PerformanceMode.nextLevel(PerformanceMode.level(player))\n"
+			.. "\tPerformanceMode.setLevel(player, nextLevel)", 1, true) ~= nil
 		and not ui2:find("FireServer", 1, true),
-		"OtherPlantsUI flips the one local preference (through PerformanceMode) and starts the one watcher; nothing "
+		"OtherPlantsUI steps the local preferences (through PerformanceMode) and starts the one watcher; nothing "
 			.. "goes to the server")
+	-- No invisible pick-ups (ULTRA, 2026-10-13): PlantPickUI passes a plant this
+	-- screen hides, and lets a selection go when its plant hides.
+	local pick = src(SPS, "PlantPickUI")
+	check(pick:find("if marker and not PlantVisibility.isHidden(child) then", 1, true) ~= nil
+			and pick:find("model:GetAttributeChangedSignal(PlantVisibility.Marker):Connect(function()\n"
+				.. "\t\tif PlantVisibility.isHidden(model) then\n\t\t\tclearSelection()", 1, true) ~= nil,
+		"PICK UP: a hidden plant is never under the pointer, and a selected one hidden is let go")
 	local vis = src(Shared, "PlantVisibility")
 	check(not vis:find(":Destroy()", 1, true) and not vis:find(".Parent = ", 1, true)
 		and not vis:find("orkspace:GetDescendants", 1, true) and not vis:find("game:GetDescendants", 1, true)
@@ -461,6 +488,25 @@ local ok, err = pcall(function()
 	local whileOn = q()
 	Perf.set(you, false)
 	check(whileOn == "Off" and q() == "Reduced", "and a Reduced quality comes back as it was", tostring(q()))
+	-- THE THREE LEVELS (2026-10-13): the cycle, and each level's preferences.
+	check(Perf.nextLevel("off") == "on" and Perf.nextLevel("on") == "ultra" and Perf.nextLevel("ultra") == "off"
+			and Perf.nextLevel("??") == "off" and #Perf.Levels == 3,
+		"one press steps OFF, ON, ULTRA, then OFF again")
+	Perf.setLevel(you, "ultra")
+	local ultraOk = Perf.level(you) == "ultra" and Perf.isOn(you) and PlantVisibility.hideOwn(you)
+		and not PlantVisibility.showOthers(you) and q() == "Off"
+	Perf.setLevel(you, "on")
+	local onOk = Perf.level(you) == "on" and not PlantVisibility.hideOwn(you) and not PlantVisibility.showOthers(you)
+	Perf.setLevel(you, "ultra")
+	Perf.setLevel(you, "off")
+	local offOk = Perf.level(you) == "off" and not PlantVisibility.hideOwn(you) and PlantVisibility.showOthers(you)
+		and q() == "Reduced"
+	Perf.setLevel(you, "ultra")
+	Perf.set(you, true)
+	local setOnOk = Perf.level(you) == "on"
+	check(ultraOk and onOk and offOk and setOnOk,
+		"ULTRA: ON's work and this player's own plants hidden too; ON: theirs shown; OFF: everything, Reduced FX given "
+			.. "back; set(true) is ON, never ULTRA")
 	you:Destroy()
 	-- The rule lives in the one value every Reduced-FX-aware effect reads.
 	local statusText = src(Shared, "StatusText")
@@ -475,11 +521,55 @@ local ok, err = pcall(function()
 			and rush:find("if on == ringsOn and (not on or still == ringsStill) then", 1, true) ~= nil,
 		"the Pod Rush's nest rings follow Reduced FX switched mid-Rush: built again, breathing or still")
 	-- The switch.
-	check(ui2:find("local on = PerformanceMode.isOn(player)", 1, true) ~= nil
+	check(ui2:find("local level = PerformanceMode.level(player)", 1, true) ~= nil
 			and ui2:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
 			and ui2:find("bolt.Text = OTHERS.Icon", 1, true) ~= nil and ui2:find("bolt.Parent = thumb", 1, true) ~= nil
-			and not ui2:find("stateWord.Visible = inline", 1, true) and not ui2:find("stateWord.Visible = false", 1, true),
-		"the switch: PERFORMANCE MODE, the bolt riding its thumb, ON or OFF in the track in every layout")
+			and ui2:find("stateWord.Visible = not inlineRow and level ~= \"ultra\"", 1, true) ~= nil
+			and ui2:find("local x = if level == \"ultra\" then trackW - thumbW elseif level == \"on\" then "
+				.. "math.floor((trackW - thumbW - 1) / 2) else 0", 1, true) ~= nil,
+		"the switch: PERFORMANCE MODE, the bolt riding its thumb at the left, middle or right; OFF or ON beside it off "
+			.. "a phone's row, and no word for ULTRA (the owner: a spark instead)")
+	check(ui2:find("aura.Size = UDim2.new(1, 2, 1, 2)", 1, true) ~= nil and ui2:find("auraLine.Thickness = 1.5", 1, true) ~= nil
+			and ui2:find("track.Position = if right then UDim2.new(1, -3, 0, TRACK_Y) else UDim2.fromOffset(3, TRACK_Y)", 1,
+				true) ~= nil
+			and ui2:find("local wantSpark, still = level == \"ultra\", PerformanceMode.ownReduced(player)", 1, true) ~= nil
+			and ui2:find("Enum.EasingDirection.InOut, -1, true, (i - 1) * OTHERS.Stagger), { Scale = 1 })", 1, true) ~= nil
+			and ui2:find("s.scale.Scale = OTHERS.StillScale", 1, true) ~= nil and not ui2:find("ParticleEmitter", 1, true)
+			and ui2:find("local ULTRA_FACE = OTHERS.UltraFace", 1, true) ~= nil and #OP.UltraFace == 3,
+		"ULTRA's sparks: stars twinkling inside the thumb and an aura round it, inside the 3 px the track keeps from "
+			.. "the switch's edge; still under Reduced Motion; no particles in the world")
+	check(ui2:find("if nextLevel == \"ultra\" then\n\t\tNotice.post({ kind = \"info\", title = OTHERS.UltraNotice.Title", 1,
+				true) ~= nil
+			and OP.UltraNotice.Title == "YOUR PLANTS ARE HIDDEN TOO" and OP.UltraNotice.Detail == "They still grow and earn.",
+		"reaching ULTRA says once that the player's own plants are hidden too, and still grow and earn")
+	-- OFF and ON fit beside the thumb where they are drawn (the rail's and
+	-- compact's tracks), in LuckiestGuy at the word's size.
+	local function num(name)
+		return tonumber(string.match(ui2, "local " .. name .. " = (%d+)"))
+	end
+	local thumbW, wordSize = tonumber(string.match(ui2, "local THUMB = Vector2.new%((%d+),")), num("WORD_SIZE")
+	local fits, worst = thumbW ~= nil and wordSize ~= nil, ""
+	for _, trackW in ipairs({ num("TRACK_WIDE"), num("TRACK_NARROW") }) do
+		if not (trackW and fits) then
+			fits = false
+			break
+		end
+		local off = game:GetService("TextService"):GetTextSize("OFF", wordSize, Enum.Font.LuckiestGuy, Vector2.new(400, 40)).X
+		local on = game:GetService("TextService"):GetTextSize("ON", wordSize, Enum.Font.LuckiestGuy, Vector2.new(400, 40)).X
+		local onRoom = trackW - math.floor((trackW - thumbW - 1) / 2) - thumbW - 2
+		if off > trackW - thumbW - 2 or on > onRoom then
+			fits = false
+		end
+		worst ..= string.format("%d: OFF %.1f/%d, ON %.1f/%d; ", trackW, off, trackW - thumbW - 2, on, onRoom)
+	end
+	check(fits, "OFF beside the left thumb and ON beside the middle one fit both tracks", worst)
+	-- A phone's 128 x 28 row: the thumb alone (no word), its three places in the
+	-- 40-px track, the aura (1 px and a 1.5-px line) inside the row's own pad.
+	local ROW = require(Shared:WaitForChild("HudLayout")).Config.Phone.Switch
+	check(ROW.W == 128 and ROW.H == 28 and ROW.Thumb < ROW.Track.X and ROW.PadRight >= 3
+			and ROW.Thumb + 2 * 2.5 <= ROW.H,
+		"a phone's row: the coloured thumb alone, left, middle or right, its sparks and aura inside the row",
+		string.format("track %d x %d, thumb %d, pad %d", ROW.Track.X, ROW.Track.Y, ROW.Thumb, ROW.PadRight))
 	check(OP.Label == "PERFORMANCE MODE" and OP.Icon == "\u{26A1}" and OP.OnText == "ON" and OP.OffText == "OFF",
 		"its words: PERFORMANCE MODE, ON / OFF, and U+26A1 -- a colour emoji, seen drawing in LuckiestGuy in a capture")
 	-- Settings: REDUCED FX shown forced on while Performance Mode holds it.

@@ -18,6 +18,12 @@
 -- attribute live follows the switch live.
 --
 -- Local only: this client writes it, nothing is sent, nothing is saved.
+--
+-- THREE LEVELS (2026-10-13, the owner: "insert a level 3 switch on performance
+-- mode, when turned level 3, owned plants will be hidden too"): OFF, ON, and
+-- ULTRA -- ON with this player's own grown plants hidden as well
+-- (PlantVisibility's hideOwn). One press steps OFF, ON, ULTRA, then OFF again
+-- (nextLevel). ON and ULTRA are both "on" for Reduced FX (isOn).
 --==============================================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -56,7 +62,7 @@ function PerformanceMode.ownReduced(player: Player): boolean
 	return player:GetAttribute(QUALITY) == "Off"
 end
 
--- Turns Performance Mode on or off on this screen.
+-- Turns Performance Mode on (ON, never ULTRA) or off on this screen.
 function PerformanceMode.set(player: Player, on: boolean)
 	if on then
 		-- Put the player's own choice aside once, however often this is called.
@@ -65,6 +71,7 @@ function PerformanceMode.set(player: Player, on: boolean)
 			player:SetAttribute(OWN, if type(q) == "string" then q else PerformanceMode.Unset)
 		end
 		player:SetAttribute(QUALITY, "Off")
+		PlantVisibility.setHideOwn(player, false)
 		PlantVisibility.setShowOthers(player, false)
 		return
 	end
@@ -75,7 +82,44 @@ function PerformanceMode.set(player: Player, on: boolean)
 		-- effect reads a cleared attribute as "no change", not as the default).
 		player:SetAttribute(QUALITY, if own == PerformanceMode.Unset then PerformanceMode.deviceQuality() else own)
 	end
+	PlantVisibility.setHideOwn(player, false)
 	PlantVisibility.setShowOthers(player, true)
+end
+
+--==============================================================================
+-- THE THREE LEVELS
+--==============================================================================
+export type Level = "off" | "on" | "ultra"
+
+PerformanceMode.Levels = { "off", "on", "ultra" } :: { Level }
+
+-- The level `player` is at on this screen.
+function PerformanceMode.level(player: Player): Level
+	if not PerformanceMode.isOn(player) then
+		return "off"
+	end
+	return if PlantVisibility.hideOwn(player) then "ultra" else "on"
+end
+
+-- The level one press goes to: OFF, ON, ULTRA, then OFF again. Pure.
+function PerformanceMode.nextLevel(level: string): Level
+	if level == "off" then
+		return "on"
+	elseif level == "on" then
+		return "ultra"
+	end
+	return "off"
+end
+
+-- Puts `player` at `level` on this screen: ON's work for ON and ULTRA, and
+-- ULTRA's own plants hidden after it.
+function PerformanceMode.setLevel(player: Player, level: string)
+	if level == "on" or level == "ultra" then
+		PerformanceMode.set(player, true)
+		PlantVisibility.setHideOwn(player, level == "ultra")
+	else
+		PerformanceMode.set(player, false)
+	end
 end
 
 return PerformanceMode

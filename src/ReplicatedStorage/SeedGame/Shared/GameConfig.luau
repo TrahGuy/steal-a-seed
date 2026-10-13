@@ -1870,6 +1870,11 @@ GameConfig.WalkMode = {
 --==============================================================================
 GameConfig.OtherPlants = {
 	Attribute = "ShowOtherPlants",
+	-- PERFORMANCE MODE's third level, ULTRA (2026-10-13, the owner: "when turned
+	-- level 3, owned plants will be hidden too"): this player's OWN grown plants
+	-- are not drawn either. A second LOCAL attribute on the player, beside
+	-- Attribute: true only in ULTRA (PerformanceMode.setLevel writes both).
+	HideOwnAttribute = "HideOwnPlants",
 	Label = "PERFORMANCE MODE",
 	OnText = "ON",
 	OffText = "OFF",
@@ -1877,6 +1882,21 @@ GameConfig.OtherPlants = {
 	-- to 40 px (measured in Studio, 2026-10-11). On the switch's thumb.
 	Icon = "\u{26A1}",
 	OwnQualityAttribute = "SeedOwnAfterimageQuality",
+	-- Said once each time the switch reaches ULTRA.
+	UltraNotice = { Title = "YOUR PLANTS ARE HIDDEN TOO", Detail = "They still grow and earn." },
+	-- ULTRA's thumb (the owner, 2026-10-13: no word, "an extra spark effect"):
+	-- Sparks little four-point stars twinkling inside the thumb, each Twinkle
+	-- seconds out and back, Stagger apart; a gold Aura round the thumb. Under
+	-- reduced motion the stars stand still at StillScale and the aura holds.
+	Sparks = 4,
+	Twinkle = 0.45,
+	Stagger = 0.22,
+	StillScale = 0.8,
+	SparkColour = Color3.fromRGB(255, 252, 214),
+	AuraColour = Color3.fromRGB(255, 214, 72),
+	-- ULTRA's thumb: a deep amber gold (top, foot, edge). On CLAIM's lighter gold
+	-- the bolt's own yellow all but vanished (Play capture, 2026-10-13).
+	UltraFace = { Color3.fromRGB(226, 138, 18), Color3.fromRGB(184, 96, 6), Color3.fromRGB(120, 58, 0) },
 }
 
 --==============================================================================

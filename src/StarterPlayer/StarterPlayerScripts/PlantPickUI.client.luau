@@ -52,6 +52,9 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ReachPoint = require(Shared:WaitForChild("ReachPoint"))
+-- PERFORMANCE MODE: ULTRA (2026-10-13): a plant not drawn on this screen is
+-- never picked (PlantVisibility.isHidden).
+local PlantVisibility = require(Shared:WaitForChild("PlantVisibility"))
 
 local Remotes = SeedGame:WaitForChild("Remotes")
 local channel = Remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
@@ -276,7 +279,8 @@ local function plantUnder(at: Vector2): (Model?, BasePart?)
 	local bestAt = math.huge
 	for _, child in ipairs(plants:GetChildren()) do
 		local marker = markerFor(child)
-		if marker then
+		-- Never one this screen does not draw (ULTRA): no invisible pick-ups.
+		if marker and not PlantVisibility.isHidden(child) then
 			local model = child :: Model
 			if distanceTo(model) <= SELECT_RANGE then
 				local boxCF, boxSize = model:GetBoundingBox()
@@ -405,6 +409,12 @@ local function select(model: Model, marker: BasePart)
 	-- pick up: picked up, hatched over, or rebuilt.
 	table.insert(watching, marker.AncestryChanged:Connect(function(_, parent)
 		if not parent then
+			clearSelection()
+		end
+	end))
+	-- Hidden while selected (ULTRA switched on): the selection goes with it.
+	table.insert(watching, model:GetAttributeChangedSignal(PlantVisibility.Marker):Connect(function()
+		if PlantVisibility.isHidden(model) then
 			clearSelection()
 		end
 	end))

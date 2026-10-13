@@ -1,5 +1,67 @@
 # Steal a Seed — Session Handoff
 
+## PERFORMANCE MODE: ULTRA, A THIRD LEVEL THAT HIDES YOUR OWN PLANTS TOO — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; OtherPlantsSpec 75/0 (new checks); HudLayoutSpec 1499/0 (one pin updated); MysteryPodSpec 39/0, PlantGlowSpec 69/0, PlantLabelSpec 39/0, ReachPointSpec 53/0; MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
+
+The owner: "insert a level 3 switch on performance mode, when turned level 3, owned plants will be hidden too". Their picks:
+- "tap cycles 3 steps";
+- "grown plants only";
+- "instead of word ultra in the switch, just make an extra spark effect".
+
+**The levels**:
+- **OFF** shows everything; every session starts here, as before.
+- **ON** is unchanged: other players' grown plants are hidden, plus Reduced FX.
+- **ULTRA** is ON plus this player's OWN grown plants hidden too, with their labels, income pops and effects.
+  - The pods in their beds, with their timers, still show (a pod is never GROWN).
+  - Carried and loose pods, players, guardians and the map are as ON has them.
+  - Nothing on the server changes: the plants still grow and earn, and income, ownership, saves and pickups are untouched.
+- **How:**
+  - PlantVisibility gains a second LOCAL player attribute, `HideOwnPlants` (hideOwn/setHideOwn). It is watched as the first one is.
+  - The rule `hides()`: a grown plant in a plot with a known owner is hidden when it is the viewer's own and hideOwn is set, or someone else's and the show-others preference is off.
+  - PerformanceMode gains `level()`, `nextLevel()` (OFF, ON, ULTRA, then OFF) and `setLevel()`. `set(on)` is ON or OFF and never ULTRA. `isOn()` is true for ON and ULTRA, so Settings' forced Reduced FX is unchanged.
+
+**The switch** (OtherPlantsUI): the same switch in the same spot on every layout. Each press steps the thumb left (red, OFF), middle (green, ON), then right (deep amber gold, ULTRA). The bolt is kept, and the controller press cycles too.
+- OFF and ON keep their word beside the thumb on the rail's and compact's tracks. The middle place leans a pixel left so ON fits the compact track's 58 px, which stays Walk Mode's twin.
+- ULTRA has no word. Four little stars twinkle in the thumb (looping tweens, no particles in the world) and a gold aura rings it, all inside the 3 px the track keeps from the switch's edge.
+- **Sparks and Reduced Motion:** the sparks stand still only under the player's OWN Reduced FX (`PerformanceMode.ownReduced`). Performance Mode itself turns Reduced FX on, so reading that would have frozen them for good. The first Play caught this.
+- **The amber face:** CLAIM's lighter gold made the yellow bolt vanish (first Play), hence the deeper amber gold (OtherPlants.UltraFace).
+- **On a phone's 128 x 28 row** the thumb's place and colour say it alone: the 40-px track has no room for a word beside a middle thumb. The label is unchanged. HudLayoutSpec's pin now says so.
+- Reaching ULTRA posts one notice: "YOUR PLANTS ARE HIDDEN TOO / They still grow and earn."
+
+**No invisible pick-ups** (PlantPickUI): a plant this screen hides is never under the pointer, and a selection whose plant hides is let go. The Garden menu, EQUIP BEST and MY PLANTS work as normal.
+
+**Specs**: OtherPlantsSpec gained:
+- the ULTRA rule (own grown hidden, own pods never, others by the preference);
+- the watcher hearing the new attribute;
+- the cycle and each level's two preferences (set(true) never ULTRA);
+- the pick-up skip;
+- the switch's places, words, sparks, aura, amber face and notice;
+- the fits: OFF and ON beside the thumb on both tracks in LuckiestGuy, and the phone row with the aura inside its pad.
+
+**Mutants**: 6/6 caught. They were:
+- own plants never hidden;
+- pods hidden in ULTRA;
+- the cycle skipping ULTRA;
+- the own preference unheard;
+- hidden plants still picked;
+- the sparks keyed to the forced Reduced FX.
+
+**The Plays** (guarded, SeedTest_20261013, desktop). No script errors. Captures are in output/performance-ultra-2026-10-13/:
+- **OFF:** 5 grown plants shown, red/OFF.
+- **ON:** shown, green/ON in the middle, Reduced FX on.
+- **ULTRA:**
+  - all 5 hidden, the beds empty;
+  - the amber thumb with sparks, measured twinkling (scales 0.65 -> 0.99 etc. in 0.2 s) with Reduced FX forced on;
+  - the notice up.
+- **Back to OFF:** all 5 shown, and Reduced FX given back ("Full").
+- **Pick-up:** in OFF a click on a plant opened PICK UP. Reaching ULTRA let it go, and a click on the same spot did nothing.
+- Cleared after: probe 383 / 0 differ / 0 ZZ / marker absent.
+
+**Files**:
+- Shared/GameConfig.luau (OtherPlants: HideOwnAttribute, UltraNotice, Sparks, Twinkle, Stagger, StillScale, SparkColour, AuraColour, UltraFace);
+- Shared/PlantVisibility.luau, Shared/PerformanceMode.luau;
+- StarterPlayerScripts/OtherPlantsUI.client.luau, PlantPickUI.client.luau;
+- tools/tests/OtherPlantsSpec.luau, HudLayoutSpec.luau.
+
 ## PUBLISHED AS v1060 — 2026-10-13 ~09:48 UTC (17:48 the owner's time) (CLAUDE, TERMINAL, RECORDING THE DESKTOP SESSION'S CHECK)
 
 The owner published v1060 from Studio. It holds the 82af665 tree (= origin/wip). The desktop session's pre-publish probe: 383 scripts = disk, 0 ZZ, the test-store marker absent, nothing uncommitted in src or tools. Nothing was touched after that probe.

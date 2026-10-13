@@ -9,6 +9,11 @@
 -- pods, players, guardians, traps, plots and the map, and every viewport
 -- preview (those are clones in a ViewportFrame, never tagged Planted).
 --
+-- PERFORMANCE MODE: ULTRA (2026-10-13, the owner: "owned plants will be hidden
+-- too") hides THIS player's own grown plants the same way, by a second local
+-- preference (hideOwn). The pods in their beds, with their timers, still show:
+-- a pod is never grown. The plants still grow and earn on the server.
+--
 -- A CLIENT DISPLAY PREFERENCE AND NOTHING ELSE. No server model is deleted,
 -- moved or reparented here; no ownership, income, collision, pickup, spawn or
 -- save changes; nobody else's screen changes. Hiding is LOCAL properties only,
@@ -63,6 +68,7 @@ local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PlantVisibility = {}
 
 local PREF = GameConfig.OtherPlants.Attribute
+local HIDE_OWN = GameConfig.OtherPlants.HideOwnAttribute
 local TAGS = GameConfig.Tags
 local OWNER = GameConfig.Attributes.OwnerUserId
 
@@ -83,15 +89,29 @@ function PlantVisibility.setShowOthers(player: Player, on: boolean)
 	player:SetAttribute(PREF, on == true)
 end
 
+-- PERFORMANCE MODE: ULTRA (2026-10-13): this player's OWN grown plants hidden
+-- too. A second local attribute, true only in ULTRA; absent is false.
+function PlantVisibility.hideOwn(player: Player): boolean
+	return player:GetAttribute(HIDE_OWN) == true
+end
+
+function PlantVisibility.setHideOwn(player: Player, on: boolean)
+	player:SetAttribute(HIDE_OWN, on == true)
+end
+
 --==============================================================================
 -- THE RULE, PURE
 --
--- Hidden only when every fact says so: the preference is OFF, the model is a
--- planted one standing in a plot, it is GROWN, its plot's owner is known, and
--- that owner is somebody else. Anything unknown answers visible.
+-- Hidden only when every fact says so: the model is a planted one standing in
+-- a plot, it is GROWN, its plot's owner is known, and the preference for that
+-- owner says hide -- somebody else's with the preference OFF, this player's
+-- own with ULTRA's hideOwn. A pod in the ground is never grown, so it always
+-- shows. Anything unknown answers visible.
 --==============================================================================
 export type Facts = {
 	showOthers: boolean,
+	-- ULTRA (2026-10-13); absent is false.
+	hideOwn: boolean?,
 	planted: boolean,
 	inPlot: boolean,
 	stage: any,
@@ -100,7 +120,7 @@ export type Facts = {
 }
 
 function PlantVisibility.hides(f: Facts): boolean
-	if f.showOthers or not f.planted or not f.inPlot then
+	if not f.planted or not f.inPlot then
 		return false
 	end
 	if f.stage ~= PlantVisibility.GROWN then
@@ -109,7 +129,10 @@ function PlantVisibility.hides(f: Facts): boolean
 	if type(f.owner) ~= "number" or f.owner == 0 or f.owner ~= f.owner then
 		return false
 	end
-	return f.owner ~= f.viewer
+	if f.owner == f.viewer then
+		return f.hideOwn == true
+	end
+	return not f.showOthers
 end
 
 -- The plot a model stands in: its nearest ancestor tagged Plot.
@@ -128,6 +151,7 @@ function PlantVisibility.factsFor(model: Instance, player: Player): Facts
 	local plot = PlantVisibility.plotOf(model)
 	return {
 		showOthers = PlantVisibility.showOthers(player),
+		hideOwn = PlantVisibility.hideOwn(player),
 		planted = CollectionService:HasTag(model, TAGS.Planted),
 		inPlot = plot ~= nil,
 		stage = model:GetAttribute("Stage"),
@@ -406,11 +430,14 @@ function PlantVisibility.start(player: Player)
 	end
 	table.insert(top, CollectionService:GetInstanceAddedSignal(TAGS.Planted):Connect(track))
 	table.insert(top, CollectionService:GetInstanceRemovedSignal(TAGS.Planted):Connect(forget))
-	table.insert(top, player:GetAttributeChangedSignal(PREF):Connect(function()
+	local function applyAll()
 		for _, t in pairs(tracked) do
 			apply(t)
 		end
-	end))
+	end
+	table.insert(top, player:GetAttributeChangedSignal(PREF):Connect(applyAll))
+	-- ULTRA's own-plants preference (2026-10-13), heard the same way.
+	table.insert(top, player:GetAttributeChangedSignal(HIDE_OWN):Connect(applyAll))
 
 	local me = {
 		stop = function()

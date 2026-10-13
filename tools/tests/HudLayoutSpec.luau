@@ -4063,17 +4063,20 @@ do
 		"local stateWord = UIKit.outlined(track, \"State\", ROW.Word, WHITE, 1)" }) do
 		rowLines = rowLines and walkSrc:find(line, 1, true) ~= nil and othersSrc:find(line, 1, true) ~= nil
 	end
-	-- WALK MODE says ON / OFF in its track on a phone only; PERFORMANCE MODE in
-	-- every layout (its name has no room for it), its name wrapped on a phone.
+	-- WALK MODE says ON / OFF in its track on a phone only. PERFORMANCE MODE says
+	-- OFF or ON beside its thumb off a phone and never a word for ULTRA; on a
+	-- phone's row its thumb's place and colour say it alone (2026-10-13: three
+	-- places, and the 40-px track has no room for a word beside the middle one).
+	-- Its name wraps on a phone.
 	rowLines = rowLines and walkSrc:find("stateWord.Visible = inline", 1, true) ~= nil
-		and not othersSrc:find("stateWord.Visible", 1, true)
+		and othersSrc:find("stateWord.Visible = not inlineRow and level ~= \"ultra\"", 1, true) ~= nil
 		and othersSrc:find("label.TextSize = ROW.Label\n\t\tlabel.TextXAlignment = Enum.TextXAlignment.Left\n"
 			.. "\t\tlabel.TextWrapped = true", 1, true) ~= nil
 	check(rowLines and walkSrc:find("label.Text = WALK.Label\n", 1, true) ~= nil
 			and othersSrc:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
 			and not walkSrc:find("RowPlate", 1, true) and not othersSrc:find("RowPlate", 1, true),
 		"both switches draw the see-through row alike on a phone: no plate behind it, the words inline, the small "
-			.. "switch with ON or OFF in it")
+			.. "switch -- WALK MODE's with ON or OFF in it, PERFORMANCE MODE's thumb alone at its three places")
 	local teleSrc, returnSrc = sourceOf("PlotTeleportUI") or "", sourceOf("ObbyUI") or ""
 	check(teleSrc:find('label.Text = if short then "PLOT" else "TELEPORT TO PLOT"', 1, true) ~= nil
 			and teleSrc:find("icon.Visible = not short", 1, true) ~= nil

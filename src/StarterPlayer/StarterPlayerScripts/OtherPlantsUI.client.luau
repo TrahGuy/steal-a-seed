@@ -2,6 +2,23 @@
 -- Steal a Seed :: OtherPlantsUI
 --
 --==============================================================================
+-- PERFORMANCE MODE: OFF / ON / ULTRA (2026-10-13, the owner: "insert a level 3
+-- switch on performance mode, when turned level 3, owned plants will be hidden
+-- too"; "tap cycles 3 steps"; "instead of word ultra in the switch, just make
+-- an extra spark effect")
+--
+-- One press steps OFF, ON, ULTRA, then OFF again (PerformanceMode.nextLevel):
+--   - OFF: the thumb red at the left, OFF beside it.
+--   - ON: green in the middle, ON beside it.
+--   - ULTRA: gold at the right with no word; little sparks twinkle in the thumb
+--     and a gold aura rings it (THE SPARKS). Under reduced motion the sparks
+--     stand still.
+-- On a phone's row the thumb's place and colour say it alone: its 40-px track
+-- has no room for a word beside a thumb in the middle. The words above say
+-- PERFORMANCE MODE as before. Reaching ULTRA says once that the player's own
+-- plants are hidden too, and still grow and earn.
+--
+--==============================================================================
 -- PERFORMANCE MODE: ON / OFF (2026-10-11, the owner: this switch was OTHER
 -- PLANTS, and became PERFORMANCE MODE with a lightning bolt)
 --
@@ -63,6 +80,7 @@ local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local PlantVisibility = require(Shared:WaitForChild("PlantVisibility"))
 local PerformanceMode = require(Shared:WaitForChild("PerformanceMode"))
+local Notice = require(Shared:WaitForChild("Notice"))
 
 local RAIL = GameConfig.Rail
 local OTHERS = GameConfig.OtherPlants
@@ -75,6 +93,8 @@ local TRACK_TOP = Color3.fromRGB(210, 220, 212)
 local TRACK_BOTTOM = Color3.fromRGB(250, 252, 248)
 local OFF_FACE = { LOOK.DangerTop, LOOK.DangerBottom, LOOK.DangerEdge }
 local ON_FACE = { LOOK.ButtonTop, LOOK.ButtonBottom, LOOK.ButtonEdge }
+-- ULTRA (2026-10-13): a deep amber gold, so the bolt still reads on it.
+local ULTRA_FACE = OTHERS.UltraFace
 local LABEL_H = 18
 local TRACK_H = 20
 local THUMB = Vector2.new(26, 24)
@@ -197,6 +217,87 @@ bolt.TextSize = THUMB.Y - 8
 bolt.ZIndex = 10
 bolt.Parent = thumb
 
+--==============================================================================
+-- THE SPARKS (2026-10-13, ULTRA): little four-point stars inside the thumb,
+-- twinkling one after another (looping tweens, nothing per frame), and a gold
+-- aura 1 px round it -- all within the thumb's box and that 1 px plus its
+-- line, so the switch's rect holds them (the track stands 3 px inside it).
+-- Built once; shown only in ULTRA. Under reduced motion they stand still.
+--==============================================================================
+local aura = Instance.new("Frame")
+aura.Name = "Aura"
+aura.BackgroundTransparency = 1
+aura.AnchorPoint = Vector2.new(0.5, 0.5)
+aura.Position = UDim2.fromScale(0.5, 0.5)
+aura.Size = UDim2.new(1, 2, 1, 2)
+aura.ZIndex = 7
+aura.Visible = false
+aura.Parent = thumb
+UIKit.corner(aura, 8)
+local auraLine = Instance.new("UIStroke")
+auraLine.Color = OTHERS.AuraColour
+auraLine.Thickness = 1.5
+auraLine.Transparency = 0.25
+auraLine.Parent = aura
+
+-- Where the stars stand in the thumb (shares of its box) -- round the bolt,
+-- clear of the edges.
+local SPARK_AT = { Vector2.new(0.22, 0.24), Vector2.new(0.8, 0.26), Vector2.new(0.24, 0.78), Vector2.new(0.78, 0.76) }
+type Spark = { holder: Frame, scale: UIScale }
+local sparks: { Spark } = {}
+for i = 1, math.min(OTHERS.Sparks, #SPARK_AT) do
+	local holder = Instance.new("Frame")
+	holder.Name = "Spark"
+	holder.BackgroundTransparency = 1
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.fromScale(SPARK_AT[i].X, SPARK_AT[i].Y)
+	holder.Size = UDim2.fromScale(0.3, 0.3)
+	holder.ZIndex = 11
+	holder.Visible = false
+	holder.Parent = thumb
+	local aspect = Instance.new("UIAspectRatioConstraint")
+	aspect.Parent = holder
+	for _, size in ipairs({ UDim2.fromScale(0.26, 1), UDim2.fromScale(1, 0.26) }) do
+		local arm = Instance.new("Frame")
+		arm.Name = "Arm"
+		arm.AnchorPoint = Vector2.new(0.5, 0.5)
+		arm.Position = UDim2.fromScale(0.5, 0.5)
+		arm.Size = size
+		arm.BackgroundColor3 = OTHERS.SparkColour
+		arm.BorderSizePixel = 0
+		arm.ZIndex = 11
+		arm.Parent = holder
+		UIKit.corner(arm, 2)
+	end
+	local scale = Instance.new("UIScale")
+	scale.Parent = holder
+	table.insert(sparks, { holder = holder, scale = scale })
+end
+local twinkles: { Tween } = {}
+
+-- The sparks on or off; twinkling unless the player asked for reduced motion
+-- THEMSELVES -- their own Reduced FX (PerformanceMode.ownReduced), never the one
+-- Performance Mode itself turns on, or ULTRA's sparks would never move.
+local function sparkle(on: boolean, still: boolean)
+	for _, t in ipairs(twinkles) do
+		t:Cancel()
+	end
+	table.clear(twinkles)
+	aura.Visible = on
+	for i, s in ipairs(sparks) do
+		s.holder.Visible = on
+		if on and not still then
+			s.scale.Scale = 0
+			local t = TweenService:Create(s.scale, TweenInfo.new(OTHERS.Twinkle, Enum.EasingStyle.Sine,
+				Enum.EasingDirection.InOut, -1, true, (i - 1) * OTHERS.Stagger), { Scale = 1 })
+			table.insert(twinkles, t)
+			t:Play()
+		else
+			s.scale.Scale = OTHERS.StillScale
+		end
+	end
+end
+
 -- ON or OFF in the track, on the side the thumb is not -- in every layout
 -- since PERFORMANCE MODE (the phone's row had it before).
 local stateWord = UIKit.outlined(track, "State", ROW.Word, WHITE, 1)
@@ -255,11 +356,11 @@ local function placeSwitch()
 		stateWord.Size = UDim2.new(0, trackW - THUMB.X - 2, 1, 0)
 		bolt.TextSize = THUMB.Y - 8
 	end
-	if inline ~= inlineRow then
-		inlineRow = inline
-		if paint then
-			paint()
-		end
+	inlineRow = inline
+	-- Every layout: the thumb's three places and the word's room follow the
+	-- track (2026-10-13). A new shape of switch jumps (paint's `reshaped`).
+	if paint then
+		paint()
 	end
 end
 local relayout = layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSwitch)
@@ -280,18 +381,41 @@ local slide: Tween? = nil
 local painted = false
 local paintedRow = false
 
+local sparkOn, sparkStill = false, false
+
 function paint()
-	-- PERFORMANCE MODE (2026-10-11): ON is the old OTHER PLANTS: OFF.
-	local on = PerformanceMode.isOn(player)
+	-- THREE LEVELS (2026-10-13): OFF red at the left, ON green in the middle,
+	-- ULTRA gold at the right with its sparks and no word.
+	local level = PerformanceMode.level(player)
 	label.Text = OTHERS.Label
-	stateWord.Text = if on then OTHERS.OnText else OTHERS.OffText
-	stateWord.AnchorPoint = Vector2.new(if on then 0 else 1, 0)
-	stateWord.Position = if on then UDim2.fromOffset(2, 0) else UDim2.new(1, -2, 0, 0)
-	local face = if on then ON_FACE else OFF_FACE
+	local trackW = track.Size.X.Offset
+	local thumbW = thumb.Size.X.Offset
+	-- The middle place leans a pixel left when it must, so ON fits beside it.
+	local x = if level == "ultra" then trackW - thumbW elseif level == "on" then math.floor((trackW - thumbW - 1) / 2) else 0
+	-- The word beside the thumb: OFF or ON where it fits (never a phone's row),
+	-- never ULTRA.
+	stateWord.Visible = not inlineRow and level ~= "ultra"
+	if level == "on" then
+		stateWord.Text = OTHERS.OnText
+		stateWord.AnchorPoint = Vector2.new(0, 0)
+		stateWord.Position = UDim2.fromOffset(x + thumbW + 1, 0)
+		stateWord.Size = UDim2.new(0, math.max(0, trackW - x - thumbW - 2), 1, 0)
+	else
+		stateWord.Text = OTHERS.OffText
+		stateWord.AnchorPoint = Vector2.new(1, 0)
+		stateWord.Position = UDim2.new(1, -2, 0, 0)
+		stateWord.Size = UDim2.new(0, math.max(0, trackW - thumbW - 2), 1, 0)
+	end
+	local face = if level == "ultra" then ULTRA_FACE elseif level == "on" then ON_FACE else OFF_FACE
 	thumbFace.Color = UIKit.footColours(face[1], face[2], face[3])
 	thumbLine.Color = face[3]
-	local thumbW = thumb.Size.X.Offset
-	local goal = if on then UDim2.new(1, -thumbW, 0.5, 0) else UDim2.new(0, 0, 0.5, 0)
+	-- The sparks follow the level, and Reduced Motion while it is ULTRA.
+	local wantSpark, still = level == "ultra", PerformanceMode.ownReduced(player)
+	if wantSpark ~= sparkOn or (wantSpark and still ~= sparkStill) then
+		sparkle(wantSpark, still)
+		sparkOn, sparkStill = wantSpark, still
+	end
+	local goal = UDim2.new(0, x, 0.5, 0)
 	if slide then
 		slide:Cancel()
 		slide = nil
@@ -312,8 +436,12 @@ end
 
 paint()
 local repaint = player:GetAttributeChangedSignal(OTHERS.Attribute):Connect(paint)
+-- ULTRA's own-plants preference (2026-10-13).
+local repaintOwn = player:GetAttributeChangedSignal(OTHERS.HideOwnAttribute):Connect(paint)
 slab.Destroying:Once(function()
 	repaint:Disconnect()
+	repaintOwn:Disconnect()
+	sparkle(false, true)
 end)
 
 --==============================================================================
@@ -342,10 +470,11 @@ end)
 showSwitch()
 
 --==============================================================================
--- THE PRESS: the opposite of what the attribute says now. A click, a tap, or
--- the controller's selection (the slab is an ordinary selectable button, so
--- the UI's own navigation and PadFocus's ring reach it). A held finger fires
--- Activated over and over; one flip per fifth of a second.
+-- THE PRESS: the next level -- OFF, ON, ULTRA, then OFF (2026-10-13). A click,
+-- a tap, or the controller's selection (the slab is an ordinary selectable
+-- button, so the UI's own navigation and PadFocus's ring reach it). A held
+-- finger fires Activated over and over; one step per fifth of a second.
+-- Reaching ULTRA says so once.
 --==============================================================================
 local lastFlip = 0
 slab.Activated:Connect(function()
@@ -354,7 +483,12 @@ slab.Activated:Connect(function()
 		return
 	end
 	lastFlip = now
-	PerformanceMode.set(player, not PerformanceMode.isOn(player))
+	local nextLevel = PerformanceMode.nextLevel(PerformanceMode.level(player))
+	PerformanceMode.setLevel(player, nextLevel)
+	if nextLevel == "ultra" then
+		Notice.post({ kind = "info", title = OTHERS.UltraNotice.Title, detail = OTHERS.UltraNotice.Detail,
+			key = "performance-ultra" })
+	end
 end)
 
 --==============================================================================
