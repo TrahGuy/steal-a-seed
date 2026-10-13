@@ -17,9 +17,10 @@
 --
 -- No remote and no server: the words ship with a publish, like any config.
 --
--- THE LIST BELOW IS A DRAFT (2026-10-05) written from KB/HANDOFF.md's record of
--- what the last publishes carried -- the owner rewrites or approves it before
--- it is published.
+-- THE OWNER APPROVED THE FOUR NEWEST ENTRIES ON 2026-10-13 (the two below them
+-- are the 2026-10-05 draft, kept). Every line was checked against the code and
+-- KB/HANDOFF.md's record of the publish that carried it; a date is the owner's
+-- day (UTC+8) of that publish.
 --
 -- Pure helpers, for UpdateLogUI and UpdateLogSpec:
 --   dayOf(date)     a date's UTC midnight in seconds, or nil if unreadable
@@ -42,9 +43,58 @@ export type Entry = {
 }
 
 --==============================================================================
--- THE ENTRIES, NEWEST FIRST (DRAFT -- the owner approves the wording)
+-- THE ENTRIES, NEWEST FIRST (the owner approved the wording, 2026-10-13)
 --==============================================================================
 UpdateLog.Entries = {
+	-- The day the owner publishes it: a publish after 13 Oct moves this date
+	-- and the id's together.
+	{
+		id = "2026-10-13-gifts-controller",
+		date = "13 Oct 2026",
+		title = "Gifts and controller fixes",
+		bullets = {
+			"Gift a Game Pass to another player in your server.",
+			"Stand on the EQUIP BEST pad on your plot to plant your best.",
+			"The Shop now works with a controller.",
+			"With a menu open, the right stick scrolls it.",
+			"The SELL button takes you straight to Marigold's stall.",
+		},
+	},
+	{
+		id = "2026-10-12-enchanted-mist",
+		date = "12 Oct 2026",
+		title = "The Enchanted Mist",
+		bullets = {
+			"The Enchanted Mist rolls in: check the timer at the hub.",
+			"Collect Dewberries while the Mist is out.",
+			"Bring them to the Mosskeeper to earn Mysterious Pods.",
+			"Mysterious Pods hold Mist creatures, even a Secret!",
+		},
+	},
+	{
+		id = "2026-10-12-shop",
+		date = "12 Oct 2026",
+		title = "New in the Shop",
+		bullets = {
+			"New passes: +12 Bag Slots, Faster Hatch and VIP.",
+			"New boosts: Starter Pack, Server Luck and Summon Rain.",
+			"Buy Mysterious Pods in bundles, or gift them.",
+			"Skip Rebirth: rebirth now, no cash or mill needed.",
+			"A REBIRTH button is now on your screen.",
+		},
+	},
+	{
+		id = "2026-10-10-rebirth-podrush",
+		date = "10 Oct 2026",
+		title = "Rebirth, Pod Rush and more",
+		bullets = {
+			"Rebirth for a lasting bonus: more training, more income.",
+			"POD RUSH: steal and bank as many pods as you can!",
+			"Play Sprout Dash on your mill for a training boost.",
+			"Pods hatch in your beds again.",
+			"DROP a pod you carry, and sort your Bag.",
+		},
+	},
 	{
 		id = "2026-10-05-top-creatures",
 		date = "5 Oct 2026",

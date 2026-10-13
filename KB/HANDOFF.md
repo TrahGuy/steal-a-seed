@@ -1,5 +1,34 @@
 # Steal a Seed — Session Handoff
 
+## WHAT'S NEW: THE OWNER'S FOUR NEW ENTRIES, FACT-CHECKED — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; UpdateLogSpec 22/0 (its panel-size check reworked); MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "whats new button seems outdated, we should update it too". Their four entries (relayed by the peer) stand at the top of Shared/UpdateLog.luau. The two oldest (5 and 4 Oct) stay, so the panel shows all six (GameConfig.UpdateLog.Shown). The header now says the owner approved the words on 2026-10-13.
+
+**Fact-checked line by line** against the code and this file's publish records. Every line is true as written; no wording changed. A date is the owner's day (UTC+8) of the publish that carried it.
+- 13 Oct: items 1 (the EQUIP BEST pad), 2 (the Shop on a controller), 3 (the right stick), 6 (pass gifts, to a player in the server) and 7 (SELL), all on wip after v1059.
+- 12 Oct, the Mist: on since item 14, first live in v1056 (06:01 UTC). The timer sign stands above the Event Hub ("Next Mist in"). The Mosskeeper gives a Mysterious Pod for 10 Dewberries. The pod's pool holds two Secrets (Gnarlmaw 0.8%, Snarlbloom 0.2%), drawn whatever GameConfig.Secret.Enabled says.
+- 12 Oct, the Shop: items 9A, 9B (the BOOSTS shelf), 17, 18A and 18B, all live by v1058 (23:02 the owner's time).
+- 10 Oct: rebirth, Pod Rush and Sprout Dash live from v1047 (00:31 on 10 Oct, the owner's time); pods in beds and DROP from v1048; SORT from v1051. Pod Rush starts from the admin console only.
+
+**Item 7's line**: "The SELL button takes you straight to Marigold's stall." took the place of "Shop and Index text is easier to read." (the swap, not a split).
+- A second 13 Oct entry would make seven, and the 4 Oct one would fall off a panel that shows six.
+- "Marigold's stall", not "Marigold": the landing is at the SELL ALL board.
+- Item 8 is not built, so it has no line.
+
+**The newest entry's date** is 13 Oct. If the owner publishes on a later day, its date and id change together; the comment over it says so.
+
+**The spec**: UpdateLogSpec's panel check assumed the shipped log is short. Six cards (1044 px) scroll in the full 460-px panel, as designed. The check now takes the shipped list as whichever it is, with two short cards and six full ones standing for each case. Mutants on MenuLayout.updatesPanel: NeverShrinks and LongLogShrinks, both caught.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1065 x 716):
+- The UPDATES button wore its NEW dot; opening the panel cleared it.
+- The newest card has the NEW tag; every bullet sits on one line. Scrolled, entries 3 and 4 too.
+- No script errors.
+- Captures: output/whats-new-2026-10-13/ (01-03). Cleared: probe 381 / 0 differ / 0 ZZ / marker absent.
+
+**Not seen**: a phone. UpdateLogSpec holds every bullet to two lines on the narrowest card (331 px).
+
+**Files**: src/ReplicatedStorage/SeedGame/Shared/UpdateLog.luau, tools/tests/UpdateLogSpec.luau.
+
 ## ITEM 7 (BACKLOG 2026-10-12): THE OBBY PILL BECOMES SELL — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK, 933a91d, NOT PUBLISHED; the landing at the SELL ALL board approved as built; PlotTeleportSpec 82/0 (14 new SELL checks), HudLayoutSpec 1498/0, ObbyViewSpec 112/0, TutorialSpotlightSpec 51/0 (checks updated); ObbySpec 69/0, TutorialSpec 121/0, ActionRefusalSpec 74/0, EventHubSpec 53/0, DebugTeleportSpec 8/0, BatHintSpec 19/0, ControllerSpec 64/0, FirstMinuteSpec 117/0, MetricsSpec 66/0, PhoneMenuSpec 29/0, UsabilityAudioSpec 95/0, StorageDoorsSpec 128/0, TutorialPodSpec 263 checks; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "change the obby navigation pill to SELL, and teleport to marigold". Their default: the pill shows under today's rules (Safe Zone, not on the course).

@@ -9,7 +9,8 @@
 --      date readable ("5 Oct 2026"), a short title, 2 to 5 bullets each, every
 --      bullet one line under BulletMax -- and every word fitting the cards: a
 --      bullet at most two lines on the narrowest screen the button stands on and
---      one on a desktop, a title and a date whole; a short log a short panel.
+--      one on a desktop, a title and a date whole; a short log a short panel,
+--      a long one the full panel, scrolling.
 --   2. THE RULES CATCH WHAT THEY SHOULD: a twice-used id, an older entry above
 --      a newer one, an unreadable date, one bullet or six, a long or two-line
 --      bullet, an empty list -- each reported.
@@ -149,26 +150,39 @@ local ok, err = pcall(function()
 		string.format("every title and date is whole on one line of the narrowest card (%d px), the date short of the "
 			.. "newest card's tag, whose LATEST fits its %d px", inner, U.TagW), table.concat(whole, "; "))
 
-	-- A short log is a short panel; a long one stops at MaxH and scrolls.
+	-- A short log is a short panel whose well holds its cards exactly; a long one
+	-- keeps the full panel (MaxH) and scrolls. The shipped list is checked as
+	-- whichever it is (2026-10-13: its six cards scroll), and two short cards and
+	-- six full ones stand for each case whatever ships.
+	local roomy = MenuLayout.blocks(desk).main.h
+	local function sized(counts)
+		local need = MenuLayout.updatesContent(counts) + U.ListInset * 2
+		local panel = MenuLayout.updatesPanel({ safe = Vector2.new(1280, 662), compact = false, railRight = 142,
+			rightLeft = 1218 }, OUTLINE, need - U.ListInset * 2)
+		local well = MenuLayout.blocks(panel).main.h
+		local short = need <= roomy
+		local ok = panel.rect.w == desk.rect.w and if short
+			then well >= need and well < need + 1 and panel.rect.h <= desk.rect.h
+			else panel.rect.h == desk.rect.h and well == roomy
+		return ok, short, panel, need
+	end
 	local counts = {}
 	for _, e in ipairs(UpdateLog.shown()) do
 		table.insert(counts, #e.bullets)
 	end
-	local content = MenuLayout.updatesContent(counts)
-	local fitted = MenuLayout.updatesPanel({ safe = Vector2.new(1280, 662), compact = false, railRight = 142,
-		rightLeft = 1218 }, OUTLINE, content)
-	local well = MenuLayout.blocks(fitted).main.h
 	local many = {}
 	for _ = 1, GameConfig.UpdateLog.Shown do
 		table.insert(many, GameConfig.UpdateLog.MaxBullets)
 	end
-	local tall = MenuLayout.updatesPanel({ safe = Vector2.new(1280, 662), compact = false, railRight = 142,
-		rightLeft = 1218 }, OUTLINE, MenuLayout.updatesContent(many))
-	check(well >= content + U.ListInset * 2 and well < content + U.ListInset * 2 + 1 and fitted.rect.h < desk.rect.h
-			and tall.rect.h == desk.rect.h and fitted.rect.w == desk.rect.w,
-		string.format("the shipped %d cards (%d px) get a %d-px panel whose well holds them exactly; six full cards "
-			.. "get the %d-px panel and scroll", #counts, content, fitted.rect.h, tall.rect.h),
-		string.format("well %d", well))
+	local shipOk, shipShort, shipPanel, shipNeed = sized(counts)
+	local twoOk, twoShort, twoPanel = sized({ 3, 4 })
+	local manyOk, manyShort, manyPanel = sized(many)
+	check(shipOk and twoOk and twoShort and twoPanel.rect.h < desk.rect.h and manyOk and not manyShort,
+		string.format("the shipped %d cards (%d px) get a %d-px panel (%s); two short cards get a %d-px panel whose "
+			.. "well holds them exactly; six full cards get the %d-px panel and scroll", #counts, shipNeed,
+			shipPanel.rect.h, if shipShort then "its well holds them exactly" else "they scroll", twoPanel.rect.h,
+			manyPanel.rect.h),
+		string.format("full well %d", roomy))
 
 	--==========================================================================
 	say("\n-- 2. the rules catch what they should --")
