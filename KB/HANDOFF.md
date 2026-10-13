@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## NAME BADGES: THE OWNER'S, MICHAEL'S AND EVERY VIP'S, AFTER THE NAME OVER THE HEAD AND ON THEIR BROADCASTS AND ADMIN LINES — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NameBadgeSpec 26/0 (new); AnnouncementSpec 63/0, AdminAnnounceSpec 44/0, NoticeSpec 105/0 (pins updated); HudLayoutSpec 1499/0, AdminSpec 137/0, AdminMistSpec 69/0, PodRushSpec 98/0, SecretToastSpec 61/0, PassBenefitsSpec 31/0; THE WHOLE SUITE 161/161 (with 6a06b75's two spec fixes); MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
+## NAME BADGES: THE OWNER'S, MICHAEL'S AND EVERY VIP'S, AFTER THE NAME OVER THE HEAD AND ON THEIR BROADCASTS AND ADMIN LINES — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, 82af665, NOT PUBLISHED; NameBadgeSpec 26/0 (new); AnnouncementSpec 63/0, AdminAnnounceSpec 44/0, NoticeSpec 105/0 (pins updated); HudLayoutSpec 1499/0, AdminSpec 137/0, AdminMistSpec 69/0, PodRushSpec 98/0, SecretToastSpec 61/0, PassBenefitsSpec 31/0; THE WHOLE SUITE 161/161 (with 6a06b75's two spec fixes); MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
 
 The owner's request, NAME BADGES, relayed by the coordinator. The pictures are the owner's own uploads (CrazyCozy Games, 2026-10-13 08:39 UTC, from Codex's dev-badge set), each checked in Studio (Image type 1, the group, IsLoaded true, fetch Success):
 - 134108586814210, the DEV letters, for the owner;
