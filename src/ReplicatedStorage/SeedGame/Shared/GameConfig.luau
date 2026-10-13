@@ -7980,17 +7980,19 @@ GameConfig.Store = {
 	-- gifted pass (ProfileSchema.GiftedPasses), which PassService counts as the
 	-- pass itself. `forPass` is the pass's key in Items.Passes -- NOT `pass`,
 	-- which would make StoreService take the row for a Game Pass and skip it.
-	-- The ids are the owner's to create; 0 until then, and a pass with no live
-	-- gift shows no GIFT button (PassGiftService, ShopUI).
+	-- The ids are the owner's (created 2026-10-13; each name checked against
+	-- economy details, the prices the owner's list -- GetProductInfo reads
+	-- regional ones). A pass with no live gift (id 0) shows no GIFT button
+	-- (PassGiftService, ShopUI).
 	--==========================================================================
 	PassGifts = {
-		{ key = "giftx2money", forPass = "x2money", label = "Gift: \u{00D7}2 MONEY", robux = 199, product = 0,
+		{ key = "giftx2money", forPass = "x2money", label = "Gift: \u{00D7}2 MONEY", robux = 199, product = 3718302369,
 			kind = "passgift" },
-		{ key = "giftbagslots", forPass = "bagslots", label = "Gift: +12 BAG SLOTS", robux = 149, product = 0,
+		{ key = "giftbagslots", forPass = "bagslots", label = "Gift: +12 BAG SLOTS", robux = 149, product = 3718302049,
 			kind = "passgift" },
-		{ key = "giftfasterhatch", forPass = "fasterhatch", label = "Gift: FASTER HATCH", robux = 129, product = 0,
-			kind = "passgift" },
-		{ key = "giftvip", forPass = "vip", label = "Gift: VIP", robux = 249, product = 0, kind = "passgift" },
+		{ key = "giftfasterhatch", forPass = "fasterhatch", label = "Gift: FASTER HATCH", robux = 129,
+			product = 3718302137, kind = "passgift" },
+		{ key = "giftvip", forPass = "vip", label = "Gift: VIP", robux = 249, product = 3718302234, kind = "passgift" },
 	},
 }
 

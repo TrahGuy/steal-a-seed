@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE 4 GIFT PRODUCT IDS ARE THE OWNER'S TO CREATE)
+## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE OWNER'S 4 GIFT PRODUCT IDS WIRED AFTER, IN THEIR OWN COMMIT)
 
 The owner: "make the passes giftable". Their decision: as written; the same prices as the passes; the owner creates the four gift products, and the code ships with the ids unset until they arrive.
 
@@ -47,7 +47,7 @@ Otherwise the recipient is noted (Gift.NoteSeconds, 600) and the gift's prompt o
 - Two players in one server. The gift to another player, the refusals and the race are held by PassGiftSpec, over the real PassService and PassGiftService.
 - A phone. A console.
 
-**For the owner:** create the four gift products (the names, prices and descriptions the coordinator relayed) and their icons (the Codex brief), then send the ids. Until then no GIFT shows.
+**The gift products** (the owner's, created 2026-10-13, wired in their own commit): Gift: x2 Money 3718302369, Gift: +12 Bag Slots 3718302049, Gift: Faster Hatch 3718302137, Gift: VIP 3718302234. Each name was checked against economy details; the prices are the owner's list (GetProductInfo reads regional ones: 79/59/55/99). Seen in a second guarded Play: GIFT on all four pass cards, and every shelf's cells one size (the Passes shelf too), so nothing under it moves. Captures 06-07. PassGiftSpec pins the ids. The gift icons in the Codex brief are still open.
 
 **Files:**
 - GameConfig (Store.PassGifts, Pass.OwnedAttribute, Pass.Gift, Save.MaxGiftedPasses).

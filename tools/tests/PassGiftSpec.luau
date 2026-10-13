@@ -101,11 +101,16 @@ local ok, err = pcall(function()
 	say("1. The products")
 	--==========================================================================
 	local gifts = GameConfig.Store.PassGifts or {}
+	-- The owner's ids (created 2026-10-13; each name checked against economy
+	-- details -- "Gift: x2 Money", "Gift: +12 Bag Slots", "Gift: Faster Hatch",
+	-- "Gift: VIP" -- the prices the owner's list).
+	local OWNER = { giftx2money = 3718302369, giftbagslots = 3718302049, giftfasterhatch = 3718302137,
+		giftvip = 3718302234 }
 	local wrong, seenFor = {}, {}
 	for _, item in ipairs(gifts) do
 		local target = passBy[tostring(item.forPass)]
 		if not (target and item.robux == target.robux and item.kind == "passgift" and item.pass == nil
-			and type(item.key) == "string" and (tonumber(item.product) or -1) >= 0 and not seenFor[item.forPass]) then
+			and type(item.key) == "string" and item.product == OWNER[item.key] and not seenFor[item.forPass]) then
 			table.insert(wrong, tostring(item.key))
 		end
 		seenFor[tostring(item.forPass)] = true
@@ -134,17 +139,12 @@ local ok, err = pcall(function()
 	scan(GameConfig.Store.MysteryPods)
 	scan(gifts)
 	check(#gifts == #PASSES and #wrong == 0 and everyPass and #twice == 0,
-		"one GIFT product per pass, at the pass's own price, named by forPass (no `pass` field), no id twice",
-		table.concat(wrong, ",") .. " | " .. table.concat(twice, ","))
-	local live = 0
-	for _, item in ipairs(gifts) do
-		if (tonumber(item.product) or 0) > 0 then
-			live += 1
-		end
-	end
-	check(live > 0 or (ShopCatalog.giftFor("vip") == nil and ShopCatalog.giftFor("x2money") == nil),
-		"a gift product not yet created (id 0) gives its pass's card no GIFT (ShopCatalog.giftFor is nil)")
-	say(string.format("  note  %d of %d gift products have their id", live, #gifts))
+		"one GIFT product per pass, the owner's id, at the pass's own price, named by forPass (no `pass` field), "
+			.. "no id twice", table.concat(wrong, ",") .. " | " .. table.concat(twice, ","))
+	check(ShopCatalog.giftFor("vip") == OWNER.giftvip and ShopCatalog.giftFor("x2money") == OWNER.giftx2money
+			and ShopCatalog.giftFor("bagslots") == OWNER.giftbagslots
+			and ShopCatalog.giftFor("fasterhatch") == OWNER.giftfasterhatch and ShopCatalog.giftFor("nosuchpass") == nil,
+		"each pass's card carries its gift product (ShopCatalog.giftFor); a pass with none -- or an id of 0 -- has no GIFT")
 
 	--==========================================================================
 	say("2. What a gift is worth (the real PassService, stand-in profiles)")
@@ -300,9 +300,9 @@ local ok, err = pcall(function()
 		return false
 	end
 
-	-- Refused before any prompt.
+	-- Refused before any prompt (a pass with no gift product: NO_GIFT).
 	fresh()
-	G.AskGift(buyer, { pass = "x2money", recipient = friend.UserId })
+	G.AskGift(buyer, { pass = "nosuchpass", recipient = friend.UserId })
 	clock += 2
 	G.AskGift(buyer, { pass = "vip", recipient = 90000000999 })
 	clock += 2
