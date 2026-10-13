@@ -10,6 +10,9 @@
 --      buyer if they have gone; owed pods handed over as room comes
 --   4. the wiring: the receipt, the gate's own flag, the reset, OPEN ALL, the
 --      Bag's button, the grid, the Shop's banner on live prices only
+--   5. the words you can read (2026-10-13, backlog item 5): every rarity word
+--      on an odds card light text with its ink line; the banner's light words
+--      keep theirs
 --==============================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -365,6 +368,35 @@ local ok, err = pcall(function()
 			and has(banner, "channel:FireServer(SHOP.GiftAction, { bundle = giftFor.key, recipient = other.UserId })"),
 		"the Shop's banner, first on the page: the six inside with their odds and ODDS's full page before any buy, "
 			.. "this player's live prices only, offer and GIFT shown only on PolicyService's yes")
+
+	--==========================================================================
+	say("5. The words you can read (2026-10-13, backlog item 5)")
+	--==========================================================================
+	-- The owner: "some texts is not readable due to color overlap". Every
+	-- rarity word on an odds card is light text by MenuKit's own rule, with its
+	-- ink line kept; so are the banner's tagline, WAS prices and gift refusal
+	-- (MenuKit.ink SETS a colour: ink(label, INK) had made the words near-black).
+	local MenuKit = require(Shared:WaitForChild("MenuKit"))
+	local MistOddsView = require(Shared:WaitForChild("MistOddsView"))
+	local dim = {}
+	for rarity in pairs(GameConfig.RarityColor) do
+		local c = MistOddsView.wordColour(rarity)
+		if not MenuKit.isLight(c) then
+			table.insert(dim, string.format("%s (%d, %d, %d)", rarity, c.R * 255, c.G * 255, c.B * 255))
+		end
+	end
+	table.sort(dim)
+	local odds = strip(Shared:WaitForChild("MistOddsView").Source)
+	check(#dim == 0
+			and has(odds, 'local rarity = MenuKit.text(face, "Rarity", 13, MistOddsView.wordColour(entry.Rarity), z + 5)')
+			and has(odds, "MenuKit.keepInk(rarity).Thickness = 1.5"),
+		"every rarity word on an odds card is light text with its ink line", table.concat(dim, ", "))
+	check(has(banner, "MenuKit.keepInk(tagline).Thickness = 1.5") and has(banner, "MenuKit.keepInk(was).Thickness = 1.5")
+			and has(banner, "MenuKit.keepInk(status).Thickness = 1.5")
+			and has(banner, 'MenuKit.text(tileFrame, "Was", 16, Color3.fromRGB(226, 230, 242), z + 4)')
+			and not has(banner, "MenuKit.ink(tagline") and not has(banner, "MenuKit.ink(was")
+			and not has(banner, "MenuKit.ink(status"),
+		"the banner's tagline, WAS prices and gift refusal are light words that keep their ink line")
 end)
 
 if not ok then

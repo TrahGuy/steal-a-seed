@@ -182,15 +182,34 @@ function MistOddsView.card(parent: GuiObject, entry: any, z: number, cardH: numb
 	name.Size = UDim2.new(1, -10, 0, 18)
 	name.TextScaled = true
 	name.Text = entry.Name
-	local rarity = MenuKit.text(face, "Rarity", 12, WHITE, z + 5)
+	-- THE RARITY, READABLE ON THE DARK BACKING (2026-10-13, the owner's backlog
+	-- item 5: the banner's rarity words read dim, and Secret's black letters --
+	-- RarityFX's word for the light Bag -- all but vanished): the rarity's bright
+	-- colour (MistOddsView.wordColour), plain, a point bigger, its ink line kept.
+	local rarity = MenuKit.text(face, "Rarity", 13, MistOddsView.wordColour(entry.Rarity), z + 5)
 	rarity.Position = UDim2.new(0, 5, 1, -19)
 	rarity.Size = UDim2.new(1, -10, 0, 15)
 	rarity.Text = entry.Rarity
-	local word = RarityFX.text(rarity, rarity:FindFirstChildOfClass("UIStroke"))
-	local tone = (ALMANAC.Rarity :: any)[entry.Rarity] or (ALMANAC.Rarity :: any).Common
-	RarityFX.setText(word, entry.Rarity, tone[1])
-	table.insert(fx, word)
+	MenuKit.keepInk(rarity).Thickness = 1.5
 	return holderCard
+end
+
+-- A rarity word's colour on these cards' dark backing: the rarity's edge
+-- colour (RarityFX's for the three rarest, GameConfig.RarityEdge's for the
+-- rest), lifted WordLift toward white -- and on, a step at a time, until it is
+-- light text by the game's own rule (MenuKit.isLight). Mythic's deep red
+-- lifted only WordLift stayed dim on the pearl card's band.
+MistOddsView.WordLift = 0.35
+MistOddsView.WordStep = 0.05
+function MistOddsView.wordColour(rarity: string): Color3
+	local edge = (RarityFX.edgeColour(rarity) or (GameConfig.RarityEdge.Colours :: any)[rarity] or WHITE) :: Color3
+	local lift = MistOddsView.WordLift
+	local colour = edge:Lerp(WHITE, lift)
+	while not MenuKit.isLight(colour) and lift < 1 do
+		lift = math.min(1, lift + MistOddsView.WordStep)
+		colour = edge:Lerp(WHITE, lift)
+	end
+	return colour
 end
 
 -- A size's chance words (the Odds page's chips, the Mysterious Pod's size

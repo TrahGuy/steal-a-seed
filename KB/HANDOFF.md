@@ -1,5 +1,44 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 5 (BACKLOG 2026-10-12): TEXT YOU CAN READ — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HudLayoutSpec 1498/0, CompactMenusSpec 48/0 (2 new), MysteryShopSpec 16/0 (2 new); ActionRefusalSpec 74/0, BoostIconsSpec 43/0, CardZoomSpec 12/0, ContextSlotSpec 8/0, ControllerSpec 64/0, EnchantedMistSpec 62/0, HatchBonusSpec 41/0, HatchRollSpec 166/0, HotbarSpec 38/0, InviteHudSpec 438/0, MiniEventSpec 90/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, MysteryPodSpec 39/0, NoticeSpec 100/0, PadStickSpec 18/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, PodGuideSpec 29/0, RainEventSpec 98/0, RarityCardsSpec 60/0, RarityFXSpec 72/0, RebirthCelebrationSpec 92/0, SecretToastSpec 61/0, ShopPadSpec 22/0, SourceIconsSpec 21/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UsabilityAudioSpec 95/0, WheelSpec 163/0; MUTANTS 4/4 CAUGHT; THREE GUARDED PLAYS, DESKTOP ONLY)
+
+The owner: "some texts is not readable due to color overlap", with a screenshot of the Shop's Mysterious Pod banner. Their pick for the notice (2026-10-13): option 1, above the panel's top edge, a slim strip on a dark backing where there is no gap.
+
+**The banner** (Shared/MysteryShopBanner.luau):
+- The cause of the dark words: MenuKit.ink(label, colour) SETS the label's colour. `MenuKit.ink(tagline, INK)` had made the description itself near-black on the teal studs, and the same call did it to the WAS prices and the gift sheet's refusal line.
+- Now the tagline is white, the WAS prices light grey (226, 230, 242) with their strike line, and the refusal keeps its light red. All three keep their ink line (MenuKit.keepInk, 1.5 px).
+
+**The rarity words** (Shared/MistOddsView.luau; the banner's six cards and the odds page in the Shop and in Mosskeeper's talk):
+- Each word is now its rarity's edge colour (RarityFX's for the three rarest, GameConfig.RarityEdge's for the rest), lifted WordLift 0.35 toward white. Where that is still not light text by MenuKit.isLight, it is lifted further in 0.05 steps. Only Mythic needs that: (221, 111, 124) became (229, 144, 154).
+- 13 px, with its ink line. Before, Secret's word was RarityFX's black lettering for the light Bag, and it all but vanished on the dark band.
+
+**A notice above an open panel** (StarterPlayerScripts/ActionToastUI.client.luau, Shared/PadInput.luau):
+- While a centre panel is open, the notice stack is one SLIM line: the headline alone, on a solid dark backing (Notice.Outline, transparency 0.12). Its foot stands CONFIG_GAP above the panel's top edge (each open dimmer's Shell; the highest of them).
+- Where there is no gap under the top bar (a phone's panel fills the safe area), the line reaches up into the top bar's band. Only with no room even there does it go to the screen's foot. It never stands over the panel.
+- PadInput.openPanels() is new. Two panels can be open at once: a returning player's offline card stood open under the Shop in the first Play, and placing against "the" open panel (PadInput.openPanel) put the line on the Shop.
+- The line is placed again on OpenPanel, on PadInput.PanelChanged, and 0.35 s later, once the panel's opening pop has settled.
+
+**The sweep** (Shop shelves, Bag, Index, Garden, Rebirth, the admin console, Mosskeeper's talk and his odds page): one more fault, in the Index.
+- Each biome's harvest ("+250M", "+10M") ran on under its CLAIM button. The speed column was measured as "+1B", which is narrower in FredokaOne than "+250M" (20 px against 41).
+- IndexUI now measures both columns from every biome's own reward words, the same words its headings print. In Play all five headings measured clear: "+250M" ends at x 760, CLAIM starts at 772.
+- CompactMenusSpec packs the heading on all 13 listed screens at the phone menu scale: the bar, the whole harvest and CLAIM stay on every one. The 640 x 360 phone keeps a 102 px bar.
+
+**The Plays** (guarded, the throwaway SeedTest_20261013; a gated ZZNoticeHost posted notices through the game's own ServerNotice in the first two and was deleted after; Mosskeeper's talk was opened with the server's own "open" message; viewports 1065 x 716 and 1169 x 716, no touch):
+- The banner, before and after the Mythic lift.
+- The slim line over the open Shop: its top at y -9 and its foot at 21, the Shell's top at 32 (the gui's space, which starts under the 58 px inset).
+- The full notice with nothing open.
+- The Index's harvests before and after the fix.
+- Mosskeeper's talk and his odds page.
+- Every other swept panel.
+- Captures: output/item5-readability-2026-10-13/ (01-15).
+
+**Not seen:**
+- Phone size. Studio's device emulator was off and MCP cannot switch it. The phone layouts are held by arithmetic only: CompactMenusSpec's 8 phone sizes, and HudLayoutSpec's source checks of the slim line's formula. The owner can switch the emulator on for phone captures.
+- A console.
+- The odds percentages on the white (pearl) cards ("17%" pink, "5%" gold, each with its ink line) read weaker than the rest. They are unchanged: not in the owner's report.
+
+**Files:** Shared/MysteryShopBanner.luau, Shared/MistOddsView.luau (wordColour, WordLift, WordStep), Shared/PadInput.luau (openPanels), StarterPlayerScripts/ActionToastUI.client.luau, StarterPlayerScripts/IndexUI.client.luau, tools/tests/HudLayoutSpec.luau, tools/tests/CompactMenusSpec.luau, tools/tests/MysteryShopSpec.luau.
+
 ## ANALYTICS: THE ONBOARDING FUNNEL'S BUDGET, ORDER AND A VERIFIED RUN — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MetricsSpec 66/0 (6 new); MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A FRESH STORE)
 
 The owner's Creator Hub onboarding funnel (data of 2026-10-13 09:00; 1,348 users; total conversion 31.6%): Session Ready 1,348; First Pod Stolen 858 (63.65%, the biggest drop); First Pod Banked 723 (84.27%); step 4 (labelled "First Pod Planted" there) 520 (71.92%); First Plant Placed 427 (82.12%); First Plant Income 426 (99.77%). A tester reported funnel completions "close to 0%" today; not confirmed (the owner was asked for the day-by-day chart).

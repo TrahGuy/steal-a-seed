@@ -189,7 +189,10 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	tagline.TextXAlignment = Enum.TextXAlignment.Left
 	tagline.TextWrapped = true
 	tagline.Text = W.Tagline
-	MenuKit.ink(tagline, INK)
+	-- White with its ink line KEPT (2026-10-13, backlog item 5: it read dark on
+	-- the teal). MenuKit.ink SETS a label's colour -- ink(tagline, INK) had made
+	-- the words themselves near-black.
+	MenuKit.keepInk(tagline).Thickness = 1.5
 	local oddsButton = MenuKit.button(inner, "Odds", z + 5, W.Odds, 16)
 	oddsButton.style("sky")
 	oddsButton.hit.AnchorPoint = Vector2.new(1, 0)
@@ -290,12 +293,14 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		many.Size = UDim2.fromOffset(60, 26)
 		many.TextXAlignment = Enum.TextXAlignment.Left
 		many.Text = string.format("x%d", count)
-		local was = MenuKit.text(tileFrame, "Was", 16, Color3.fromRGB(255, 220, 220), z + 4)
+		-- Light grey, its strike line kept, its ink line kept (backlog item 5: it
+		-- was near-black on the navy tile, for the tagline's reason).
+		local was = MenuKit.text(tileFrame, "Was", 16, Color3.fromRGB(226, 230, 242), z + 4)
 		was.Position = UDim2.fromOffset(0, 80)
 		was.Size = UDim2.new(1, 0, 0, 20)
 		was.RichText = true
 		was.Visible = false
-		MenuKit.ink(was, INK)
+		MenuKit.keepInk(was).Thickness = 1.5
 		local buy = Instance.new("TextButton")
 		buy.Name = "Buy"
 		buy.Text = ""
@@ -510,7 +515,8 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	status.Position = UDim2.new(0, 14, 1, -10)
 	status.Size = UDim2.new(1, -28, 0, 24)
 	status.TextWrapped = true
-	MenuKit.ink(status, INK)
+	-- A refusal in light red with its ink line (it was near-black on the sheet).
+	MenuKit.keepInk(status).Thickness = 1.5
 	-- Nobody to give to: said where the names would stand.
 	local nobody = MenuKit.heading(giftPanel, "Nobody", 18, WHITE, z + 43)
 	nobody.AnchorPoint = Vector2.new(0.5, 0.5)

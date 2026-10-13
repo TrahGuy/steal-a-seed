@@ -1202,8 +1202,16 @@ relayout = function()
 	local ph = if p.short then IDX.ProgressShort else IDX.ProgressTall
 	local headW = main.w - grid.ScrollBarThickness - GRID_INSET * 2
 	local textW = math.ceil(MenuKit.textWidth("Greenhollow \u{00B7} 5/5 Grown", 15)) + 4 + ICON + 6
-	local cashW = math.ceil(MenuKit.textWidth("$250M", 14)) + 2
-	local speedW = math.ceil(MenuKit.textWidth("+1B", 14)) + 2
+	-- The widest harvest any biome shows, in the words paintHeadings writes
+	-- (2026-10-13, backlog item 5's sweep: "+250M" ran on under CLAIM when the
+	-- column was measured as "+1B", and no one string is the widest -- in this
+	-- face "+250M" is wider than "+888M").
+	local cashW, speedW = 0, 0
+	for _, biome in ipairs(road) do
+		local cash, speed = AlmanacData.Reward(biome.Id)
+		cashW = math.max(cashW, math.ceil(MenuKit.textWidth("$" .. GameConfig.compact(cash), 14)) + 2)
+		speedW = math.max(speedW, math.ceil(MenuKit.textWidth("+" .. GameConfig.compact(speed), 14)) + 2)
+	end
 	local rewardW = 22 + cashW + 10 + 22 + speedW
 	local inner = MenuLayout.pack(8, headW - 4, 10, {
 		{ id = "text", w = textW },

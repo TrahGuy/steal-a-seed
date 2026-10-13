@@ -58,6 +58,15 @@
 -- chase word, a reward card) and comes back after it. With a panel open the
 -- stack keeps to one line. Until 2026-10-12 it stood over the belt.
 --
+-- ABOVE AN OPEN PANEL, NEVER ON IT (2026-10-13, the owner's pick for backlog
+-- item 5: "A DEWBERRY APPEARED!" had come down over the Shop's MYSTERIOUS POD).
+-- With a centre panel open the one line is SLIM -- the headline alone, on a
+-- solid dark backing -- and its foot stands just above the panel's top edge:
+-- in the gap under the top bar where there is one, reaching up into the top
+-- bar's band where there is not (a phone's panel takes the whole safe area).
+-- Only a screen with no room even there puts it at the screen's foot instead.
+-- It never stands over the panel.
+--
 -- DisplayOrder 49: over every panel (the owner: a notice draws over an open
 -- panel's title strip) and over the prompts and the hatch timers; under the
 -- chase word (50), the admin console and ADMIN, and the guide's spotlight.
@@ -80,6 +89,8 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local Notice = require(Shared:WaitForChild("Notice"))
+-- Which centre panel is open, and its shell (ABOVE AN OPEN PANEL, 2026-10-13).
+local PadInput = require(Shared:WaitForChild("PadInput"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
@@ -157,6 +168,10 @@ local CONFIG_GAP = HudLayout.Config.Gap
 local metrics: Metrics = FULL
 local maxShown = Notice.MaxShown
 local width = 340
+-- ABOVE AN OPEN PANEL (2026-10-13): whether the stack is the slim line now,
+-- and how far its backing stands proud of the headline.
+local slim = false
+local SLIM_PAD = 3
 -- Hanging from the top (a phone) rather than standing on the belt; where the
 -- stack's top edge is, in this gui's space; and the least depth it is allowed.
 local fromTop = false
@@ -215,6 +230,12 @@ type Drawn = {
 	-- The close button of a notice the player may take down (Notice's
 	-- `dismissible`); nil on every other notice.
 	close: TextButton?,
+	-- ABOVE AN OPEN PANEL (2026-10-13): the headline row's height, the whole
+	-- notice's, the dark backing the slim line stands on, and whether it is slim.
+	rowH: number,
+	fullHeight: number,
+	backing: Frame,
+	slimmed: boolean,
 }
 
 local drawn: { Drawn } = {}
@@ -273,6 +294,19 @@ local function build(post: Notice.Post, key: string): Drawn
 	alpha.Value = 1
 	local hide = Instance.new("NumberValue")
 	hide.Value = 0
+	-- The slim line's backing (ABOVE AN OPEN PANEL), under everything in the
+	-- body; shown only while a panel is open (dress).
+	local backing = Instance.new("Frame")
+	backing.Name = "Backing"
+	backing.AnchorPoint = Vector2.new(0.5, 0)
+	backing.BackgroundColor3 = Notice.Outline
+	backing.BackgroundTransparency = 0.12
+	backing.BorderSizePixel = 0
+	backing.Active = false
+	backing.Visible = false
+	backing.ZIndex = 0
+	backing.Parent = body
+	UIKit.corner(backing, 8)
 	local d: Drawn = {
 		key = key,
 		post = post,
@@ -290,7 +324,12 @@ local function build(post: Notice.Post, key: string): Drawn
 		slotY = 0,
 		fades = {},
 		close = nil,
+		rowH = 0,
+		fullHeight = 0,
+		backing = backing,
+		slimmed = false,
 	}
+	track(d, backing, "BackgroundTransparency")
 
 	-- The headline row: icon, a small gap, the words -- centred as one. A notice
 	-- the player may dismiss keeps its close button's width clear on BOTH sides,
@@ -518,6 +557,11 @@ local function build(post: Notice.Post, key: string): Drawn
 	end
 
 	d.height = total
+	d.rowH = rowH
+	d.fullHeight = total
+	-- The backing hugs the headline row, a few pixels proud of it all round.
+	backing.Position = UDim2.new(0.5, 0, 0, -SLIM_PAD)
+	backing.Size = UDim2.fromOffset(rowW + SLIM_PAD * 4, rowH + SLIM_PAD * 2)
 	frame.Size = UDim2.fromOffset(width, total)
 	alpha.Changed:Connect(function()
 		applyAlpha(d)
@@ -552,9 +596,28 @@ local function slotTween(d: Drawn, y: number, instant: boolean)
 		{ Position = goal }):Play()
 end
 
+-- A notice as the slim line (ABOVE AN OPEN PANEL) or as itself: the slim one
+-- shows its headline alone on the backing, and stands that much shorter.
+local function dress(d: Drawn)
+	if d.slimmed == slim then
+		return
+	end
+	d.slimmed = slim
+	local detail = d.detailLabel
+	if detail then
+		detail.Visible = not slim
+	end
+	d.backing.Visible = slim
+	d.height = if slim then d.rowH else d.fullHeight
+	d.frame.Size = UDim2.fromOffset(width, d.height)
+end
+
 local function restack(newest: Drawn?)
 	local y = 0
 	local standing = 0
+	for _, d in ipairs(drawn) do
+		dress(d)
+	end
 	local first, last, step = #drawn, 1, -1
 	if fromTop then
 		first, last, step = 1, #drawn, 1
@@ -729,7 +792,8 @@ end
 
 local function applyCeiling()
 	local area = homeArea
-	if not (fromTop and area) then
+	-- The slim line over a panel stands where place() puts it, whatever is in the band.
+	if not (fromTop and area) or slim then
 		return
 	end
 	local top = area.y
@@ -977,6 +1041,25 @@ end
 -- fewer where that would reach the middle band, where the controller's reticle
 -- and its reason line sit.
 --==============================================================================
+-- ABOVE AN OPEN PANEL (2026-10-13): the highest top edge of the open centre
+-- panels, in this gui's units (each one's Shell, as UIKit.modal builds every
+-- one), or nil when none is open or none has a shell to measure. The highest,
+-- because two can be up at once: a returning player's offline card stood
+-- open under the Shop in Play, lower on the screen than the Shop's own top.
+local function panelTop(): number?
+	local top: number? = nil
+	for _, open in ipairs(PadInput.openPanels()) do
+		local shell = open.dimmer:FindFirstChild("Shell", true)
+		if shell and shell:IsA("GuiObject") and shell.AbsoluteSize.Y > 0 then
+			local y = (shell.AbsolutePosition.Y - gui.AbsolutePosition.Y) / HudLayout.scaleOf(gui)
+			if top == nil or y < (top :: number) then
+				top = y
+			end
+		end
+	end
+	return top
+end
+
 local function place()
 	if gui.AbsoluteSize.X <= 0 then
 		return
@@ -1001,6 +1084,25 @@ local function place()
 	-- put the first out the moment it arrived.
 	-- With a panel open, one line over its title strip (the owner, 2026-10-12).
 	maxShown = if panelOpen() then 1 elseif fromTop then most else count
+	-- ABOVE AN OPEN PANEL (2026-10-13): the slim line, its foot just above the
+	-- panel's top edge -- up into the top bar's band when it must -- or, with no
+	-- room even there, at the screen's foot. Never over the panel.
+	local shellTop = panelTop()
+	slim = shellTop ~= nil
+	if shellTop then
+		local k = HudLayout.scaleOf(gui)
+		local slimH = math.max(metrics.icon, metrics.head + 4)
+		-- The screen's own top: AbsolutePosition's origin stands under the top
+		-- bar's inset, so the top bar's band is above 0 here.
+		local screenTop = (-GuiService:GetGuiInset().Y - gui.AbsolutePosition.Y) / k
+		local y = shellTop - CONFIG_GAP - slimH - SLIM_PAD
+		if y < screenTop + SLIM_PAD then
+			y = gui.AbsoluteSize.Y / k - CONFIG_GAP - slimH - SLIM_PAD
+		end
+		area = { x = area.x, y = y, w = area.w, h = slimH }
+		fromTop = true
+		maxShown = 1
+	end
 	-- On the belt the column stands on its bottom edge; at the top it hangs from
 	-- its top edge, and may grow down to the middle of the screen and no further.
 	local anchor = if fromTop then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
@@ -1015,7 +1117,7 @@ local function place()
 	for _, d in ipairs(drawn) do
 		d.frame.AnchorPoint = anchor
 	end
-	if fromTop then
+	if fromTop and not slim then
 		-- Under whatever "above" stands in the band now: applyCeiling moves the
 		-- column whenever the top it finds is not where the column stands.
 		stackTop = area.y - 1
@@ -1027,7 +1129,16 @@ end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 -- A panel opening or closing: one line with it open, the stack's own count
 -- without (2026-10-12).
-player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(place)
+-- ABOVE AN OPEN PANEL (2026-10-13): any centre panel coming or going, on the
+-- mutex or not -- and again once its opening pop has settled, so the slim line
+-- stands off the panel's real top edge.
+local function placeSoon()
+	place()
+	task.delay(0.35, place)
+end
+player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(placeSoon)
+PadInput.PanelChanged:Connect(placeSoon)
+PadInput.watch()
 -- The active-boost icon row (BoostIconsUI, 2026-10-04) stands over the belt
 -- and the toast line steps up over it: asked again whenever its count changes.
 Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)

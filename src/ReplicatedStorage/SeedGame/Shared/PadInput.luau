@@ -163,6 +163,21 @@ function PadInput.openPanel(): (GuiButton?, LayerCollector?)
 	return nil, nil
 end
 
+-- EVERY open panel's dimmer and gui (2026-10-13): two can be up at once -- the
+-- offline card that greets a returning player is not on the mutex -- and a
+-- notice placed above "the" open panel must clear the highest of them.
+function PadInput.openPanels(): { { dimmer: GuiButton, gui: LayerCollector } }
+	watch()
+	local out: { { dimmer: GuiButton, gui: LayerCollector } } = {}
+	for dimmer in pairs(openDimmers) do
+		local gui = dimmer.Parent
+		if gui and gui:IsA("LayerCollector") and gui.Enabled then
+			table.insert(out, { dimmer = dimmer, gui = gui })
+		end
+	end
+	return out
+end
+
 function PadInput.panelOpen(): boolean
 	local player = Players.LocalPlayer
 	if player and player:GetAttribute(ATTR.OpenPanel) ~= nil then

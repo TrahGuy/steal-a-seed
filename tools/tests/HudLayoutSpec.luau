@@ -2941,12 +2941,27 @@ check(toastSrc:find("if fromTop then\n\t\tfirst, last, step = 1, #drawn, 1\n\ten
 		and toastSrc:find("leave(older, Notice.GiveWaySeconds)", 1, true) ~= nil
 		and toastSrc:find("-Notice.GiveWayPixels else -4", 1, true) ~= nil
 		and toastSrc:find("maxShown = if panelOpen() then 1 elseif fromTop then most else count", 1, true) ~= nil
-		and toastSrc:find("player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(place)", 1, true) ~= nil
+		and toastSrc:find("player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(placeSoon)", 1, true) ~= nil
 		and toastSrc:find('for _, r in ipairs(Notice.bandRects("above")) do', 1, true) ~= nil
 		and toastSrc:find("setYield(d, meetsOver(d, overs))", 1, true) ~= nil
 		and toastSrc:find("table.insert(waiting, { post = post, at = now })", 1, true) ~= nil,
 	"the notices stand first-at-the-top, the oldest giving way up and fading; one line under an open panel; under an "
 		.. "\"above\" in the band, giving way to an \"over\" and back after; waiting where there is no room")
+-- ABOVE AN OPEN PANEL, NEVER ON IT (2026-10-13, the owner's pick for backlog item 5).
+check(toastSrc:find("for _, open in ipairs(PadInput.openPanels()) do", 1, true) ~= nil
+		and toastSrc:find('open.dimmer:FindFirstChild("Shell", true)', 1, true) ~= nil
+		and toastSrc:find("if top == nil or y < (top :: number) then", 1, true) ~= nil
+		and toastSrc:find("slim = shellTop ~= nil", 1, true) ~= nil
+		and toastSrc:find("local y = shellTop - CONFIG_GAP - slimH - SLIM_PAD", 1, true) ~= nil
+		and toastSrc:find("local screenTop = (-GuiService:GetGuiInset().Y - gui.AbsolutePosition.Y) / k", 1, true) ~= nil
+		and toastSrc:find("if y < screenTop + SLIM_PAD then\n\t\t\ty = gui.AbsoluteSize.Y / k - CONFIG_GAP - slimH - SLIM_PAD", 1, true) ~= nil
+		and toastSrc:find("detail.Visible = not slim", 1, true) ~= nil
+		and toastSrc:find("d.backing.Visible = slim", 1, true) ~= nil
+		and toastSrc:find("d.height = if slim then d.rowH else d.fullHeight", 1, true) ~= nil
+		and toastSrc:find("PadInput.PanelChanged:Connect(placeSoon)", 1, true) ~= nil
+		and toastSrc:find("if fromTop and not slim then", 1, true) ~= nil,
+	"with a centre panel open the one notice is SLIM -- its headline on a dark backing -- and its foot stands just above "
+		.. "the panel's top edge, up into the top bar's band if it must, else at the screen's foot: never over the panel")
 -- And what shares the band says so (Notice.band): the notices stack under the guide's card off a phone, the
 -- spotlight's hand, a desktop's Pod Rush tracker and mill bar and an announcement; the chase word and the moments --
 -- CONGRATULATIONS!, the Pod Rush end card, the invite card, REBORN!, the chest splash, the Mysterious Pod's draw --

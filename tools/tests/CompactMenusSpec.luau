@@ -10,7 +10,8 @@
 --      (and then it covers the rail); inside the safe area, never past the
 --      on-screen keyboard
 --   2. the header: the title, the controls and the close all fit one row --
---      the search and the filter on every listed phone
+--      the search and the filter on every listed phone -- and every Index
+--      biome heading keeps its bar, its whole harvest and CLAIM
 --   3. the grids: columns from the width and a readable minimum (3-6 Index
 --      columns on a landscape phone, more on a desktop; two Shop rows on a
 --      phone, three tiles on a desktop), at least one whole row in view
@@ -289,6 +290,61 @@ local ok, err = pcall(function()
 		check(#problems == 0, "MY PLANTS fits every listed screen: header, footer outside the scroll, a whole row of cards",
 			table.concat(problems, "; "))
 		say("  note  MY PLANTS columns: " .. table.concat(cols, ", "))
+	end
+
+	-- THE INDEX'S HARVEST (2026-10-13, backlog item 5's sweep): every biome's
+	-- heading keeps its bar, its whole harvest and CLAIM on every listed screen
+	-- at the default menu size -- a phone's gui drawn at its phone scale, so its
+	-- canvas is that much larger -- with the columns measured the way IndexUI
+	-- measures them, from every biome's own words. Measured as "+1B", "+250M"
+	-- ran on under CLAIM.
+	do
+		local LABEL_FONT = GameConfig.BagLook.LabelFont
+		local function width(text, size)
+			return TextService:GetTextSize(text, size, LABEL_FONT, Vector2.new(4000, 200)).X
+		end
+		local cashW, speedW = 0, 0
+		for _, biome in ipairs(AlmanacView.road()) do
+			local cash, speed = AlmanacData.Reward(biome.Id)
+			cashW = math.max(cashW, math.ceil(width("$" .. GameConfig.compact(cash), 14)) + 2)
+			speedW = math.max(speedW, math.ceil(width("+" .. GameConfig.compact(speed), 14)) + 2)
+		end
+		local rewardW = 22 + cashW + 10 + 22 + speedW
+		local textW = math.ceil(width("Greenhollow \u{00B7} 5/5 Grown", 15)) + 4 + 20 + 6
+		local problems, bars = {}, {}
+		for _, case in ipairs(cases) do
+			local L = HudLayout.solve(case.input)
+			local k = GameConfig.menuPhoneScale(case.input.viewport, case.input.touch)
+			local s = { safe = L.safe / k, compact = L.compact, railRight = L.railRight / k, rightLeft = L.rightLeft / k,
+				fill = math.min(1, k) }
+			local p = MenuLayout.indexPanel(s, OUTLINE, indexCounts)
+			local headW = MenuLayout.blocks(p).main.w - 5 - MenuLayout.Index.GridInset * 2
+			local inner = MenuLayout.pack(8, headW - 4, 10, {
+				{ id = "text", w = textW },
+				{ id = "bar", grow = true, minW = 40, maxW = 220, drop = 2 },
+				{ id = "reward", w = rewardW, drop = 1 },
+				{ id = "claim", w = 112 },
+			})
+			if not inner.reward or not inner.bar then
+				table.insert(problems, case.tag .. (if inner.reward then " drops the bar" else " drops the harvest"))
+			elseif inner.claim.x + inner.claim.w > headW - 4 + 0.5 then
+				table.insert(problems, case.tag .. " CLAIM runs past the heading")
+			end
+			table.insert(bars, string.format("%s %d", case.tag, if inner.bar then inner.bar.w else 0))
+		end
+		check(#problems == 0, "every listed screen's Index headings keep the bar, the whole harvest and CLAIM",
+			table.concat(problems, "; "))
+		say(string.format("  note  harvest columns %d/%d; bars: %s", cashW, speedW, table.concat(bars, ", ")))
+		local index = code(sourceOf(Scripts, "IndexUI"))
+		check(has(index, 'cashW = math.max(cashW, math.ceil(MenuKit.textWidth("$" .. GameConfig.compact(cash), 14)) + 2)')
+				and has(index, 'speedW = math.max(speedW, math.ceil(MenuKit.textWidth("+" .. GameConfig.compact(speed), 14)) + 2)')
+				and has(index, 's.cashValue.Text = "$" .. GameConfig.compact(cash)')
+				and has(index, 's.speedValue.Text = "+" .. GameConfig.compact(speed)')
+				and has(index, "MenuLayout.pack(8, headW - 4, 10, {")
+				and has(index, '{ id = "bar", grow = true, minW = 40, maxW = 220, drop = 2 },')
+				and has(index, '{ id = "reward", w = rewardW, drop = 1 },')
+				and has(index, '{ id = "claim", w = 112 },'),
+			"Index: the harvest columns are measured from every biome's own words, the words its headings print")
 	end
 
 	-- A desktop panel ends where its content does, its sidebar still whole; a
