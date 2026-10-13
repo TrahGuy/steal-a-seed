@@ -61,7 +61,6 @@ local PASS_ATTR = GameConfig.Pass.MultiplierAttribute
 --==============================================================================
 local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
-local CREAM = Color3.fromRGB(242, 238, 206)
 local CASH_GREEN = Color3.fromRGB(38, 255, 0)
 local TIME_GOLD = Color3.fromRGB(255, 226, 122)
 
@@ -306,6 +305,7 @@ aspect.Parent = view
 local zees: { TextLabel } = {}
 for i, size in ipairs({ 14, 18, 24 }) do
 	local z = UIKit.outlined(scene, "Z" .. i, size, WHITE, 1.5)
+	UIKit.comic(z)
 	z.Text = if i == 3 then "Z" else "z"
 	z.AnchorPoint = Vector2.new(0.5, 0.5)
 	z.Size = UDim2.fromOffset(size + 6, size + 6)
@@ -314,9 +314,16 @@ for i, size in ipairs({ 14, 18, 24 }) do
 end
 
 --== THE WORDS ================================================================--
+-- COMIC TYPE (2026-10-13, the owner: the reward pop-ups in the notices' face):
+-- the card's words -- the Zzz, the line, the amount, the chips and CLAIM -- in
+-- UIKit's comic face, each over a thick ink line by the largest size it is
+-- drawn at (UIKit.comic); TextScaled and AutomaticSize fit them in that face.
+-- The line white with its green accents, the amount in the cash green. The
+-- title bar is the menus' and keeps their face; the coin's $ is its mark.
 local function textRow(name: string, size: number, colour: Color3, height: number,
-	order: number, outline: number): TextLabel
-	local label = UIKit.outlined(column, name, size, colour, outline)
+	order: number): TextLabel
+	local label = UIKit.outlined(column, name, size, colour)
+	UIKit.comic(label)
 	label.Size = UDim2.new(1, 0, 0, height)
 	label.LayoutOrder = order
 	label.TextXAlignment = Enum.TextXAlignment.Center
@@ -330,10 +337,10 @@ local function textRow(name: string, size: number, colour: Color3, height: numbe
 	return label
 end
 
-local info = textRow("Info", 17, CREAM, INFO_H, 2, 1.5)
+local info = textRow("Info", 17, WHITE, INFO_H, 2)
 info.RichText = true
 info.TextWrapped = true
-local amount = textRow("Amount", 46, CASH_GREEN, AMOUNT_H, 3, 3)
+local amount = textRow("Amount", 46, CASH_GREEN, AMOUNT_H, 3)
 
 --== THE CHIPS ================================================================--
 local chips = Instance.new("Frame")
@@ -364,6 +371,7 @@ local function chip(name: string, text: string, face: Color3, shade: Color3, ink
 	pad.PaddingRight = UDim.new(0, 10)
 	pad.Parent = c
 	local label = UIKit.outlined(c, "Label", 13, ink, 1)
+	UIKit.comic(label)
 	label.AutomaticSize = Enum.AutomaticSize.X
 	label.Size = UDim2.fromOffset(0, CHIPS_H)
 	label.Position = UDim2.fromOffset(0, -1)
@@ -468,6 +476,7 @@ end
 local buttonCoin = coin(face, 30, 9)
 buttonCoin.LayoutOrder = 1
 local claimLabel = UIKit.outlined(face, "Label", 28, WHITE, 2.5)
+UIKit.comic(claimLabel)
 claimLabel.AutomaticSize = Enum.AutomaticSize.X
 claimLabel.Size = UDim2.fromOffset(0, BUTTON_H)
 claimLabel.Text = OFFLINE.ClaimText

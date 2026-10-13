@@ -19,6 +19,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local RewardSplash = require(Shared:WaitForChild("RewardSplash"))
+local UIKit = require(Shared:WaitForChild("UIKit"))
 local Scripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
 local Server = ServerScriptService:WaitForChild("SeedGameServer")
 
@@ -179,6 +180,33 @@ local ok, err = pcall(function()
 				and built.k <= S.scaleFor(view) + 1e-6,
 			"never wider than most of the screen", ok2 and string.format("%.0f of %.0f", built.card.Size.X.Offset * built.k,
 				view.X) or nil)
+		-- COMIC TYPE (2026-10-13, the owner: the reward pop-ups in the notices'
+		-- face): every word in the comic face, inked by its size; the names white,
+		-- the reward's colour left to its icon; each column as wide as its words.
+		local comic, whiteNames, roomy = 0, 0, true
+		if ok2 then
+			for _, d in ipairs(built.card:GetDescendants()) do
+				if d:IsA("TextLabel") then
+					local edge = d:FindFirstChildOfClass("UIStroke")
+					if d.FontFace.Family == UIKit.ComicFace.Family and edge and edge.Thickness == UIKit.comicInk(d.TextSize) then
+						comic += 1
+					end
+					if d.Name == "Title" and d.TextColor3 == Color3.new(1, 1, 1) then
+						whiteNames += 1
+					end
+					local column = d.Parent
+					if column and column:IsA("Frame") and string.sub(column.Name, 1, 6) == "Reward"
+						and UIKit.comicBounds(d.Text, d.TextSize).X > column.Size.X.Offset then
+						roomy = false
+					end
+				end
+			end
+		end
+		check(ok2 and comic == 5 and whiteNames == 2 and roomy
+				and not has(sourceOf(Shared, "RewardSplash"), "GetTextSize"),
+			"COMIC TYPE: the heading, the names and the amounts in the comic face, each inked by its size; the names "
+				.. "white, the reward's colour on its icon; every column as wide as its words",
+			string.format("%d comic of 5, %d white names of 2", comic, whiteNames))
 		if built then
 			built.card:Destroy()
 		end

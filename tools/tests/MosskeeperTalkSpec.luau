@@ -9,7 +9,7 @@
 --   1. the replies: the owner's four, keys 1-4, written as the clip writes them
 --   2. his lines: the greeting, his answers to a Give all from the server's own
 --      payload, How to play's run, the counts -- all in plain ASCII, which
---      LuckiestGuy draws (the glyph rules)
+--      the comic face draws (the glyph rules)
 --   3. the typing: none with Reduced Motion
 --   4. the camera: behind the player's right shoulder, facing him
 --   5. the replies' place on every screen: inside the HUD's free middle, clear
@@ -28,6 +28,7 @@ local EnchantedMistConfig = require(Shared.EnchantedMistConfig)
 local EnchantedMistData = require(Shared.EnchantedMistData)
 local HudLayout = require(Shared.HudLayout)
 local Talk = require(Shared.MosskeeperTalk)
+local UIKit = require(Shared.UIKit)
 
 local CFG = EnchantedMistConfig.Mosskeeper
 local TALK = CFG.Talk
@@ -139,8 +140,9 @@ local ok, err = pcall(function()
 			and Talk.counts(-2, -2) == "Carrying 0/5    Next pod 0/10",
 		"the counts under the replies, kept to their caps", Talk.counts(99, 99))
 	-- THE GLYPH RULES: every word the talk can show is plain ASCII -- letters,
-	-- digits and . , ! ' " # [ ] / : -- which LuckiestGuy draws. No em dash, no
-	-- ellipsis character, no dingbat.
+	-- digits and . , ! ' " # [ ] / : -- which the comic face draws (Comic Neue
+	-- Angular since 2026-10-13, LuckiestGuy before). No em dash, no ellipsis
+	-- character, no dingbat.
 	local shown = { Talk.greeting(true), Talk.greeting(false), TALK.Given, TALK.GivenPod, TALK.Counts }
 	for _, o in ipairs(options) do
 		table.insert(shown, Talk.plain(o))
@@ -160,7 +162,7 @@ local ok, err = pcall(function()
 			table.insert(odd, text)
 		end
 	end
-	check(#odd == 0, "every word it shows is plain ASCII, which LuckiestGuy draws (the glyph rules)",
+	check(#odd == 0, "every word it shows is plain ASCII, which the comic face draws (the glyph rules)",
 		table.concat(odd, " | "))
 
 	--==========================================================================
@@ -272,14 +274,14 @@ local ok, err = pcall(function()
 		add(soft, status)
 		add(soft, boosts)
 		local bounds = { x = 0, y = 0, w = input.safe.X, h = input.safe.Y }
+		-- In the comic face, its ink by size, as MosskeeperUI measures (2026-10-13).
 		local function widths(look)
 			local widest = 0
 			for _, o in ipairs(options) do
-				local size = TextService:GetTextSize(Talk.plain(o), look.Type, Enum.Font.LuckiestGuy, Vector2.new(4000, 1000))
-				widest = math.max(widest, size.X + TALK.Look.Stroke * 2 + 16)
+				local size = UIKit.comicBounds(Talk.plain(o), look.Type)
+				widest = math.max(widest, size.X + UIKit.comicInk(look.Type) * 2 + 16)
 			end
-			return widest, TextService:GetTextSize(Talk.counts(5, 9), look.Counts, Enum.Font.LuckiestGuy,
-				Vector2.new(4000, 1000)).X + TALK.Look.Stroke * 2 + 16
+			return widest, UIKit.comicBounds(Talk.counts(5, 9), look.Counts).X + UIKit.comicInk(look.Counts) * 2 + 16
 		end
 		-- His line over his bar: the top middle of the shot.
 		local his = { x = input.safe.X / 2 - 150, y = input.safe.Y * 0.1, w = 300, h = 56 }
@@ -441,6 +443,17 @@ local ok, err = pcall(function()
 		"nothing solid between the player and the shot: pulled in to it")
 	check(has(ui, "\t-- The player's line takes his place (the clip): his comes back with his answer.\n\tsetHis(nil)\n\tsetYou(option.text)"),
 		"the player's line takes his place, as in the clip")
+	-- COMIC TYPE (2026-10-13, the owner: the NPC's dialogue in Comic Neue Angular).
+	check(has(ui, "UIKit.comic(words)") and has(ui, "\tUIKit.comic(label)\n\tlabel.Size = UDim2.fromScale(1, 1)")
+			and has(ui, "label.TextSize = look.Bubble * k\n\t\tUIKit.comic(label)")
+			and has(ui, "reply.words.TextSize = look.Type * k\n\t\tUIKit.comic(reply.words)")
+			and has(ui, "countsLabel.TextSize = look.Counts * k\n\tUIKit.comic(countsLabel)")
+			and has(ui, "local size = UIKit.comicBounds(line.text, look.Bubble * k, look.BubbleWidth * k)")
+			and has(ui, "local size = UIKit.comicBounds(MosskeeperTalk.plain(option), look.Type)")
+			and has(ui, "task.spawn(UIKit.comicBounds, \"A\", TALK.Look.Desktop.Type)")
+			and not has(ui, "LuckiestGuy") and not has(ui, "GetTextSize"),
+		"every word of the talk -- his line, the player's, the replies, the counts -- in the comic face, its ink by "
+			.. "its size, measured in that face, which loads from the start")
 end)
 
 if not ok then

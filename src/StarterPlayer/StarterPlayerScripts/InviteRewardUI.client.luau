@@ -185,6 +185,11 @@ local confettiLayer = MenuKit.frame(card, "Confetti", Z + 1)
 confettiLayer.Size = UDim2.fromScale(1, 1)
 confettiLayer.ClipsDescendants = true
 
+-- COMIC TYPE (2026-10-13, the owner: the reward pop-ups in the notices' face):
+-- every word on the card in UIKit's comic face, each over a thick ink line by
+-- the largest size it is drawn at (UIKit.comic); TextScaled still fits each to
+-- its block, in that face. The words white; the rim, the ribbon, the rarity's
+-- pill and the income's gold carry the colour.
 local ribbon = MenuKit.frame(card, "Ribbon", Z + 2, WHITE, 0, 8)
 place(ribbon, B.ribbon)
 local ribbonEdge = MenuKit.keyline(ribbon, CONFIG.Ink, 2)
@@ -194,6 +199,7 @@ ribbonWords.Size = UDim2.new(1, -12, 1, -4)
 ribbonWords.Position = UDim2.fromOffset(6, 2)
 ribbonWords.ZIndex = Z + 3
 fitText(ribbonWords, 26, 10)
+UIKit.comic(ribbonWords, 26)
 
 -- The stage: the rays turning behind the form's window.
 local stage = MenuKit.frame(card, "Stage", Z + 2)
@@ -253,6 +259,7 @@ local nameLabel = UIKit.outlined(card, "FormName", 28, WHITE, 2.5)
 place(nameLabel, B.name)
 nameLabel.ZIndex = Z + 3
 fitText(nameLabel, 30, 12)
+UIKit.comic(nameLabel, 30)
 
 local pill = MenuKit.frame(card, "Rarity", Z + 3, WHITE, 0, math.floor(B.pill.h / 2))
 place(pill, B.pill)
@@ -262,21 +269,25 @@ pillWord.Size = UDim2.new(1, -10, 1, 0)
 pillWord.Position = UDim2.fromOffset(5, 0)
 MenuKit.keepInk(pillWord)
 fitText(pillWord, 15, 9)
+UIKit.comic(pillWord, 15)
 
 local income = MenuKit.text(card, "Income", 18, CONFIG.Income, Z + 3)
 place(income, B.income)
 income.TextXAlignment = Enum.TextXAlignment.Left
 MenuKit.keepInk(income)
 fitText(income, 20, 10)
+UIKit.comic(income, 20)
 
 local line = MenuKit.body(card, "Line", 13, CONFIG.Cream, Z + 3)
 place(line, B.line)
 MenuKit.keepInk(line)
 fitText(line, 14, 9)
+UIKit.comic(line, 14)
 
 local placeIt = MenuKit.button(card, "PlaceIt", Z + 3, POP.Place, 20, { studs = true })
 place(placeIt.hit, B.place)
 placeIt.style("go")
+UIKit.comic(placeIt.label, 20)
 
 -- LATER: grey, its words moved over for the ring that empties.
 local later = MenuKit.button(card, "Later", Z + 3, POP.Later, 16)
@@ -289,6 +300,7 @@ do
 	later.label.TextColor3 = WHITE
 	later.label.Position = UDim2.fromOffset(B.ring.w + 10, 1)
 	later.label.Size = UDim2.new(1, -(B.ring.w + 14), 1 - GameConfig.BagLook.FootShare, 0)
+	UIKit.comic(later.label, 16)
 end
 local ring = MenuKit.frame(later.plate, "Ring", Z + 6)
 ring.AnchorPoint = Vector2.new(0, 0.5)

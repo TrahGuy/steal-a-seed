@@ -303,6 +303,17 @@ function UIKit.comicBounds(text: string, size: number, width: number?): Vector2
 	return TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(width or 100000, 100000))
 end
 
+-- A label set in comic type (2026-10-13, the owner's words for the dialogue,
+-- the broadcast, the reward cards and the guide): the face, and its own ink
+-- line -- the UIStroke it has, or a black one made -- at comicInk of `size`
+-- (its TextSize when none is given). Answers the line.
+function UIKit.comic(label: TextLabel | TextButton, size: number?): UIStroke
+	label.FontFace = UIKit.ComicFace
+	local ink = label:FindFirstChildOfClass("UIStroke") or UIKit.stroke(label, BLACK, 1)
+	ink.Thickness = UIKit.comicInk(size or label.TextSize)
+	return ink
+end
+
 --==============================================================================
 -- THE DIAMOND LATTICE
 --

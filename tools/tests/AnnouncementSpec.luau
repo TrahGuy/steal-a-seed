@@ -527,11 +527,22 @@ local ok, err = pcall(function()
 		"the console takes each SEND into an outbox at once, sends them in order, and gives back words that went nowhere")
 	check(string.find(ui, "broadcast.BackgroundTransparency = 1", 1, true) ~= nil
 			and string.find(ui, "block.BackgroundTransparency = 1", 1, true) ~= nil
-			and string.find(ui, "local FACE = Enum.Font.FredokaOne", 1, true) ~= nil
-			and string.find(ui, "label.Font = FACE\n\tlabel.TextSize = style.size", 1, true) ~= nil
+			and string.find(ui, "local FACE = UIKit.ComicFace", 1, true) ~= nil
+			and string.find(ui, "label.FontFace = FACE\n\tlabel.TextSize = style.size", 1, true) ~= nil
 			and string.find(ui, "restartFrame.BackgroundTransparency = 0.25", 1, true) ~= nil
 			and string.find(ui, "TweenService", 1, true) == nil and string.find(ui, "RenderStepped", 1, true) == nil,
-		"a broadcast is one panel-less line in one rounded face and size; the restart notice keeps its plate")
+		"a broadcast is one panel-less line in one face and size; the restart notice keeps its plate")
+	-- COMIC TYPE (2026-10-13, the owner: the broadcast in the notices' face):
+	-- measured only in that face, its ink by size, drawn once the face has loaded.
+	check(string.find(ui, "return UIKit.comicBounds(text, style.size).X + style.outline * 2", 1, true) ~= nil
+			and string.find(ui, "local measured = UIKit.comicBounds(name, style.size)", 1, true) ~= nil
+			and string.find(ui, "{ size = 22, outline = UIKit.comicInk(22),", 1, true) ~= nil
+			and string.find(ui, "{ size = 17, outline = UIKit.comicInk(17),", 1, true) ~= nil
+			and string.find(ui, "UIKit.comic(restartTitle)\n\tUIKit.comic(restartBody)", 1, true) ~= nil
+			and string.find(ui, "if faceReady then\n\t\t\tdraw(current.from, current.text)", 1, true) ~= nil
+			and string.find(ui, "\tfaceReady = true\n\tdrawn = \"\"\n\trefresh()", 1, true) ~= nil
+			and string.find(ui, "Enum.Font.", 1, true) == nil and string.find(ui, "GetTextSize", 1, true) == nil,
+		"the broadcast and the restart notice in the comic face, measured in it, the ink by size, drawn once it loads")
 	check(string.find(ui, "if not StatusText.reducedMotion() then", 1, true) ~= nil
 			and string.find(ui, "fill.Color = RAINBOW", 1, true) ~= nil
 			and string.find(ui, "glowRainbow.Color = RAINBOW", 1, true) ~= nil

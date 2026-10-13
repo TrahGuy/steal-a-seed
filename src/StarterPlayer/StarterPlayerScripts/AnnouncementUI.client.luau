@@ -47,7 +47,6 @@ local GuiService = game:GetService("GuiService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TextService = game:GetService("TextService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
@@ -68,8 +67,12 @@ local INK = Color3.fromRGB(20, 16, 12)
 local AMBER = Color3.fromRGB(255, 170, 72)
 local WHITE = Color3.fromRGB(255, 255, 255)
 
--- The broadcast's face: bold, rounded, cartoon -- and one size for all of it.
-local FACE = Enum.Font.FredokaOne
+-- The broadcast's face: COMIC NEUE ANGULAR since 2026-10-13 (the owner: the
+-- broadcast in the notices' face), white over a thick ink line by its size,
+-- the name's rainbow its accent -- and one size for all of it. Measured only in
+-- that face (UIKit.comicBounds), and drawn only once it has loaded (faceReady).
+local FACE = UIKit.ComicFace
+local faceReady = false
 -- The wheel sign's rainbow (WheelModel, THE SIGN), stop for stop, and its drift
 -- at twice the wheel's pace, like the community chest's FREE.
 local RAINBOW = ColorSequence.new({
@@ -124,11 +127,11 @@ end
 --==============================================================================
 -- THE RESTART NOTICE'S CARD: a plate, a title and a countdown -- unchanged
 --==============================================================================
-local function line(parent: Instance, name: string, font: Enum.Font, colour: Color3, order: number): TextLabel
+local function line(parent: Instance, name: string, colour: Color3, order: number): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.BackgroundTransparency = 1
-	label.Font = font
+	label.FontFace = FACE
 	label.TextColor3 = colour
 	label.RichText = false
 	label.TextWrapped = true
@@ -166,8 +169,8 @@ do
 	inner.Padding = UDim.new(0, 2)
 	inner.Parent = restartFrame
 end
-local restartTitle = line(restartFrame, "Title", Enum.Font.GothamBlack, AMBER, 1)
-local restartBody = line(restartFrame, "Body", Enum.Font.GothamBold, WHITE, 2)
+local restartTitle = line(restartFrame, "Title", AMBER, 1)
+local restartBody = line(restartFrame, "Body", WHITE, 2)
 
 --==============================================================================
 -- THE BROADCAST: "Name: message" as one centred block, no panel
@@ -200,8 +203,9 @@ rows.Padding = UDim.new(0, 0)
 rows.Parent = block
 
 type Style = { size: number, outline: number, glow: number, gap: number }
-local DESKTOP: Style = { size = 22, outline = 2.5, glow = 7, gap = 7 }
-local SMALL: Style = { size = 17, outline = 2, glow = 5, gap = 5 }
+-- The outline is the comic ink for the size (UIKit.comicInk): 2.5 at 22, 2 at 17.
+local DESKTOP: Style = { size = 22, outline = UIKit.comicInk(22), glow = 7, gap = 7 }
+local SMALL: Style = { size = 17, outline = UIKit.comicInk(17), glow = 5, gap = 5 }
 local style: Style = DESKTOP
 local maxWidth = 520
 
@@ -212,7 +216,7 @@ local function run(parent: Instance, name: string, text: string, order: number):
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.BackgroundTransparency = 1
-	label.Font = FACE
+	label.FontFace = FACE
 	label.TextSize = style.size
 	label.TextColor3 = WHITE
 	label.RichText = false
@@ -231,7 +235,7 @@ local function widthOf(text: string): number
 	if text == "" then
 		return 0
 	end
-	return TextService:GetTextSize(text, style.size, FACE, Vector2.new(100000, 100000)).X + style.outline * 2
+	return UIKit.comicBounds(text, style.size).X + style.outline * 2
 end
 
 -- The longest start of `word` that fits in `room` (at least one character),
@@ -325,7 +329,7 @@ local function draw(name: string, message: string)
 			-- only shows round them as light. Measured rather than sized from
 			-- its own text, so nothing in it sizes itself from its parent.
 			--==================================================================
-			local measured = TextService:GetTextSize(name, style.size, FACE, Vector2.new(100000, 100000))
+			local measured = UIKit.comicBounds(name, style.size)
 			local box = Instance.new("Frame")
 			box.Name = "Name"
 			box.BackgroundTransparency = 1
@@ -419,6 +423,8 @@ local function place()
 	stack.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - layout.safe.X / 2), 0, math.round(top + inset))
 	restartTitle.TextSize = if small then 14 else 18
 	restartBody.TextSize = if small then 13 else 16
+	UIKit.comic(restartTitle)
+	UIKit.comic(restartBody)
 	style = if small then SMALL else DESKTOP
 	maxWidth = width
 	drawn = ""
@@ -539,7 +545,11 @@ local function paint(): boolean
 	end
 	local announcing = current ~= nil
 	if current then
-		draw(current.from, current.text)
+		-- Measured in the comic face, so drawn once it has loaded (the loader
+		-- below paints again then); the chime does not wait for it.
+		if faceReady then
+			draw(current.from, current.text)
+		end
 		-- One chime per broadcast: a new id, never one this client has already
 		-- heard, never the one already up when it started.
 		if GameConfig.announceChime(heard, current.id, starting) then
@@ -574,3 +584,11 @@ end
 -- silence: the chime is for a broadcast arriving, not for joining.
 refresh()
 starting = false
+-- The comic face's loader: one measure waits for it, then the broadcast up
+-- now is drawn (2026-10-13).
+task.spawn(function()
+	UIKit.comicBounds("A", DESKTOP.size)
+	faceReady = true
+	drawn = ""
+	refresh()
+end)

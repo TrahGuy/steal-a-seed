@@ -1,5 +1,60 @@
 # Steal a Seed — Session Handoff
 
+## THE NARROW COMIC NEUE PASS: THE MOSSKEEPER'S TALK, THE BROADCAST, THE REWARD CARDS AND THE GUIDE'S CARD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; AnnouncementSpec 63/0, MosskeeperTalkSpec 36/0, RewardSplashSpec 21/0, OfflineEarningsSpec 27/0, InviteRewardsSpec 173/0, HudLayoutSpec 1499/0 (checks updated or added); NoticeSpec 105/0, SecretToastSpec 61/0, MosskeeperSpec 69/0, MosskeeperMoodsSpec 23/0, TutorialSpec 121/0, TutorialSpotlightSpec 51/0, TutorialPodSpec 263, InviteHudSpec 438/0, InvitePanelSpec 395/0, AdminAnnounceSpec 44/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "just change the npc dialogue, notifications, broadcast, and toasts". The notices and the Secret toast were done in 3afb373. "Comic Neue everywhere" stays in the backlog, not queued.
+
+**The style** is the notices': UIKit.ComicFace, white over a thick ink line by size (UIKit.comicInk), the colour on icons and accents, measured only in that face (UIKit.comicBounds). The new UIKit.comic(label, size?) sets a label's face and its own ink line (the UIStroke it has, or a black one).
+
+**What changed**:
+- **The Mosskeeper's talk** (MosskeeperUI): his bubble, the player's, the four replies and the counts line. Each takes UIKit.comic again whenever its size changes. The replies' widths and his bubble's rect are measured in the comic face. The face starts loading when the script starts, so the talk's first measures never wait. He is the only NPC with dialogue.
+- **The broadcast and the restart notice** (AnnouncementUI): "Name: message" (the name's rainbow kept) and the restart title (amber) and countdown. Their outline is comicInk (2.5 at 22, 2 at 17). A broadcast is drawn once the face has loaded; the chime does not wait.
+- **The reward splash** (RewardSplash): the heading (gold), the names (white; the reward's colour stays on its icon) and the amounts (cream), each column as wide as its comic words. The face's one load wait comes before the card on screen is ended, and a newer splash asked for during it takes that one's place.
+- **The invite reward card** (InviteRewardUI): the ribbon, the form's name, the rarity pill, the income (gold), the line, PLACE IT and LATER. TextScaled still fits each to its block; each ink is set by the largest size it draws at.
+- **The offline claim card** (OfflineUI): the Zzz, the line (white; its green accents kept), the amount (cash green), the chips and CLAIM.
+- **The guide's step card** (TutorialUI): the instruction (white, was cream), the advice (gold), STEP n / n (green), Skip guide and GUIDE (gold). A phone's wrapping (wrappedAt) measures the comic face. Until the face has loaded, a line is laid out at its largest; it is laid out again once the face loads.
+
+**Left as they were** (out of scope):
+- the AlertUI chase alarm, REBORN!, the Pod Rush tracker, the notice's X;
+- the menus, the HUD and the world text;
+- in this pass: the offline card's title bar ("WHILE YOU WERE AWAY", the menus' title family, UIKit.modal), the coin's "$" mark, the Mosskeeper's over-head bar (world), the guide's pointing-hand words, its celebration lines and its world markers.
+
+**Glyphs**: no glyph these surfaces draw is missing from Comic Neue Angular (q8/glyph_audit over their code and TutorialData; MosskeeperTalkSpec keeps his talk to plain ASCII).
+- The 4 GameConfig strings the face lacks belong elsewhere: OtherPlants' ⚡ icon, and the Rebirth panel's → ← ✓.
+- So no Codex glyph icon is wired here, and art/icons/glyphs-2026-10-13/ stays uncommitted.
+- An admin's typed broadcast can carry any character; a symbol the face lacks draws as a box.
+
+**Specs**:
+- AnnouncementSpec pins the comic face, its measures, ink and load gate.
+- MosskeeperTalkSpec measures the replies in the comic face and pins the talk's wiring.
+- RewardSplashSpec builds the card and checks every word's face, its ink by size, the white names and the columns' room.
+- OfflineEarningsSpec and InviteRewardsSpec pin the cards' comic labels and inks.
+- HudLayoutSpec models a phone's guide block in the comic face (its line is its size, as LuckiestGuy's was) and pins TutorialUI's.
+
+**Mutants**: 7 of 7 caught. They were:
+- the splash's names in the reward's colour, its columns measured at half width, and a fixed 2-px ink;
+- the broadcast drawn before the face loads;
+- the Mosskeeper's bubble measured in LuckiestGuy;
+- the offline line in green;
+- the invite name inked for 12 px.
+
+**The Play** (guarded, SeedTest_20261013, desktop). No script errors. Captures are in output/comic-dialogue-2026-10-13/:
+- 01 the offline card at join.
+- 02 a broadcast. The queue attribute was set from the server in its own shape.
+- 03 the restart notice, set by the server's own RestartTitle/RestartAt.
+- 04 the reward splash: the real module, played in the chest's gui with its first real reward, under reduced motion so it held still.
+- 05 the invite card: the real "granted" payload. Nothing was granted; the card was held with Studio's SeedTestHoldCard and closed with LATER.
+- 06 the guide's card: this profile was at step 1.
+- 07 the Mosskeeper's talk, 08 the player's line, 09 his answer to How to play. The bubbles had AlwaysOnTop off for this run only, because MCP captures never draw AlwaysOnTop billboards. The game keeps it on.
+- Cleared after: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Phones** were checked by the specs: MosskeeperTalkSpec's 640-px phone, HudLayoutSpec's guide block at every listed phone width, and the invite card's MenuLayout blocks. Comic Neue measures narrower than LuckiestGuy at the same size, with the same line height (measured in Studio, 12-34 px).
+
+**Files**:
+- Shared/UIKit.luau, Shared/RewardSplash.luau;
+- StarterPlayerScripts/MosskeeperUI, AnnouncementUI, InviteRewardUI, OfflineUI and TutorialUI (.client.luau);
+- tools/tests/AnnouncementSpec, MosskeeperTalkSpec, RewardSplashSpec, OfflineEarningsSpec, InviteRewardsSpec and HudLayoutSpec (.luau).
+
 ## PLAYERS SPAWN EMPTY-HANDED: A JOIN AND A RESPAWN PUT PLANTS IN THE BAG ONLY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HeldRestoreSpec 63/0 (2 new); HatchInBagSpec 43/0, InventoryModelSpec 56/0, HotbarSpec 38/0, PodHatchSpec 22/0, ContextSlotSpec 8/0, MysteryPodSpec 39/0, InviteRewardsSpec 172/0, PlacementCircleSpec 23/0; MUTANT 1/1 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "everytime players spawn, they carry a plant, can we fix it also?"

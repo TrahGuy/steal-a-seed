@@ -977,6 +977,20 @@ section("5c. The notices (the owner's notices brief)", function()
 			and has("elseif os.clock() < cardsAfter then\n\t\t\t\ttask.wait(POP.Wait)")
 			and GameConfig.InviteRewards.Popup.AwayLead > 0,
 		"WHILE YOU WERE AWAY: the cards wait AwayLead after it, even a form that arrives a moment later")
+	-- COMIC TYPE (2026-10-13, the owner: the reward pop-ups in the notices' face):
+	-- each word's ink by the largest size its block lets it draw at.
+	local inked = 0
+	for _, pin in ipairs({ "fitText(ribbonWords, 26, 10)\nUIKit.comic(ribbonWords, 26)",
+		"fitText(nameLabel, 30, 12)\nUIKit.comic(nameLabel, 30)", "fitText(pillWord, 15, 9)\nUIKit.comic(pillWord, 15)",
+		"fitText(income, 20, 10)\nUIKit.comic(income, 20)", "fitText(line, 14, 9)\nUIKit.comic(line, 14)",
+		"POP.Place, 20, { studs = true })", "UIKit.comic(placeIt.label, 20)", "POP.Later, 16)",
+		"UIKit.comic(later.label, 16)" }) do
+		if has(pin) then
+			inked += 1
+		end
+	end
+	check(inked == 9, "the reward card's every word in the comic face, inked by the largest size it draws at",
+		inked .. " of 9")
 	invite.Hooks.send = realSend
 	for _, p in ipairs({ fern, rowan, wanderer, host }) do
 		leave(p)

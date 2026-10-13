@@ -39,7 +39,6 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
 local VRService = game:GetService("VRService")
 local Workspace = game:GetService("Workspace")
@@ -207,6 +206,9 @@ for i, option in ipairs(OPTIONS) do
 	hit.Selectable = false
 	hit.Parent = talkGui
 	local words = UIKit.outlined(hit, "Words", TALK.Look.Desktop.Type, TALK.Look.Text, TALK.Look.Stroke)
+	-- COMIC TYPE (2026-10-13, the owner: the NPC's dialogue in Comic Neue
+	-- Angular): every word of the talk, its ink by its size (UIKit.comic).
+	UIKit.comic(words)
 	words.RichText = true
 	words.Size = UDim2.fromScale(1, 1)
 	words.TextXAlignment = Enum.TextXAlignment.Left
@@ -215,6 +217,10 @@ for i, option in ipairs(OPTIONS) do
 	table.insert(replies, { hit = hit, words = words })
 end
 local countsLabel = UIKit.outlined(talkGui, "Counts", TALK.Look.Desktop.Counts, TALK.Look.Text, TALK.Look.Stroke)
+UIKit.comic(countsLabel)
+-- The comic face loads in the background from the start, so the talk's first
+-- measures (widths, hisRect) never wait for it.
+task.spawn(UIKit.comicBounds, "A", TALK.Look.Desktop.Type)
 countsLabel.TextXAlignment = Enum.TextXAlignment.Left
 countsLabel.TextYAlignment = Enum.TextYAlignment.Center
 
@@ -238,6 +244,7 @@ local function bubble(name: string): (BillboardGui, TextLabel)
 	board.Enabled = false
 	board.Parent = playerGui
 	local label = UIKit.outlined(board, "Line", TALK.Look.Desktop.Bubble, TALK.Look.Text, TALK.Look.Stroke)
+	UIKit.comic(label)
 	label.Size = UDim2.fromScale(1, 1)
 	label.TextWrapped = true
 	label.TextXAlignment = Enum.TextXAlignment.Center
@@ -390,6 +397,7 @@ local function sizeBubbles()
 		local board, label = pair[1] :: BillboardGui, pair[2] :: TextLabel
 		board.Size = UDim2.fromOffset(look.BubbleWidth * k, (look.Bubble * 1.2 * 4 + 8) * k)
 		label.TextSize = look.Bubble * k
+		UIKit.comic(label)
 	end
 	local model = npcModel()
 	hisBoard.Adornee = if model then model.PrimaryPart else nil
@@ -438,9 +446,9 @@ local function hisRect(camera: Camera, model: Model, k: number, look: Mosskeeper
 	if not inFront then
 		return nil
 	end
-	local size = TextService:GetTextSize(line.text, look.Bubble * k, Enum.Font.LuckiestGuy,
-		Vector2.new(look.BubbleWidth * k, 4000))
-	local w, h = size.X + TALK.Look.Stroke * 2 * k, size.Y + TALK.Look.Stroke * 2 * k
+	local size = UIKit.comicBounds(line.text, look.Bubble * k, look.BubbleWidth * k)
+	local ink = UIKit.comicInk(look.Bubble * k)
+	local w, h = size.X + ink * 2, size.Y + ink * 2
 	return { x = point.X + origin.X - w / 2, y = point.Y + origin.Y - h, w = w, h = h }
 end
 
@@ -469,12 +477,11 @@ end
 local function widths(look: MosskeeperTalk.Look): (number, number)
 	local widest = 0
 	for _, option in ipairs(OPTIONS) do
-		local size = TextService:GetTextSize(MosskeeperTalk.plain(option), look.Type, Enum.Font.LuckiestGuy,
-			Vector2.new(4000, 1000))
-		widest = math.max(widest, size.X + TALK.Look.Stroke * 2 + 16)
+		local size = UIKit.comicBounds(MosskeeperTalk.plain(option), look.Type)
+		widest = math.max(widest, size.X + UIKit.comicInk(look.Type) * 2 + 16)
 	end
-	local counts = TextService:GetTextSize(countsLabel.Text, look.Counts, Enum.Font.LuckiestGuy, Vector2.new(4000, 1000))
-	return widest, counts.X + TALK.Look.Stroke * 2 + 16
+	local counts = UIKit.comicBounds(countsLabel.Text, look.Counts)
+	return widest, counts.X + UIKit.comicInk(look.Counts) * 2 + 16
 end
 
 -- The rows beside the player, from where the player stands on screen now --
@@ -571,11 +578,13 @@ local function layoutReplies()
 		reply.hit.Position = UDim2.fromOffset(r.x * k, r.y * k)
 		reply.hit.Size = UDim2.fromOffset(r.w * k, r.h * k)
 		reply.words.TextSize = look.Type * k
+		UIKit.comic(reply.words)
 	end
 	local c = block.counts
 	countsLabel.Position = UDim2.fromOffset(c.x * k, c.y * k)
 	countsLabel.Size = UDim2.fromOffset(c.w * k, c.h * k)
 	countsLabel.TextSize = look.Counts * k
+	UIKit.comic(countsLabel)
 end
 
 local function showReplies(on: boolean)

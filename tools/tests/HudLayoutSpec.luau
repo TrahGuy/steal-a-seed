@@ -607,8 +607,8 @@ for _, case in ipairs(cases) do
 		tag .. ": Skip stands on the row above the words, beside the step counter, as tall as it always was",
 		r2s(L.skip))
 	-- Two lines of instruction and two of advice fit under that row, as
-	-- TutorialUI lays them out: 3 over each, 24 and 15 tall a line (LuckiestGuy's
-	-- line is its size), 2 under -- at the phone's scale. The words themselves
+	-- TutorialUI lays them out: 3 over each, 24 and 15 tall a line (the comic
+	-- face's line is its size, as LuckiestGuy's was), 2 under -- at the phone's scale. The words themselves
 	-- are measured further down (THE GUIDE'S WORDS, EVERY ONE).
 	do
 		local drawn = GUIDE.Height - GUIDE.Row
@@ -3039,12 +3039,20 @@ do
 	check(tutorialSrc:find("local GUIDE = { Line = 24, LineMin = 17, Sub = 15, SubMin = 13, Counter = 14, Gap = 3, "
 			.. "Lines = 2 }", 1, true) ~= nil,
 		"TutorialUI lays the block out at the sizes measured here")
-	local FONT = Enum.Font.LuckiestGuy
+	-- In the comic face, as TutorialUI wraps them since 2026-10-13 (the owner: the
+	-- guide's card in the notices' face).
+	local UIKit = require(Shared:WaitForChild("UIKit"))
+	check(tutorialSrc:find('local one = UIKit.comicBounds("Ag", at).Y', 1, true) ~= nil
+			and tutorialSrc:find("local all = UIKit.comicBounds(text, at, width).Y", 1, true) ~= nil
+			and tutorialSrc:find("skip.FontFace = UIKit.ComicFace", 1, true) ~= nil
+			and tutorialSrc:find("resume.FontFace = UIKit.ComicFace", 1, true) ~= nil
+			and tutorialSrc:find("label.TextSize = size\n\t\t\tUIKit.comic(label)", 1, true) ~= nil,
+		"TutorialUI measures and draws the card's words in the comic face, the face measured here")
 	local function wrappedAt(text, size, least, width, lines)
 		local at = size
 		while true do
-			local one = TextService:GetTextSize("Ag", at, FONT, Vector2.new(10000, 10000)).Y
-			local all = TextService:GetTextSize(text, at, FONT, Vector2.new(width, 10000)).Y
+			local one = UIKit.comicBounds("Ag", at).Y
+			local all = UIKit.comicBounds(text, at, width).Y
 			if all <= one * lines + 1 or at <= least then
 				return at, math.min(all, one * lines) + 2, all > one * lines + 1
 			end
@@ -3124,11 +3132,10 @@ do
 	check(measured >= 1, "the listed phones' guide blocks were measured", measured)
 	-- The row above the words: the step counter in its own width, and Skip's
 	-- longest word in the button's (it is drawn at 1, outside the banner's scale).
-	local counterW = TextService:GetTextSize("STEP " .. #TutorialData.Steps .. " / " .. #TutorialData.Steps,
-		G.Counter, FONT, Vector2.new(4000, 100)).X * ts
+	local counterW = UIKit.comicBounds("STEP " .. #TutorialData.Steps .. " / " .. #TutorialData.Steps, G.Counter).X * ts
 	local skipW = 0
 	for _, words in ipairs({ "Skip guide", "Tap again to skip" }) do
-		skipW = math.max(skipW, TextService:GetTextSize(words, 12, Enum.Font.GothamBold, Vector2.new(4000, 100)).X)
+		skipW = math.max(skipW, UIKit.comicBounds(words, 12).X)
 	end
 	check(counterW <= CFG.Phone.Counter and skipW <= CFG.Phone.Skip.X
 			and tutorialSrc:find('"Tap again to skip" else "Skip guide"', 1, true) ~= nil,

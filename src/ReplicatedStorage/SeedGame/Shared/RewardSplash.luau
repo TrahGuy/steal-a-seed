@@ -23,7 +23,8 @@
 --==============================================================================
 
 local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
+
+local UIKit = require(script.Parent:WaitForChild("UIKit"))
 
 local RewardSplash = {}
 
@@ -34,6 +35,7 @@ export type Item = {
 	-- smaller line under it ("BOOST FOR 2 MIN").
 	title: string,
 	detail: string?,
+	-- The reward's colour. Its icon carries it; the words are white (2026-10-13).
 	tint: Color3,
 	-- Where it lands; nil when nothing suitable is on screen.
 	destination: () -> GuiObject?,
@@ -69,11 +71,15 @@ RewardSplash.CentreY = 0.42
 -- Never wider than this share of the screen.
 RewardSplash.MaxWidthShare = 0.92
 
-RewardSplash.TitleFont = Enum.Font.LuckiestGuy
-RewardSplash.DetailFont = Enum.Font.GothamBold
+-- COMIC NEUE ANGULAR since 2026-10-13 (the owner: the reward pop-ups in the
+-- notices' face): every word on the card, white over a thick ink line by its
+-- size; the heading's gold is its accent, and each reward's own colour stays
+-- on its icon. Measured only in that face (UIKit.comicBounds).
+RewardSplash.Face = UIKit.ComicFace
 RewardSplash.Outline = Color3.fromRGB(34, 24, 16)
 RewardSplash.Gold = Color3.fromRGB(255, 211, 77)
 RewardSplash.Cream = Color3.fromRGB(242, 238, 206)
+RewardSplash.White = Color3.fromRGB(255, 255, 255)
 
 --==============================================================================
 -- THE NUMBERS (pure: RewardSplashSpec checks them)
@@ -156,21 +162,21 @@ local function apply(list: { Fade }, a: number)
 	end
 end
 
-local function textWidth(text: string, size: number, font: Enum.Font): number
+local function textWidth(text: string, size: number): number
 	if text == "" then
 		return 0
 	end
-	return TextService:GetTextSize(text, size, font, Vector2.new(4000, 400)).X
+	return UIKit.comicBounds(text, size).X
 end
 
-local function label(parent: Instance, name: string, text: string, size: number, font: Enum.Font, colour: Color3,
-	y: number, h: number, outline: number, z: number): TextLabel
+local function label(parent: Instance, name: string, text: string, size: number, colour: Color3, y: number,
+	h: number, z: number): TextLabel
 	local l = Instance.new("TextLabel")
 	l.Name = name
 	l.BackgroundTransparency = 1
 	l.Position = UDim2.new(0, 0, 0, y)
 	l.Size = UDim2.new(1, 0, 0, h)
-	l.Font = font
+	l.FontFace = RewardSplash.Face
 	l.TextSize = size
 	l.Text = text
 	l.TextColor3 = colour
@@ -178,7 +184,7 @@ local function label(parent: Instance, name: string, text: string, size: number,
 	l.Parent = parent
 	local edge = Instance.new("UIStroke")
 	edge.Color = RewardSplash.Outline
-	edge.Thickness = outline
+	edge.Thickness = UIKit.comicInk(size)
 	edge.Parent = l
 	return l
 end
@@ -214,8 +220,8 @@ function RewardSplash.build(opts: Options): Built?
 	local widths: { number } = {}
 	local total = S.Pad * 2
 	for i, item in ipairs(opts.items) do
-		local w = math.max(S.IconPx + 24, textWidth(item.title, S.TitleSize, S.TitleFont) + 14,
-			textWidth(item.detail or "", S.DetailSize, S.DetailFont) + 14)
+		local w = math.max(S.IconPx + 24, textWidth(item.title, S.TitleSize) + 14,
+			textWidth(item.detail or "", S.DetailSize) + 14)
 		widths[i] = math.ceil(w)
 		total += widths[i] + (if i > 1 then S.Gap else 0)
 	end
@@ -250,10 +256,10 @@ function RewardSplash.build(opts: Options): Built?
 	-- the card has gone (the owner, 2026-10-12; Notice.band).
 	require(script.Parent:WaitForChild("Notice")).band("reward-splash", "over", card)
 
-	-- Outlines a little heavier than they were on the plate: the only thing
-	-- between a word and the scene now.
+	-- The comic ink line by size (2 px at the heading's and the amounts' sizes,
+	-- 3 at the names'): the only thing between a word and the scene.
 	if opts.heading then
-		label(card, "Heading", opts.heading, S.HeadingSize, S.TitleFont, S.Gold, S.Pad - 2, S.HeadingSize + 4, 2, z + 1)
+		label(card, "Heading", opts.heading, S.HeadingSize, S.Gold, S.Pad - 2, S.HeadingSize + 4, z + 1)
 	end
 
 	local pieces: { Piece } = {}
@@ -286,11 +292,10 @@ function RewardSplash.build(opts: Options): Built?
 			end
 		end
 
-		label(column, "Title", item.title, S.TitleSize, S.TitleFont, item.tint, S.IconPx + 6, S.TitleSize + 4, 2.5,
-			z + 1)
+		label(column, "Title", item.title, S.TitleSize, S.White, S.IconPx + 6, S.TitleSize + 4, z + 1)
 		if item.detail then
-			label(column, "Detail", item.detail, S.DetailSize, S.DetailFont, S.Cream,
-				S.IconPx + 6 + S.TitleSize + 4, S.DetailSize + 4, 2, z + 1)
+			label(column, "Detail", item.detail, S.DetailSize, S.Cream, S.IconPx + 6 + S.TitleSize + 4,
+				S.DetailSize + 4, z + 1)
 		end
 		local fades: { Fade } = {}
 		collect(holder, fades)
@@ -328,6 +333,10 @@ end
 -- PLAYING IT
 --==============================================================================
 local stopCurrent: (() -> ())? = nil
+-- Splashes asked for: the comic face's first measure waits for it to load
+-- (once a session), and a newer splash asked for during that wait takes this
+-- one's place, as it would have a moment later.
+local asked = 0
 
 -- Ends the splash on screen now, if there is one.
 function RewardSplash.stop()
@@ -340,6 +349,12 @@ end
 -- Draws and plays it; false when there was nothing to draw (the caller then
 -- says it another way).
 function RewardSplash.play(opts: Options): boolean
+	asked += 1
+	local mine = asked
+	UIKit.comicBounds("A", RewardSplash.TitleSize)
+	if mine ~= asked then
+		return true
+	end
 	RewardSplash.stop()
 	local built = RewardSplash.build(opts)
 	if not built then

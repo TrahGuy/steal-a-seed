@@ -76,6 +76,7 @@ local GOLD = Color3.fromRGB(255, 211, 105)
 local CREAM = Color3.fromRGB(255, 246, 220)
 local SPEED_BLUE = Color3.fromRGB(25, 144, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
+local WHITE = Color3.fromRGB(255, 255, 255)
 
 --== bounded costs, all of them ===============================================
 --==============================================================================
@@ -195,12 +196,21 @@ bannerScale.Parent = banner
 -- The same scale for the pointer and the celebration, kept from the last layout.
 local tutorialScale = 1
 
-local instruction = outlined(banner, "Line", 34, CREAM, 3)
+-- COMIC TYPE (2026-10-13, the owner: the guide's card in the notices' face):
+-- the instruction, its advice, the step, Skip and GUIDE in UIKit's comic
+-- face, each over a thick ink line by its size (UIKit.comic, again whenever
+-- a size changes) -- the instruction white; the advice's gold, the step's
+-- green and GUIDE's gold are their accents. The phone's wrapping measures
+-- that face (wrappedAt).
+local instruction = outlined(banner, "Line", 34, WHITE, 3)
+UIKit.comic(instruction)
 instruction.Size = UDim2.new(1, 0, 0, 42)
 local subline = outlined(banner, "Sub", 19, GOLD, 2.5)
+UIKit.comic(subline)
 subline.Position = UDim2.fromOffset(0, 42)
 subline.Size = UDim2.new(1, 0, 0, 24)
 local counter = outlined(banner, "Counter", 15, Color3.fromRGB(196, 219, 173), 2)
+UIKit.comic(counter)
 counter.Position = UDim2.fromOffset(0, 64)
 counter.Size = UDim2.new(1, 0, 0, 18)
 
@@ -208,7 +218,7 @@ counter.Size = UDim2.new(1, 0, 0, 18)
 local skip = Instance.new("TextButton")
 skip.Name = "Skip"
 skip.Text = "Skip guide"
-skip.Font = Enum.Font.GothamBold
+skip.FontFace = UIKit.ComicFace
 skip.TextSize = 12
 skip.TextColor3 = Color3.fromRGB(214, 205, 184)
 skip.BackgroundTransparency = 1
@@ -219,11 +229,12 @@ skip.Size = UDim2.fromOffset(150, 20)
 skip.Visible = false
 skip.Parent = words
 UIKit.stroke(skip, BLACK, 2)
+UIKit.comic(skip)
 
 local resume = Instance.new("TextButton")
 resume.Name = "Resume"
 resume.Text = "GUIDE"
-resume.Font = Enum.Font.LuckiestGuy
+resume.FontFace = UIKit.ComicFace
 resume.TextSize = 16
 resume.TextColor3 = GOLD
 resume.BackgroundTransparency = 1
@@ -234,6 +245,7 @@ resume.Size = UDim2.fromOffset(150, 26)
 resume.Visible = false
 resume.Parent = words
 UIKit.stroke(resume, BLACK, 2.5)
+UIKit.comic(resume)
 
 --==============================================================================
 -- WHERE THE BANNER SITS, AND HOW IT KEEPS ITS WORDS
@@ -296,13 +308,22 @@ local guide = false
 -- The row the counter and Skip stand on, and the block's width; at scale 1.
 local guideRow, guideWidth = 0, 0
 
+-- The comic face's measures wait for it to load (once a session). Until it has
+-- -- it draws nothing before then either -- a line is laid out at its
+-- largest, two lines tall, and again the moment it is in (the loader under
+-- placeBanner).
+local faceReady = false
+
 -- The size, from `size` down to `least`, at which `text` stands in `lines` lines
--- of `width`, and how tall that is.
+-- of `width`, and how tall that is -- in the comic face.
 local function wrappedAt(text: string, size: number, least: number, width: number, lines: number): (number, number)
+	if not faceReady then
+		return size, size * lines + 2
+	end
 	local at = size
 	while true do
-		local one = TextService:GetTextSize("Ag", at, Enum.Font.LuckiestGuy, Vector2.new(10000, 10000)).Y
-		local all = TextService:GetTextSize(text, at, Enum.Font.LuckiestGuy, Vector2.new(width, 10000)).Y
+		local one = UIKit.comicBounds("Ag", at).Y
+		local all = UIKit.comicBounds(text, at, width).Y
 		if all <= one * lines + 1 or at <= least then
 			return at, math.min(all, one * lines) + 2
 		end
@@ -323,6 +344,7 @@ local function layoutGuide()
 		else
 			local size, height = wrappedAt(label.Text, line[2] :: number, line[3] :: number, guideWidth, GUIDE.Lines)
 			label.TextSize = size
+			UIKit.comic(label)
 			label.Position = UDim2.fromOffset(0, y)
 			label.Size = UDim2.fromOffset(guideWidth, height)
 			y += height + GUIDE.Gap
@@ -377,6 +399,7 @@ local function placeBanner()
 		end
 		counter.TextScaled = false
 		counter.TextSize = GUIDE.Counter
+		UIKit.comic(counter)
 		counter.TextXAlignment = Enum.TextXAlignment.Left
 		counter.Position = UDim2.fromOffset(0, 0)
 		counter.Size = UDim2.fromOffset(HudLayout.Config.Phone.Counter / tutorialScale, guideRow)
@@ -396,6 +419,7 @@ local function placeBanner()
 		for _, line in ipairs(BANNER_LINES) do
 			local label = line[1] :: TextLabel
 			label.TextSize = line[2] :: number
+			UIKit.comic(label)
 			label.TextWrapped = false
 			label.TextXAlignment = Enum.TextXAlignment.Center
 			label.TextYAlignment = Enum.TextYAlignment.Center
@@ -422,6 +446,13 @@ table.insert(connections, player:GetAttributeChangedSignal(Config.Hotbar.RemoveR
 -- And the x2 card beside a phone's cash line (2026-10-05), which the belt keeps off.
 table.insert(connections, player:GetAttributeChangedSignal(Config.Pass.MultiplierAttribute):Connect(placeBanner))
 placeBanner()
+-- The comic face's loader (2026-10-13): one measure waits for it, then a
+-- phone's block is laid out in it.
+task.spawn(function()
+	UIKit.comicBounds("Ag", GUIDE.Line)
+	faceReady = true
+	layoutGuide()
+end)
 
 --==============================================================================
 -- THE POINTING HAND AND THE SPOTLIGHT (the owner's brief, 2026-10-08)

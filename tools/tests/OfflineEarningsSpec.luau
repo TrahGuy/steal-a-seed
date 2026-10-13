@@ -283,6 +283,15 @@ local ok, err = pcall(function()
 	check(uiSource:find("modal.close.Visible = false", 1, true) ~= nil
 		and uiSource:find("channel:FireServer(OFFLINE.ClaimAction)", 1, true) ~= nil,
 		"the card has no close button and claims with the bare verb")
+	-- COMIC TYPE (2026-10-13, the owner: the reward pop-ups in the notices' face).
+	check(uiSource:find("\torder: number): TextLabel\n\tlocal label = UIKit.outlined(column, name, size, colour)\n"
+			.. "\tUIKit.comic(label)", 1, true) ~= nil
+		and uiSource:find('local info = textRow("Info", 17, WHITE, INFO_H, 2)', 1, true) ~= nil
+		and uiSource:find('local amount = textRow("Amount", 46, CASH_GREEN, AMOUNT_H, 3)', 1, true) ~= nil
+		and uiSource:find('\tlocal label = UIKit.outlined(c, "Label", 13, ink, 1)\n\tUIKit.comic(label)', 1, true) ~= nil
+		and uiSource:find("UIKit.comic(claimLabel)", 1, true) ~= nil
+		and uiSource:find("\tUIKit.comic(z)", 1, true) ~= nil,
+		"the claim card's words in the comic face, each inked by its size: the line white, the amount in the cash green")
 end)
 if not ok then
 	fail += 1
