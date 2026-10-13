@@ -267,6 +267,22 @@ function UIKit.outlined(parent: Instance, name: string, size: number,
 end
 
 --==============================================================================
+-- COMIC TYPE (2026-10-13, the owner's reference: a thumbnail in Comic Sans MS
+-- Bold, white letters with a thick black outline)
+--
+-- Comic Neue Angular is the closest face the engine ships. Its family has one
+-- face, "Bold" at weight 400, so it is asked for at Regular; there is no
+-- lighter one. It is no Enum.Font. Its ink line is thick: about a ninth of the
+-- size, never under 1.5 px.
+--==============================================================================
+UIKit.ComicFace = Font.new("rbxasset://fonts/families/ComicNeueAngular.json", Enum.FontWeight.Regular,
+	Enum.FontStyle.Normal)
+
+function UIKit.comicInk(size: number): number
+	return math.max(1.5, math.floor(size * 0.22 + 0.5) / 2)
+end
+
+--==============================================================================
 -- THE DIAMOND LATTICE
 --
 -- Two families of parallel diagonal lines crossing at right angles. The diamonds

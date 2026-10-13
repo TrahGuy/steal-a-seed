@@ -1,5 +1,33 @@
 # Steal a Seed — Session Handoff
 
+## COMIC NEUE ANGULAR (a): THE ODDS CARDS' PERCENTAGES, READABLE ON EVERY CARD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MysteryPodSpec 39/0 (the light-card check replaced), MysteryShopSpec 16/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, CompactMenusSpec 48/0, EnchantedMistSpec 62/0, MistLookSpec 17/0; MUTANTS 3/3 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: the odds cards' percentages in COMIC NEUE ANGULAR, the face nearest their reference (a thumbnail in Comic Sans MS Bold: white letters, a thick black outline). Folded into the faint "17%" pink and "5%" gold on the white pearl cards.
+
+**Why they were faint**: MenuKit drops a label's ink line under dark words (MenuKit.isLight, 0.62). Mythic's pink (0.49) and Divine's deep gold ink on the pearl (0.52) are under it, so the pearl showed bare colour.
+
+**Now** (MistOddsView.card, the one builder behind the Shop's Mysterious Pod banner, Mosskeeper's odds page and the draw's reels):
+- The face: UIKit.ComicFace (new): Comic Neue Angular at Regular, its family's one face.
+- The colour: the rarity word's (MistOddsView.wordColour, the edge colour lifted until light), so the % matches the word under it.
+- A thick ink line kept on whatever the colour: UIKit.comicInk(18), 2 px.
+- The rarest still run their rainbow (0.2%) and shimmer (0.8%).
+- Gone: EnchantedMistConfig's LightCards and InkOnLight (the pearl's deep inks). Nothing else read them.
+
+**The colour, decided**: the lifted rarity tint, over white. Both read as well, because the ink carries them. The tint keeps the rarity's colour and pairs with its word. White is one line (WHITE into chanceWords) if the owner prefers it; output/comic-percentages-2026-10-13/02 shows both.
+
+**Not changed**: the size chips' % ("Tiny 53.25%", on the odds page and the draw's size reel). They are not cards; offered.
+
+**Glyphs**: the font file (ComicNeue-Angular-Bold.ttf, 290 glyphs, read with fontTools) has every digit, "." and "%".
+
+**The Play** (guarded, SeedTest_20261013, desktop 1169 x 716):
+- The Shop's banner and Mosskeeper's odds page: every % in the comic face, with its ink.
+- No script errors.
+- Captures: output/comic-percentages-2026-10-13/ (01 the banner, 02 built vs white, 03 the odds page). Cleared: probe 381 / 0 differ / 0 ZZ / marker absent.
+
+**Not seen**: the draw's reels live (the same card; MysteryPodSpec holds it), a phone.
+
+**Files**: Shared/UIKit.luau (ComicFace, comicInk), Shared/MistOddsView.luau, Shared/EnchantedMistConfig.luau, tools/tests/MysteryPodSpec.luau.
+
 ## WHAT'S NEW: THE OWNER'S FOUR NEW ENTRIES, FACT-CHECKED — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, fa1b1e7, NOT PUBLISHED; UpdateLogSpec 22/0 (its panel-size check reworked); MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "whats new button seems outdated, we should update it too". Their four entries (relayed by the peer) stand at the top of Shared/UpdateLog.luau. The two oldest (5 and 4 Oct) stay, so the panel shows all six (GameConfig.UpdateLog.Shown). The header now says the owner approved the words on 2026-10-13.

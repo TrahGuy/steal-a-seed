@@ -453,30 +453,31 @@ local ok, err = pcall(function()
 	-- THE LANDED CREATURE HOLDS (2026-10-12, the owner via the peer: the size
 	-- reel replaced it after ~0.15 s): ~1 s to read it before the size reel;
 	-- the size still lands before the world reveal; the whole reveal compact.
-	-- A chance on a LIGHT card in its rarity's deep ink (2026-10-12, the peer
-	-- for the owner: Divine's cream "5%" was lost on the pearl): dark enough to
-	-- read there; Mythic keeps its own rose, a card that is not light its own.
-	local GameConfig = require(Shared:WaitForChild("GameConfig"))
+	-- THE CHANCE, READABLE ON EVERY CARD (2026-10-13, the owner: Mythic's pink
+	-- "17%" and Divine's gold "5%" read faint on the white pearl): the comic
+	-- face, its rarity word's colour (light by MenuKit.isLight), and a thick dark
+	-- ink line kept on whatever the colour -- on the pearl, the gold, the holo.
+	local UIKit = require(Shared:WaitForChild("UIKit"))
+	local MenuKit = require(Shared:WaitForChild("MenuKit"))
 	local inkHolder = Instance.new("Frame")
-	local function chanceOf(rarity)
+	local unread = {}
+	for _, rarity in ipairs({ "Legendary", "Mythic", "Divine", "Secret" }) do
 		local card = MistOddsView.card(inkHolder, { Id = made.Id, Name = "Ink", Rarity = rarity, Weight = 5 }, 1, 140,
 			{}, {}, {})
-		return card:FindFirstChild("Chance", true)
+		local pct = card:FindFirstChild("Chance", true)
+		local ink = pct and pct:FindFirstChild("Ink")
+		local dark = ink ~= nil and ink:IsA("UIStroke")
+			and 0.299 * ink.Color.R + 0.587 * ink.Color.G + 0.114 * ink.Color.B < 0.1
+		if not (pct and pct.FontFace.Family == UIKit.ComicFace.Family and pct.TextColor3 == MistOddsView.wordColour(rarity)
+			and MenuKit.isLight(pct.TextColor3) and dark and ink.Enabled and ink.Transparency == 0
+			and ink.Thickness >= 2) then
+			table.insert(unread, string.format("%s: %s", rarity, if pct then tostring(pct.TextColor3) else "no Chance"))
+		end
 	end
-	local divine, mythic, legendary = chanceOf("Divine"), chanceOf("Mythic"), chanceOf("Legendary")
 	inkHolder:Destroy()
-	local function lum(c)
-		return 0.299 * c.R + 0.587 * c.G + 0.114 * c.B
-	end
-	local pearlTop = GameConfig.BagLook.Studs.pearl.top
-	check(ODDS.LightCards.pearl == true and ODDS.LightCards.stone == true and divine ~= nil
-			and divine.TextColor3 == ODDS.InkOnLight.Divine and lum(pearlTop) - lum(divine.TextColor3) >= 0.3
-			and mythic ~= nil and mythic.TextColor3 == GameConfig.RarityColor.Mythic
-			and legendary ~= nil and legendary.TextColor3 == GameConfig.RarityColor.Legendary
-			and ODDS.InkOnLight.Common ~= nil and lum(ODDS.InkOnLight.Common) < 0.35,
-		"a chance on a light card (the pearl, the stone) in its rarity's deep ink, dark enough to read; Mythic's rose "
-			.. "and a gold card's own colour stay",
-		divine and tostring(divine.TextColor3))
+	check(#unread == 0 and ODDS.LightCards == nil and ODDS.InkOnLight == nil,
+		"a card's chance reads on every card: the comic face, its rarity word's light colour, a thick dark ink line "
+			.. "kept on (Legendary, Mythic, Divine, Secret)", table.concat(unread, "; "))
 	-- EACH REEL SPINS AT LEAST 5 s (the owner, 2026-10-12): the creature reel, its landed card's ~1 s hold, and a
 	-- sized creature's size reel as long again, landing before the world reveal; a Secret's reel, then its words.
 	local sizedT = EnchantedMistData.reelTimes(true)

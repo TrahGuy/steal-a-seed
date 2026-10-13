@@ -132,14 +132,14 @@ function MistOddsView.card(parent: GuiObject, entry: any, z: number, cardH: numb
 	table.insert(fx, shine)
 	local rare = RarityFX.edgeColour(entry.Rarity)
 	MenuKit.keyline(face, rare or LOOK.CardEdge, 1, if rare then 0.05 else LOOK.CardEdgeTransparency)
-	-- The % at the card's top edge, in its rarity's colour; on a light card
-	-- (ODDS.LightCards) a pale one takes its deep ink (ODDS.InkOnLight).
-	local colour = (GameConfig.RarityColor :: any)[entry.Rarity] or WHITE
-	local studsKey = (STUD_LOOK.StudsByRarity :: any)[entry.Rarity]
-	if spec and studsKey and ODDS.LightCards[studsKey] then
-		colour = ODDS.InkOnLight[entry.Rarity] or colour
-	end
-	local pct = chanceWords(face, "Chance", 18, chance, colour, z + 6, moving)
+	-- The % at the card's top edge, READABLE ON EVERY CARD (2026-10-13, the
+	-- owner: Mythic's pink "17%" and Divine's gold "5%" read faint on the white
+	-- pearl -- dark words lose MenuKit's ink line). In the reference's comic
+	-- face, in the rarity word's colour, lifted until light (wordColour), under
+	-- a thick ink line kept on; the rarest run their rainbow and shimmer over it.
+	local pct = chanceWords(face, "Chance", 18, chance, MistOddsView.wordColour(entry.Rarity), z + 6, moving)
+	pct.FontFace = UIKit.ComicFace
+	MenuKit.keepInk(pct).Thickness = UIKit.comicInk(18)
 	pct.AnchorPoint = Vector2.new(0.5, 0)
 	pct.Position = UDim2.new(0.5, 0, 0, 3)
 	pct.Size = UDim2.new(1, -8, 0, 20)
