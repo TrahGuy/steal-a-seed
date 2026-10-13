@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## ITEM 9 (BACKLOG 2026-10-12): REBIRTHS ON THE ADMIN CONSOLE'S PLAYER TAB — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; AdminSpec 137/0 (8 new), AdminConsoleSpec 64/0 (1 new, 2 request shapes), AdminAnnounceSpec 43/0, AdminMistSpec 69/0, RebirthSpec 93/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 9 (BACKLOG 2026-10-12): REBIRTHS ON THE ADMIN CONSOLE'S PLAYER TAB — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, a904e1b, NOT PUBLISHED; AdminSpec 137/0 (8 new), AdminConsoleSpec 64/0 (1 new, 2 request shapes), AdminAnnounceSpec 43/0, AdminMistSpec 69/0, RebirthSpec 93/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "add a rebirth section for admin console to reset it or to add"; their answers: "ADD raises only the count, never wiping money or plants; RESET sets it to 0".
 
