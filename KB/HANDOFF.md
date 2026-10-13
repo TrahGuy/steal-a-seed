@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 8 (BACKLOG 2026-10-12): "OBBY" OVER THE ARCH, FOR EVERYBODY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ObbySignSpec 10/0 (NEW); ObbySpec 69/0, ObbyViewSpec 112/0, FloatingSignSpec 49/0, EventHubSpec 53/0, EnchantedMistSpec 62/0; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner's option 1: a floating billboard "OBBY" with "Floating Garden" under it, above the Floating Garden's entrance arch. With the OBBY pill gone (item 7, SELL), this is how players find the obby.
+
+**The sign** (StarterPlayerScripts/ObbySign.client.luau, new; its numbers are ObbyData.Sign):
+- FloatingSign's family: LuckiestGuy and its dark outline, sized in studs, no backing, nothing to press. OBBY in the old pill's sky-blue rim (Rail.IndexEdge); Floating Garden in its gold pennant (255, 206, 84). Both lines whole at full height in a 19-stud box (OBBY 6 studs, Floating Garden 2.2).
+- On a local anchor in a folder of its own (SeedObbySign), as the Mist sign is: never streamed out, so it stands for a player anywhere on the map. That is the brief's "anchor Persistent". Behind walls (AlwaysOnTop false). Shown to everybody, always, while GameConfig.Obby.Enabled.
+- Its bottom edge is 16.5 up: 2 over the arch's vine crown. The crown measured 14.5 in Play (the vines at 31 degrees, their corners turned up), not the 14 its middle vine suggests. The Start prompt sits on the step under the arch (0.3 up), so the sign never comes down onto it.
+- THE SIZE THAT READS: FloatingSign.clampScale (new), the Mist sign's rule made general and checked to give the Mist sign's own answers. After the camera moves, the sign is sized so its header is at least 22 screen units tall far off and at most 8% of the screen's height up close. It grows and shrinks about its bottom edge, written only when the scale moves (BindToRenderStep after the camera). It draws out to 520 studs: past the field's far side (504: the deepest plot's back and a camera behind it).
+
+**The Play** (guarded, SeedTest_20261013, desktop 1169 x 716; taken with the bottom edge at 16, before the measured crown raised it to 16.5):
+- From the hub, 258 studs off: OBBY / FLOATING GARDEN over the arch, the header held at its 22-unit least (scale 1.85).
+- On the approach, 76 studs off: at its built 19 x 8.2 studs (scale 1), over the arch with the first island behind.
+- Under the arch, 25 studs off: shrunk to 0.46 and still above the arch; in that camera's pitch it stood behind the HUD's top row, as any world billboard does.
+- No script errors.
+- Captures: output/item8-obby-sign-2026-10-13/ (01 from the hub, 02 the approach, 03 a close-up of 01). Cleared: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Open (the owner's pick):** the What's New line for item 8 ("A big OBBY sign shows the way to the obby."). It needs a second 13 Oct entry, which makes 7 entries: Shown 7, or the 4 Oct entry drops off.
+
+**Not seen**: a phone (the rule takes the camera's own ViewportSize, so a phone's header is 22 points), a TV.
+
+**Files**: Shared/ObbyData.luau (Sign), Shared/FloatingSign.luau (clampScale), StarterPlayerScripts/ObbySign.client.luau (new), tools/tests/ObbySignSpec.luau (new), AGENTS.md.
+
 ## COMIC NEUE ANGULAR (b): EVERY TOP-CENTRE NOTICE — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, 3afb373, NOT PUBLISHED; NoticeSpec 103/0 (3 new), SecretToastSpec 61/0 (its model now the comic face), TutorialSpotlightSpec 51/0 (the locked chest's line measured in it), HudLayoutSpec 1498/0, CompactMenusSpec 48/0, ActionRefusalSpec 74/0 and 11 more green; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: every top-centre notice in COMIC NEUE ANGULAR, their reference's look: white letters, a thick black outline. That is ActionToastUI's whole stack: the headline and the detail line; the event, refusal, admin-console and gift notices; the slim line above an open panel.

@@ -264,7 +264,9 @@ src/
                                 THE WHEEL!" (studs-sized billboard, LuckiestGuy, dark outline,
                                 the wheel's SignDistance), one plain colour, made per client on
                                 a local anchor: the chest's OPEN FREE CHEST! and the pedestal's
-                                SACRIFICE A POD! (words in GameConfig *.FloatingWords)
+                                SACRIFICE A POD! (words in GameConfig *.FloatingWords);
+                                clampScale (2026-10-13): the Mist sign's read-from-afar size
+                                rule for any sign (a header's least and most screen size)
     Shared/HotbarSlots.luau     pure: the freely assignable hotbar's grammar (2026-10-03; it
                                 replaced HotbarRoles) -- a slot is a shortcut ref (i:<Item>,
                                 w:<weapon>, ticket, a faint +bat/+trap/+ticket), what a profile
@@ -706,6 +708,10 @@ src/StarterPlayer/StarterPlayerScripts/
                                 (the start, a checkpoint after a fall), and once to Marigold's
                                 stall when SELL lands there, and hands it straight back --
                                 ObbyView's arithmetic, nothing held
+    ObbySign.client.luau        "OBBY" / "Floating Garden" over the obby's entrance arch for
+                                everybody (2026-10-13, item 8; ObbyData.Sign): a FloatingSign on a
+                                local anchor, its bottom edge over the arch's crown, sized each
+                                frame by FloatingSign.clampScale to read from the hub
     WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
                                 species cards, owed prizes) and this player's copy of the world
                                 wheel's face; GET SPINS and its card, shown only while the

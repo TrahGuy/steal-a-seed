@@ -155,6 +155,38 @@ ObbyData.Entrance = {
 }
 
 --==============================================================================
+-- THE SIGN OVER THE ARCH (2026-10-13, the owner's item 8, option 1): "OBBY"
+-- with "Floating Garden" under it, on a billboard over the entrance arch for
+-- every player -- with the OBBY pill gone (item 7, SELL) this is how the obby
+-- is found. FloatingSign's family, in the old pill's sky-blue rim (OBBY) and
+-- gold pennant (Floating Garden). ObbySign.client draws it.
+--
+-- Its bottom edge stands BottomAbove the ground, 2 studs over the arch's vine
+-- crown (14.5 up, measured in Play: the vines at 31 degrees, their corners
+-- turned up; ObbyCourse's arch), so it never comes down onto the Start
+-- prompt on the step under the arch. Sized in studs, then held between
+-- MinHeaderUnits tall on screen (read from far off) and MaxHeaderShare of the
+-- screen's height (never huge up close) by FloatingSign.clampScale, about that
+-- bottom edge. It draws out to MaxDistance: past the deepest plot's back on
+-- the far side of the field (GameConfig.Plot.MaxReach, a camera behind it).
+--==============================================================================
+ObbyData.Sign = {
+	Header = "OBBY",
+	Sub = "Floating Garden",
+	HeaderColour = Color3.fromRGB(120, 190, 245),
+	SubColour = Color3.fromRGB(255, 206, 84),
+	-- "OBBY" is 2.42 times as wide as it is tall in LuckiestGuy, "Floating
+	-- Garden" 8.17: both whole at these heights in this width.
+	Width = 19,
+	Height = 6,
+	SubHeight = 2.2,
+	BottomAbove = 16.5,
+	MaxDistance = 520,
+	MinHeaderUnits = 22,
+	MaxHeaderShare = 0.08,
+}
+
+--==============================================================================
 -- PALETTES: one per stage, so a screenshot of any island says which it is.
 -- Grass/soil/rock form the island; `accent` and `flower` dress it; `pad` is
 -- the colour of what you stand on, kept apart from anything decorative.

@@ -160,4 +160,21 @@ function FloatingSign.new(spec: Spec): Sign
 	}
 end
 
+-- THE SIZE THAT READS (2026-10-13; the Enchanted Mist sign's rule, its
+-- EnchantedMistStatus.signScale, for any sign): the scale for a sign whose
+-- header is `headerStuds` tall, seen from `distance` by a camera with this
+-- ViewportSize.Y and FieldOfView -- the header at least `minUnits` screen units
+-- tall far off, at most `maxShare` of the screen's height (never under
+-- minUnits) up close, and 1 between the two.
+function FloatingSign.clampScale(distance: number, headerStuds: number, viewportHeight: number,
+	fieldOfView: number, minUnits: number, maxShare: number): number
+	if viewportHeight <= 0 or fieldOfView <= 0 or headerStuds <= 0 then
+		return 1
+	end
+	local perStud = (viewportHeight / 2) / math.tan(math.rad(fieldOfView / 2)) / math.max(distance, 1e-3)
+	local header = headerStuds * perStud
+	local most = math.max(minUnits, maxShare * viewportHeight)
+	return math.min(math.max(1, minUnits / header), most / header)
+end
+
 return FloatingSign
