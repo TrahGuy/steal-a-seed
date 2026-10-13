@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## THE NARROW COMIC NEUE PASS: THE MOSSKEEPER'S TALK, THE BROADCAST, THE REWARD CARDS AND THE GUIDE'S CARD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; AnnouncementSpec 63/0, MosskeeperTalkSpec 36/0, RewardSplashSpec 21/0, OfflineEarningsSpec 27/0, InviteRewardsSpec 173/0, HudLayoutSpec 1499/0 (checks updated or added); NoticeSpec 105/0, SecretToastSpec 61/0, MosskeeperSpec 69/0, MosskeeperMoodsSpec 23/0, TutorialSpec 121/0, TutorialSpotlightSpec 51/0, TutorialPodSpec 263, InviteHudSpec 438/0, InvitePanelSpec 395/0, AdminAnnounceSpec 44/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## THE NARROW COMIC NEUE PASS: THE MOSSKEEPER'S TALK, THE BROADCAST, THE REWARD CARDS AND THE GUIDE'S CARD — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, ff1a2e0, NOT PUBLISHED; AnnouncementSpec 63/0, MosskeeperTalkSpec 36/0, RewardSplashSpec 21/0, OfflineEarningsSpec 27/0, InviteRewardsSpec 173/0, HudLayoutSpec 1499/0 (checks updated or added); NoticeSpec 105/0, SecretToastSpec 61/0, MosskeeperSpec 69/0, MosskeeperMoodsSpec 23/0, TutorialSpec 121/0, TutorialSpotlightSpec 51/0, TutorialPodSpec 263, InviteHudSpec 438/0, InvitePanelSpec 395/0, AdminAnnounceSpec 44/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "just change the npc dialogue, notifications, broadcast, and toasts". The notices and the Secret toast were done in 3afb373. "Comic Neue everywhere" stays in the backlog, not queued.
 
@@ -17,7 +17,7 @@ The owner: "just change the npc dialogue, notifications, broadcast, and toasts".
 **Left as they were** (out of scope):
 - the AlertUI chase alarm, REBORN!, the Pod Rush tracker, the notice's X;
 - the menus, the HUD and the world text;
-- in this pass: the offline card's title bar ("WHILE YOU WERE AWAY", the menus' title family, UIKit.modal), the coin's "$" mark, the Mosskeeper's over-head bar (world), the guide's pointing-hand words, its celebration lines and its world markers.
+- in this pass: the offline card's title bar ("WHILE YOU WERE AWAY", the menus' title family, UIKit.modal; the owner, 2026-10-13: "keep luckiest guy on the title"), the coin's "$" mark, the Mosskeeper's over-head bar (world), the guide's pointing-hand words, its celebration lines and its world markers.
 
 **Glyphs**: no glyph these surfaces draw is missing from Comic Neue Angular (q8/glyph_audit over their code and TutorialData; MosskeeperTalkSpec keeps his talk to plain ASCII).
 - The 4 GameConfig strings the face lacks belong elsewhere: OtherPlants' ⚡ icon, and the Rebirth panel's → ← ✓.
@@ -55,7 +55,7 @@ The owner: "just change the npc dialogue, notifications, broadcast, and toasts".
 - StarterPlayerScripts/MosskeeperUI, AnnouncementUI, InviteRewardUI, OfflineUI and TutorialUI (.client.luau);
 - tools/tests/AnnouncementSpec, MosskeeperTalkSpec, RewardSplashSpec, OfflineEarningsSpec, InviteRewardsSpec and HudLayoutSpec (.luau).
 
-## PLAYERS SPAWN EMPTY-HANDED: A JOIN AND A RESPAWN PUT PLANTS IN THE BAG ONLY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; HeldRestoreSpec 63/0 (2 new); HatchInBagSpec 43/0, InventoryModelSpec 56/0, HotbarSpec 38/0, PodHatchSpec 22/0, ContextSlotSpec 8/0, MysteryPodSpec 39/0, InviteRewardsSpec 172/0, PlacementCircleSpec 23/0; MUTANT 1/1 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## PLAYERS SPAWN EMPTY-HANDED: A JOIN AND A RESPAWN PUT PLANTS IN THE BAG ONLY — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, 0321fb9, NOT PUBLISHED; HeldRestoreSpec 63/0 (2 new); HatchInBagSpec 43/0, InventoryModelSpec 56/0, HotbarSpec 38/0, PodHatchSpec 22/0, ContextSlotSpec 8/0, MysteryPodSpec 39/0, InviteRewardsSpec 172/0, PlacementCircleSpec 23/0; MUTANT 1/1 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "everytime players spawn, they carry a plant, can we fix it also?"
 
@@ -75,7 +75,7 @@ The owner: "everytime players spawn, they carry a plant, can we fix it also?"
 
 **Files**: ServerScriptService/SeedGameServer/CarryService.luau, tools/tests/HeldRestoreSpec.luau.
 
-## ADMIN LINES BARE, NO BACKING, NOTHING SAID FOR AN ADMIN'S OWN, REBIRTHS IN RESET'S KEPT LIST — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NoticeSpec 105/0 (2 new), AdminAnnounceSpec 44/0 (1 new), AdminMistSpec 69/0, AdminSpec 137/0, AdminConsoleSpec 64/0, HudLayoutSpec 1498/0, MiniEventSpec 90/0, SourceIconsSpec 21/0 and 9 more notice specs green; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ADMIN LINES BARE, NO BACKING, NOTHING SAID FOR AN ADMIN'S OWN, REBIRTHS IN RESET'S KEPT LIST — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, 54c2be7, NOT PUBLISHED; NoticeSpec 105/0 (2 new), AdminAnnounceSpec 44/0 (1 new), AdminMistSpec 69/0, AdminSpec 137/0, AdminConsoleSpec 64/0, HudLayoutSpec 1498/0, MiniEventSpec 90/0, SourceIconsSpec 21/0 and 9 more notice specs green; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 Four owner asks, from item 9's Play and the peer:
 - "theres a black background on notices, remove it": ActionToastUI's slim line over an open panel stands on NO backing now (the Backing frame is gone). Its white comic letters and their ink carry it. Its placement rules are unchanged: above the panel's top edge, growing up, never on the panel.
