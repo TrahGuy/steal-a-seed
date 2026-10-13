@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## WHAT'S NEW: THE OWNER'S FOUR NEW ENTRIES, FACT-CHECKED — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; UpdateLogSpec 22/0 (its panel-size check reworked); MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## WHAT'S NEW: THE OWNER'S FOUR NEW ENTRIES, FACT-CHECKED — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, fa1b1e7, NOT PUBLISHED; UpdateLogSpec 22/0 (its panel-size check reworked); MUTANTS 2/2 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "whats new button seems outdated, we should update it too". Their four entries (relayed by the peer) stand at the top of Shared/UpdateLog.luau. The two oldest (5 and 4 Oct) stay, so the panel shows all six (GameConfig.UpdateLog.Shown). The header now says the owner approved the words on 2026-10-13.
 
