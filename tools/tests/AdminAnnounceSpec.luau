@@ -77,11 +77,8 @@ local ok, err = pcall(function()
 		{ AdminAnnounce.line(A, { kind = "miniend", mode = "podrush" }), "Nicky ended POD RUSH" },
 		{ AdminAnnounce.line(A, { kind = "spawn", target = "Rin", words = "a Colossal Snarlbloom pod" }),
 			"Nicky gave Rin a Colossal Snarlbloom pod!" },
-		{ AdminAnnounce.line(A, { kind = "spawn", own = true, words = "a Colossal Snarlbloom pod" }),
-			"Nicky spawned a Colossal Snarlbloom pod!" },
 		{ AdminAnnounce.line(A, { kind = "money", target = "Rin", amount = 1e6 }), "Nicky gave Rin $1M" },
 		{ AdminAnnounce.line(A, { kind = "speed", target = "Rin", amount = 500e3 }), "Nicky gave Rin 500K Speed" },
-		{ AdminAnnounce.line(A, { kind = "money", own = true, amount = 2.5e6 }), "Nicky gave themselves $2.5M" },
 	}
 	local wrong = {}
 	for _, pair in ipairs(lines) do
@@ -90,6 +87,23 @@ local ok, err = pcall(function()
 		end
 	end
 	check(#wrong == 0, "every action's line, in the owner's style", table.concat(wrong, " | "))
+	-- AN ADMIN'S OWN SAYS NOTHING (2026-10-13, the owner: "if i give myself anything, dont announce it,
+	-- announce it when i give on another player"): every kind given to oneself is silent; the same on
+	-- another player, and what acts on the whole world, are said.
+	local spoken = {}
+	for _, what in ipairs({ { kind = "spawn", own = true, words = "a pod" }, { kind = "money", own = true, amount = 1e6 },
+		{ kind = "speed", own = true, amount = 5 }, { kind = "dewberries", own = true, amount = 3 },
+		{ kind = "progress", own = true, amount = 3 }, { kind = "mistpod", own = true }, { kind = "mistready", own = true },
+		{ kind = "rebirths", own = true, amount = 2 } }) do
+		if AdminAnnounce.line(A, what) ~= nil then
+			table.insert(spoken, what.kind)
+		end
+	end
+	check(#spoken == 0 and AdminAnnounce.line(A, { kind = "money", target = "Rin", amount = 1e6 }) ~= nil
+			and AdminAnnounce.line(A, { kind = "rebirths", target = "Rin", amount = 2 }) ~= nil
+			and AdminAnnounce.line(A, { kind = "rain" }) ~= nil,
+		"an admin's action on themselves says nothing, whatever it gives; on another player, and the world's, said",
+		table.concat(spoken, ", "))
 	local modes = 0
 	for id, mode in pairs(GameConfig.MiniEvent.Modes) do
 		if AdminAnnounce.line(A, { kind = "mini", mode = id }) == string.format("Nicky started %s!", mode.Name) then
@@ -426,7 +440,7 @@ local ok, err = pcall(function()
 	check(r.ok and one("Nicky gave Rin $2M", "admin:" .. ADMIN_A .. ":money:" .. rin.UserId),
 		"a second give to the same player folds into the same line, counted up", said[1] and said[1].title)
 	r = act(admin, "AddSpeed", admin.UserId, 500e3)
-	check(r.ok and one("Nicky gave themselves 500K Speed"), "ADD SPEED to oneself", said[1] and said[1].title)
+	check(r.ok and #said == 0, "ADD SPEED to oneself: added, and said to nobody", said[1] and said[1].title)
 	r = act(admin, "AddMoney", rin.UserId, -5)
 	check(not r.ok and #said == 0, "a refused grant says nothing")
 	local request = { species = "petalpip", form = "pod", size = 5, quantity = 5, request = "spec-announce-0001" }
@@ -436,8 +450,7 @@ local ok, err = pcall(function()
 		"SPAWN to somebody: the give, with its quantity", said[1] and said[1].title)
 	local own = { species = "petalpip", form = "pod", size = 5, quantity = 1, request = "spec-announce-0002" }
 	r = act(admin, "Spawn", admin.UserId, own, nil)
-	check(r.ok and one(string.format("Nicky spawned %s!", SpawnCatalog.phrase(SeedData.Get("petalpip"), 5, "pod", 1))),
-		"SPAWN to oneself", said[1] and said[1].title)
+	check(r.ok and #said == 0, "SPAWN to oneself: given, and said to nobody", said[1] and said[1].title)
 	r = act(admin, "Spawn", rin.UserId, { species = "petalpip", form = "pod", size = 5, quantity = 5,
 		request = "spec-announce-0001" }, rin.Name)
 	check(#said == 0, "the same request again gives nothing more, and says nothing")

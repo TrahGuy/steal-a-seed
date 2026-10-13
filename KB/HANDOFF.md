@@ -1,5 +1,22 @@
 # Steal a Seed — Session Handoff
 
+## ADMIN LINES BARE, NO BACKING, NOTHING SAID FOR AN ADMIN'S OWN, REBIRTHS IN RESET'S KEPT LIST — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NoticeSpec 105/0 (2 new), AdminAnnounceSpec 44/0 (1 new), AdminMistSpec 69/0, AdminSpec 137/0, AdminConsoleSpec 64/0, HudLayoutSpec 1498/0, MiniEventSpec 90/0, SourceIconsSpec 21/0 and 9 more notice specs green; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+Four owner asks, from item 9's Play and the peer:
+- "theres a black background on notices, remove it": ActionToastUI's slim line over an open panel stands on NO backing now (the Backing frame is gone). Its white comic letters and their ink carry it. Its placement rules are unchanged: above the panel's top edge, growing up, never on the panel.
+- "the setting logo before it remove it also": an admin's line has NO icon. Notice.Post gained `bare` (no glyph, no picture, no icon's room; the words centred alone), passed by Notice.readServerNotice, sent by AdminService.TellEveryone and both of MiniEventService's admin lines. Gone: GameConfig.AdminAnnounce.Icon and SourceIcons.admin. The gear stays on the rail, in Settings and as the console's own MenuIcons.admin.
+- "if i give myself anything, dont announce it, announce it when i give on another player": AdminAnnounce.line says NOTHING when `own` (cash, Speed, a spawn, Dewberries, progress, a pod, pods ready, rebirths, on oneself). The console still answers privately. The same on another player, and what acts on the whole world (weather, events, the Mist, night/day), are said as before. The "gave themselves" words are gone from GameConfig.
+- "add rebirths to the list": RESET PROGRESS's red box now says KEPT: game passes, Robux purchase records, the Walk Mode setting, the rebirth count. Words only. Still 3 lines on the 640 x 360 phone and 2 elsewhere (measured), so nothing moves.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1065 x 716):
+- START NIGHT with the console open: "nicnicniccoal made it night!" above the console's top edge, with no backing and no icon.
+- With no panel open: the same line centred under the guide's card, no icon.
+- ADD MONEY to oneself: the console's own "Added $1,000 to nicnicniccoal." and no notice at all (the audit's log line as ever).
+- No script errors.
+- Captures: output/admin-lines-2026-10-13/ (01-03). Cleared: probe 382 / 0 differ / 0 ZZ / marker absent.
+
+**Files**: StarterPlayerScripts/ActionToastUI.client.luau, Shared/Notice.luau, Shared/AdminAnnounce.luau, Shared/GameConfig.luau, AdminService/init.luau, AdminService/AdminConsoleUI.client.luau, MiniEventService.luau, tools/tests/NoticeSpec.luau, AdminAnnounceSpec.luau, AdminMistSpec.luau, AdminSpec.luau, HudLayoutSpec.luau.
+
 ## ITEM 9 (BACKLOG 2026-10-12): REBIRTHS ON THE ADMIN CONSOLE'S PLAYER TAB — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, a904e1b, NOT PUBLISHED; AdminSpec 137/0 (8 new), AdminConsoleSpec 64/0 (1 new, 2 request shapes), AdminAnnounceSpec 43/0, AdminMistSpec 69/0, RebirthSpec 93/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "add a rebirth section for admin console to reset it or to add"; their answers: "ADD raises only the count, never wiping money or plants; RESET sets it to 0".

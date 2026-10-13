@@ -363,6 +363,28 @@ do
 			and UIKit.comicInk(14) == 1.5 and UIKit.comicInk(11) == 1.5,
 		"the comic face is Comic Neue Angular, measured as the engine draws it (wrapping where asked); its ink "
 			.. "thick, never under 1.5 px", string.format("%s / %s", tostring(got), tostring(want)))
+	-- BARE (2026-10-13, the owner: no gear on an admin's line): a server line that asks for no icon keeps none --
+	-- no glyph, no picture, no icon's room -- and both senders of admin lines ask for it.
+	local bareIn = Notice.readServerNotice({ title = "Nicky gave Rin $1M", bare = true })
+	local plainIn = Notice.readServerNotice({ title = "Nicky gave Rin $1M" })
+	local oddIn = Notice.readServerNotice({ title = "Nicky gave Rin $1M", bare = "yes" })
+	local adminSrc = sourceOf(ServerScriptService:FindFirstChild("SeedGameServer"), "AdminService") or ""
+	local miniSrc = sourceOf(ServerScriptService:FindFirstChild("SeedGameServer"), "MiniEventService") or ""
+	local _, miniBare = string.gsub(miniSrc, "\n%s*bare = true }, nil%)", "")
+	check(bareIn and bareIn.bare == true and plainIn and plainIn.bare == nil and oddIn and oddIn.bare == nil
+			and toast:find("local bare = post.bare == true", 1, true) ~= nil
+			and toast:find("local glyph = if bare then 0 else iconSize + 8", 1, true) ~= nil
+			and toast:find("local room = width - glyph - closeW * 2", 1, true) ~= nil
+			and toast:find("local rowW = glyph + headW", 1, true) ~= nil
+			and toast:find("if not bare then\n\t\tlocal drawnIcon = StatusText.icon(", 1, true) ~= nil
+			and adminSrc:find("event:FireAllClients(Notice.ServerNotice, { title = title, key = key, bare = true,", 1, true) ~= nil
+			and miniBare == 2 and GameConfig.AdminAnnounce.Icon == nil and (GameConfig.SourceIcons :: any).admin == nil,
+		"an admin's line is BARE: no icon and no icon's room, the words centred alone -- from AdminService and both of "
+			.. "MiniEventService's lines", string.format("mini %d", miniBare))
+	-- NO BACKING (2026-10-13, the owner: "theres a black background on notices, remove it"): the slim line over an
+	-- open panel is its headline alone.
+	check(toast:find("Backing", 1, true) == nil and toast:find("BackgroundTransparency = 0.12", 1, true) == nil,
+		"the slim line over an open panel stands on no backing")
 	local chest = sourceOf(scripts, "BonusChestUI") or ""
 	check(chest:find("Notice.post(", 1, true) ~= nil and not chest:find("showCard", 1, true)
 			and not chest:find("SoundKit.play(\"SellAll\")", 1, true),

@@ -456,7 +456,7 @@ function AdminService.TellEveryone(title: string, key: string, quiet: boolean?)
 	local event = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if event and event:IsA("RemoteEvent") then
 		pcall(function()
-			event:FireAllClients(Notice.ServerNotice, { title = title, key = key, icon = GameConfig.AdminAnnounce.Icon,
+			event:FireAllClients(Notice.ServerNotice, { title = title, key = key, bare = true,
 				quiet = if quiet then true else nil })
 		end)
 	end

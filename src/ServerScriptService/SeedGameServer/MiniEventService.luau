@@ -1424,7 +1424,7 @@ local function reconcile(now: number, source: string)
 		local line = if shown then AdminAnnounce.line(shown, { kind = "miniend", mode = event.mode }) else nil
 		if line and r then
 			broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(r.endedBy or 0, "miniend"),
-				icon = GameConfig.AdminAnnounce.Icon }, nil)
+				bare = true }, nil)
 		end
 	end
 end
@@ -1546,7 +1546,7 @@ function MiniEventService.Step(now: number)
 			local line = if shown then AdminAnnounce.line(shown, { kind = "mini", mode = event.mode }) else nil
 			if line then
 				broadcast(Notice.ServerNotice, { title = line, key = AdminAnnounce.key(event.by or 0, "mini"),
-					icon = GameConfig.AdminAnnounce.Icon }, nil)
+					bare = true }, nil)
 			end
 		end
 		if hasTickets(event) then

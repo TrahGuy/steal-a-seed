@@ -1463,12 +1463,12 @@ local ok, err = pcall(function()
 	local resetBody = string.match(adminSource, "\nlocal function resetRebirths%(.-\nend\n") or ""
 	local addBody = string.match(adminSource, "\nlocal function addRebirths%(.-\nend\n") or ""
 	check(AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 5, target = "Rin" }) == "Nicky gave Rin 5 rebirths!"
-			and AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 1, own = true })
-				== "Nicky gave themselves a rebirth!"
+			and AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 1, own = true }) == nil
 			and AdminAnnounce.line("Nicky", { kind = "rebirths", amount = 0, target = "Rin" }) == nil
 			and resetBody ~= "" and not string.find(resetBody, "announce(", 1, true)
 			and string.find(addBody, 'foldGive(admin, target, { kind = "rebirths", amount = added })', 1, true) ~= nil,
-		"an ADD is said to everybody (\"Nicky gave Rin 5 rebirths!\"), folded per admin and player; a reset says nothing")
+		"an ADD on another player is said to everybody (\"Nicky gave Rin 5 rebirths!\"), folded per admin and player; one "
+			.. "on oneself, and a reset, say nothing")
 	check(string.find(addBody, "PlayerDataService.UpdateRebirth(", 1, true) ~= nil
 			and string.find(resetBody, "PlayerDataService.UpdateRebirth(", 1, true) ~= nil
 			and not string.find(addBody .. resetBody, "AddCash", 1, true)

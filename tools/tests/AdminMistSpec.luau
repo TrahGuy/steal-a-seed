@@ -78,15 +78,10 @@ local ok, err = pcall(function()
 	local A = "Nicky"
 	local lines = {
 		{ AdminAnnounce.line(A, { kind = "dewberries", amount = 5, target = "Rin" }), "Nicky gave Rin 5 Dewberries!" },
-		{ AdminAnnounce.line(A, { kind = "dewberries", amount = 1, own = true }), "Nicky gave themselves 1 Dewberry!" },
 		{ AdminAnnounce.line(A, { kind = "progress", amount = 7, target = "Rin" }),
 			string.format("Nicky set Rin's Dewberry progress to 7/%d", PER) },
-		{ AdminAnnounce.line(A, { kind = "progress", amount = 3, own = true }),
-			string.format("Nicky set their Dewberry progress to 3/%d", PER) },
 		{ AdminAnnounce.line(A, { kind = "mistpod", target = "Rin" }), "Nicky gave Rin a Mysterious Pod!" },
-		{ AdminAnnounce.line(A, { kind = "mistpod", own = true }), "Nicky gave themselves a Mysterious Pod!" },
 		{ AdminAnnounce.line(A, { kind = "mistready", target = "Rin" }), "Nicky made Rin's Mysterious Pods ready!" },
-		{ AdminAnnounce.line(A, { kind = "mistready", own = true }), "Nicky made their Mysterious Pods ready!" },
 		{ AdminAnnounce.line(A, { kind = "burst" }), "Nicky dropped a Dewberry burst!" },
 		{ AdminAnnounce.line(A, { kind = "misteligible" }), "Nicky made the Enchanted Mist eligible!" },
 	}
@@ -504,7 +499,7 @@ local ok, err = pcall(function()
 		string.format("a count outside 0..%d, or not a whole number: refused, nothing changed", CAP),
 		table.concat(outOfRange, ", "))
 	r = act(admin, "MistBerries", admin.UserId, 1)
-	check(r.ok and one("Nicky gave themselves 1 Dewberry!"), "to oneself", said[1] and said[1].title)
+	check(r.ok and #said == 0, "to oneself: set, and said to nobody (the owner, 2026-10-13)", said[1] and said[1].title)
 
 	-- A PLAYER'S PROGRESS.
 	r = act(admin, "MistProgress", rin.UserId, 7)
@@ -517,7 +512,7 @@ local ok, err = pcall(function()
 	check(not badProgress.ok and #said == 0 and profiles[rin].DewberryProgress == 0,
 		string.format("%d or more: refused (%d earns a pod)", PER, PER), badProgress.message)
 	r = act(admin, "MistProgress", admin.UserId, 3)
-	check(r.ok and one(string.format("Nicky set their Dewberry progress to 3/%d", PER)), "to oneself",
+	check(r.ok and #said == 0, "to oneself: set, and said to nobody (the owner, 2026-10-13)",
 		said[1] and said[1].title)
 
 	-- A MYSTERIOUS POD.
@@ -544,8 +539,8 @@ local ok, err = pcall(function()
 	for _, record in pairs(profiles[admin].MysteryPods) do
 		mine = record
 	end
-	check(r.ok and mine and mine.Species == "elderbough" and mine.Size == 7 and one("Nicky gave themselves a Mysterious Pod!"),
-		"a chosen creature and size, to oneself (no username needed): saved as chosen", mine and mine.Species)
+	check(r.ok and mine and mine.Species == "elderbough" and mine.Size == 7 and #said == 0,
+		"a chosen creature and size, to oneself (no username needed): saved as chosen, said to nobody", mine and mine.Species)
 	r = act(admin, "MistPod", admin.UserId, { species = "snarlbloom" }, nil)
 	local secret = false
 	for _, record in pairs(profiles[admin].MysteryPods) do

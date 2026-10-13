@@ -75,6 +75,9 @@ export type Post = {
 	-- picture is drawn in place of the kind's glyph once uploaded, and until
 	-- then the glyph is. Changes nothing else -- not the kind, timing or sound.
 	icon: string?,
+	-- No icon at all (2026-10-13, the owner: an admin's line has no gear): the
+	-- headline stands alone, centred, with no icon's room kept beside it.
+	bare: boolean?,
 	-- How long it stays up, when the default for its kind is wrong for it.
 	seconds: number?,
 	-- Asked before it goes up and while it is up; false takes it down at once.
@@ -458,6 +461,8 @@ function Notice.readServerNotice(payload: any): Post?
 		key = key,
 		icon = icon,
 		quiet = if payload.quiet == true then true else nil,
+		-- An admin's line (2026-10-13): no icon at all.
+		bare = if payload.bare == true then true else nil,
 	}
 end
 

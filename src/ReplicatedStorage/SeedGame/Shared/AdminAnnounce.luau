@@ -68,7 +68,8 @@ end
 -- REBIRTHS (2026-10-13, the owner's item 9):
 --   rebirths (+ amount)         rebirths added to a player's count; never a
 --                               reset to 0 (silent, as a progress reset is)
--- `own` when the admin gave to themselves; `target` the player's name otherwise.
+-- `own` when the admin acted on themselves -- and then NOTHING is said
+-- (2026-10-13, below); `target` the player's name otherwise.
 export type What = {
 	kind: string,
 	mode: string?,
@@ -80,8 +81,16 @@ export type What = {
 }
 
 -- The line for one action by `admin` (a display name), or nil when it says
--- nothing (an unknown action, a give of nothing).
+-- nothing (an unknown action, a give of nothing, an admin's own).
 function AdminAnnounce.line(admin: string, what: What): string?
+	-- AN ADMIN'S OWN SAYS NOTHING (2026-10-13, the owner: "if i give myself
+	-- anything, dont announce it, announce it when i give on another player"):
+	-- cash, Speed, a spawn, Dewberries, progress, a pod, pods made ready,
+	-- rebirths -- on themselves, between them and the console. The same on
+	-- another player, and what acts on the whole world, are said as before.
+	if what.own then
+		return nil
+	end
 	local W = CFG.Words
 	local kind = what.kind
 	if kind == "rain" then
@@ -110,9 +119,6 @@ function AdminAnnounce.line(admin: string, what: What): string?
 		if not words or words == "" then
 			return nil
 		end
-		if what.own then
-			return string.format(W.SpawnOwn, admin, words)
-		end
 		return string.format(W.Spawn, admin, what.target or W.Somebody, words)
 	elseif kind == "money" or kind == "speed" then
 		local n = what.amount
@@ -120,9 +126,6 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return nil
 		end
 		local amount = if kind == "money" then AdminAnnounce.money(n) else AdminAnnounce.speed(n)
-		if what.own then
-			return string.format(W.GiveOwn, admin, amount)
-		end
 		return string.format(W.Give, admin, what.target or W.Somebody, amount)
 	elseif kind == "dewberries" then
 		local n = what.amount
@@ -130,9 +133,6 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return nil
 		end
 		local berries = string.format(if n == 1 then W.OneDewberry else W.Dewberries, n)
-		if what.own then
-			return string.format(W.DewberriesOwn, admin, berries)
-		end
 		return string.format(W.DewberriesGiven, admin, what.target or W.Somebody, berries)
 	elseif kind == "progress" then
 		local n = what.amount
@@ -140,19 +140,10 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return nil
 		end
 		local per = EnchantedMistData.BerriesPerPod
-		if what.own then
-			return string.format(W.ProgressOwn, admin, n, per)
-		end
 		return string.format(W.Progress, admin, what.target or W.Somebody, n, per)
 	elseif kind == "mistpod" then
-		if what.own then
-			return string.format(W.MistPodOwn, admin)
-		end
 		return string.format(W.MistPod, admin, what.target or W.Somebody)
 	elseif kind == "mistready" then
-		if what.own then
-			return string.format(W.MistReadyOwn, admin)
-		end
 		return string.format(W.MistReady, admin, what.target or W.Somebody)
 	elseif kind == "rebirths" then
 		local n = what.amount
@@ -160,9 +151,6 @@ function AdminAnnounce.line(admin: string, what: What): string?
 			return nil
 		end
 		local rebirths = if n == 1 then W.OneRebirth else string.format(W.Rebirths, n)
-		if what.own then
-			return string.format(W.RebirthsOwn, admin, rebirths)
-		end
 		return string.format(W.RebirthsGiven, admin, what.target or W.Somebody, rebirths)
 	elseif kind == "burst" then
 		return string.format(W.Burst, admin)

@@ -61,8 +61,9 @@
 --
 -- ABOVE AN OPEN PANEL, NEVER ON IT (2026-10-13, the owner's pick for backlog
 -- item 5: "A DEWBERRY APPEARED!" had come down over the Shop's MYSTERIOUS POD).
--- With a centre panel open the one line is SLIM -- the headline alone, on a
--- solid dark backing -- and it stands on its foot just above the panel's top
+-- With a centre panel open the one line is SLIM -- the headline alone, on
+-- nothing since 2026-10-13 (the owner: no black behind it; its white letters
+-- and their ink carry it) -- and it stands on its foot just above the panel's top
 -- edge, a headline that wraps growing up: in the gap under the top bar where
 -- there is one, reaching up into the top bar's band where there is not (a
 -- phone's panel takes the whole safe area). Only a screen with no room even
@@ -177,7 +178,7 @@ local metrics: Metrics = FULL
 local maxShown = Notice.MaxShown
 local width = 340
 -- ABOVE AN OPEN PANEL (2026-10-13): whether the stack is the slim line now,
--- and how far its backing stands proud of the headline.
+-- and the room kept round it.
 local slim = false
 local SLIM_PAD = 3
 -- The headline height place() last made room for over a panel: a taller one
@@ -244,10 +245,9 @@ type Drawn = {
 	-- `dismissible`); nil on every other notice.
 	close: TextButton?,
 	-- ABOVE AN OPEN PANEL (2026-10-13): the headline row's height, the whole
-	-- notice's, the dark backing the slim line stands on, and whether it is slim.
+	-- notice's, and whether it is slim.
 	rowH: number,
 	fullHeight: number,
-	backing: Frame,
 	slimmed: boolean,
 }
 
@@ -307,19 +307,6 @@ local function build(post: Notice.Post, key: string): Drawn
 	alpha.Value = 1
 	local hide = Instance.new("NumberValue")
 	hide.Value = 0
-	-- The slim line's backing (ABOVE AN OPEN PANEL), under everything in the
-	-- body; shown only while a panel is open (dress).
-	local backing = Instance.new("Frame")
-	backing.Name = "Backing"
-	backing.AnchorPoint = Vector2.new(0.5, 0)
-	backing.BackgroundColor3 = Notice.Outline
-	backing.BackgroundTransparency = 0.12
-	backing.BorderSizePixel = 0
-	backing.Active = false
-	backing.Visible = false
-	backing.ZIndex = 0
-	backing.Parent = body
-	UIKit.corner(backing, 8)
 	local d: Drawn = {
 		key = key,
 		post = post,
@@ -339,17 +326,18 @@ local function build(post: Notice.Post, key: string): Drawn
 		close = nil,
 		rowH = 0,
 		fullHeight = 0,
-		backing = backing,
 		slimmed = false,
 	}
-	track(d, backing, "BackgroundTransparency")
 
-	-- The headline row: icon, a small gap, the words -- centred as one. A notice
-	-- the player may dismiss keeps its close button's width clear on BOTH sides,
-	-- so the row stays centred and never runs under the button.
+	-- The headline row: icon, a small gap, the words -- centred as one; a BARE
+	-- notice (an admin's line, 2026-10-13) the words alone, no icon's room kept.
+	-- A notice the player may dismiss keeps its close button's width clear on
+	-- BOTH sides, so the row stays centred and never runs under the button.
 	local iconSize = metrics.icon
+	local bare = post.bare == true
+	local glyph = if bare then 0 else iconSize + 8
 	local closeW = if post.dismissible == true then iconSize + 6 else 0
-	local room = width - iconSize - 8 - closeW * 2
+	local room = width - glyph - closeW * 2
 	local hs = headSize(post.title, room)
 	local headW = math.min(room, textWidth(post.title, hs))
 	-- A headline still wider than the room at the smallest size wraps onto a
@@ -372,8 +360,8 @@ local function build(post: Notice.Post, key: string): Drawn
 			headH = if wrapped then UIKit.comicBounds(table.concat(found.lines, "\n"), hs).Y else hs
 		end
 	end
-	local rowW = iconSize + 8 + headW
-	local rowH = math.max(iconSize, headH + 4)
+	local rowW = glyph + headW
+	local rowH = math.max(if bare then 0 else iconSize, headH + 4)
 
 	local row = Instance.new("Frame")
 	row.Name = "Headline"
@@ -384,10 +372,15 @@ local function build(post: Notice.Post, key: string): Drawn
 	row.BorderSizePixel = 0
 	row.Parent = body
 
-	-- The kind's glyph, or the picture of where it came from once uploaded.
-	local icon = StatusText.icon(row, post.kind, style.tint, iconSize, post.icon)
-	icon.AnchorPoint = Vector2.new(0, 0.5)
-	icon.Position = UDim2.new(0, 0, 0.5, 0)
+	-- The kind's glyph, or the picture of where it came from once uploaded --
+	-- none on a bare notice.
+	local icon: GuiObject? = nil
+	if not bare then
+		local drawnIcon = StatusText.icon(row, post.kind, style.tint, iconSize, post.icon)
+		drawnIcon.AnchorPoint = Vector2.new(0, 0.5)
+		drawnIcon.Position = UDim2.new(0, 0, 0.5, 0)
+		icon = drawnIcon
+	end
 
 	local head = Instance.new("TextLabel")
 	head.Name = "Title"
@@ -557,7 +550,7 @@ local function build(post: Notice.Post, key: string): Drawn
 	end
 
 	-- The icon's rings are strokes and its glyph is fills with strokes.
-	for _, part in ipairs(icon:GetDescendants()) do
+	for _, part in ipairs(if icon then icon:GetDescendants() else {}) do
 		if part:IsA("UIStroke") then
 			track(d, part, "Transparency")
 		elseif part:IsA("Frame") and part.BackgroundTransparency < 1 then
@@ -570,9 +563,6 @@ local function build(post: Notice.Post, key: string): Drawn
 	d.height = total
 	d.rowH = rowH
 	d.fullHeight = total
-	-- The backing hugs the headline row, a few pixels proud of it all round.
-	backing.Position = UDim2.new(0.5, 0, 0, -SLIM_PAD)
-	backing.Size = UDim2.fromOffset(rowW + SLIM_PAD * 4, rowH + SLIM_PAD * 2)
 	frame.Size = UDim2.fromOffset(width, total)
 	alpha.Changed:Connect(function()
 		applyAlpha(d)
@@ -608,7 +598,7 @@ local function slotTween(d: Drawn, y: number, instant: boolean)
 end
 
 -- A notice as the slim line (ABOVE AN OPEN PANEL) or as itself: the slim one
--- shows its headline alone on the backing, and stands that much shorter.
+-- shows its headline alone, and stands that much shorter.
 local function dress(d: Drawn)
 	if d.slimmed == slim then
 		return
@@ -618,7 +608,6 @@ local function dress(d: Drawn)
 	if detail then
 		detail.Visible = not slim
 	end
-	d.backing.Visible = slim
 	d.height = if slim then d.rowH else d.fullHeight
 	d.frame.Size = UDim2.fromOffset(width, d.height)
 end

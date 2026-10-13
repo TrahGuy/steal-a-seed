@@ -2964,11 +2964,12 @@ check(toastSrc:find("for _, open in ipairs(PadInput.openPanels()) do", 1, true) 
 		and toastSrc:find("area = { x = area.x, y = foot - slimH, w = area.w, h = slimH }\n\t\tfromTop = false", 1, true) ~= nil
 		and toastSrc:find("if slim and d.rowH > slimNeed then\n\t\tplace()", 1, true) ~= nil
 		and toastSrc:find("detail.Visible = not slim", 1, true) ~= nil
-		and toastSrc:find("d.backing.Visible = slim", 1, true) ~= nil
+		-- No backing since 2026-10-13 (the owner: no black behind it).
+		and toastSrc:find("Backing", 1, true) == nil and toastSrc:find("backing", 1, true) == nil
 		and toastSrc:find("d.height = if slim then d.rowH else d.fullHeight", 1, true) ~= nil
 		and toastSrc:find("PadInput.PanelChanged:Connect(placeSoon)", 1, true) ~= nil
 		and toastSrc:find("if fromTop and not slim then", 1, true) ~= nil,
-	"with a centre panel open the one notice is SLIM -- its headline on a dark backing -- and its foot stands just above "
+	"with a centre panel open the one notice is SLIM -- its headline alone, on no backing -- and its foot stands just above "
 		.. "the panel's top edge, up into the top bar's band if it must, else at the screen's foot: never over the panel")
 -- And what shares the band says so (Notice.band): the notices stack under the guide's card off a phone, the
 -- spotlight's hand, a desktop's Pod Rush tracker and mill bar and an announcement; the chase word and the moments --

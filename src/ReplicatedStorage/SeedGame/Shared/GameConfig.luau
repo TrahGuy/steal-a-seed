@@ -8081,8 +8081,9 @@ GameConfig.AdminAnnounce = {
 	-- A burst of one admin's gives to one player folds into one line that
 	-- counts up while each lands within this many seconds of the last.
 	FoldSeconds = 30,
-	-- The picture beside the line: the admin console's own (SourceIcons.admin).
-	Icon = "admin",
+	-- No picture beside the line (2026-10-13, the owner: no gear on these): the
+	-- notice draws it bare (Notice.Post's `bare`), the words centred alone. And
+	-- an admin's action on themselves says nothing (AdminAnnounce.line).
 	Words = {
 		Rain = "%s started the Rain!",
 		Thunder = "%s summoned a Thunderstorm!",
@@ -8097,9 +8098,7 @@ GameConfig.AdminAnnounce = {
 		MiniEnd = "%s ended %s",
 		-- SpawnCatalog's words: "a Colossal Snarlbloom pod", "5 Giant Petalpip pods".
 		Spawn = "%s gave %s %s!",
-		SpawnOwn = "%s spawned %s!",
 		Give = "%s gave %s %s",
-		GiveOwn = "%s gave themselves %s",
 		-- A folded burst of different things.
 		Pods = "%d pods",
 		Plants = "%d grown plants",
@@ -8111,13 +8110,9 @@ GameConfig.AdminAnnounce = {
 		OneDewberry = "%d Dewberry",
 		Dewberries = "%d Dewberries",
 		DewberriesGiven = "%s gave %s %s!",
-		DewberriesOwn = "%s gave themselves %s!",
 		Progress = "%s set %s's Dewberry progress to %d/%d",
-		ProgressOwn = "%s set their Dewberry progress to %d/%d",
 		MistPod = "%s gave %s a Mysterious Pod!",
-		MistPodOwn = "%s gave themselves a Mysterious Pod!",
 		MistReady = "%s made %s's Mysterious Pods ready!",
-		MistReadyOwn = "%s made their Mysterious Pods ready!",
 		Burst = "%s dropped a Dewberry burst!",
 		MistEligible = "%s made the Enchanted Mist eligible!",
 		-- REBIRTHS (2026-10-13, the owner's item 9): rebirths added, folded per
@@ -8125,7 +8120,6 @@ GameConfig.AdminAnnounce = {
 		OneRebirth = "a rebirth",
 		Rebirths = "%d rebirths",
 		RebirthsGiven = "%s gave %s %s!",
-		RebirthsOwn = "%s gave themselves %s!",
 	},
 }
 
@@ -9714,9 +9708,6 @@ GameConfig.SourceIcons = {
 	-- THE ENCHANTED MIST (2026-10-12, item 15): its icon over the hotbar while it
 	-- is ACTIVE and its notices (the berries, the Mosskeeper's delivery).
 	mist = "rbxassetid://109594999484180",
-	-- An admin's line to everybody (2026-10-12, item 10): the admin console's own
-	-- picture (MenuIcons.admin).
-	admin = GameConfig.Rail.SettingsIcon,
 }
 
 -- A source picture uploaded with a clear margin round it is drawn by its crop

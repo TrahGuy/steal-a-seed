@@ -1063,7 +1063,7 @@ do
 	ui.resetWho.Font = LOOK.BodyBoldFont
 	build.line(card, "Erases", 12, TEXT).Text = "ERASES AND SAVES: cash, Speed, every plant and pod, the bag, bought "
 		.. "weapons, plot and mill upgrades, the Almanac and harvests, tutorial progress, offline earnings. KEPT: game "
-		.. "passes, Robux purchase records, the Walk Mode setting. This cannot be undone."
+		.. "passes, Robux purchase records, the Walk Mode setting, the rebirth count. This cannot be undone."
 	ui.typeCaption = build.line(card, "TypeCaption", 12, BAD)
 	local typed = build.action(card, "Typed", "full", { { "CloseReset", "CANCEL" },
 		{ "ResetPlayerProgress", "RESET PROGRESS" } }, 150)
