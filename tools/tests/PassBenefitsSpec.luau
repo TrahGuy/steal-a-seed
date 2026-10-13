@@ -277,7 +277,7 @@ local ok, err = pcall(function()
 	local savedLoop = string.match(merge, "ipairs%(saved%)(.-)ipairs%(live%)") or "plantLimit"
 	local restore = string.match(carry, "local function restoreOne(.-)\nend\n") or ""
 	check(merge ~= "" and not has(savedLoop, "plantLimit") and not has(savedLoop, "MaxHeld")
-			and has(restore, "given = CarryService.GiveHatched(player, species, tier, nil, nil, nil, item)")
+			and has(restore, "given = CarryService.GiveHatched(player, species, tier, INTO_BAG, sealedUntil, nil, item)")
 			and has(carry, "return math.max(limit - count, 0), count, true"),
 		"over the room, nothing is dropped or hidden: every saved plant is kept and given back; only adding stops")
 	check(has(passSrc, "if answer ~= nil and answer ~= mine[key] then")
