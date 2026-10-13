@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## COMIC NEUE ANGULAR (a): THE ODDS CARDS' PERCENTAGES, READABLE ON EVERY CARD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; MysteryPodSpec 39/0 (the light-card check replaced), MysteryShopSpec 16/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, CompactMenusSpec 48/0, EnchantedMistSpec 62/0, MistLookSpec 17/0; MUTANTS 3/3 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## COMIC NEUE ANGULAR (a): THE ODDS CARDS' PERCENTAGES, READABLE ON EVERY CARD — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, a906c35, the tint kept, NOT PUBLISHED; MysteryPodSpec 39/0 (the light-card check replaced), MysteryShopSpec 16/0, MistCreaturesSpec 11/0, MosskeeperSpec 69/0, CompactMenusSpec 48/0, EnchantedMistSpec 62/0, MistLookSpec 17/0; MUTANTS 3/3 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: the odds cards' percentages in COMIC NEUE ANGULAR, the face nearest their reference (a thumbnail in Comic Sans MS Bold: white letters, a thick black outline). Folded into the faint "17%" pink and "5%" gold on the white pearl cards.
 
