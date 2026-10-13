@@ -1,5 +1,26 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 2 (BACKLOG 2026-10-12): THE SHOP ON A CONTROLLER — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ShopPadSpec 22/0 (new); CashFormatSpec 26/0, CompactMenusSpec 46/0, ControllerSpec 64/0, MysteryShopSpec 14/0, PassBenefitsSpec 31/0, PhoneMenuSpec 29/0, RarityCardsSpec 60/0, RobuxPriceSpec 22/0, ServerBoostSpec 65/0, SpeedShoeSpec 19/0, SproutDashSpec 49/0, StoreSpec 28/0, StuddedLookSpec 33/0, TutorialSpotlightSpec 51/0, UpdateLogSpec 22/0, UsabilityAudioSpec 95/0, HotbarSpec 38/0; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, A LIVE WALK)
+
+Michael on console: "shop navigation on console is busted". No specifics came, so the owner's call was to audit and fix now.
+
+**What was wrong:**
+1. The Mysterious Pod banner's sheets (ODDS, GIFT) never took the selection. Their dimmed backdrop was one big selectable button, B closed the WHOLE Shop (PadFocus's B) instead of the sheet, and a sheet shutting left the selection to the engine's re-homing.
+2. A controller opened the Shop on the first card UNDER the banner (PadFirst was the first card), past it.
+3. LB / RB went round the shelves and never back to the banner.
+4. Every D-pad move was the engine's guess, in a page of buttons standing on buttons (a card's face and its BUY), a UIScale'd banner and a scrolling list.
+
+**What it is now:**
+- New `Shared/PadGraph.luau`: links written, not guessed. Rows in reading order (centres within 6 px are one row); left / right along a row; up / down to the nearest in x in the next row (left on a tie); an edge holds (the link is the control itself). `wire` takes GROUPS stacked in order (a header, then a scrolling page), so a card scrolled up past the window is never taken for a row above the header. `scrollInto` keeps a control inside a list's window, with a margin.
+- ShopUI wires two groups: the header (REWARDS & ODDS when shown, the close), then the page: the banner's ODDS, its four BUY, its four GIFT (MysteryShopBanner.padControls), then every shown card's face (A opens its details) and BUY, shelf by shelf. The details view wires BACK, BUY, REWARDS & ODDS. Re-wired on open, on any page or details change, and on every selection move inside the Shop. The page scrolls itself to the selection. PadFirst is the banner's ODDS. LB / RB's first stop is the banner.
+- The banner's sheets: the backdrop is never a stop; the sheet panel is a selection group that stops at every edge; on a controller the sheet takes the selection (GIFT: the first name, or the X when nobody can be given to; ODDS: the X); B is bound at 3000 above PadFocus's 2500 and shuts the sheet alone; however the sheet shuts (X, backdrop, B, a gift sent, the Shop closing), B is given back, and the selection returns to the button that opened it while the Shop is still open. The names' list is never a stop.
+
+**The Play** (guarded, the throwaway SeedTest_20261013, desktop; the Shop opened through its OpenAt event, the graph walked through NextSelection* from a Client exec): PadFirst = the banner's ODDS; 61 buttons on screen in the Shop, all 61 reached, none linking outside the Shop. Down from ODDS: x50 BUY > x50 GIFT > a Passes card's face > its BUY > the next card's face. Selecting the last card's BUY scrolled the page to 1450 with it in view; selecting ODDS again scrolled back to the top. Captures (the gold selection ring along that path): output/item2-shop-controller-2026-10-13/.
+
+**Not seen:** real controller presses (Studio cannot make them: MCP clicks and keys keep the input type), so a sheet taking the selection and B shutting it are held by the spec's source checks only; a phone layout (two columns: a card's face and BUY are then one row). Michael confirms on console.
+
+**Files:** Shared/PadGraph.luau (new), Shared/MysteryShopBanner.luau (padControls, sheetOpen, BackAction; the sheets on a controller), StarterPlayerScripts/ShopUI.client.luau (the wiring, the scroll, PadFirst, LB / RB), tools/tests/ShopPadSpec.luau (new), AGENTS.md (structure).
+
 ## ITEM 1 (BACKLOG 2026-10-12): THE EQUIP BEST PAD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; EquipBestPadSpec 27/0 (new); SfxWiringSpec 202/0, UsabilityAudioSpec 95/0, SoundLevelSpec 28/0, PlantGlowSpec 69/0, GardenPlanSpec 18/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 Michael on console: getting to EQUIP BEST through the menus is cumbersome. The owner's queue (KB/BACKLOG-CONSOLE-FEEDBACK-2026-10-12.md, the decisions of 2026-10-13): a step pad, NOT at the entrance ("dont put the step pad on the entrance"), on the left grass strip, halfway along the bed, following the plot at every level.

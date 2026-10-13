@@ -140,6 +140,11 @@ src/
                                 left grass strip, halfway along the main bed, at every level), whether a
                                 root is on it, the 1-s hold / 5-s cooldown / step-off rule, and its parts
                                 (EquipBestPadSpec)
+    Shared/PadGraph.luau        a controller's D-pad through a panel, written rather than guessed
+                                (2026-10-13): rows in reading order, left / right along a row, up /
+                                down to the nearest in the next, edges that hold; wire() writes
+                                NextSelection* by groups (a header, then a scrolling page); scrollInto()
+                                keeps the selection inside a list's window. The Shop uses it (ShopPadSpec)
     Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
                                 screen's sidebars and its top row (BIOMES, PLOT, OBBY, ADMIN,
                                 the clock's chip at the row's right end; the three buttons are

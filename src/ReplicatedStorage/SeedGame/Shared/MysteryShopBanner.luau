@@ -21,7 +21,17 @@
 --
 -- Laid out once at BASE wide and scaled to the page (a probe reads any
 -- UIScale above it), so every phone and desktop gets the same banner.
+--
+-- ON A CONTROLLER (2026-10-13; the owner's backlog item 2): the Shop wires
+-- the banner's controls into its page (padControls: ODDS, then the bundles'
+-- BUY, then their GIFT). A sheet (the odds page, or who a gift is for) holds
+-- the selection while it is up: it takes it (its first control), keeps it
+-- (a selection group that stops at every edge), B closes the sheet alone
+-- (bound above PadFocus's B, which would close the whole Shop), and on the way
+-- out the selection goes back to the button that opened it. Its dimmed
+-- backdrop is never selectable.
 --==============================================================================
+local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 
@@ -79,7 +89,18 @@ function MysteryShopBanner.wasPrice(count: number, single: number?, bundle: numb
 	return if whole > bundle then whole else nil
 end
 
-export type Banner = { frame: Frame, setOpen: (boolean) -> () }
+-- B closes an open sheet: above PadFocus's SeedPanelBack (2500), which would
+-- close the whole Shop (MenuKit.bindBack binds at 3000).
+MysteryShopBanner.BackAction = "SeedMysterySheet"
+
+export type Banner = {
+	frame: Frame,
+	setOpen: (boolean) -> (),
+	-- The controls a controller walks, in reading order, while no sheet is up.
+	padControls: () -> { GuiObject },
+	-- A sheet is up (it holds the selection; the page's wiring waits).
+	sheetOpen: () -> boolean,
+}
 
 function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: number, order: number): Banner
 	local player = Players.LocalPlayer
@@ -243,7 +264,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		lastPress = now
 		return true
 	end
-	local openGift: (any) -> ()
+	local openGift: (any, GuiObject) -> ()
 
 	for i, count in ipairs(COUNTS) do
 		local item = mineBy[count]
@@ -319,7 +340,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		giftButton.hit.Activated:Connect(function()
 			if giftItem and pressOnce() then
 				SoundKit.play("CardClick")
-				openGift(giftItem)
+				openGift(giftItem, giftButton.hit)
 			end
 		end)
 	end
@@ -339,7 +360,14 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	--==========================================================================
 	-- A SHEET OVER THE SHOP: the odds page, or who a gift is for
 	--==========================================================================
-	local function sheet(name: string, tall: number): (Frame, Frame, () -> ())
+	-- ON A CONTROLLER: the button that opened the sheet that is up, which the
+	-- selection goes back to; whether the Shop is open (a sheet shut by the
+	-- Shop closing hands nothing back -- PadFocus has the selection then).
+	local opener: GuiObject? = nil
+	local shopOpen = false
+	local upSheet: GuiObject? = nil
+
+	local function sheet(name: string, tall: number): (TextButton, Frame, () -> (), GuiButton)
 		local back = Instance.new("TextButton")
 		back.Name = name
 		back.Text = ""
@@ -349,11 +377,20 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		back.Size = UDim2.fromScale(1, 1)
 		back.ZIndex = z + 40
 		back.Visible = false
+		-- The dimmed backdrop shuts the sheet on a tap, but a controller never
+		-- lands on it: it covers the whole Shop.
+		back.Selectable = false
 		back.Parent = sheetParent
 		local panel = MenuKit.frame(back, "Panel", z + 41, Color3.fromRGB(34, 28, 52), 0, 14)
 		panel.AnchorPoint = Vector2.new(0.5, 0.5)
 		panel.Position = UDim2.fromScale(0.5, 0.5)
 		panel.Size = UDim2.new(0.92, 0, 0, tall)
+		-- The selection stays inside while it is up.
+		panel.SelectionGroup = true
+		panel.SelectionBehaviorUp = Enum.SelectionBehavior.Stop
+		panel.SelectionBehaviorDown = Enum.SelectionBehavior.Stop
+		panel.SelectionBehaviorLeft = Enum.SelectionBehavior.Stop
+		panel.SelectionBehaviorRight = Enum.SelectionBehavior.Stop
 		MenuKit.keyline(panel, MINT, 2)
 		local cap = Instance.new("UISizeConstraint")
 		cap.MaxSize = Vector2.new(560, tall)
@@ -369,11 +406,44 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end
 		close.hit.Activated:Connect(shut)
 		back.Activated:Connect(shut)
-		return back, panel, shut
+		-- However it shuts (its X, the backdrop, B, a gift sent, the Shop
+		-- closing): B is the Shop's again, and the selection goes back to the
+		-- button that opened it while the Shop is still up.
+		back:GetPropertyChangedSignal("Visible"):Connect(function()
+			if back.Visible or upSheet ~= back then
+				return
+			end
+			upSheet = nil
+			MenuKit.unbind(MysteryShopBanner.BackAction)
+			local from = opener
+			opener = nil
+			if shopOpen and from and from.Visible and MenuKit.onPad() then
+				GuiService.SelectedObject = from
+			end
+		end)
+		return back, panel, shut, close.hit
+	end
+
+	-- A sheet comes up: it takes B, and on a controller the selection, once the
+	-- sheet has drawn (its first control, `first`).
+	local function holdPad(back: TextButton, from: GuiObject, first: () -> GuiObject?)
+		upSheet = back
+		opener = from
+		MenuKit.bindBack(MysteryShopBanner.BackAction, function()
+			back.Visible = false
+		end)
+		if MenuKit.onPad() then
+			task.defer(function()
+				local target = if back.Visible then first() else nil
+				if target then
+					GuiService.SelectedObject = target
+				end
+			end)
+		end
 	end
 
 	-- ODDS: MistOddsView's own page, the creatures and the sizes.
-	local oddsBack, oddsPanel = sheet("MysteryOdds", 380)
+	local oddsBack, oddsPanel, _, oddsClose = sheet("MysteryOdds", 380)
 	local oddsTitle = MenuKit.heading(oddsPanel, "Title", 24, WHITE, z + 43)
 	oddsTitle.Position = UDim2.fromOffset(14, 10)
 	oddsTitle.Size = UDim2.new(1, -60, 0, 32)
@@ -396,6 +466,10 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		local built = oddsView :: MistOddsView.View
 		built.frame.Size = UDim2.fromScale(1, 1)
 		built.setShown(true)
+		-- The page itself only scrolls; its one control is the close.
+		holdPad(oddsBack, oddsButton.hit, function(): GuiObject?
+			return oddsClose
+		end)
 	end)
 	oddsBack:GetPropertyChangedSignal("Visible"):Connect(function()
 		if oddsView and not oddsBack.Visible then
@@ -404,7 +478,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	end)
 
 	-- GIFT: who it is for, among the players here PolicyService allows.
-	local giftBack, giftPanel, giftShut = sheet("MysteryGift", 330)
+	local giftBack, giftPanel, giftShut, giftClose = sheet("MysteryGift", 330)
 	local giftTitle = MenuKit.heading(giftPanel, "Title", 22, WHITE, z + 43)
 	giftTitle.Position = UDim2.fromOffset(14, 10)
 	giftTitle.Size = UDim2.new(1, -60, 0, 30)
@@ -424,6 +498,8 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.ScrollBarThickness = 5
 	list.ZIndex = z + 43
+	-- A controller walks the names; the list follows them, it is never a stop.
+	list.Selectable = false
 	list.Parent = giftPanel
 	local rows = Instance.new("UIListLayout")
 	rows.SortOrder = Enum.SortOrder.LayoutOrder
@@ -446,7 +522,7 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	local remotes = game:GetService("ReplicatedStorage"):WaitForChild("SeedGame"):WaitForChild("Remotes")
 	local channel = remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
 	local giftFor: any = nil
-	openGift = function(item: any)
+	openGift = function(item: any, from: GuiObject)
 		giftFor = item
 		giftTitle.Text = string.upper(string.format("%s %s", W.Gift, (string.gsub(item.label, "^Gift: ", ""))))
 		status.Text = ""
@@ -477,6 +553,17 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end
 		nobody.Visible = not any
 		giftBack.Visible = true
+		-- The first name, or the close when there is nobody to give to.
+		holdPad(giftBack, from, function(): GuiObject?
+			local pick: GuiButton? = nil
+			for _, child in ipairs(list:GetChildren()) do
+				if child:IsA("GuiButton") and child.Visible
+					and (pick == nil or child.LayoutOrder < (pick :: GuiButton).LayoutOrder) then
+					pick = child
+				end
+			end
+			return pick or giftClose
+		end)
 	end
 	channel.OnClientEvent:Connect(function(action: any, reply: any)
 		if action ~= SHOP.GiftReply or type(reply) ~= "table" or not giftBack.Visible then
@@ -492,6 +579,8 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 	-- Open, its glow and its rainbows run; shut, they rest.
 	local stopMoving: (() -> ())? = nil
 	local function setOpen(open: boolean)
+		-- First: a sheet shut by the Shop closing hands no selection back.
+		shopOpen = open
 		for _, h in ipairs(fx) do
 			RarityFX.setActive(h, open)
 		end
@@ -509,7 +598,32 @@ function MysteryShopBanner.build(page: GuiObject, sheetParent: GuiObject, z: num
 		end
 	end
 	fitWidth()
-	return { frame = outer, setOpen = setOpen }
+
+	-- ON A CONTROLLER: the banner's stops in reading order -- ODDS, the
+	-- bundles' BUY, their GIFT -- the bundles only while they are offered.
+	local function padControls(): { GuiObject }
+		local out: { GuiObject } = { oddsButton.hit }
+		if tilesRow.Visible then
+			for _, t in ipairs(tiles) do
+				table.insert(out, t.buy)
+			end
+			for _, t in ipairs(tiles) do
+				if t.giftButton.hit.Visible then
+					table.insert(out, t.giftButton.hit)
+				end
+			end
+		end
+		return out
+	end
+
+	return {
+		frame = outer,
+		setOpen = setOpen,
+		padControls = padControls,
+		sheetOpen = function(): boolean
+			return upSheet ~= nil
+		end,
+	}
 end
 
 return MysteryShopBanner

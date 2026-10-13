@@ -72,6 +72,8 @@ local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local MysteryShopBanner = require(Shared:WaitForChild("MysteryShopBanner"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
 local ServerBoost = require(Shared:WaitForChild("ServerBoost"))
+-- A controller's D-pad through the page, written rather than guessed (2026-10-13).
+local PadGraph = require(Shared:WaitForChild("PadGraph"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -217,6 +219,8 @@ local owned: { [number]: boolean } = {}
 --==============================================================================
 local paint: () -> ()
 local relayout: () -> ()
+-- A controller's way through the page, written again (ON A CONTROLLER, below).
+local relink: () -> ()
 
 -- REWARDS & ODDS: the wheel's own sheet of every outcome's odds, one press away
 -- before any Spin Ticket purchase.
@@ -962,6 +966,9 @@ local function closeDetail()
 	grid.Visible = true
 	-- The plate stays hidden: the studded kit's Shop has none (THE PAGE, above).
 	MenuKit.unbind(backName)
+	task.defer(function()
+		relink()
+	end)
 	local card = cards[key]
 	if card and MenuKit.onPad() and card.holder.Visible then
 		GuiService.SelectedObject = card.face
@@ -980,6 +987,9 @@ openDetail = function(key: string)
 	showArt(card.entry)
 	paintDetail()
 	MenuKit.bindBack(backName, closeDetail)
+	task.defer(function()
+		relink()
+	end)
 	if MenuKit.onPad() then
 		GuiService.SelectedObject = back.hit
 	end
@@ -1028,10 +1038,16 @@ local function paintGrid()
 			section.frame.Visible = false
 		end
 	end
+	-- A controller starts on the Mysterious Pod's banner, first on the page
+	-- (2026-10-13; it started on the first card under it, past the banner).
 	local top = first
-	padFirst.Value = if top then top.face else nil
+	local lead = podBanner.padControls()[1]
+	padFirst.Value = if lead then lead elseif top then top.face else nil
 	-- REWARDS & ODDS whenever Spin Tickets are on the page.
 	odds.hit.Visible = shown[ShopCatalog.TicketsId] == true and odds.hit.Size.X.Offset > 0
+	task.defer(function()
+		relink()
+	end)
 end
 
 paint = function()
@@ -1223,6 +1239,93 @@ task.spawn(function()
 	end
 end)
 
+--==============================================================================
+-- ON A CONTROLLER: THE D-PAD'S WAY THROUGH THE PAGE (2026-10-13; Michael's
+-- console feedback, the owner's backlog item 2: "shop navigation on console is
+-- busted")
+--
+-- Written, not guessed (PadGraph). The header's buttons, then the Mysterious
+-- Pod's banner (ODDS, the bundles' BUY, their GIFT), then every shelf's cards
+-- row by row -- each card two stops, its face (A opens its details) and its
+-- BUY. Left and right walk a row and up and down take the nearest in the next;
+-- an edge holds. The details view walks its own: BACK, BUY, REWARDS & ODDS.
+-- The header and the page are wired as two groups, so a card scrolled up past
+-- the window is never taken for a row above the header.
+--
+-- Written again when the Shop opens, whenever the page or the details change,
+-- and on every move of the selection inside the Shop, so the links are always
+-- the ones on screen; the page scrolls itself to keep the selection in view.
+-- The first stop a controller gets is the banner's first (PadFirst, read by
+-- PadFocus). While a banner sheet is up it holds the selection, and none of
+-- this runs.
+--==============================================================================
+local function onScreen(object: GuiObject): boolean
+	if not object.Visible or object.AbsoluteSize.X <= 0 or object.AbsoluteSize.Y <= 0 then
+		return false
+	end
+	local node: Instance? = object.Parent
+	while node and node ~= gui do
+		if node:IsA("GuiObject") and not node.Visible then
+			return false
+		end
+		node = node.Parent
+	end
+	return node == gui
+end
+
+-- The stops, as two groups: the header's, then the page's (or the details').
+local function padGroups(): { { GuiObject } }
+	local head: { GuiObject } = {}
+	local page: { GuiObject } = {}
+	local function add(into: { GuiObject }, object: GuiObject?)
+		if object and onScreen(object) then
+			table.insert(into, object)
+		end
+	end
+	add(head, odds.hit)
+	add(head, close)
+	if detailKey then
+		add(page, back.hit)
+		add(page, detailBuy.hit)
+		add(page, detailOdds.hit)
+		return { head, page }
+	end
+	for _, object in ipairs(podBanner.padControls()) do
+		add(page, object)
+	end
+	for _, category in ipairs(categories) do
+		local section = sections[category.id]
+		if section and section.frame.Visible then
+			for _, entry in ipairs(ShopCatalog.entries(category.id)) do
+				local card = cards[entry.key]
+				if card and card.holder.Visible then
+					add(page, card.face)
+					add(page, card.buy.hit)
+				end
+			end
+		end
+	end
+	return { head, page }
+end
+
+relink = function()
+	if not open or podBanner.sheetOpen() then
+		return
+	end
+	PadGraph.wire(padGroups())
+end
+
+GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+	local selected = GuiService.SelectedObject
+	if not (open and selected and selected:IsDescendantOf(gui)) or podBanner.sheetOpen() then
+		return
+	end
+	relink()
+	if selected:IsDescendantOf(grid) then
+		PadGraph.scrollInto(grid, selected, 12)
+	end
+end)
+
 paint()
 relayout()
 
@@ -1231,27 +1334,40 @@ relayout()
 --
 -- A controller's LB / RB jump the page to the previous or next shelf's heading
 -- (one page since 2026-10-06; they stepped the chosen category before), with
--- that shelf's first card selected.
+-- that shelf's first card selected. The Mysterious Pod's banner is the first
+-- stop (2026-10-13): LB / RB went round the shelves and never back to it.
 --==============================================================================
+type Stop = { frame: GuiObject, first: () -> GuiObject? }
+
 local function stepCategory(step: number)
-	if detailKey ~= nil then
+	if detailKey ~= nil or podBanner.sheetOpen() then
 		return
 	end
-	local shown: { Section } = {}
+	local shown: { Stop } = {
+		{ frame = podBanner.frame, first = function(): GuiObject?
+			return podBanner.padControls()[1]
+		end },
+	}
 	for _, category in ipairs(categories) do
 		local section = sections[category.id]
 		if section and section.frame.Visible then
-			table.insert(shown, section)
+			table.insert(shown, { frame = section.frame, first = function(): GuiObject?
+				local pick: Card? = nil
+				for _, card in pairs(cards) do
+					if card.holder.Parent == section.shelf and card.holder.Visible
+						and (pick == nil or card.holder.LayoutOrder < (pick :: Card).holder.LayoutOrder) then
+						pick = card
+					end
+				end
+				return if pick then pick.face else nil
+			end })
 		end
 	end
-	if #shown == 0 then
-		return
-	end
-	-- The shelf the view is in: the last whose heading is at or above its top.
+	-- The stop the view is in: the last whose top is at or above the page's.
 	local k = math.max(HudLayout.scaleOf(grid), 1e-3)
 	local at = 1
-	for i, section in ipairs(shown) do
-		if section.frame.AbsolutePosition.Y <= grid.AbsolutePosition.Y + 2 then
+	for i, stop in ipairs(shown) do
+		if stop.frame.AbsolutePosition.Y <= grid.AbsolutePosition.Y + 2 then
 			at = i
 		end
 	end
@@ -1260,15 +1376,9 @@ local function stepCategory(step: number)
 	grid.CanvasPosition = Vector2.new(0, math.max(0, y))
 	SoundKit.play("CardClick")
 	if MenuKit.onPad() then
-		local pick: Card? = nil
-		for _, card in pairs(cards) do
-			if card.holder.Parent == target.shelf and card.holder.Visible
-				and (pick == nil or card.holder.LayoutOrder < (pick :: Card).holder.LayoutOrder) then
-				pick = card
-			end
-		end
+		local pick = target.first()
 		if pick then
-			GuiService.SelectedObject = pick.face
+			GuiService.SelectedObject = pick
 		end
 	end
 end
@@ -1297,6 +1407,12 @@ local function setOpen(want: boolean)
 		RarityFX.setActive(h, want)
 	end
 	podBanner.setOpen(want)
+	if want then
+		-- A controller's way through it, once it has laid out.
+		task.defer(function()
+			relink()
+		end)
+	end
 end
 
 button.Activated:Connect(function()
