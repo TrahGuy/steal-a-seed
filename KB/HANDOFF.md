@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## PUBLISHED AS v1060 — 2026-10-13 ~09:48 UTC (17:48 the owner's time) (CLAUDE, TERMINAL, RECORDING THE DESKTOP SESSION'S CHECK)
+
+The owner published v1060 from Studio. It holds the 82af665 tree (= origin/wip). The desktop session's pre-publish probe: 383 scripts = disk, 0 ZZ, the test-store marker absent, nothing uncommitted in src or tools. Nothing was touched after that probe.
+
+- **Studio's log clock** runs about 8 h 57 m behind the real time today: the PC slept, and the log's clock leaves sleep out. So the log's "00:51:54Z v1060" is really about 09:48Z. The owner published twice (log 00:51 and 01:00); both read v1060.
+- **LIVE as v1060**: everything since v1059 (f0286da) through the name badges. That is:
+  - items 1-3 (the EQUIP BEST pad, the Shop on a controller, the right stick scrolling menus);
+  - the analytics funnel;
+  - item 5 and its follow-up (readable text, notices over an open panel);
+  - item 6 and its gift ids (the passes, giftable);
+  - item 7 (SELL);
+  - What's New (fa1b1e7, c126394);
+  - Comic Neue (a) and (b);
+  - item 8 (OBBY over the arch);
+  - item 9 (rebirths on the console);
+  - the bare admin lines;
+  - players spawning empty-handed;
+  - the narrow Comic Neue pass;
+  - the two spec fixes (6a06b75);
+  - the name badges (82af665).
+- Every "NOT PUBLISHED" tag in the 2026-10-13 entries below is now stale.
+- Next, on HOLD for the owner's memory OK: PERFORMANCE MODE's third level, ULTRA (plan agreed with the coordinator; no code yet).
+
 ## NAME BADGES: THE OWNER'S, MICHAEL'S AND EVERY VIP'S, AFTER THE NAME OVER THE HEAD AND ON THEIR BROADCASTS AND ADMIN LINES — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, 82af665, NOT PUBLISHED; NameBadgeSpec 26/0 (new); AnnouncementSpec 63/0, AdminAnnounceSpec 44/0, NoticeSpec 105/0 (pins updated); HudLayoutSpec 1499/0, AdminSpec 137/0, AdminMistSpec 69/0, PodRushSpec 98/0, SecretToastSpec 61/0, PassBenefitsSpec 31/0; THE WHOLE SUITE 161/161 (with 6a06b75's two spec fixes); MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
 
 The owner's request, NAME BADGES, relayed by the coordinator. The pictures are the owner's own uploads (CrazyCozy Games, 2026-10-13 08:39 UTC, from Codex's dev-badge set), each checked in Studio (Image type 1, the group, IsLoaded true, fetch Success):
