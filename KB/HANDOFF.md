@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## WHAT'S NEW: "SELL BUTTON AND OBBY SIGN" ON TOP, THE 4 OCT ENTRY DROPPED — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; UpdateLogSpec 22/0; ONE GUARDED PLAY, DESKTOP)
+## WHAT'S NEW: "SELL BUTTON AND OBBY SIGN" ON TOP, THE 4 OCT ENTRY DROPPED — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, c126394, NOT PUBLISHED; UpdateLogSpec 22/0; ONE GUARDED PLAY, DESKTOP)
 
 The owner: "yes push it, drop the 4 oct entry", on the peer's proposal for item 8's line.
 - A second 13 Oct entry at the very top, so it carries the NEW tag: "SELL button and OBBY sign" (the peer's wording, approved by the owner in principle; the title is still to be shown to them). Its lines: "The SELL button takes you straight to Marigold's stall." and "A big OBBY sign shows the way to the obby." (item 8, 7b93f68).
@@ -13,7 +13,7 @@ The owner: "yes push it, drop the 4 oct entry", on the peer's proposal for item 
 
 **Files**: src/ReplicatedStorage/SeedGame/Shared/UpdateLog.luau.
 
-## ITEM 8 (BACKLOG 2026-10-12): "OBBY" OVER THE ARCH, FOR EVERYBODY — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; ObbySignSpec 10/0 (NEW); ObbySpec 69/0, ObbyViewSpec 112/0, FloatingSignSpec 49/0, EventHubSpec 53/0, EnchantedMistSpec 62/0; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## ITEM 8 (BACKLOG 2026-10-12): "OBBY" OVER THE ARCH, FOR EVERYBODY — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, 7b93f68, NOT PUBLISHED; ObbySignSpec 10/0 (NEW); ObbySpec 69/0, ObbyViewSpec 112/0, FloatingSignSpec 49/0, EventHubSpec 53/0, EnchantedMistSpec 62/0; MUTANTS 4/4 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner's option 1: a floating billboard "OBBY" with "Floating Garden" under it, above the Floating Garden's entrance arch. With the OBBY pill gone (item 7, SELL), this is how players find the obby.
 
