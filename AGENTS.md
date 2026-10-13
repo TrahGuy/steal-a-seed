@@ -136,6 +136,10 @@ src/
                                 one request at a time with bounded retries (2026-10-04)
     Shared/GardenPlan.luau      MY PLANTS' arithmetic: EQUIP BEST's ranking and ties, whole-change room
                                 checks, newcomers' spots (pure; GardenPlanSpec)
+    Shared/EquipBestPad.luau    the EQUIP BEST pad (2026-10-13): where it stands on the owner's plot (the
+                                left grass strip, halfway along the main bed, at every level), whether a
+                                root is on it, the 1-s hold / 5-s cooldown / step-off rule, and its parts
+                                (EquipBestPadSpec)
     Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
                                 screen's sidebars and its top row (BIOMES, PLOT, OBBY, ADMIN,
                                 the clock's chip at the row's right end; the three buttons are
@@ -585,6 +589,9 @@ src/StarterPlayer/StarterPlayerScripts/
                                 MY PLANTS (2026-10-04) -- PLANTED / STORED cards, plot count,
                                 garden income; PLANT, RETURN TO BAG, EQUIP BEST, UNEQUIP ALL asked of
                                 PlantService (GameConfig.Plant.MyPlants); pods keep their clocks
+    EquipBestPad.client.luau    the EQUIP BEST pad on THIS player's own plot only (2026-10-13): stand on it
+                                1 s and it sends the Garden menu's own EQUIP BEST verb; GardenUI says the
+                                answer. Nobody else sees it
     EventsUI.client.luau        EVENTS (2026-10-04): the owner's POSTED Roblox experience events, read on
                                 the client (SocialService) when the panel opens -- rows soonest first,
                                 details with Back, NOTIFY ME through Roblox's own RSVP prompt, LIVE NOW

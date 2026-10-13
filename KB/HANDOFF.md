@@ -1,5 +1,21 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 1 (BACKLOG 2026-10-12): THE EQUIP BEST PAD — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; EquipBestPadSpec 27/0 (new); SfxWiringSpec 202/0, UsabilityAudioSpec 95/0, SoundLevelSpec 28/0, PlantGlowSpec 69/0, GardenPlanSpec 18/0; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+Michael on console: getting to EQUIP BEST through the menus is cumbersome. The owner's queue (KB/BACKLOG-CONSOLE-FEEDBACK-2026-10-12.md, the decisions of 2026-10-13): a step pad, NOT at the entrance ("dont put the step pad on the entrance"), on the left grass strip, halfway along the bed, following the plot at every level.
+
+**What it is** (Shared/EquipBestPad.luau, EquipBestPad.client.luau, GameConfig.EquipBestPad):
+- A low disc on the owner's OWN plot, built by that player's client only: nobody else sees it or can use it. EQUIP BEST's green, a dark band carrying a 12-segment ring, and "EQUIP BEST / STAND HERE" floating over it (FloatingSign).
+- Where: x = -Width/2 + 2.65 in the plot's frame (the left strip, the side the Level 3+ wing never grows on; 0.30 clear of the fence's inner face and 0.30 clear of where a creature's base may walk, Plant.Wander.FenceMargin), z = 0 (the main bed's middle at every level of every plot, plot 6's deeper Levels 6-7 included). Placed again when the plot's PlotCF or Level changes.
+- Stand on it 1 s: the ring fills gold, then it sends GameEvent "MyPlantsBest", the Garden menu button's own verb. PlantService.EquipBest decides; GardenUI says the answer in the button's words ("BEST PLANTS EQUIPPED / N in, M to your Bag", "ALREADY YOUR BEST", ...). No server change and no new rule.
+- Then a 5 s cooldown (green segments count it out), and never again until the body steps off. A slow frame fills at most 0.25 s of the hold; stepping off empties it.
+
+**The Play** (guarded, the throwaway SeedTest_20261013, desktop): the client's pad stood exactly where the server computes it (plot 1, Level 1). Two Huge Nubkin given by SPAWN, then onto the pad: Bag 2 -> 0, garden 1 -> 3, "BEST PLANTS EQUIPPED / 2 in, 0 to your Bag". With the Level 1 plot full, two Mega Spiretip, then two Mega Thornwhorl: "2 in, 2 to your Bag" each time (the two weakest went to the Bag). The first look's white rim hid the white segments, so the rim became a dark band (RimColour) and the captures were retaken. Captures: output/item1-equip-best-pad-2026-10-13/ (item1_sheet.png).
+
+**Not seen:** a phone or a console (the pad is in the world and drawn the same everywhere; a controller only walks onto it); Levels 2-7 in Play (the spec builds all six plots at every level); a second player (the client builds only on its own plot, which the spec holds).
+
+**Files:** GameConfig (EquipBestPad), Shared/EquipBestPad.luau (new), StarterPlayerScripts/EquipBestPad.client.luau (new), tools/tests/EquipBestPadSpec.luau (new), AGENTS.md (structure).
+
 ## ITEM 19: THE MIST REPLACES THE MUSIC — 2026-10-12 (CLAUDE, TERMINAL)  (LIVE as v1059; MistAudioSpec 19/0, MusicBedSpec 30/0 (1 new), RainAudioSpec 39/0, SfxWiringSpec 202/0, SoundLevelSpec 28/0, EnchantedMistBerrySpec 73/0, DiscoDancersSpec 59/0, MiniEventSpec 90/0, MistLookSpec 17/0, PodRushSpec 98/0, RainEventSpec 98/0, SproutDashSpec 49/0; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, A TIMELINE)
 
 The owner on v1058: "the default background music is still overlapping when I trigger the mist event". Their pick (option 1): THE MIST REPLACES THE MUSIC.

@@ -12450,6 +12450,72 @@ function GameConfig.plotShowcaseBase(plotCF: CFrame, level: number?, plotId: num
 		* CFrame.Angles(0, math.rad(SC.YawDegrees), 0)
 end
 
+--==============================================================================
+-- THE EQUIP BEST PAD (2026-10-13; Michael's console feedback, the owner's
+-- backlog item 1)
+--
+-- Michael on console: getting to EQUIP BEST through the menus is cumbersome.
+-- So the owner's own plot has a step pad for it: stand on it HoldSeconds, its
+-- ring fills, and it asks the server for the SAME verb as the Garden menu's
+-- EQUIP BEST button (Plant.MyPlants.Best). No new rule, and the same answer in
+-- the same words (GardenUI's notice).
+--
+-- WHERE (the owner: "dont put the step pad on the entrance"): the LEFT grass
+-- strip, -X in the plot's frame, the side the Level 3+ wing never grows on,
+-- between the left fence and the main bed, halfway along the bed. The main bed
+-- is centred on the plot's frame at every level of every plot (plot 6's deeper
+-- Levels 6-7 included), so halfway is z = 0, and the pad follows an upgrade by
+-- re-reading the plot's PlotCF.
+--
+-- The strip is narrow. The fence's inner face is 0.8 in from the fence line
+-- (its boards are 1.6 thick), and a creature's base never comes nearer the
+-- fence than Plant.Wander.FenceMargin (4.5). InsetX centres the pad between
+-- the two, and RimRadius leaves a quarter stud and more to each.
+-- EquipBestPadSpec builds every plot at every level around it and measures.
+--
+-- EACH CLIENT'S OWN: the owner's client builds it on its own plot only
+-- (EquipBestPad.client), so nobody else sees it or can use it.
+--==============================================================================
+GameConfig.EquipBestPad = {
+	-- From the left fence's centre line to the pad's centre, along +X.
+	InsetX = 2.65,
+	-- The lit disc and the dark band round it, which the ring's segments
+	-- stand on: dark, so a white (waiting) or gold (filling) segment reads on it
+	-- (a white rim hid them, Play 2026-10-13).
+	PadRadius = 1.15,
+	RimRadius = 1.55,
+	RimColour = Color3.fromRGB(26, 56, 30),
+	-- How far from its centre a root still counts as on it (the rim, plus a
+	-- little for feet that overhang), and how far under and over it.
+	TriggerRadius = 1.8,
+	ReachBelow = 1,
+	ReachAbove = 5,
+	-- Stand this long and it runs. Then it waits CooldownSeconds, and never
+	-- runs again until the body has stepped off it.
+	HoldSeconds = 1,
+	CooldownSeconds = 5,
+	-- One slow frame never fills more than this much of the hold.
+	MaxStep = 0.25,
+	-- The ring: this many segments light up as the hold fills.
+	Segments = 12,
+	-- EQUIP BEST's own green, the button's (BagLook.ButtonTop).
+	Colour = GameConfig.BagLook.ButtonTop,
+	LitColour = Color3.fromRGB(255, 214, 64),
+	IdleColour = Color3.fromRGB(255, 255, 255),
+	-- The words over it (FloatingSign), in studs: centred this high, this wide,
+	-- the headline this tall and the line under it this tall.
+	Words = "EQUIP BEST",
+	SubWords = "STAND HERE",
+	WordsHeight = 4.2,
+	WordsWidth = 5.5,
+	WordsSize = 1.1,
+	SubSize = 0.6,
+	-- Checked this many times a second within NearStuds of it, once a second
+	-- further away.
+	NearStuds = 40,
+	NearHz = 30,
+}
+
 function GameConfig.plotSlotsFor(rows: number): number
 	return rows * GameConfig.Plot.BedColumns
 end
