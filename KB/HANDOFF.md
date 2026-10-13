@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## COMIC NEUE ANGULAR (b): EVERY TOP-CENTRE NOTICE — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; NoticeSpec 103/0 (3 new), SecretToastSpec 61/0 (its model now the comic face), TutorialSpotlightSpec 51/0 (the locked chest's line measured in it), HudLayoutSpec 1498/0, CompactMenusSpec 48/0, ActionRefusalSpec 74/0 and 11 more green; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## COMIC NEUE ANGULAR (b): EVERY TOP-CENTRE NOTICE — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED ON wip with the owner's OK, 3afb373, NOT PUBLISHED; NoticeSpec 103/0 (3 new), SecretToastSpec 61/0 (its model now the comic face), TutorialSpotlightSpec 51/0 (the locked chest's line measured in it), HudLayoutSpec 1498/0, CompactMenusSpec 48/0, ActionRefusalSpec 74/0 and 11 more green; MUTANTS 5/5 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner: every top-centre notice in COMIC NEUE ANGULAR, their reference's look: white letters, a thick black outline. That is ActionToastUI's whole stack: the headline and the detail line; the event, refusal, admin-console and gift notices; the slim line above an open panel.
 
