@@ -16,8 +16,8 @@
 --     hold taken once;
 --   * no ribbon behind a runner: the one question SpeedFX and TrailFX ask, and
 --     that neither of them writes anything a player owns;
---   * the wiring of ObbyCamera, ObbyButtonUI, SpeedFX and TrailFX, read from
---     their source.
+--   * the wiring of ObbyCamera, SellButtonUI (OBBY's place since 2026-10-13),
+--     SpeedFX and TrailFX, read from their source.
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
@@ -541,8 +541,11 @@ do
 			and src:find("if falls > lastFalls and ObbyData.onCourse(player) then", 1, true) ~= nil
 			and src:find("GetAttributeChangedSignal(OA.Checkpoint)", 1, true) ~= nil
 			and src:find("GetAttributeChangedSignal(OA.Course)", 1, true) ~= nil
-			and src:find("GetAttributeChangedSignal(ObbyData.LocalAttributes.EntranceAsked)", 1, true) ~= nil,
-		"it waits on a fall, a start or replay, and this client's own OBBY press")
+			and src:find("local SELL_ASKED = GameConfig.Plot.SellAskedAttribute", 1, true) ~= nil
+			and src:find("GetAttributeChangedSignal(SELL_ASKED)", 1, true) ~= nil
+			and src:find("local landing = GameConfig.hubSellLanding()", 1, true) ~= nil,
+		"it waits on a fall, a start or replay, and this client's own SELL press (OBBY's until 2026-10-13), turning "
+			.. "to the very frame the server lands on")
 	check(src:find("player.CharacterRemoving:Connect(", 1, true) ~= nil
 			and src:find("script.Destroying:Connect(", 1, true) ~= nil
 			and count(src, "handBack()") >= 3,
@@ -552,13 +555,16 @@ do
 		"it sends nothing to the server, and the only thing it marks is the camera while it holds it")
 end
 do
-	local src = code(sourceOf("ObbyButtonUI"))
+	-- The SELL button in OBBY's place (2026-10-13, the owner's backlog item 7).
+	local src = code(sourceOf("SellButtonUI"))
 	check(count(src, "FireServer(") == 1
-			and count(src, "player:SetAttribute(ObbyData.LocalAttributes.EntranceAsked, now)") == 1
+			and count(src, "player:SetAttribute(PLOT.SellAskedAttribute, now)") == 1
 			and count(src, "SetAttribute(") == 1,
-		"the OBBY button still sends its one verb, and notes the press for this client's camera")
-	check(ObbyData.LocalAttributes.EntranceAsked ~= nil and ObbyData.Attributes.EntranceAsked == nil,
-		"that note is a client's own, kept apart from what the server publishes")
+		"the SELL button sends its one verb, and notes the press for this client's camera")
+	local GameConfig = require(Shared:WaitForChild("GameConfig"))
+	check(type(GameConfig.Plot.SellAskedAttribute) == "string" and ObbyData.LocalAttributes == nil
+			and ObbyData.Attributes.EntranceAsked == nil,
+		"that note is a client's own, kept apart from what the server publishes; the OBBY button's went with it")
 end
 
 end)

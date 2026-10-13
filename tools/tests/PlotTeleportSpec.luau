@@ -687,6 +687,151 @@ local function body()
 		end
 	end
 	check(#others == 0, "and no other biome is named as a destination", table.concat(others, ", "))
+
+	--==========================================================================
+	-- 12. THE SELL BUTTON (2026-10-13, the owner's backlog item 7): ONE PLACE,
+	-- MARIGOLD'S STALL, WHERE THE OBBY BUTTON STOOD
+	--
+	-- "change the obby navigation pill to SELL, and teleport to marigold": in
+	-- front of the SELL ALL board at her stall, inside that board's prompt and
+	-- clear of every other one, facing between the board and her; TELEPORT TO
+	-- PLOT's rules and cooldown, and never during a chase.
+	--==========================================================================
+	say("\n-- the SELL button's teleport --")
+	check(type(PLOT.SellAction) == "string" and PLOT.SellAction ~= "" and PLOT.SellAction ~= PLOT.TeleportAction
+			and PLOT.SellAction ~= PLOT.BiomesAction and PLOT.SellAction ~= GameConfig.Plant.PlaceAction
+			and PLOT.SellAction ~= ActionRefusal.Action,
+		"SELL is one verb of its own on GameEvent", PLOT.SellAction)
+	local landingS = PlotService.SellLanding()
+	local atS = landingS.Position
+	local ROW = MAP.ShopRow
+	check(landingS == GameConfig.hubSellLanding() and math.abs(atS.Y - (MAP.GroundY + PLOT.SpawnHeightOffset)) < 1e-6
+			and MapService.IsInSafeZone(atS)
+			and atS.X >= ROW.From.X and atS.X <= ROW.To.X and atS.Z >= ROW.From.Y and atS.Z <= ROW.To.Y,
+		"it lands at Marigold's stall, on the shop row's ground, at the spawn height, in the Safe Zone", tostring(atS))
+	-- The prompts as the game builds them: SELL ALL's and SELL ONE's on their
+	-- boards (SellService: BoardSide/BoardFront off the StallFloor, which
+	-- MapService lays 2 behind the stall's frame; the board 6.4 up, reach 12),
+	-- Marigold's on her torso (MapService puts her 5.5 behind the counter and
+	-- about 5 up; FairyService walks her 6.5 along it and 2.2 to and fro;
+	-- reach Weapon.PromptDistance). A standing body's root is about 3 up.
+	-- (Measured in Play 2026-10-13: the board at -155.5, 6.4, -162.)
+	local S = MAP.Stall
+	local stallCF = GameConfig.hubStallCFrame()
+	local bodyAt = Vector3.new(atS.X, MAP.GroundY + 3, atS.Z)
+	local sellAllAt = GameConfig.hubStallPoint(-S.BoardSide, S.BoardFront - 2) + Vector3.new(0, 6.4, 0)
+	local sellOneAt = GameConfig.hubStallPoint(S.BoardSide, S.BoardFront - 2) + Vector3.new(0, 6.4, 0)
+	local local3 = stallCF:PointToObjectSpace(bodyAt)
+	local herNearest = stallCF:PointToWorldSpace(Vector3.new(math.clamp(local3.X, -6.5, 6.5), 0,
+		math.clamp(local3.Z, -5.5 - 2.2, -5.5 + 2.2)))
+	herNearest = Vector3.new(herNearest.X, MAP.GroundY + 5, herNearest.Z)
+	local toBoard = (sellAllAt - bodyAt).Magnitude
+	local toHer = (herNearest - bodyAt).Magnitude
+	local toOne = (sellOneAt - bodyAt).Magnitude
+	local herReach = GameConfig.Weapon.PromptDistance
+	check(toBoard <= 12 - 1.5 and toHer >= herReach + 1.5 and toOne >= 12 + 1.5,
+		"inside the SELL ALL board's prompt with room to spare, and clear of Marigold's wherever she walks and of "
+			.. "SELL ONE's", string.format("board %.1f, Marigold %.1f (reach %g), SELL ONE %.1f", toBoard, toHer,
+			herReach, toOne))
+	say(string.format("  note  from the landing: SELL ALL %.1f (reach 12), Marigold's nearest %.1f (reach %g), "
+		.. "SELL ONE %.1f (reach 12)", toBoard, toHer, herReach, toOne))
+	local function flatUnit(v: Vector3): Vector3
+		return Vector3.new(v.X, 0, v.Z).Unit
+	end
+	local towardHer = flatUnit(stallCF:PointToWorldSpace(Vector3.new(0, 0, -5.5)) - atS)
+	local towardBoard = flatUnit(sellAllAt - atS)
+	check(math.abs(landingS.LookVector.Y) < 1e-6 and landingS.LookVector:Dot(towardHer) > 0.7
+			and landingS.LookVector:Dot(towardBoard) > 0.5,
+		"facing between them: Marigold ahead, the board ahead and to the side", string.format("her %.2f, board %.2f",
+			landingS.LookVector:Dot(towardHer), landingS.LookVector:Dot(towardBoard)))
+	local sellSrc = sourceOf(Server:FindFirstChild("SellService"))
+	local fairySrc = sourceOf(Server:FindFirstChild("FairyService"))
+	local mapSrc = sourceOf(Server:FindFirstChild("MapService"))
+	check(sellSrc ~= nil and string.find(sellSrc, "local POST_HEIGHT = 5.2", 1, true) ~= nil
+			and string.find(sellSrc, "local BOARD_SIZE = Vector3.new(7.2, 3.0, 0.4)", 1, true) ~= nil
+			and string.find(sellSrc, "prompt.MaxActivationDistance = 12", 1, true) ~= nil
+			and fairySrc ~= nil and string.find(fairySrc, "local WANDER_X = 6.5", 1, true) ~= nil
+			and string.find(fairySrc, "local WANDER_Z = 2.2", 1, true) ~= nil
+			and mapSrc ~= nil and string.find(mapSrc, "HubFairy.build(stallCF * CFrame.new(0, 2, -5.5)", 1, true) ~= nil
+			and string.find(mapSrc, "cframe = stallCF * CFrame.new(0, 0.3, -2), color = WOOD_DARK", 1, true) ~= nil
+			and string.find(sellSrc, "local floor = map:FindFirstChild(\"StallFloor\", true)", 1, true) ~= nil,
+		"the boards (off the StallFloor), their reach and Marigold's walk are still the ones those numbers are")
+	if Workspace:FindFirstChild(MAP.FolderName) then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { fixture }
+		params.RespectCanCollide = true
+		local hit = Workspace:Raycast(atS, Vector3.new(0, -PLOT.TeleportGroundProbe, 0), params)
+		check(hit ~= nil and math.abs(hit.Position.Y - MAP.GroundY) < 0.6,
+			"on the map in Edit: the shop row's floor is under the landing", hit and hit.Instance:GetFullName())
+		local overlap = OverlapParams.new()
+		overlap.FilterType = Enum.RaycastFilterType.Exclude
+		overlap.FilterDescendantsInstances = { fixture }
+		local solid = {}
+		for _, part in ipairs(Workspace:GetPartBoundsInBox(CFrame.new(atS.X, MAP.GroundY + 4, atS.Z),
+			Vector3.new(8, 7, 8), overlap)) do
+			if part.CanCollide and part.Name ~= "Terrain" then
+				table.insert(solid, part:GetFullName())
+			end
+		end
+		check(#solid == 0, "and nothing collidable in the 8 x 7 x 8 box a body lands in", table.concat(solid, ", "))
+
+		-- The press, by TELEPORT TO PLOT's rules, and never during a chase.
+		local s = makePlayer("SpecSell", -412, IN_FIELD)
+		leases[s] = plotA
+		s.root.AssemblyLinearVelocity = Vector3.new(0, 0, 50)
+		local sMoved, sCode = PlotService.TeleportToSell(s)
+		check(sMoved == true and sCode == nil and (s.root.Position - atS).Magnitude < 0.05
+				and s.root.CFrame.LookVector:Dot(landingS.LookVector) > 0.999
+				and s.root.AssemblyLinearVelocity.Magnitude < 0.01,
+			"a press in the Safe Zone lands at Marigold's stall, facing her and the board, momentum taken off",
+			tostring(sCode) .. " " .. tostring(s.root.Position))
+		standAt(s, IN_FIELD)
+		local s2Moved, s2Code = PlotService.TeleportToSell(s)
+		local homeMoved4, homeCode4 = PlotService.TeleportHome(s)
+		check(not s2Moved and s2Code == "TELEPORT_COOLDOWN" and not homeMoved4 and homeCode4 == "TELEPORT_COOLDOWN"
+				and still(s, IN_FIELD),
+			"and it shares TELEPORT TO PLOT's cooldown: neither button works again straight away",
+			tostring(s2Code) .. " / " .. tostring(homeCode4))
+		local c = makePlayer("SpecSellHeld", -413, ON_ROAD)
+		local rMoved2, rCode2 = PlotService.TeleportToSell(c)
+		standAt(c, IN_FIELD)
+		c:SetAttribute(ATTR.PursuedBy, 1)
+		local chMoved, chCode = PlotService.TeleportToSell(c)
+		c:SetAttribute(ATTR.PursuedBy, nil)
+		c:SetAttribute(ATTR.WakingBy, 1)
+		local wkMoved, wkCode = PlotService.TeleportToSell(c)
+		c:SetAttribute(ATTR.WakingBy, nil)
+		c:SetAttribute(ATTR.CarryingSpecies, "nubkin")
+		local cMoved2, cCode2 = PlotService.TeleportToSell(c)
+		c:SetAttribute(ATTR.CarryingSpecies, nil)
+		c:SetAttribute(ATTR.Trapped, true)
+		local tMoved2, tCode2 = PlotService.TeleportToSell(c)
+		c:SetAttribute(ATTR.Trapped, nil)
+		check(not rMoved2 and rCode2 == "TELEPORT_OUTSIDE" and not chMoved and chCode == "SELL_CHASED"
+				and not wkMoved and wkCode == "SELL_CHASED" and not cMoved2 and cCode2 == "CARRYING_POD"
+				and not tMoved2 and tCode2 == "TELEPORT_STUNNED" and still(c, IN_FIELD),
+			"from the road, chased or woken after, with a raided pod, or trapped: refused, never spending the cooldown",
+			string.format("%s %s %s %s %s", tostring(rCode2), tostring(chCode), tostring(wkCode), tostring(cCode2),
+				tostring(tCode2)))
+		local freeMoved4 = PlotService.TeleportToSell(c)
+		check(freeMoved4 == true and (c.root.Position - atS).Magnitude < 0.05,
+			"and none of those refusals spent the cooldown")
+	else
+		say("  (no map in this Edit session: the floor, the clearance and the press itself are Play's)")
+	end
+	local handlerS = plotSource and string.match(plotSource,
+		"channel%.OnServerEvent:Connect%((function%([^)]*%).-)\n\t\tend%)%)")
+	check(handlerS ~= nil and string.find(handlerS, "PlotService.TeleportToSell(player)", 1, true) ~= nil
+			and string.find(handlerS, "if action == PLOT.SellAction then", 1, true) ~= nil,
+		"the one GameEvent handler hands TeleportToSell the sender alone, for the verb alone")
+	local sellUi = sourceOf(scripts and scripts:FindFirstChild("SellButtonUI"))
+	local _, sellFires = string.gsub(sellUi or "", "FireServer%(", "")
+	check(sellUi ~= nil and sellFires == 1 and string.find(sellUi, "remote:FireServer(PLOT.SellAction)", 1, true) ~= nil,
+		"the SELL button sends the verb and nothing else", sellFires)
+	check(ActionRefusal.Text.SELL_BLOCKED ~= nil and ActionRefusal.Notices.SELL_BLOCKED ~= nil
+			and ActionRefusal.Text.SELL_CHASED ~= nil and ActionRefusal.Notices.SELL_CHASED ~= nil,
+		"and its two refusals of its own -- nothing to stand on, a chase -- have words and a notice")
 end
 
 local ok, err = pcall(body)

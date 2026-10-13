@@ -192,6 +192,17 @@ GameConfig.Map = {
 		BoardSide = 15.5,
 		BoardFront = -3.0,
 		BoardFocus = 15,
+		-- Where the SELL button lands a player (2026-10-13, backlog item 7;
+		-- GameConfig.hubSellLanding), in this frame: in front of the SELL ALL
+		-- board's end of the counter, inside that board's prompt reach (12; the
+		-- board stands at front -5 and 6.4 up, its BoardFront taken from the
+		-- StallFloor 2 behind this frame) and clear of Marigold's (11, on her
+		-- torso 5 up, wandering 6.5 along the counter and 2.2 back and forth
+		-- from 5.5 behind it) and of every other prompt in the row; facing the
+		-- point Look*, between the board and Marigold. Measured in Play
+		-- 2026-10-13: 9.0 to the board's prompt; 13.3 to the nearest she can
+		-- walk (PlotTeleportSpec), 16.4 to where she stood.
+		SellLanding = { Side = -18, Front = 3, LookSide = -8, LookFront = -3 },
 	},
 	-- The shop row's ground (X, Z), every fixture and its customers inside.
 	ShopRow = { From = Vector2.new(-258, -167), To = Vector2.new(-118, -113) },
@@ -237,6 +248,18 @@ end
 function GameConfig.hubStallPoint(side: number, front: number): Vector3
 	local p = GameConfig.hubStallCFrame():PointToWorldSpace(Vector3.new(side, 0, front))
 	return Vector3.new(p.X, GameConfig.Map.GroundY, p.Z)
+end
+
+-- THE SELL BUTTON'S LANDING (2026-10-13, backlog item 7; Map.Stall.SellLanding):
+-- at the spawn height, facing between the SELL ALL board and Marigold. The
+-- server lands a player here (PlotService.TeleportToSell); the client turns
+-- the camera to it once they arrive (ObbyCamera). Pure.
+function GameConfig.hubSellLanding(): CFrame
+	local L = GameConfig.Map.Stall.SellLanding
+	local up = Vector3.new(0, GameConfig.Plot.SpawnHeightOffset, 0)
+	local at = GameConfig.hubStallPoint(L.Side, L.Front) + up
+	local look = GameConfig.hubStallPoint(L.LookSide, L.LookFront) + up
+	return CFrame.lookAt(at, look)
 end
 
 --==============================================================================
@@ -504,6 +527,18 @@ GameConfig.Plot = {
 	--==========================================================================
 	BiomesAction = "TeleportToBiomes",
 	BiomesLandingInset = 10,
+	--==========================================================================
+	-- SELL (PlotService.TeleportToSell; 2026-10-13, the owner's backlog item
+	-- 7: "change the obby navigation pill to SELL, and teleport to marigold").
+	-- One button, one destination: Marigold's stall, at the SELL ALL board
+	-- (GameConfig.hubSellLanding). The verb carries nothing; TELEPORT TO PLOT's
+	-- rules and cooldown, and never during a chase. SellAskedAttribute is the
+	-- note the button leaves on this client's own Player when pressed -- for
+	-- ObbyCamera's turn to the stall and the guide's travel step; it never
+	-- leaves the machine.
+	--==========================================================================
+	SellAction = "TeleportToSell",
+	SellAskedAttribute = "SeedSellAsked",
 
 	--==========================================================================
 	-- THE BED
@@ -1571,7 +1606,7 @@ GameConfig.Attributes = {
 	-- On a HUD button, client-local, set by TutorialUI's spotlight (2026-10-08)
 	-- while it lights that button and holds a controller's selection on it:
 	-- the button's own D-pad key presses it then (PlotTeleportUI, BiomesButtonUI,
-	-- ObbyButtonUI). The engine's GUI navigation takes the D-pad before any
+	-- SellButtonUI). The engine's GUI navigation takes the D-pad before any
 	-- ContextActionService binding while something is selected, so only an
 	-- InputBegan listener can hear it. Absent (nil) every other moment.
 	GuideLit = "GuideLit",

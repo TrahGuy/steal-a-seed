@@ -194,10 +194,12 @@ local ok, err = pcall(function()
 		-- The targets the brief names, where this screen has them.
 		local targets = {}
 		local top = {}
-		for _, name in ipairs({ "teleport", "biomes", "obby" }) do
-			local r = L[name]
+		-- Each target by its HudLayout rect: SELL stands in the `obby` rect, the
+		-- OBBY button's place it took on 2026-10-13.
+		for _, pair in ipairs({ { "teleport", "teleport" }, { "biomes", "biomes" }, { "sell", "obby" } }) do
+			local r = L[pair[2]]
 			if r and r.w > 0 and r.h > 0 then
-				top[name] = toSpot(c, r)
+				top[pair[1]] = toSpot(c, r)
 			end
 		end
 		for name, r in pairs(top) do
@@ -322,10 +324,10 @@ local ok, err = pcall(function()
 		.. "edge at the top of a tap, never covering the target, and the words stand beside it, on screen, clear of "
 		.. "both", #cases, measured, Spot.Hand.Gap), table.concat(problems, " | ", 1, math.min(#problems, 8)))
 	check((perTarget.teleport or 0) == #cases and (perTarget.speed or 0) == #cases and (perTarget.slot or 0) == #cases
-			and (perTarget.biomes or 0) >= #cases - 2 and (perTarget.obby or 0) >= #cases - 2,
-		"TELEPORT, SPEED and a hotbar slot on every screen; BIOMES and OBBY wherever HudLayout gives them a rect",
-		string.format("teleport %d speed %d slot %d biomes %d obby %d of %d", perTarget.teleport or 0,
-			perTarget.speed or 0, perTarget.slot or 0, perTarget.biomes or 0, perTarget.obby or 0, #cases))
+			and (perTarget.biomes or 0) >= #cases - 2 and (perTarget.sell or 0) >= #cases - 2,
+		"TELEPORT, SPEED and a hotbar slot on every screen; BIOMES and SELL wherever HudLayout gives them a rect",
+		string.format("teleport %d speed %d slot %d biomes %d sell %d of %d", perTarget.teleport or 0,
+			perTarget.speed or 0, perTarget.slot or 0, perTarget.biomes or 0, perTarget.sell or 0, #cases))
 	check(phoneCase ~= nil and phoneCase.n >= 4, "including Studio's 705 x 338 phone, notch and home bar and all",
 		phoneCase and phoneCase.n)
 	-- The words keep off `avoid` too (2026-10-09): a button where they would
@@ -625,14 +627,14 @@ local ok, err = pcall(function()
 			and has(uiSrc, "GuiService.SelectedObject = button") and has(uiSrc, "button:SetAttribute(ATTR.GuideLit, true)"),
 		"with a controller in hand the selection goes on the lit button once A is let go, marked GuideLit")
 	local keysOk = true
-	for name, key in pairs({ PlotTeleportUI = "DPadUp", BiomesButtonUI = "DPadLeft", ObbyButtonUI = "DPadRight" }) do
+	for name, key in pairs({ PlotTeleportUI = "DPadUp", BiomesButtonUI = "DPadLeft", SellButtonUI = "DPadRight" }) do
 		local src = sourceOf(Client:FindFirstChild(name))
 		keysOk = keysOk and has(src, "input.KeyCode == Enum.KeyCode." .. key .. " and button.Visible and button:GetAttribute(ATTR.GuideLit) == true")
 			and has(src, "and GuiService.SelectedObject == button and not PadInput.panelOpen() then")
 	end
-	check(keysOk, "and each button's own D-pad key presses it while lit and selected: TELEPORT Up, BIOMES Left, OBBY Right")
+	check(keysOk, "and each button's own D-pad key presses it while lit and selected: TELEPORT Up, BIOMES Left, SELL Right")
 	check(Spot.Targets.teleport.key == "A or D-PAD UP" and Spot.Targets.biomes.key == "A or D-PAD LEFT"
-			and Spot.Targets.obby.key == "A or D-PAD RIGHT",
+			and Spot.Targets.sell.key == "A or D-PAD RIGHT",
 		"whose words name the key, written out (no arrow glyphs)")
 	local arrows = {}
 	local wordsOk = true
@@ -679,14 +681,14 @@ local ok, err = pcall(function()
 		table.insert(named, key)
 	end
 	table.sort(named)
-	check(table.concat(named, ",") == "biomes,obby,slot,speed,teleport",
-		"only HUD targets are ever spotlit (BIOMES, OBBY, a hotbar slot, SPEED, TELEPORT); world targets get the hand",
+	check(table.concat(named, ",") == "biomes,sell,slot,speed,teleport",
+		"only HUD targets are ever spotlit (BIOMES, SELL, a hotbar slot, SPEED, TELEPORT); world targets get the hand",
 		table.concat(named, ","))
 	check(has(uiSrc, "handOver(stand + Vector3.new(0, BELT_TIP, 0))") and has(uiSrc, "handOver(spot + Vector3.new(0, SOIL_TIP, 0))")
 			and has(uiSrc, "\"HOLD HATCH\""),
 		"the hand in the world: over the belt, over a free spot of soil, and HOLD HATCH over the pod")
-	check(has(uiSrc, "PLOT.TeleportCooldownSeconds + COOL_MARGIN") and has(uiSrc, "ObbyData.LocalAttributes.EntranceAsked"),
-		"step 7 lights TELEPORT only after the shared cooldown since OBBY was pressed")
+	check(has(uiSrc, "PLOT.TeleportCooldownSeconds + COOL_MARGIN") and has(uiSrc, "PLOT.SellAskedAttribute"),
+		"step 7 lights TELEPORT only after the shared cooldown since SELL was pressed")
 	-- Found in the guarded Play (2026-10-08) and fixed there.
 	check(has(uiSrc, "words.Position = UDim2.fromOffset(0, shift)")
 			and has(uiSrc, "reach = layout.skip.y + layout.skip.h + wordsShift")

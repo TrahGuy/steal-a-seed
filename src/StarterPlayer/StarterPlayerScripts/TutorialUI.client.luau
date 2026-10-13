@@ -29,7 +29,7 @@
 -- The owner's pointing glove replaced the HUD's gold pointer and the world's
 -- green finger. Once per step a HUD target is SPOTLIT -- the screen dimmed round
 -- one real button, which alone takes a press, movement untouched -- and a
--- seventh step, `travel`, teaches OBBY and TELEPORT TO PLOT after the hatch.
+-- seventh step, `travel`, teaches SELL and TELEPORT TO PLOT after the hatch.
 -- TutorialSpotlight holds the rules and the arithmetic (TutorialSpotlightSpec).
 --==============================================================================
 local Players = game:GetService("Players")
@@ -60,8 +60,6 @@ local Spot = require(Shared:WaitForChild("TutorialSpotlight"))
 -- panel or a reward moment up (no spotlight over either).
 local PadInput = require(Shared:WaitForChild("PadInput"))
 local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
--- Only for the note the OBBY button leaves when it is pressed (EntranceAsked).
-local ObbyData = require(Shared:WaitForChild("ObbyData"))
 -- The starter pod's words on the training steps (2026-10-08).
 local FirstMinute = require(Shared:WaitForChild("FirstMinute"))
 
@@ -684,7 +682,7 @@ local BELT_TIP = 3.2
 local POD_TIP = 2.8
 local SOIL_TIP = 2.2
 local SPAWN_TIP = 3
--- A little past the teleport cooldown OBBY and TELEPORT share before TELEPORT is
+-- A little past the teleport cooldown SELL and TELEPORT share before TELEPORT is
 -- lit: the server counts it from the moment it moved the player, one trip after
 -- this client pressed.
 local COOL_MARGIN = 0.4
@@ -1223,7 +1221,7 @@ local litConnections: { RBXScriptConnection } = {}
 local fading = false
 -- When each of this step's targets was pressed, lit or not. A pressed button
 -- has done its job and is not pointed at again in the step (the hand stays on
--- one only while it is still waiting to be pressed); and after OBBY, TELEPORT
+-- one only while it is still waiting to be pressed); and after SELL, TELEPORT
 -- waits out the teleport cooldown the two share before it is lit.
 local pressedAt: { [string]: number } = {}
 
@@ -1241,7 +1239,7 @@ local SCAN_EVERY = 0.5
 -- SPEED spotlight, which lights a label and takes a tap anywhere.
 local PAD_KEYS: { [string]: Enum.KeyCode } = {
 	biomes = Enum.KeyCode.DPadLeft,
-	obby = Enum.KeyCode.DPadRight,
+	sell = Enum.KeyCode.DPadRight,
 	teleport = Enum.KeyCode.DPadUp,
 }
 local TAP_INPUTS: { [Enum.UserInputType]: boolean } = {
@@ -1546,7 +1544,7 @@ local function spotTick()
 			end
 		end))
 	end
-	-- What the step points at has moved on -- the pod equipped, OBBY done, the
+	-- What the step points at has moved on -- the pod equipped, SELL done, the
 	-- step finished, the guide hidden: a light that was up ends where it stands.
 	if litKey and (litKey ~= key or aim.button ~= litButton) then
 		local light = lights[litKey :: string]
@@ -2433,33 +2431,34 @@ local function refresh()
 	--== 7: the travel buttons (owner, 2026-10-08) ============================
 	if id == "travel" then
 		--======================================================================
-		-- TWO SPOTLIGHTS IN A ROW: OBBY, then TELEPORT TO PLOT
+		-- TWO SPOTLIGHTS IN A ROW: SELL, then TELEPORT TO PLOT (SELL since
+		-- 2026-10-13, the owner's backlog item 7; it was OBBY)
 		--
-		-- a. OBBY, "TAP OBBY": to the Floating Garden's entrance -- unless OBBY is
-		--    off, hidden or has no rect on this screen, when it is straight to b.
+		-- a. SELL, "TAP SELL": to Marigold's stall -- unless SELL is hidden or
+		--    has no rect on this screen, when it is straight to b.
 		-- b. TELEPORT TO PLOT, "TAP TO GO HOME" -- lit only once the teleport
-		--    cooldown the two buttons share has run out since OBBY was pressed, so
+		--    cooldown the two buttons share has run out since SELL was pressed, so
 		--    the press it asks for is never refused. The server records the step
 		--    on that teleport's success (PlotService.TeleportHome), and nothing
 		--    here claims it.
 		-- Both stand only in the Safe Zone; outside it the words say so.
 		--======================================================================
-		local obby = hudButton("SeedObbyButton", "TeleportToObby")
+		local sell = hudButton("SeedSellButton", "TeleportToSell")
 		local home = hudButton("SeedPlotTeleport", "TeleportToPlot")
-		local obbyLight = lights.obby
-		local obbyDone = pressedAt.obby ~= nil or (obbyLight ~= nil and obbyLight.phase == "spent")
-		if obby and not obbyDone then
-			subline.Text = "OBBY takes you to the Floating Garden."
-			pointAt(obby, "TAP OBBY", "obby", obby)
+		local sellLight = lights.sell
+		local sellDone = pressedAt.sell ~= nil or (sellLight ~= nil and sellLight.phase == "spent")
+		if sell and not sellDone then
+			subline.Text = "SELL takes you to Marigold's stall."
+			pointAt(sell, "TAP SELL", "sell", sell)
 		elseif home then
 			subline.Text = "TELEPORT TO PLOT takes you home."
-			local pressed = pressedAt.obby
+			local pressed = pressedAt.sell
 			local cooling = pressed ~= nil and os.clock() - pressed < PLOT.TeleportCooldownSeconds + COOL_MARGIN
 			if not cooling then
 				pointAt(home, "TAP TO GO HOME", "teleport", home)
 			end
 		else
-			subline.Text = "OBBY and TELEPORT TO PLOT work from the Safe Zone."
+			subline.Text = "SELL and TELEPORT TO PLOT work from the Safe Zone."
 		end
 		return
 	end
@@ -2500,11 +2499,11 @@ table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 	end
 end))
 
--- OBBY pressed, lit or not (the note ObbyButtonUI leaves for ObbyCamera): in the
+-- SELL pressed, lit or not (the note SellButtonUI leaves for ObbyCamera): in the
 -- travel step that is part a done, and TELEPORT waits out the shared cooldown.
-table.insert(connections, player:GetAttributeChangedSignal(ObbyData.LocalAttributes.EntranceAsked):Connect(function()
+table.insert(connections, player:GetAttributeChangedSignal(PLOT.SellAskedAttribute):Connect(function()
 	if lightsStep == "travel" then
-		press("obby")
+		press("sell")
 	end
 end))
 

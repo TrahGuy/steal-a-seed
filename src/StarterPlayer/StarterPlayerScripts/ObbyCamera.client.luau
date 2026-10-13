@@ -3,8 +3,9 @@
 --
 -- Turns the camera to face the route, ONCE, each time the Floating Garden puts
 -- this player down: the start island, a checkpoint after a fall, the summit
--- after a fall from it, and the arch the OBBY button lands in front of. After
--- that the camera is the player's -- nothing here runs until the next time.
+-- after a fall from it -- and, off the course, ONCE at Marigold's stall where
+-- the SELL button lands (2026-10-13; the OBBY button's arch had that place).
+-- After that the camera is the player's -- nothing here runs until the next time.
 --
 -- WHY, AND HOW: Shared/ObbyView. In short, a phone's camera turns to look the
 -- way its subject has just travelled, a fall's way back to its checkpoint is
@@ -17,9 +18,10 @@
 --   ObbyFalls going UP          a fall: back on the respawn ObbyCheckpoint names
 --   ObbyCheckpoint = "start"    a run begun, from the arch's prompt or the
 --   (on the course)             pavilion's Replay
---   ObbyEntranceAsked           this client's own note that the OBBY button was
---                               pressed (ObbyButtonUI); it never leaves this
---                               machine, and the server may still refuse
+--   SeedSellAsked               this client's own note that the SELL button was
+--                               pressed (SellButtonUI, Plot.SellAskedAttribute);
+--                               it never leaves this machine, and the server
+--                               may still refuse
 --
 -- None of them turns the camera. Each only says where the body is about to be
 -- put, and the turn is made when the body is FOUND there -- within ArriveStuds
@@ -260,11 +262,14 @@ player:GetAttributeChangedSignal(OA.Checkpoint):Connect(function()
 	lastCheckpoint = now
 end)
 
--- The OBBY button, pressed on this client: in front of the arch, facing it.
-player:GetAttributeChangedSignal(ObbyData.LocalAttributes.EntranceAsked):Connect(function()
-	if player:GetAttribute(ObbyData.LocalAttributes.EntranceAsked) ~= nil and not ObbyData.onCourse(player) then
-		local at, forward = ObbyView.entrance()
-		expect(at, forward, ObbyView.EntranceWaitSeconds)
+-- The SELL button, pressed on this client (2026-10-13; the OBBY button and its
+-- arch had this place): at Marigold's stall, facing between the SELL ALL board
+-- and her -- GameConfig.hubSellLanding, the very frame the server lands on.
+local SELL_ASKED = GameConfig.Plot.SellAskedAttribute
+player:GetAttributeChangedSignal(SELL_ASKED):Connect(function()
+	if player:GetAttribute(SELL_ASKED) ~= nil and not ObbyData.onCourse(player) then
+		local landing = GameConfig.hubSellLanding()
+		expect(landing.Position, landing.LookVector, ObbyView.EntranceWaitSeconds)
 	end
 end)
 

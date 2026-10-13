@@ -372,6 +372,29 @@ function PlotService.TeleportToBiomes(player: Player): (boolean, string?)
 	return PlotService.TeleportTo(player, landing, "BIOMES_BLOCKED")
 end
 
+--==============================================================================
+-- SELL: MARIGOLD'S STALL (2026-10-13, the owner's backlog item 7: "change the
+-- obby navigation pill to SELL, and teleport to marigold")
+--
+-- One button, one destination, BIOMES's shape: the verb carries nothing and
+-- the landing is this file's -- in front of the SELL ALL board at Marigold's
+-- stall, facing between the board and her (GameConfig.hubSellLanding), inside
+-- that board's prompt and clear of every other one. TeleportTo's rules and its
+-- ONE shared cooldown, and on top of them never while a guardian is still
+-- after the player (the old OBBY button's rule, kept with its place).
+--==============================================================================
+function PlotService.SellLanding(): CFrame
+	return GameConfig.hubSellLanding()
+end
+
+function PlotService.TeleportToSell(player: Player): (boolean, string?)
+	if (tonumber(player:GetAttribute(ATTR.PursuedBy)) or 0) > 0
+		or (tonumber(player:GetAttribute(ATTR.WakingBy)) or 0) > 0 then
+		return false, "SELL_CHASED"
+	end
+	return PlotService.TeleportTo(player, PlotService.SellLanding(), "SELL_BLOCKED")
+end
+
 function PlotService.OnAssigned(fn: Listener): () -> ()
 	table.insert(onAssigned, fn)
 	--==========================================================================
@@ -910,6 +933,14 @@ function PlotService.Start()
 			-- BIOMES: the same shape, the verb alone; the server names the place.
 			if action == PLOT.BiomesAction then
 				local went, why = PlotService.TeleportToBiomes(player)
+				if not went and why then
+					ActionRefusal.send(player, why)
+				end
+				return
+			end
+			-- SELL (2026-10-13): the same shape again.
+			if action == PLOT.SellAction then
+				local went, why = PlotService.TeleportToSell(player)
 				if not went and why then
 					ActionRefusal.send(player, why)
 				end

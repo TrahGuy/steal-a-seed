@@ -1,33 +1,35 @@
 --!strict
--- Steal a Seed :: ObbyButtonUI
+-- Steal a Seed :: SellButtonUI
 --
--- OBBY: one button right beside TELEPORT TO PLOT (2026-09-27), while the player
--- is alive, standing in the Safe Zone and not already on the course. A press
--- asks for the Floating Garden's ENTRANCE -- in front of the arch, where Return
--- and a fall already land -- never a checkpoint or the finish, and it grants
--- nothing: a run still starts at the Start prompt, like any other.
+-- SELL: one button right beside TELEPORT TO PLOT (2026-10-13, the owner's
+-- backlog item 7: "change the obby navigation pill to SELL, and teleport to
+-- marigold"; it was the OBBY button, 2026-09-27, in the same place), while the
+-- player is alive, standing in the Safe Zone and not on the course. A press
+-- asks for Marigold's stall -- in front of the SELL ALL board, inside its
+-- prompt, facing between the board and her -- and it sells nothing: the board
+-- still sells, like any other time.
 --
 --==============================================================================
 -- THE CLIENT SHOWS IT. THE SERVER DECIDES IT.
 --
--- One verb on GameEvent and nothing else. ObbyService.TeleportToEntrance
--- checks every press with TELEPORT TO PLOT's own rules and its shared cooldown
+-- One verb on GameEvent and nothing else. PlotService.TeleportToSell checks
+-- every press with TELEPORT TO PLOT's own rules and its shared cooldown
 -- (PlotService.TeleportTo) -- alive, in the Safe Zone, no raided pod, not
 -- trapped or knocked down, ground under the landing -- and on top of those,
--- never during a chase and never with the obby switched off. A refusal a player
--- can act on comes back as a notice (ActionToastUI).
+-- never during a chase. A refusal a player can act on comes back as a notice
+-- (ActionToastUI).
 --
 --==============================================================================
 -- WHERE, AND HOW IT LOOKS
 --
--- HudLayout's `obby` rect: TELEPORT's own row and height, 8 px off it, drawn at
--- TELEPORT's scale -- so on a phone it stands up under the clock with it. The
--- plate is TELEPORT's, built the same way one level down from the touch area,
--- in the Index tile's slate with a sky-blue rim so the two never read as one
--- button; the icon is three rising platforms and a pennant, drawn from frames,
--- and the word is OBBY. Where there is only room for the word, only the word;
--- where a screen has no room beside TELEPORT at all, the rect is empty and the
--- button stays hidden rather than cover anything.
+-- HudLayout's `obby` rect (the name it kept): TELEPORT's own row and height,
+-- 8 px off it, drawn at TELEPORT's scale -- so on a phone it stands up under
+-- the clock with it. The plate is TELEPORT's, built the same way one level down
+-- from the touch area, in the Index tile's slate with a sky-blue rim so the two
+-- never read as one button; the icon is a gold coin with a dollar sign, drawn
+-- from frames, and the word is SELL. Where there is only room for the word,
+-- only the word; where a screen has no room beside TELEPORT at all, the rect is
+-- empty and the button stays hidden rather than cover anything.
 --
 -- A CONTROLLER presses it with D-pad Right while it shows (TELEPORT has Up),
 -- bound only then, and never while a panel is open or the selection is out on
@@ -47,35 +49,30 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local PadInput = require(Shared:WaitForChild("PadInput"))
 local ObbyData = require(Shared:WaitForChild("ObbyData"))
-local WheelData = require(Shared:WaitForChild("WheelData"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local RAIL = GameConfig.Rail
 local ATTR = GameConfig.Attributes
-local WHITE = Color3.fromRGB(255, 255, 255)
+local PLOT = GameConfig.Plot
 local BLACK = Color3.fromRGB(0, 0, 0)
-local GRASS = Color3.fromRGB(132, 222, 104)
-local PENNANT = Color3.fromRGB(255, 206, 84)
-local PAD_ACTION = "SeedTeleportToObby"
+local GOLD = Color3.fromRGB(255, 206, 84)
+local GOLD_DEEP = Color3.fromRGB(232, 158, 30)
+local GOLD_LIGHT = Color3.fromRGB(255, 244, 196)
+local PAD_ACTION = "SeedTeleportToSell"
 
 --==============================================================================
 -- RE-RUN SAFE
 --==============================================================================
-local existing = playerGui:FindFirstChild("SeedObbyButton")
+local existing = playerGui:FindFirstChild("SeedSellButton")
 if existing then
 	existing:Destroy()
 end
 ContextActionService:UnbindAction(PAD_ACTION)
 
--- No course, no button.
-if not GameConfig.Obby.Enabled then
-	return
-end
-
 local gui = Instance.new("ScreenGui")
-gui.Name = "SeedObbyButton"
+gui.Name = "SeedSellButton"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 -- TELEPORT TO PLOT's own order: over the world and the prompts, under every panel.
@@ -89,7 +86,7 @@ gui.Parent = playerGui
 -- PLATE inside it is drawn at the layout's `teleportScale`, like TELEPORT's.
 --==============================================================================
 local button = Instance.new("TextButton")
-button.Name = "TeleportToObby"
+button.Name = "TeleportToSell"
 button.AnchorPoint = Vector2.new(0.5, 0)
 button.BackgroundTransparency = 1
 button.BorderSizePixel = 0
@@ -101,29 +98,36 @@ button.Parent = gui
 UIKit.clicks(button)
 
 -- The HUD's plate button (UIKit.hudPlate, the global UI pass 2026-10-04): the
--- outline on the BORDER (it never drew on the old text-less label), the
--- family's darker foot, the inner rim, the icon and the outlined word.
+-- outline on the BORDER, the family's darker foot, the inner rim, the icon and
+-- the outlined word.
 local hud = UIKit.hudPlate(button, {
 	top = RAIL.TileTop,
 	bottom = RAIL.TileBottom,
 	rim = RAIL.IndexEdge,
-	text = "OBBY",
+	text = "SELL",
 })
 local plate = hud.plate
 local plateScale = hud.scale
-local rim = hud.rim
 local icon = hud.icon
 local label = hud.label
--- Three rising platforms and a pennant on the highest: an obby, in 28 px.
-for i, at in ipairs({ { 0.2, 0.8 }, { 0.5, 0.58 }, { 0.8, 0.36 } }) do
-	local step = UIKit.piece(icon, "Step" .. i, at[1], at[2], 0.34, 0.17, GRASS, 0.3)
-	UIKit.stroke(step, BLACK, 1.5)
-end
-local pole = UIKit.piece(icon, "Pole", 0.88, 0.13, 0.07, 0.3, WHITE, 0.3)
-UIKit.stroke(pole, BLACK, 1)
-local pennant = UIKit.piece(icon, "Pennant", 0.74, 0.06, 0.22, 0.13, PENNANT, 0.2)
-UIKit.stroke(pennant, BLACK, 1)
-
+-- A gold coin with a dollar sign, in 28 px: the rim, a deeper face, the sign,
+-- and a glint.
+local coin = UIKit.piece(icon, "Coin", 0.5, 0.52, 0.86, 0.86, GOLD, 0.5)
+UIKit.stroke(coin, BLACK, 1.5)
+UIKit.piece(icon, "Face", 0.5, 0.52, 0.6, 0.6, GOLD_DEEP, 0.5, nil, 3)
+local sign = Instance.new("TextLabel")
+sign.Name = "Dollar"
+sign.AnchorPoint = Vector2.new(0.5, 0.5)
+sign.Position = UDim2.fromScale(0.5, 0.53)
+sign.Size = UDim2.fromScale(0.5, 0.56)
+sign.BackgroundTransparency = 1
+sign.Font = Enum.Font.FredokaOne
+sign.Text = "$"
+sign.TextScaled = true
+sign.TextColor3 = GOLD_LIGHT
+sign.ZIndex = 4
+sign.Parent = icon
+UIKit.piece(icon, "Glint", 0.32, 0.3, 0.16, 0.1, GOLD_LIGHT, 0.5, -35, 4)
 
 local scale = Instance.new("UIScale")
 scale.Parent = button
@@ -181,10 +185,11 @@ local function request()
 		return
 	end
 	lastPress = now
-	remote:FireServer(WheelData.Actions.ObbyTeleport)
+	remote:FireServer(PLOT.SellAction)
 	-- A note for this client's own ObbyCamera, which turns the camera to the
-	-- arch once if the body does land there. It never leaves this machine.
-	player:SetAttribute(ObbyData.LocalAttributes.EntranceAsked, now)
+	-- stall once if the body does land there, and for the guide's travel step.
+	-- It never leaves this machine.
+	player:SetAttribute(PLOT.SellAskedAttribute, now)
 end
 
 button.Activated:Connect(request)
@@ -205,7 +210,7 @@ task.spawn(function()
 	if found and found:IsA("RemoteEvent") then
 		channel = found
 	else
-		warn("[Seed/ObbyButtonUI] No GameEvent remote; the button cannot ask for anything.")
+		warn("[Seed/SellButtonUI] No GameEvent remote; the button cannot ask for anything.")
 	end
 end)
 
@@ -242,8 +247,9 @@ local function alive(): boolean
 end
 
 refresh = function()
-	-- Never on the course (RETURN TO PLOT is the way off it), and never where
-	-- the screen had no room for it.
+	-- Today's rules (the owner's default for item 7): never on the course
+	-- (RETURN TO PLOT is the way off it), and never where the screen had no
+	-- room for it.
 	local want = roomy and alive()
 		and player:GetAttribute(ATTR.InSafeZone) == true
 		and player:GetAttribute(ObbyData.Attributes.Course) ~= true

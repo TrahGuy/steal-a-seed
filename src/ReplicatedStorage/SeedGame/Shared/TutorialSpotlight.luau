@@ -89,7 +89,8 @@ export type Target = { words: string, key: string? }
 Spotlight.Targets = {
 	speed = { words = "YOUR SPEED \u{00B7} GET " .. TutorialData.SpeedTargetText },
 	biomes = { words = "TAP BIOMES", key = "A or D-PAD LEFT" },
-	obby = { words = "TAP OBBY", key = "A or D-PAD RIGHT" },
+	-- SELL (2026-10-13, the owner's backlog item 7): OBBY's place and key.
+	sell = { words = "TAP SELL", key = "A or D-PAD RIGHT" },
 	teleport = { words = "TAP TO GO HOME", key = "A or D-PAD UP" },
 	slot = { words = "EQUIP YOUR POD", key = "PRESS A" },
 } :: { [string]: Target }

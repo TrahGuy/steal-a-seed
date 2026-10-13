@@ -692,12 +692,15 @@ src/StarterPlayer/StarterPlayerScripts/
                                 PLOT (HudLayout `returnPlot`: on a phone's row over BIOMES' and
                                 PLOT's span, words only); on a phone the run's clock alone, each
                                 stage's name said once as a notice
-    ObbyButtonUI.client.luau    OBBY beside TELEPORT TO PLOT: to the obby's entrance, Safe Zone only
+    SellButtonUI.client.luau    SELL beside TELEPORT TO PLOT (OBBY's place until 2026-10-13): to
+                                Marigold's stall at the SELL ALL board, Safe Zone only, TELEPORT TO
+                                PLOT's rules and cooldown, never in a chase
     BiomesButtonUI.client.luau  BIOMES on TELEPORT's other side: to the Greenhollow entrance
                                 only, Safe Zone only, TELEPORT TO PLOT's rules and cooldown
     ObbyCamera.client.luau      turns the camera down the course ONCE when a runner is put down
-                                (the arch, the start, a checkpoint after a fall) and hands it
-                                straight back -- ObbyView's arithmetic, nothing held
+                                (the start, a checkpoint after a fall), and once to Marigold's
+                                stall when SELL lands there, and hands it straight back --
+                                ObbyView's arithmetic, nothing held
     WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
                                 species cards, owed prizes) and this player's copy of the world
                                 wheel's face; GET SPINS and its card, shown only while the

@@ -23,7 +23,8 @@
 --==============================================================================
 -- ONE LESSON AFTER THE HATCH: THE TRAVEL BUTTONS (owner, 2026-10-08; Version 3)
 --
--- Step 7, `travel`, teaches OBBY and TELEPORT TO PLOT. It is recorded only on a
+-- Step 7, `travel`, teaches SELL (OBBY until 2026-10-13) and TELEPORT TO PLOT.
+-- It is recorded only on a
 -- successful PlotService.TeleportHome while the first loop is already done
 -- (Needs, below) -- never by a client, never before it. It pays nothing, so the
 -- FIRST LOOP still ends before it: the Bonus Chest opens there and the
@@ -152,7 +153,7 @@ Tutorial.Steps = {
 	{
 		Id = "travel",
 		Title = "Get around fast!",
-		Detail = "From the Safe Zone, OBBY takes you to the Floating Garden and TELEPORT TO PLOT takes you home.",
+		Detail = "From the Safe Zone, SELL takes you to Marigold's stall and TELEPORT TO PLOT takes you home.",
 	},
 } :: { Step }
 

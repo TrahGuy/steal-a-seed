@@ -338,7 +338,8 @@ export type Layout = {
 	-- DRAWN inside it -- 1, except on a phone (TELEPORT TO PLOT ON A PHONE).
 	teleport: Rect,
 	teleportScale: number,
-	-- The OBBY button right beside it (ObbyButtonUI), its plate drawn at
+	-- The SELL button right beside it (SellButtonUI; it was OBBY until
+	-- 2026-10-13, and the rect keeps the name), its plate drawn at
 	-- `teleportScale` too; `obbyWide` where there is room for its icon as well as
 	-- its word. An empty rect where neither side has room: it then stays hidden.
 	obby: Rect,
@@ -1438,9 +1439,10 @@ end
 HudLayout.adminBeside = adminBeside
 
 --==============================================================================
--- THE OBBY BUTTON: RIGHT BESIDE TELEPORT TO PLOT (2026-09-27)
+-- THE OBBY BUTTON: RIGHT BESIDE TELEPORT TO PLOT (2026-09-27; the SELL button
+-- since 2026-10-13, the owner's backlog item 7 -- the place is the same)
 --
--- ObbyButtonUI's touch area. TELEPORT's own row and height, 8 px off it, its
+-- SellButtonUI's touch area. TELEPORT's own row and height, 8 px off it, its
 -- plate drawn at TELEPORT's scale -- so on a phone it is up under the clock
 -- with it -- on TELEPORT's right where that clears everything, else on its
 -- left; with its icon where the room allows, the word alone where only that

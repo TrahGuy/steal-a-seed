@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## ITEM 7 (BACKLOG 2026-10-12): THE OBBY PILL BECOMES SELL — 2026-10-13 (CLAUDE, TERMINAL)  (COMMITTED ON wip, NOT PUSHED; PlotTeleportSpec 82/0 (14 new SELL checks), HudLayoutSpec 1498/0, ObbyViewSpec 112/0, TutorialSpotlightSpec 51/0 (checks updated); ObbySpec 69/0, TutorialSpec 121/0, ActionRefusalSpec 74/0, EventHubSpec 53/0, DebugTeleportSpec 8/0, BatHintSpec 19/0, ControllerSpec 64/0, FirstMinuteSpec 117/0, MetricsSpec 66/0, PhoneMenuSpec 29/0, UsabilityAudioSpec 95/0, StorageDoorsSpec 128/0, TutorialPodSpec 263 checks; MUTANTS 6/6 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner: "change the obby navigation pill to SELL, and teleport to marigold". Their default: the pill shows under today's rules (Safe Zone, not on the course).
+
+**The button** (StarterPlayerScripts/SellButtonUI.client.luau, moved from ObbyButtonUI):
+- SELL, with a gold coin and a dollar sign drawn from frames, in OBBY's place: HudLayout's `obby` rect (the name it kept), TELEPORT's row and scale, D-pad Right.
+- It shows alive, in the Safe Zone and off the course, as OBBY did.
+- One verb, PLOT.SellAction; and a client-only note, PLOT.SellAskedAttribute.
+
+**The teleport** (PlotService.SellLanding / TeleportToSell, BIOMES's shape):
+- It lands in front of the SELL ALL board at Marigold's stall, facing between the board and her (GameConfig.hubSellLanding, Map.Stall.SellLanding).
+- Measured in Play: 9.0 to the SELL ALL prompt (reach 12). 13.3 to the nearest point Marigold can walk to (her prompt's reach is 11; PlotTeleportSpec), and she stood 16.4 off. The reward wheel is 20.8 off.
+- Why there and not in front of Marigold: her own prompt is "Open Shop" for bats and traps; selling is the board's.
+- TeleportTo's rules and its ONE shared cooldown, and never during a chase (SELL_CHASED). Its own words for no ground under the landing (SELL_BLOCKED).
+- The obby's teleport verb (ObbyService.TeleportToEntrance) stays on the server, still under ObbySpec. No button sends it now; item 8's sign shows the way to the obby.
+
+**The camera:** ObbyCamera turns it ONCE to the stall when the body lands there (the SELL note), the way it turned to the arch for OBBY.
+
+**The guide** (TutorialUI, TutorialSpotlight, TutorialData): step 7 now says "TAP SELL" and "SELL takes you to Marigold's stall." before TELEPORT TO PLOT. ObbyData.LocalAttributes.EntranceAsked went with the button.
+
+**The Play** (guarded, SeedTest_20261013, desktop 1065 x 716):
+- SELL in OBBY's place with its coin.
+- A press landed at (-158, 3, -154) facing (0.86, -0.51), with the camera turned to the stall: Marigold ahead, the SELL ALL board front-left.
+- A second press inside the cooldown: TELEPORT RECHARGING.
+- The returning player's offline card ate the first press; claiming it freed the HUD (that card's own rule).
+- The first landing spot, 0.4 short of SELL ALL's reach, was found here and moved: the boards stand on the StallFloor, 2 behind the stall's frame.
+- Captures: output/item7-sell-button-2026-10-13/ (01-04).
+
+**Not seen:** a phone, a console, the guide's step 7 live (TutorialSpotlightSpec holds it), a chase (PlotTeleportSpec holds it).
+
+**Files:** GameConfig (Map.Stall.SellLanding, hubSellLanding, Plot.SellAction, Plot.SellAskedAttribute), ServerScriptService/SeedGameServer/PlotService.luau, ObbyService.luau (comment), Shared/ActionRefusal.luau (SELL_CHASED, SELL_BLOCKED), HudLayout.luau and ObbyData.luau (comments; EntranceAsked gone), TutorialData.luau, TutorialSpotlight.luau, StarterPlayerScripts/SellButtonUI.client.luau (was ObbyButtonUI), ObbyCamera.client.luau, TutorialUI.client.luau, tools/tests/PlotTeleportSpec.luau, HudLayoutSpec.luau, ObbyViewSpec.luau, TutorialSpotlightSpec.luau, AGENTS.md.
+
 ## ITEM 6 (BACKLOG 2026-10-12): THE PASSES, GIFTABLE — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK with its ids, d3ca5f9, NOT PUBLISHED; PassGiftSpec 19/0 (new); MysteryShopSpec 16/0 and ShopPadSpec 22/0 (checks updated); THE WHOLE SUITE 159/159 GREEN; MUTANTS 9/9 CAUGHT; ONE GUARDED PLAY ON A SEPARATE STORE, DESKTOP; THE OWNER'S 4 GIFT PRODUCT IDS WIRED AFTER, IN THEIR OWN COMMIT)
 
 The owner: "make the passes giftable". Their decision: as written; the same prices as the passes; the owner creates the four gift products, and the code ships with the ids unset until they arrive.

@@ -413,6 +413,10 @@ end
 -- TO PLOT's own rules and cooldown; on top of those, never while running the
 -- course, never while a guardian is still after the player, and never with
 -- the obby switched off. The verb carries nothing else.
+--
+-- No HUD button sends it since 2026-10-13: its place beside TELEPORT TO PLOT
+-- is the SELL button's (the owner's backlog item 7). The verb stays as it was,
+-- and ObbySpec still holds it.
 --==============================================================================
 function ObbyService.TeleportToEntrance(player: Player): boolean
 	if not running or not GameConfig.Obby.Enabled or runs[player] ~= nil then

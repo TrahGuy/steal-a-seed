@@ -75,20 +75,9 @@ ObbyData.Attributes = {
 	RewardChallenge = "ObbyRewardChallenge",
 }
 
---==============================================================================
--- WHAT A CLIENT NOTES FOR ITSELF (2026-09-29)
---
--- Written by a LocalScript on its OWN copy of the player, so it never leaves
--- that machine: the server does not see it and nothing is decided by it.
---
---   EntranceAsked   os.clock() when this client pressed the OBBY button
---                   (ObbyButtonUI). ObbyCamera reads it to know the arch is
---                   where the body may be about to land -- the server may still
---                   refuse the press, and then nothing happens.
---==============================================================================
-ObbyData.LocalAttributes = {
-	EntranceAsked = "ObbyEntranceAsked",
-}
+-- (ObbyData.LocalAttributes.EntranceAsked, the OBBY button's note for
+-- ObbyCamera, went with the button on 2026-10-13: its place on the HUD is the
+-- SELL button's now, which leaves GameConfig.Plot.SellAskedAttribute.)
 
 -- The course's folder in Workspace, and the tags on its working parts: the
 -- server's ObbyCourse stamps them, every client's ObbyUI drives them.

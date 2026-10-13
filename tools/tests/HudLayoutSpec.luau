@@ -2137,12 +2137,15 @@ do
 
 	-- The wiring: placed by HudLayout at TELEPORT's scale, one verb and nothing
 	-- else, the Safe Zone and the course the server's own flags, D-pad Right,
-	-- no loop -- and the chase warning never shares the row with it.
-	local obbySrc = sourceOf("ObbyButtonUI") or ""
+	-- no loop -- and the chase warning never shares the row with it. The SELL
+	-- button since 2026-10-13 (the owner's backlog item 7): OBBY's place, rect
+	-- and rules, its own verb.
+	local obbySrc = sourceOf("SellButtonUI") or ""
 	check(obbySrc:find("layout.obby", 1, true) ~= nil and obbySrc:find("layout.obbyWide", 1, true) ~= nil
 			and obbySrc:find("plateScale.Scale = layout.teleportScale", 1, true) ~= nil
-			and obbySrc:find("remote:FireServer(WheelData.Actions.ObbyTeleport)", 1, true) ~= nil
+			and obbySrc:find("remote:FireServer(PLOT.SellAction)", 1, true) ~= nil
 			and select(2, obbySrc:gsub("FireServer%(", "")) == 1
+			and obbySrc:find('text = "SELL"', 1, true) ~= nil
 			and obbySrc:find("GetAttribute(ATTR.InSafeZone) == true", 1, true) ~= nil
 			and obbySrc:find("GetAttribute(ObbyData.Attributes.Course) ~= true", 1, true) ~= nil
 			and obbySrc:find("Enum.KeyCode.DPadRight", 1, true) ~= nil
@@ -2150,8 +2153,8 @@ do
 			and obbySrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)', 1, true) ~= nil
 			and obbySrc:find("UIKit.tenFoot(gui)", 1, true) ~= nil
 			and not obbySrc:find("while true", 1, true) and not obbySrc:find("RenderStepped", 1, true),
-		"ObbyButtonUI: placed by HudLayout at TELEPORT's scale, sends one verb and nothing else, shows only in the "
-			.. "Safe Zone off the course, answers D-pad Right, and runs no loop")
+		"SellButtonUI (OBBY's place): placed by HudLayout at TELEPORT's scale, sends one verb and nothing else, shows "
+			.. "only in the Safe Zone off the course, answers D-pad Right, and runs no loop")
 end
 
 --==============================================================================
@@ -3258,7 +3261,7 @@ do
 		{ "LoadoutUI", "UIKit.tenFoot(gui)" }, { "LoadoutUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
 		{ "WorldClock", "UIKit.tenFoot(gui)" }, { "WorldClock", "viewport.X / 2), 0, r.y)" },
 		{ "ActionToastUI", "UIKit.tenFoot(gui)" }, { "PlotTeleportUI", "UIKit.tenFoot(gui)" },
-		{ "ObbyButtonUI", "UIKit.tenFoot(gui)" }, { "WheelUI", "UIKit.tenFoot(gui)" },
+		{ "SellButtonUI", "UIKit.tenFoot(gui)" }, { "WheelUI", "UIKit.tenFoot(gui)" },
 		{ "WheelUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
 		{ "BiomeGuideUI", "UIKit.tenFoot(gui)" }, { "BiomeGuideUI", "label.AbsoluteSize.X / UIKit.scaleOf(gui)" },
 		-- TutorialUI's hand and spotlight live in a gui with NO UIScale (it has to

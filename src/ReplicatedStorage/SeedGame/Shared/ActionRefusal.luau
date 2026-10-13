@@ -145,6 +145,10 @@ ActionRefusal.Text = {
 	-- The BIOMES button's teleport (2026-09-30), likewise: TELEPORT TO PLOT's
 	-- codes, and this one for a Greenhollow entrance with no ground under it.
 	BIOMES_BLOCKED = "The road isn't ready yet.",
+	-- The SELL button's teleport (2026-10-13, where OBBY stood), likewise; and
+	-- like OBBY never during a chase.
+	SELL_CHASED = "Wait for the chase to end.",
+	SELL_BLOCKED = "Marigold's stall isn't ready yet.",
 
 	--==========================================================================
 	-- PLANT STORAGE (CarryService.HeldRoom), 2026-09-29
@@ -230,6 +234,8 @@ ActionRefusal.Notices = {
 	TRAP_OBBY = { title = "NO TRAPS HERE", detail = "Traps don't work on the course." },
 	OBBY_BLOCKED = { title = "OBBY NOT READY" },
 	BIOMES_BLOCKED = { title = "ROAD NOT READY" },
+	SELL_CHASED = { title = "STILL BEING CHASED", detail = "Wait for the chase to end." },
+	SELL_BLOCKED = { title = "STALL NOT READY" },
 	-- PLANT STORAGE FULL, 24/24: the headline is held to twenty characters like
 	-- every other, so the count leads the line under it. What makes room is what
 	-- takes a plant or a pod out of the bag: putting it in the ground, or
