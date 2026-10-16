@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## A SECRET IN EVERY BIOME, STEP 2: ALL FIVE WALK, FOUR NEW IDLES, THE CINDERDRAKE FLIES — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 855a406 with the owner's OK ("push it when green"), NOT PUBLISHED; BiomeSecretsSpec 55/0; THE WHOLE SUITE 165 OF 165; MUTANTS 11/11 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## A SECRET IN EVERY BIOME, STEP 2: ALL FIVE WALK, FOUR NEW IDLES, THE CINDERDRAKE FLIES — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 855a406 with the owner's OK ("push it when green"); LIVE as v1066, the owner's publish at 14:21:53 UTC 2026-10-16, Studio matching 855a406 (400 compared, 0 differ, 0 ZZ, no test marker); BiomeSecretsSpec 55/0; THE WHOLE SUITE 165 OF 165; MUTANTS 11/11 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **The owner:** "go ahead with step 2 and so on". Their answers are in KB/BIOME-SECRETS-PLAN.md: "Walk like the others", new idles for the four without a script, and for the Cinderdrake "Walk, fly sometimes".
 - Asked mid-way: "is it essential to do this? example a secret sprout takes 10 of your garden slots".
@@ -28,7 +28,7 @@
 - tools/tests/BiomeSecretsSpec.luau;
 - KB/BIOME-SECRETS-PLAN.md.
 
-## A SECRET IN EVERY BIOME, STEP 1: THE OWNER'S FIVE, WORKING WITH THEIR OWN SCRIPTS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 67af52a with the owner's OK ("push it when green"), NOT PUBLISHED; BiomeSecretsSpec 43/0 (NEW); THE WHOLE SUITE 165 OF 165 (twelve specs' pins moved to the new state); FirstHatchSpec 36/0; MUTANTS 19/19 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## A SECRET IN EVERY BIOME, STEP 1: THE OWNER'S FIVE, WORKING WITH THEIR OWN SCRIPTS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 67af52a with the owner's OK ("push it when green"); LIVE as v1066, the owner's publish at 14:21:53 UTC 2026-10-16, Studio matching 855a406 (400 compared, 0 differ, 0 ZZ, no test marker); BiomeSecretsSpec 43/0 (NEW); THE WHOLE SUITE 165 OF 165 (twelve specs' pins moved to the new state); FirstHatchSpec 36/0; MUTANTS 19/19 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **The owner's brief and answers:** KB/BIOME-SECRETS-PLAN.md (the table, and the record of step 1 at its foot).
 - Asked mid-way: "what is the sphere around cinderdrake? if not necesarry we should remove it, and can he fly too?"
@@ -72,7 +72,7 @@
 - tools/tests/BiomeSecretsSpec.luau (new) and twelve specs' pins, FirstHatchSpec;
 - KB/BIOME-SECRETS-PLAN.md (new), AGENTS.md.
 
-## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 71245c2 with the owner's OK, NOT PUBLISHED; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
+## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 71245c2 with the owner's OK; LIVE as v1065, the owner's publish at 12:00:31 UTC 2026-10-16; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
 
 **The bug** (found by the sprout rename's phone Play, above):
 - On the owner's phone emulator, the first hatch card (fa60c69, live since v1063) never appeared.
@@ -104,7 +104,7 @@
 - tools/tests/FirstHatchSpec.luau;
 - KB/FIRST-HATCH-FIX-PLAN.md, AGENTS.md.
 
-## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 919590d with the owner's OK, NOT PUBLISHED; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
+## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 919590d with the owner's OK; LIVE as v1065, the owner's publish at 12:00:31 UTC 2026-10-16; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
 
 The owner: "should we change the "plants" "creatures" into sprouts? ask me querstions". Eight answers, every recommendation taken: KB/SPROUT-RENAME-PLAN.md (new; what changed and what was tested).
 
@@ -151,7 +151,7 @@ The owner: "should we change the "plants" "creatures" into sprouts? ask me quers
 - BonusChestUI, GardenUI, IndexUI, LoadoutUI, OfflineUI, SellUI, TutorialUI, WheelUI;
 - 15 specs; KB/SPROUT-RENAME-PLAN.md (new).
 
-## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as be1abbe with the owner's OK, NOT PUBLISHED; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as be1abbe with the owner's OK; LIVE as v1065, the owner's publish at 12:00:31 UTC 2026-10-16; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner, on the Sprout Journey talk: "i like that cheaper idea" (POD RUSH on a schedule), then "ask me a lot of question". Sixteen answers, every recommendation taken: KB/POD-RUSH-HOURLY-PLAN.md (new; with where each lives and what was tested).
 
