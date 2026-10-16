@@ -7,15 +7,17 @@
 -- the pods, the look) follows the state this publishes.
 --
 -- THE SCHEDULE (the owner, 2026-10-11 -- EnchantedMistData.Schedule):
---   * A new server becomes ELIGIBLE a random 20-60 minutes after it starts.
+--   * A new server becomes ELIGIBLE a random 10-30 minutes after it starts
+--     (20-60 until 2026-10-16, the owner: "from 1 hour to 30mins").
 --   * Once eligible it waits for the next COMPLETED NATURAL RESET --
 --     WorldCycleService.OnDawn with source "cycle": the nests stocked (a short
 --     batch is reported, not waited out), Day published, the road reopened.
 --     It never forces a reset, never interrupts a raid, never skips a Pod
 --     Rush's hold: it only waits for the dawn the cycle makes anyway.
 --   * It is ACTIVE for 300 seconds: a night LOOK, gameplay in Day, biomes open.
---   * Its next eligibility is measured from that START: 60 minutes on. With
---     the unchanged 435-second cycle that is about 65:15 between starts.
+--   * Its next eligibility is measured from that START: 30 minutes on (60
+--     until 2026-10-16). With the unchanged 435-second cycle that is about
+--     35:15 between starts.
 --   * Its end triggers no reset and no restock.
 --
 -- NOT A NEW EVENT: boot (no dawn happens at boot), an admin-forced dawn
@@ -36,7 +38,7 @@
 -- is shut, and a forced Night ends a Mist). Source "admin" in the log. With
 -- the schedule off it leaves the schedule untouched -- at its end the state
 -- is "disabled" again, the sign back to COMING SOON. With it on, it counts as
--- a start: the next eligibility 60 minutes from it, as for any Mist.
+-- a start: the next eligibility 30 minutes from it, as for any Mist.
 --
 -- Published as Workspace attributes (EnchantedMistConfig.Attributes), times as
 -- Workspace:GetServerTimeNow() values, the state written last. Clients count
@@ -389,7 +391,7 @@ local unhooks: { () -> () } = {}
 local generation = 0
 
 -- (Re)starts the schedule from scratch: a fresh boot id, the first eligibility
--- a random 20-60 minutes on, nothing active. Off with the switch off or any
+-- a random 10-30 minutes on, nothing active. Off with the switch off or any
 -- binding missing.
 function EnchantedMistService._boot(now: number)
 	st.boot = string.sub(HttpService:GenerateGUID(false), 1, 8)

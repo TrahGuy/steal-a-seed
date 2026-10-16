@@ -1,5 +1,18 @@
 # Steal a Seed — Session Handoff
 
+## THE ENCHANTED MIST EVERY 30 MINUTES, NOT EVERY HOUR — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; EnchantedMistSpec 62/0 (pins moved), AdminMistSpec 69/0, EnchantedMistBerrySpec 73/0, MistAudioSpec 19/0, MosskeeperSpec 69/0, MistLookSpec 17/0, EventHubSpec 53/0; MUTANT 1/1 CAUGHT)
+
+The owner: "Adjust the event from 1 hour to 30mins". Their pick when asked which event: the Enchanted Mist.
+- **EnchantedMistData.Schedule:**
+  - CooldownSeconds 3600 to 1800. A Mist is eligible 30 minutes after the last one STARTED, then begins at the next completed biome reset, as before. With the unchanged 435-second cycle that is about 35:15 between starts (it was about 65:15).
+  - FirstEligibleMin/Max 1200/3600 to 600/1800: a new server's first Mist comes 10-30 minutes in, halved with the cooldown. This one is Claude's call, not asked; it is one line to put back.
+  - ActiveSeconds (5 minutes) and everything else unchanged. The hub sign's "Next Mist in" counts down the new cooldown by itself.
+- The comments in EnchantedMistConfig and EnchantedMistService say 30 minutes now. EnchantedMistSpec's pins follow: 3800, 7500 and 7800 for 5600, 9300 and 9600.
+- Mutant MistBackToAnHour (the cooldown back to 3600): CAUGHT.
+- Done in the desktop session (no Steal a Seed terminal was running), alongside the hourly rain and its RAIN BIOME sign (its own entry).
+
+**Files**: Shared/EnchantedMistData.luau, Shared/EnchantedMistConfig.luau (comment), EnchantedMistService.luau (comments), tools/tests/EnchantedMistSpec.luau.
+
 ## PERFORMANCE MODE: ULTRA, A THIRD LEVEL THAT HIDES YOUR OWN PLANTS TOO — 2026-10-13 (CLAUDE, TERMINAL)  (PUSHED on wip with the owner's OK by the desktop session, fb09f41, NOT PUBLISHED (v1060 is live); OtherPlantsSpec 75/0 (new checks); HudLayoutSpec 1499/0 (one pin updated); MysteryPodSpec 39/0, PlantGlowSpec 69/0, PlantLabelSpec 39/0, ReachPointSpec 53/0; MUTANTS 6/6 CAUGHT; GUARDED PLAYS, DESKTOP)
 
 The owner: "insert a level 3 switch on performance mode, when turned level 3, owned plants will be hidden too". Their picks:

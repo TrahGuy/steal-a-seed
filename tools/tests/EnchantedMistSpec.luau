@@ -11,9 +11,9 @@
 --      draws: its built studs near, never under MinHeaderUnits far, growing
 --      upward
 --   3. the coordinator on a fake clock: off while switched off or missing a
---      binding; a random 20-60 min first eligibility; starts only on an
+--      binding; a random 10-30 min first eligibility; starts only on an
 --      eligible, natural, completed dawn with the road open; never twice for
---      one dawn; 300 s active; the next eligibility 60 min from the START; a
+--      one dawn; 300 s active; the next eligibility 30 min from the START; a
 --      forced night ends it; its start and end heard once each; AN ADMIN'S
 --      MIST (2026-10-11): the console's start and end, with the schedule on
 --      (it counts as a start) and OFF (it runs anyway, the schedule
@@ -65,9 +65,10 @@ local ok, err = pcall(function()
 	local D = EnchantedMistData
 	check(D.CarryCap == 5 and D.BerriesPerPod == 10 and D.HatchSeconds == 30,
 		"confirmed: carry 5, ten deposited berries a pod, a 30-second hatch")
-	check(D.Schedule.ActiveSeconds == 300 and D.Schedule.CooldownSeconds == 3600 and D.Schedule.FirstEligibleMin == 1200
-			and D.Schedule.FirstEligibleMax == 3600,
-		"confirmed schedule: 5 minutes active, eligible 60 min after a start, a new server's first 20-60 min in")
+	check(D.Schedule.ActiveSeconds == 300 and D.Schedule.CooldownSeconds == 1800 and D.Schedule.FirstEligibleMin == 600
+			and D.Schedule.FirstEligibleMax == 1800,
+		"the schedule (halved 2026-10-16, the owner): 5 minutes active, eligible 30 min after a start, a new server's "
+			.. "first 10-30 min in")
 	local p1, r1 = D.deliver(0, 5)
 	local p2, r2 = D.deliver(r1, 5)
 	local p3, r3 = D.deliver(r2, 5)
@@ -215,7 +216,7 @@ local ok, err = pcall(function()
 	M._boot(0)
 	check(EnchantedMistConfig.Enabled == true and M.State() == STATES.Cooldown and M.EligibleAt() == 1800
 			and published[ATTR.State] == STATES.Cooldown and published[ATTR.EligibleAt] == 1800,
-		"switched on, every binding in place: a new server cools down, first eligible 20-60 minutes in (here 30), "
+		"switched on, every binding in place: a new server cools down, first eligible 10-30 minutes in (here 30), "
 			.. "published for the sign", M.State())
 
 	-- The guard still holds: with a piece unbuilt, switching on does nothing.
@@ -231,7 +232,7 @@ local ok, err = pcall(function()
 	end
 	M._boot(0)
 	check(M.State() == STATES.Cooldown and M.EligibleAt() == 1800 and published[ATTR.EligibleAt] == 1800,
-		"on: cooling down, eligible a random 20-60 minutes in (here 30)")
+		"on: cooling down, eligible a random 10-30 minutes in (here 30)")
 	local starts, ends = {}, {}
 	M.OnStart(function(info)
 		table.insert(starts, info)
@@ -253,8 +254,8 @@ local ok, err = pcall(function()
 			and M.State() == STATES.Eligible,
 		"an admin-forced dawn, or a dawn that left the road shut, starts nothing")
 	check(M._onDawn(dawn(5, "cycle", true, true), 2000) == "STARTED" and M.State() == STATES.Active
-			and published[ATTR.EndsAt] == 2300 and published[ATTR.StartedAt] == 2000 and M.EligibleAt() == 5600,
-		"an eligible natural dawn (even a short batch) starts it: 300 s, next eligible 60 min from the START")
+			and published[ATTR.EndsAt] == 2300 and published[ATTR.StartedAt] == 2000 and M.EligibleAt() == 3800,
+		"an eligible natural dawn (even a short batch) starts it: 300 s, next eligible 30 min from the START")
 	check(M._onDawn(dawn(5), 2010) == "ALREADY_ACTIVE" and M._onDawn(dawn(6), 2010) == "ALREADY_ACTIVE",
 		"a second callback while it runs starts nothing")
 	M._tick(2299)
@@ -264,7 +265,7 @@ local ok, err = pcall(function()
 		"at 300 s it ends, and cools down; no reset is asked for")
 	check(M._onDawn(dawn(5), 2400) == "DUPLICATE" and M._onDawn(dawn(6), 3000) == "NOT_ELIGIBLE",
 		"the same dawn again is a duplicate; the next dawns are inside the cooldown")
-	M._tick(5600)
+	M._tick(3800)
 	check(M._onDawn(dawn(14), 5700) == "STARTED" and M.EventId() ~= nil, "after the cooldown the next natural dawn starts the next one")
 	local second = M.EventId()
 	M._onNight(5800)
@@ -281,10 +282,10 @@ local ok, err = pcall(function()
 		return night
 	end
 	local startsFrom, endsFrom = #starts, #ends
-	-- The schedule ON (as above, cooling down until 9300): it counts as a start.
+	-- The schedule ON (as above, cooling down until 7500): it counts as a start.
 	local onOk, onWhy = M.AdminStart(6000, "SpecAdmin")
 	check(onOk and onWhy == "STARTED" and M.IsActive() and published[ATTR.StartedAt] == 6000
-			and published[ATTR.EndsAt] == 6300 and M.EligibleAt() == 9600
+			and published[ATTR.EndsAt] == 6300 and M.EligibleAt() == 7800
 			and string.find(M.EventId() or "", "-admin-", 1, true) ~= nil,
 		"the schedule on: an admin's start is a normal 300 s Mist, and the next eligibility counts from it",
 		tostring(M.EligibleAt()))

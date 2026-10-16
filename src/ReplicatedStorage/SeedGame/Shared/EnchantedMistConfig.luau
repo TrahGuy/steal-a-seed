@@ -8,8 +8,8 @@
 -- another session's work in progress; it reads GameConfig.Map.EventHub only.
 --
 -- ON since 2026-10-12 (the owner's item 14): `Enabled` runs the schedule -- a
--- new server's first eligibility 20-60 minutes in, then 60 minutes after each
--- start, each Mist after the next completed natural reset -- and even so only
+-- new server's first eligibility 10-30 minutes in, then 30 minutes after each
+-- start (60 until 2026-10-16), each Mist after the next completed natural reset -- and even so only
 -- once every binding EnchantedMistService.MissingBindings lists is in place.
 -- An admin's START MIST NOW counts as a start while it runs. The shared sign
 -- shows with `ShowSign` (ON since 2026-10-11): its real states, and COMING

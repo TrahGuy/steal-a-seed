@@ -15,23 +15,24 @@
 local EnchantedMistData = {}
 
 --==============================================================================
--- THE SCHEDULE -- CONFIRMED 2026-10-11 (the owner's answers)
+-- THE SCHEDULE -- CONFIRMED 2026-10-11 (the owner's answers); HALVED
+-- 2026-10-16 (the owner: "Adjust the event from 1 hour to 30mins")
 --
 --   * The look: an enchanted NIGHT LOOK after a reset, the road open -- not a
 --     real Night (gameplay stays in Day; biomes stay reachable).
 --   * Eligible CooldownSeconds after the previous Mist STARTED, then it begins
 --     after the next COMPLETED natural reset (dusk, the fifteen-second night,
 --     the restock, the road reopened). With the unchanged 435-second cycle that
---     is about 65:15 between starts; Pod Rush holds and resets can delay it.
---     Never called "hourly".
+--     is about 35:15 between starts (65:15 with the hour it was); Pod Rush
+--     holds and resets can delay it. Never called "every 30 minutes".
 --   * A new server's first eligibility: a random FirstEligibleMin..Max seconds
---     after it starts.
+--     after it starts -- 10-30 minutes, halved with the cooldown (20-60 before).
 --==============================================================================
 EnchantedMistData.Schedule = {
 	ActiveSeconds = 300,
-	CooldownSeconds = 3600,
-	FirstEligibleMin = 1200,
-	FirstEligibleMax = 3600,
+	CooldownSeconds = 1800,
+	FirstEligibleMin = 600,
+	FirstEligibleMax = 1800,
 	-- An admin's START MIST NOW (2026-10-12, the owner's item 12): 2, 5 or 10
 	-- minutes, the console's chips; the normal ActiveSeconds among them.
 	AdminSeconds = { 120, 300, 600 },
