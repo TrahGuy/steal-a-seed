@@ -3117,10 +3117,28 @@ do
 	local FIRST = GameConfig.FirstHatch
 	local asked: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
+	local tap: (Player, string) -> (boolean, string?, CFrame?)
+
 	function PlantService.FirstHatch(player: Player, item: string): (boolean, string?, CFrame?)
 		if PlayerDataService.TutorialDone(player, "hatch") ~= false then
 			return PlantService.HatchFromBag(player, item)
 		end
+		-- Every press while the first hatch is to come, with its first answer.
+		local ok, code, landing = tap(player, item)
+		Metrics.firstHatchCardPressed(player, code)
+		return ok, code, landing
+	end
+
+	-- The card stood on this player's screen (FirstHatch.ShownVerb): counted once,
+	-- while their first hatch is still pending.
+	function PlantService.FirstHatchShown(player: Player)
+		if PlayerDataService.TutorialDone(player, "hatch") == false
+			and player:GetAttribute(FIRST.PendingAttribute) == true then
+			Metrics.firstHatchCardShown(player)
+		end
+	end
+
+	tap = function(player: Player, item: string): (boolean, string?, CFrame?)
 		local row = bagPod(player, item)
 		local due = if row then tonumber(row.HatchAt) else nil
 		if not due then
@@ -3150,7 +3168,7 @@ do
 			end
 			local ok, code = PlantService.HatchFromBag(player, item)
 			if ok then
-				Metrics.firstHatchCard(player)
+				Metrics.firstHatchCardSucceeded(player)
 			end
 			local channel = revealChannel
 			if channel then
@@ -4421,6 +4439,9 @@ function PlantService.Start()
 					-- Pods hatch in the Bag (2026-10-09): HATCH, HATCH ALL and
 					-- Instant Hatch on a Bag pod; the first hatch's card (2026-10-16).
 					onBagHatch(player, action, payload)
+				elseif action == GameConfig.FirstHatch.ShownVerb then
+					-- The first hatch's card stood on their screen: nothing carried.
+					PlantService.FirstHatchShown(player)
 				elseif action == PICKUP_ACTION then
 					--==========================================================
 					-- AN ID IS A CLAIM TOO

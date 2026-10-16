@@ -740,7 +740,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 pod a player ever banks (ready in FirstMinute.FirstHatchSeconds) to their
                                 first hatch, the pod's picture and countdown, then one green HATCH, which
                                 sends HatchInBag.FirstHatch -- home first, facing the bed, then the hatch
-                                (PlantService.FirstHatch); no close, stands down for menus and moments
+                                (PlantService.FirstHatch); no close, stands down for menus and moments;
+                                tells the server once a session that it stood (FirstHatch.ShownVerb)
     RainSign.client.luau        "RAIN BIOME" over the rain bridge's foot for everybody (2026-10-16;
                                 GameConfig.Weather.Sign): the countdown to the next on-the-hour rain
                                 (WeatherService publishes the mark, Weather.Auto.NextAtAttribute),

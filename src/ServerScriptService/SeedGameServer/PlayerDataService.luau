@@ -160,10 +160,9 @@ function PlayerDataService.RecordTutorial(player: Player, milestone: string): bo
 	touch(player)
 	-- The first time ever, and only then: Record said so.
 	Metrics.milestone(player, milestone, entry.profile.Tutorial)
-	-- The first hatch's card (2026-10-16) follows the first bank and the first hatch.
-	if milestone == "bank" or milestone == "hatch" then
-		PlayerDataService.PublishFirstHatch(player)
-	end
+	-- The first hatch's card and the quiet first loop (2026-10-16) follow every
+	-- step of the guide's first loop.
+	PlayerDataService.PublishFirstHatch(player)
 	return true
 end
 
@@ -681,17 +680,21 @@ function PlayerDataService.PublishInvites(player: Player)
 	player:SetAttribute(A.Seen, p.InviteSeen == true)
 end
 
--- THE FIRST HATCH (2026-10-16, GameConfig.FirstHatch): true from the first bank
--- until the first hatch, for the card (FirstHatchCard.client), the Bag (no
--- Instant Hatch on that pod) and the guide; absent otherwise.
+-- THE FIRST HATCH (2026-10-16, GameConfig.FirstHatch): pending from the first
+-- bank until the first hatch, for the card (FirstHatchCard.client), the Bag (no
+-- Instant Hatch on that pod) and the guide; quiet until the first loop is done,
+-- for the rain's and the Mist's pop-ups. Each absent otherwise.
 function PlayerDataService.PublishFirstHatch(player: Player)
 	local entry = entries[player]
 	if not entry then
 		return
 	end
-	local done = entry.profile.Tutorial.Done
+	local tutorial = entry.profile.Tutorial
+	local done = tutorial.Done
 	player:SetAttribute(GameConfig.FirstHatch.PendingAttribute,
 		if done.bank == true and done.hatch ~= true then true else nil)
+	player:SetAttribute(GameConfig.FirstHatch.QuietAttribute,
+		if TutorialData.FirstLoopDone(tutorial) then nil else true)
 end
 
 --==============================================================================

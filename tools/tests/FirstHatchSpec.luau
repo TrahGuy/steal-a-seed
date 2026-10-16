@@ -232,14 +232,15 @@ local function body()
 			math.round(FirstHatchCard.MaxHeightShare * 100), G, smallestTag, smallest), bad)
 
 	--==========================================================================
-	say("4. The two analytics events")
+	say("4. The analytics events")
 	--==========================================================================
 	local sent = {}
 	local mock = {
 		onboarding = function() end,
 		funnel = function() end,
 		custom = function(player, name, value, fields)
-			table.insert(sent, { player = player, name = name, value = value })
+			table.insert(sent, { player = player, name = name, value = value,
+				word = if type(fields) == "table" then fields.CustomField01 else nil })
 		end,
 	}
 	Metrics.reset()
@@ -260,22 +261,32 @@ local function body()
 	Metrics.profileReady(veteran, { CreatedAt = 100 }, false, true)
 	Metrics.firstPodReady(newbie)
 	Metrics.firstPodReady(newbie)
-	Metrics.firstHatchCard(newbie)
-	Metrics.firstHatchCard(newbie)
+	Metrics.firstHatchCardShown(newbie)
+	Metrics.firstHatchCardShown(newbie)
+	Metrics.firstHatchCardPressed(newbie, "NOT_READY")
+	Metrics.firstHatchCardPressed(newbie, "HOME")
+	Metrics.firstHatchCardPressed(newbie, "something new")
+	Metrics.firstHatchCardSucceeded(newbie)
+	Metrics.firstHatchCardSucceeded(newbie)
 	Metrics.firstPodReady(veteran)
-	Metrics.firstHatchCard(veteran)
+	Metrics.firstHatchCardShown(veteran)
+	Metrics.firstHatchCardPressed(veteran, "HOME")
+	Metrics.firstHatchCardSucceeded(veteran)
 	local names = {}
 	for _, e in ipairs(sent) do
 		if e.player == newbie then
-			table.insert(names, e.name)
+			table.insert(names, e.name .. (if e.word then "=" .. e.word else ""))
 		elseif e.player == veteran then
 			table.insert(names, "VETERAN:" .. e.name)
 		end
 	end
-	check(#names == 2 and names[1] == "FirstPodReady" and names[2] == "FirstHatchCardPressed"
-			and Metrics.Events.FirstPodReady == "FirstPodReady" and Metrics.Events.FirstHatchCard == "FirstHatchCardPressed",
-		"FirstPodReady and FirstHatchCardPressed go out once per player in the new-player cohort, never for a "
-			.. "veteran", table.concat(names, ","))
+	local got = table.concat(names, ",")
+	check(got == "FirstPodReady,FirstHatchCardShown,FirstHatchCardPressed=NOT_READY,FirstHatchCardPressed=HOME,"
+			.. "FirstHatchCardPressed=other,FirstHatchCardSucceeded"
+			and Metrics.Events.FirstHatchCardSucceeded == "FirstHatchCardSucceeded" and Metrics.Events.FirstHatchCard == nil,
+		"FirstPodReady, FirstHatchCardShown and FirstHatchCardSucceeded once each; FirstHatchCardPressed every press, "
+			.. "with what it answered (an unknown answer reads \"other\"); the new-player cohort only, never a "
+			.. "veteran -- and the success is called a success (in v1063 it went out as \"Pressed\")", got)
 	Metrics.useSink(nil)
 	Metrics.configure(nil)
 	Metrics.useStaffCheck(nil)
@@ -302,11 +313,14 @@ local function body()
 		"FirstPodReady only for a player still here whose first pod is still unhatched")
 	local data = sourceOf(Server, "PlayerDataService")
 	local publish = between(data, "function PlayerDataService.PublishFirstHatch(player: Player)", "\nend\n")
+	local record = between(data, "function PlayerDataService.RecordTutorial(player: Player, milestone: string): boolean",
+		"\nend\n")
 	check(has(publish, "if done.bank == true and done.hatch ~= true then true else nil")
-			and has(data, "if milestone == \"bank\" or milestone == \"hatch\" then\n\t\tPlayerDataService.PublishFirstHatch(player)")
+			and has(publish, "if TutorialData.FirstLoopDone(tutorial) then nil else true")
+			and has(record, "PlayerDataService.PublishFirstHatch(player)\n\treturn true")
 			and count(data, "PlayerDataService.PublishFirstHatch(player)") == 2,
-		"the pending flag: from the first bank until the first hatch, published on load (a first pod from an "
-			.. "earlier visit finds its card) and when either is recorded")
+		"the flags: pending from the first bank until the first hatch, quiet until the first loop is done; "
+			.. "published on load (a first pod from an earlier visit finds its card) and with every guide step")
 	local plant = sourceOf(Server, "PlantService")
 	local verb = between(plant, "function PlantService.FirstHatch(player: Player, item: string)",
 		"\n\tend\nend\n")
@@ -320,7 +334,7 @@ local function body()
 		"home = PlotService.TeleportTo(player, landing :: CFrame, \"TELEPORT_BLOCKED\")",
 		"task.delay(if home then FIRST.HatchDelaySeconds else 0, function()",
 		"local ok, code = PlantService.HatchFromBag(player, item)",
-		"Metrics.firstHatchCard(player)",
+		"if ok then\n\t\t\t\tMetrics.firstHatchCardSucceeded(player)",
 		"channel:FireClient(player, BAG.Reply, { op = BAG.FirstHatch, item = item, ok = ok, code = code,",
 		"return true, if home then \"HOME\" else \"HERE\", if home then landing else nil",
 	}
@@ -340,6 +354,14 @@ local function body()
 			.. "counted, and its result told", missing)
 	check(not has(verb, "TeleportHome"),
 		"never TeleportHome: the guide's travel lesson (SELL, then TELEPORT TO PLOT) stays the buttons' to teach")
+	check(has(verb, "local ok, code, landing = tap(player, item)\n\t\tMetrics.firstHatchCardPressed(player, code)")
+			and has(verb, "if PlayerDataService.TutorialDone(player, \"hatch\") == false\n"
+				.. "\t\t\tand player:GetAttribute(FIRST.PendingAttribute) == true then\n\t\t\tMetrics.firstHatchCardShown(player)")
+			and has(plant, "elseif action == GameConfig.FirstHatch.ShownVerb then\n"
+				.. "\t\t\t\t\t-- The first hatch's card stood on their screen: nothing carried.\n"
+				.. "\t\t\t\t\tPlantService.FirstHatchShown(player)"),
+		"every press of the card's HATCH while the first hatch is to come is counted with its answer; the card's "
+			.. "first showing counted only while a first hatch is really pending")
 	check(has(plant, "if action == BAG.Hatch or action == BAG.Instant or action == BAG.FirstHatch then\n"
 			.. "\t\tif type(payload) ~= \"string\" or #payload == 0 or #payload > 24 then")
 			and has(plant, "elseif action == BAG.FirstHatch then\n\t\t\treply.ok, reply.code, reply.landing = "
@@ -359,12 +381,14 @@ local function body()
 			and has(card, "FirstHatchCard.rect(L.safe, avoid)"),
 		"the card reads the server's flag, the Bag's own Tools and the HUD's rects; it stands down for a menu "
 			.. "or a reward moment")
-	check(count(card, "FireServer(") == 1 and has(card, "ev:FireServer(BAG.FirstHatch, pod.item)")
+	check(count(card, "FireServer(") == 2 and has(card, "ev:FireServer(BAG.FirstHatch, pod.item)")
+			and has(card, "card.Visible = true\n\tlocal ev = remote\n\tif not toldShown and ev then\n\t\ttoldShown = true\n"
+				.. "\t\tev:FireServer(FIRST.ShownVerb)")
 			and has(card, "if pod.hatchAt > Workspace:GetServerTimeNow() then")
 			and has(card, "if reply.ok == true and typeof(reply.landing) == \"CFrame\" then\n"
 				.. "\t\t\tplayer:SetAttribute(FIRST.AskedAttribute, reply.landing)"),
 		"its HATCH: one verb with the pod's item id, only once it is ready; the server's own landing noted for "
-			.. "the camera")
+			.. "the camera; the card's first showing told once, as it goes up")
 	check(has(card, "\"FirstHatchButton\"") and has(card, "SoundKit.play(FIRST.Sound)")
 			and has(card, "if card.Visible then") and has(card, "gui.DisplayOrder = 35")
 			and count(card, "MenuKit.button(") == 1 and not has(card, "Instance.new(\"TextButton\")")
@@ -393,6 +417,35 @@ local function body()
 	check(has(loadout, "elseif player:GetAttribute(GameConfig.FirstHatch.PendingAttribute) ~= true then\n"
 			.. "\t\t\tlocal credits = tonumber(player:GetAttribute(HATCH_BAG.CreditsAttribute)) or 0"),
 		"no Instant Hatch (no Robux price) on a first pod")
+
+	--==========================================================================
+	say("7. A quiet first loop")
+	--==========================================================================
+	local fresh = { Done = {}, Skipped = false }
+	local loop = { Done = {}, Skipped = false }
+	for _, s in ipairs(TutorialData.Steps) do
+		if TutorialData.InFirstLoop(s.Id) then
+			loop.Done[s.Id] = true
+		end
+	end
+	check(TutorialData.FirstLoopDone(fresh) == false and TutorialData.FirstLoopDone(loop) == true
+			and FIRST.QuietAttribute == "FirstLoopQuiet",
+		"quiet means the first loop -- train through the first plant placed, earning -- is still to finish")
+	local toast = sourceOf(Scripts, "ActionToastUI")
+	check(has(toast, "elseif action == GameConfig.Weather.Events.Opened and type(code) == \"number\"\n"
+			.. "\t\t\tand player:GetAttribute(GameConfig.FirstHatch.QuietAttribute) ~= true then")
+			and has(toast, "if news and news.event and player:GetAttribute(GameConfig.FirstHatch.QuietAttribute) == true then\n"
+				.. "\t\t\t\tpost = nil"),
+		"the rain's and the storm's opening pop-ups, and a storm egg's toast, wait out a quiet first loop")
+	check(has(toast, "elseif action == GameConfig.Weather.Events.Warning and type(code) == \"number\" then")
+			and has(toast, "elseif action == GameConfig.Weather.Events.Evacuated then"),
+		"the warnings to those inside the rain biome, and the evacuation, still reach everybody")
+	local berries = sourceOf(Server, "EnchantedMistBerryService")
+	check(has(berries, "local quiet = profile ~= nil and type(profile.Tutorial) == \"table\"\n"
+			.. "\t\t\tand not TutorialData.FirstLoopDone(profile.Tutorial)")
+			and has(berries, "if profile and not quiet and (tonumber(profile.DewberriesCarried) or 0) < CAP then")
+			and count(berries, "TutorialData.FirstLoopDone(") == 1,
+		"the Mist's \"A Dewberry appeared!\" waits out a quiet first loop too; a picked berry's answer never does")
 end
 
 local ok, err = pcall(body)

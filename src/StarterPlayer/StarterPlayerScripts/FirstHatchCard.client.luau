@@ -185,6 +185,9 @@ end
 --==============================================================================
 local shownItem: string? = nil
 local styledReady: boolean? = nil
+-- Said to the server once a session, the first time the card stands
+-- (FirstHatch.ShownVerb; Metrics.firstHatchCardShown).
+local toldShown = false
 local readyRung: { [string]: boolean } = {}
 local lastPlaced = -math.huge
 
@@ -261,6 +264,11 @@ local function paint()
 		end
 	end
 	card.Visible = true
+	local ev = remote
+	if not toldShown and ev then
+		toldShown = true
+		ev:FireServer(FIRST.ShownVerb)
+	end
 end
 
 hatch.hit.Activated:Connect(function()

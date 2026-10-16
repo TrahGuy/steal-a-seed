@@ -96,7 +96,9 @@ Metrics.Events = {
 	PodRushEnded = "PodRushEnded",
 	-- The first hatch's (2026-10-16, see THE FIRST HATCH below).
 	FirstPodReady = "FirstPodReady",
-	FirstHatchCard = "FirstHatchCardPressed",
+	FirstHatchCardShown = "FirstHatchCardShown",
+	FirstHatchCardPressed = "FirstHatchCardPressed",
+	FirstHatchCardSucceeded = "FirstHatchCardSucceeded",
 }
 
 -- The custom-field keys Roblox reads (Enum.AnalyticsCustomFieldKeys), by name.
@@ -455,14 +457,23 @@ end
 --==============================================================================
 -- THE FIRST HATCH (2026-10-16, the owner's fix for the onboarding funnel's step
 -- 4; KB/FIRST-HATCH-FIX-PLAN.md): where the first loop loses people between the
--- first bank and the first hatch. Once per player each, the cohort only.
+-- first bank and the first hatch. The cohort only.
 --
---   FirstPodReady          the first pod they ever banked turned ready while they
---                          were still here and had not hatched (CarryService: one
---                          timer at that bank, which happens once)
---   FirstHatchCardPressed  their first hatch came through the card's one tap
---                          (PlantService.FirstHatch, once the hatch succeeded)
+--   FirstPodReady            the first pod they ever banked turned ready while
+--                            they were still here and had not hatched
+--                            (CarryService: one timer at that bank). Once
+--   FirstHatchCardShown      the card stood on their screen (FirstHatchCard.
+--                            client says so, the server checks a first hatch is
+--                            pending). Once
+--   FirstHatchCardPressed    EVERY tap of its HATCH that reached the server while
+--                            the first hatch was to come, with what it answered at
+--                            once (01 = Metrics.CardAnswers): a failed press shows
+--   FirstHatchCardSucceeded  their first hatch came through the card, once the
+--                            hatch succeeded (PlantService.FirstHatch). Once
+-- In v1063 (live 2026-10-16) the last of these went out as "FirstHatchCardPressed".
 --==============================================================================
+Metrics.CardAnswers = { HOME = true, HERE = true, NOT_READY = true, BUSY = true, NO_POD = true }
+
 local function firstHatchEvent(player: any, key: string, name: string, stands: string)
 	pcall(function()
 		local s = states[player]
@@ -483,8 +494,30 @@ function Metrics.firstPodReady(player: any)
 	firstHatchEvent(player, "firstPodReady", Metrics.Events.FirstPodReady, "first pod ready")
 end
 
-function Metrics.firstHatchCard(player: any)
-	firstHatchEvent(player, "firstHatchCard", Metrics.Events.FirstHatchCard, "first hatch card")
+function Metrics.firstHatchCardShown(player: any)
+	firstHatchEvent(player, "firstHatchCardShown", Metrics.Events.FirstHatchCardShown, "first hatch card shown")
+end
+
+function Metrics.firstHatchCardSucceeded(player: any)
+	firstHatchEvent(player, "firstHatchCardSucceeded", Metrics.Events.FirstHatchCardSucceeded,
+		"first hatch card succeeded")
+end
+
+-- Every press, never deduplicated: its answer a fixed word, anything else "other".
+function Metrics.firstHatchCardPressed(player: any, answer: string?)
+	pcall(function()
+		local s = states[player]
+		if not s or not s.cohort then
+			return
+		end
+		local word = if type(answer) == "string" and Metrics.CardAnswers[answer] then answer else "other"
+		local who = audience(player)
+		if who == "count" then
+			send("custom", "tutorial", player, Metrics.Events.FirstHatchCardPressed, 1, { [F1] = word })
+		elseif who == "validate" then
+			validation(player, "first hatch card pressed " .. word)
+		end
+	end)
 end
 
 -- Garden income landed (EconomyService, the one positive AddCash). The funnel's

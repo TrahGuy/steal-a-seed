@@ -1348,6 +1348,11 @@ task.spawn(function()
 		elseif action == "SecretSpawned" then
 			local news = Notice.readSecret(code)
 			local post = if news then Notice.secretPost(news, GameConfig.Secret.Toast, biomeName, seenSecrets) else nil
+			-- A storm's egg waits with the storm's own toast while this player's
+			-- first loop is still to finish (GameConfig.FirstHatch, A QUIET FIRST LOOP).
+			if news and news.event and player:GetAttribute(GameConfig.FirstHatch.QuietAttribute) == true then
+				post = nil
+			end
 			if news and post then
 				local event = news.event
 				if event then
@@ -1367,7 +1372,10 @@ task.spawn(function()
 		-- was put back at the entrance. The words are GameConfig.Weather's; the
 		-- percentage is SeedData.Rain's, the one number the faucet pays.
 		--==================================================================
-		elseif action == GameConfig.Weather.Events.Opened and type(code) == "number" then
+		elseif action == GameConfig.Weather.Events.Opened and type(code) == "number"
+			and player:GetAttribute(GameConfig.FirstHatch.QuietAttribute) ~= true then
+			-- Not while this player's first loop is still to finish (GameConfig.
+			-- FirstHatch, A QUIET FIRST LOOP): the rain goes on round them unannounced.
 			local W = GameConfig.Weather
 			-- A Thunderstorm says so (2026-10-02): the same event, the same one
 			-- percentage, its own words -- and its own picture (2026-10-03).

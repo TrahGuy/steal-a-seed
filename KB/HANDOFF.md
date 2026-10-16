@@ -1,5 +1,65 @@
 # Steal a Seed — Session Handoff
 
+## THE FIRST HATCH'S EVENT NAMES, AND A QUIET FIRST LOOP — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; FirstHatchSpec 33/0 (was 28); the 12 strict-sibling specs green with the renamed Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); every other spec that reads a touched file green: SecretToastSpec 61, NoticeSpec 105, EnchantedMistBerrySpec 73, EnchantedMistSpec 62, AdminMistSpec 69, AdminAnnounceSpec 44, RainEventSpec 98, MiniEventSpec 90, MistAudioSpec 19, MetricsSpec 66, TutorialSpec 121, TutorialSpotlightSpec 51, PodRushSpec 98, PodDropSpec 24, HatchBonusSpec 41, PassBenefitsSpec 31, HudLayoutSpec 1499, InviteRewardsSpec 173, NameBadgeSpec 26, PhoneMenuSpec 29, RebirthCelebrationSpec 92, SacrificeSpec 290, SellOneSpec 98, SourceIconsSpec 21, UsabilityAudioSpec 95; MUTANTS 25/25 CAUGHT; SPEC-ONLY, NO PLAY)
+
+The owner pasted a list of suggestions after v1063 ("how about this:") and picked two:
+- "6: event names (Recommended)";
+- for the third point, "Rain/Mist notices only (Recommended)".
+
+Nothing else from the list was built. Daily rewards and points 1, 2, 4 and 5 were not asked for.
+
+**The event names (Metrics; KB/ANALYTICS.md):**
+- v1063's `FirstHatchCardPressed` (sent once, on the success) is renamed `FirstHatchCardSucceeded`. It is the same moment: the card's hatch ran and succeeded.
+- `FirstHatchCardPressed` is now EVERY tap of the card's HATCH that reaches the server while the first hatch is to come.
+  - Field 01 is what the server answered at once: HOME, HERE, NOT_READY, BUSY, NO_POD, or "other" (Metrics.CardAnswers).
+  - The card sends a tap only once it reads the pod ready, so a NOT_READY is a tap a moment before the server's clock agreed.
+- `FirstHatchCardShown` is new: the card went up on their screen.
+  - The client says so once a session (GameConfig.FirstHatch.ShownVerb on GameEvent, nothing carried).
+  - The server counts it once, and only while a first hatch is pending.
+- All three are for the cohort only, as before. A forged client's presses go through the Bag's own cooldown, and a forged Shown counts at most once.
+- **Read the two versions apart:** v1063's `FirstHatchCardPressed` is the success. From the next publish it is every press.
+
+**The quiet first loop (GameConfig.FirstHatch.QuietAttribute = "FirstLoopQuiet"):**
+- PlayerDataService.PublishFirstHatch sets it true until TutorialData.FirstLoopDone (train through place).
+  - It publishes on load and now after EVERY guide step recorded.
+  - Before, it ran only on bank and hatch; the flag has to clear at place.
+- Held back while it is set:
+  - the rain's and the thunderstorm's opening pop-up (ActionToastUI, Weather.Events.Opened);
+  - a storm egg's toast (ActionToastUI, SecretSpawned with an event);
+  - the Mist's "A Dewberry appeared!" (EnchantedMistBerryService's announce). A profile with no guide record is never held.
+- Not held:
+  - the rain's Warning and Evacuated, and LOST IN THE RAIN;
+  - a picked berry's answer;
+  - an ordinary secret's toast;
+  - every refusal and every answer to their own actions.
+- The weather and the Mist themselves go on as before. The signs and world screens are unchanged.
+
+**Specs:**
+- FirstHatchSpec, from 28 to 33 checks:
+  - the event sequence through a mock sink: Pressed three times (NOT_READY, HOME, "other"), Shown and Succeeded once each, none for a veteran;
+  - the server's routes and guards;
+  - the client's one Shown, as the card goes up;
+  - section 7, the quiet loop.
+- The 12 strict-sibling specs' Metrics stand-in carries the four new names.
+
+**Mutants (25 of 25 caught):**
+- PressedDeduped, PressedNoAnswer, PressedAnyWord, PressedForVeterans, ShownTwice, EventsTwice, EventsForVeterans;
+- SucceededDropped, SucceededOnFailure, PressedOnSuccessOnly, ShownWithoutPending, ShownNotRouted, ShownNeverSent, ShownEveryPaint;
+- QuietNeverPublished, QuietForever, QuietOnlyBankHatch, QuietNotOnLoad;
+- ToastOpenedLoud, StormEggLoud, EverySecretQuiet, WarningQuiet, BerryLoud, BerryNoGuideHeld, BerryPickQuiet.
+- Two gaps were found by reading and pinned before the run: `if ok then` before the Succeeded count (SucceededOnFailure), and FirstLoopDone used only once in the berry service (BerryPickQuiet).
+
+**Not tested:** no Play this time, to keep the tests lean as the owner asked. The first hatch's flow had two guarded Plays in fa60c69. The events stay spec-only, because the owner's account is staff and never counted. Not seen on a phone.
+
+**Studio afterwards:** the probe shows 387 compared, 0 differ, 0 ZZ leftovers, and no test-store marker.
+
+**Files:**
+- GameConfig.luau (FirstHatch.QuietAttribute, ShownVerb, the QUIET FIRST LOOP note);
+- Metrics.luau, PlantService.luau (FirstHatch, FirstHatchShown, the router), PlayerDataService.luau, EnchantedMistBerryService.luau;
+- ActionToastUI.client.luau, FirstHatchCard.client.luau;
+- tools/tests/FirstHatchSpec.luau and the 12 sibling-map specs;
+- KB/ANALYTICS.md, KB/FIRST-HATCH-FIX-PLAN.md, AGENTS.md.
+
 ## THE FIRST HATCH: THE FIRST POD READY IN 10 S, AND A ONE-TAP CARD THAT TAKES YOU HOME TO HATCH IT — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip with the owner's OK, fa60c69; LIVE as v1063, the owner's publish at 09:32:46 UTC 2026-10-16 (Studio's log, its clock in step), Studio matching fa60c69 (387 scripts, 0 differ, 0 ZZ, no test marker); FirstHatchSpec 28/0 (NEW); TutorialSpec 121/0 and PassBenefitsSpec 31/0 (pins followed); the 12 strict-sibling specs green with a Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); TutorialSpotlightSpec 51/0, TutorialPodSpec 263, PodHatchSpec 22/0, MetricsSpec 66/0, PodRushSpec 98/0, EnchantedMistBerrySpec 73/0, ObbyViewSpec 112/0, ObbySpec 69/0, MysteryPodSpec 39/0, InventorySpec 47/0, BagMenuSpec 13/0, SfxWiringSpec 202, UsabilityAudioSpec 95; MUTANTS 21/21 CAUGHT; TWO GUARDED PLAYS, DESKTOP)
 
 The owner, from the onboarding funnel: "ask a lot of question, and do what must be done to fix the leak".

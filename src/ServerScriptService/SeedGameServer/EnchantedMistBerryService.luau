@@ -37,6 +37,7 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistData = require(Shared:WaitForChild("EnchantedMistData"))
+local TutorialData = require(Shared:WaitForChild("TutorialData"))
 local DewberryModel = require(Shared:WaitForChild("DewberryModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
@@ -324,9 +325,13 @@ local function announce(berry: Berry)
 	local payload = { title = W.Appeared, detail = berry.where, key = B.NoticeKeys.Appeared, quiet = true,
 		icon = "mist" }
 	for _, player in ipairs(Hooks.players()) do
-		-- Nobody full or still loading is sent after a berry they cannot take.
+		-- Nobody full or still loading is sent after a berry they cannot take --
+		-- nor a player whose first loop is still to finish (GameConfig.FirstHatch,
+		-- A QUIET FIRST LOOP; a record with no guide is never held).
 		local profile = Hooks.profile(player)
-		if profile and (tonumber(profile.DewberriesCarried) or 0) < CAP then
+		local quiet = profile ~= nil and type(profile.Tutorial) == "table"
+			and not TutorialData.FirstLoopDone(profile.Tutorial)
+		if profile and not quiet and (tonumber(profile.DewberriesCarried) or 0) < CAP then
 			Hooks.send(player, Notice.ServerNotice, payload)
 		end
 	end

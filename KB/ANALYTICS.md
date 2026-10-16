@@ -147,12 +147,24 @@ series keeps its meaning across the update.
 The onboarding funnel keeps its six steps and their numbers; `travel` is not in it.
 | `TutorialSkipped` | The player hid the guide (Skip) | none | Once per session; Resume is not counted |
 | `FirstPodReady` | The first pod a player ever banked turned ready (10 s after that bank) while they were still in the game and had not hatched it. `CarryService`'s one timer at that bank | none | Once: there is one first bank |
-| `FirstHatchCardPressed` | The player's first hatch came through the first hatch card's one tap (`PlantService.FirstHatch`), once the hatch succeeded | none | Once per session; it happens once |
+| `FirstHatchCardShown` | The first hatch card stood on the player's screen. `FirstHatchCard.client` tells the server the first time it goes up in a session; the server counts it only while a first hatch is pending | none | Once per session |
+| `FirstHatchCardPressed` | Every tap of the card's HATCH that reached the server while the player's first hatch was still to come (`PlantService.FirstHatch`) | 01 = what the server answered at once: `HOME` (taken home to hatch), `HERE` (no trip home: the hatch runs where they stand), `NOT_READY`, `BUSY` (already asked), `NO_POD`, or `other` | None: every press |
+| `FirstHatchCardSucceeded` | The player's first hatch came through the card's tap, once the hatch succeeded (`PlantService.FirstHatch`) | none | Once per session; it happens once |
 
-**The first hatch (2026-10-16, the owner's fix for step 4; KB/FIRST-HATCH-FIX-PLAN.md).** Step 3 minus
-`FirstPodReady` is the players who left in the 10 s after their first bank; `FirstPodReady` minus step 4
-is those who saw their pod ready and did not hatch it; `FirstHatchCardPressed` against step 4 is how many
-hatched through the card rather than the Bag. Compare step 4 from the publish that carries this.
+**The first hatch (2026-10-16, the owner's fix for step 4; KB/FIRST-HATCH-FIX-PLAN.md).**
+- Step 3 minus `FirstPodReady` is the players who left in the 10 s after their first bank.
+- `FirstPodReady` minus step 4 is those who saw their pod ready and did not hatch it.
+- `FirstHatchCardShown` is how many saw the card at all.
+- `FirstHatchCardPressed` by its 01 shows taps that did not work. The card sends a tap only once it reads the
+  pod ready, so a `NOT_READY` is a tap a moment before the server's clock agreed; the card comes back for
+  another tap.
+- `FirstHatchCardSucceeded` against step 4 is how many hatched through the card rather than the Bag.
+- Compare step 4 from the publish that carries the fix (v1063).
+
+**The rename (2026-10-16).** In v1063 (live from 09:32 UTC on 2026-10-16), `FirstHatchCardPressed` was
+sent once, on the success, with no field: what `FirstHatchCardSucceeded` is now. From the next publish,
+it is every press with its 01, and `FirstHatchCardShown` and `FirstHatchCardSucceeded` are new. Read the
+two versions' `FirstHatchCardPressed` apart.
 
 These are sent only for the new-player cohort.
 

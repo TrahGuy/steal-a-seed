@@ -555,7 +555,8 @@ local function body()
 			PlantWander = PlantWander,
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
 			-- The first hatch's card (2026-10-16): its two analytics events, sent nowhere here.
-			Metrics = { firstHatchCard = function() end, firstPodReady = function() end },
+			Metrics = { firstPodReady = function() end, firstHatchCardShown = function() end,
+				firstHatchCardPressed = function() end, firstHatchCardSucceeded = function() end },
 			-- The item 9 passes (2026-10-12): owned by no stand-in player here.
 			PassService = require(Server:WaitForChild("PassService")),
 			-- The Mysterious Pod (2026-10-11): no shells in this fixture.

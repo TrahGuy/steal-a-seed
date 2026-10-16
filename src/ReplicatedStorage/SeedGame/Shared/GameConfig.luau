@@ -12300,13 +12300,26 @@ GameConfig.HatchInBag = {
 -- TELEPORT TO PLOT's rules, onto the plot's spawn turned to face into the
 -- garden -- and the hatch HatchDelaySeconds later, in front of them, with the
 -- full reveal (PlantService.FirstHatch). The Bag shows no Instant Hatch on it,
--- and the guide points at the card. Two analytics events say where the step
--- loses people: Metrics.firstPodReady, Metrics.firstHatchCard.
+-- and the guide points at the card. Analytics say where the step loses
+-- people: Metrics.firstPodReady, then the card's Shown, Pressed and Succeeded.
+--
+-- A QUIET FIRST LOOP (2026-10-16, the owner: "Rain/Mist notices only"): until
+-- a player's first plant is placed and earning (TutorialData.FirstLoopDone),
+-- the rain's and the thunderstorm's opening pop-ups, a storm egg's toast and
+-- the Mist's "A Dewberry appeared!" are held back from them. The weather and
+-- the Mist go on round them, the warnings to those inside the rain biome still
+-- reach them, and so does every answer to their own actions.
 --==============================================================================
 GameConfig.FirstHatch = {
 	-- On the player, the server's (PlayerDataService.PublishFirstHatch): true from
 	-- the first bank until the first hatch, absent otherwise.
 	PendingAttribute = "FirstHatchPending",
+	-- On the player, the server's (the same publish): true until the first loop is
+	-- done (TutorialData.FirstLoopDone), absent after -- the quiet first loop.
+	QuietAttribute = "FirstLoopQuiet",
+	-- Client to server on GameEvent, nothing carried: the card stood on this
+	-- screen for the first time this session (Metrics.firstHatchCardShown).
+	ShownVerb = "FirstHatchShown",
 	-- On the local player, this client's own: the frame the card's HATCH is about
 	-- to put the body on, so ObbyCamera turns the camera once when it lands.
 	AskedAttribute = "SeedFirstHatchAsked",

@@ -31,17 +31,17 @@ So, after the bank, a new player had to:
 | The guide's words? | **"Tap HATCH when your pod is ready!"** The guide's hand points at the card from outside it once the pod is ready; there is no hand during the countdown. |
 | What's New entry? | **No.** |
 | After building? | **Push on the owner's OK, then the owner publishes.** |
-| Analytics? | **Two events:** `FirstPodReady` and `FirstHatchCardPressed` (KB/ANALYTICS.md). |
+| Analytics? | **Two events:** `FirstPodReady` and `FirstHatchCardPressed` (KB/ANALYTICS.md). Four since the follow-up below. |
 
 ## Where it lives
 
 - **The 10 s:** FirstMinute.FirstHatchSeconds and FirstMinute.bankWait. CarryService's bank stamps it while `bank` is not yet done, and starts the FirstPodReady timer.
-- **The flag:** PlayerDataService.PublishFirstHatch sets the player attribute GameConfig.FirstHatch.PendingAttribute. It is true from the first bank until the first hatch, published on load and on those two milestones.
+- **The flag:** PlayerDataService.PublishFirstHatch sets the player attribute GameConfig.FirstHatch.PendingAttribute. It is true from the first bank until the first hatch, published on load and with every guide step (only on those two milestones in v1063).
 - **The tap:** HatchInBag.FirstHatch calls PlantService.FirstHatch. Guards, in order:
   1. after the first hatch, the Bag's own verb answers;
   2. no pod, a pod not ready, or a pod already asked for: refused before anything moves;
   3. otherwise PlotService.TeleportTo onto FirstHatchCard.landing(spawn, bed);
-  4. the Bag's HatchFromBag runs HatchDelaySeconds later, then Metrics.firstHatchCard, and the result goes back to the client.
+  4. the Bag's HatchFromBag runs HatchDelaySeconds later, then Metrics.firstHatchCardSucceeded on a success, and the result goes back to the client.
 - **The card:** Shared/FirstHatchCard holds the arithmetic and words; FirstHatchCard.client draws it. The camera's one turn is in ObbyCamera (FirstHatch.AskedAttribute, the server's landing).
 - **The guide:** TutorialUI checks the card before a pod in the ground, so a new garden's starter pod hatching by itself never shows a second timer. TutorialData has the new words.
 - **The Bag:** LoadoutUI shows no Instant Hatch while the flag is set.
@@ -57,3 +57,19 @@ So, after the bank, a new player had to:
 ## Afterwards
 
 Read funnel step 4 from the publish that carries this, and the two events (KB/ANALYTICS.md says how).
+
+## Follow-up after v1063: the event names and a quiet first loop (2026-10-16)
+
+The owner picked two of a pasted list of suggestions: "6: event names" and, for the third, "Rain/Mist notices only".
+
+- **The event names.** v1063's `FirstHatchCardPressed` (sent once, on the success) is now `FirstHatchCardSucceeded`.
+  - `FirstHatchCardPressed` is now every tap that reaches the server, with what it answered (01).
+  - `FirstHatchCardShown` is new: the card went up on their screen.
+  - KB/ANALYTICS.md has the rows and how to read the two versions apart.
+- **A quiet first loop.** Until a player's first plant is placed (TutorialData.FirstLoopDone), these pop-ups are held back from them:
+  - the rain's and the thunderstorm's opening pop-ups;
+  - a storm egg's toast;
+  - the Mist's "A Dewberry appeared!".
+- **What still reaches them:** the weather and the Mist themselves, the rain's warnings and evacuation, a picked berry's answer, and every answer to their own actions.
+- **Where:** GameConfig.FirstHatch.QuietAttribute, set by PlayerDataService.PublishFirstHatch; ActionToastUI; EnchantedMistBerryService's announce.
+- **Tested:** FirstHatchSpec 33/0, 25 mutants caught, and the neighbouring specs (KB/HANDOFF.md has the list). Spec-only: no Play.
