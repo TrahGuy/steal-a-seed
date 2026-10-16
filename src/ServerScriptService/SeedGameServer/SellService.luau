@@ -657,7 +657,7 @@ function SellService.Start()
 		string.format("your whole bag  ·  %ds of income each", seconds))
 	attachPrompt(allSign)
 	local oneSign = build(stall, ONE_SIGN_NAME, 1, "SELL ONE",
-		string.format("the plant in your hands  ·  %ds of income", seconds))
+		string.format("the sprout in your hands  ·  %ds of income", seconds))
 	attachOnePrompt(oneSign)
 
 	--==========================================================================

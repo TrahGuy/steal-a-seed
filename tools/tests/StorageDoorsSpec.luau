@@ -1017,7 +1017,7 @@ local function body()
 			"THE PLANT STAYS PLANTED: standing, grown, counted, and the garden not rewritten",
 			string.format("%d planted, %d grown", plantedIn(plot), #w.PlantService.GrownIn(plot)))
 		check(saidTo(p.Name, "STORAGE_FULL") == 1 and saidTo(p.Name) == 1,
-			"the player is told PLANT STORAGE FULL, once", saidTo(p.Name))
+			"the player is told SPROUT STORAGE FULL, once", saidTo(p.Name))
 
 		-- Pressed again and again, on both plants.
 		for _ = 1, 4 do
@@ -1851,10 +1851,10 @@ local function body()
 	do
 		local count = string.format("%d/%d", MAX, MAX)
 		local full = ActionRefusal.notice("STORAGE_FULL")
-		check(full ~= nil and full.kind == "blocked" and full.title == "PLANT STORAGE FULL"
+		check(full ~= nil and full.kind == "blocked" and full.title == "SPROUT STORAGE FULL"
 				and string.find(full.detail, count, 1, true) ~= nil
 				and string.find(string.lower(full.detail), "room", 1, true) ~= nil,
-			"a refused pickup or hatch: PLANT STORAGE FULL, the limit's own number, and what makes room",
+			"a refused pickup or hatch: SPROUT STORAGE FULL, the limit's own number, and what makes room",
 			full and (full.title .. " / " .. tostring(full.detail)))
 		-- The pod room's own lines (2026-10-09), with ITS limit, Save.MaxPods.
 		local pods = string.format("%d/%d", GameConfig.Save.MaxPods, GameConfig.Save.MaxPods)

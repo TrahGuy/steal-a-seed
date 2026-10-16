@@ -114,7 +114,7 @@ local ok, err = pcall(function()
 	check(byKey.bagslots and byKey.bagslots.benefit == B.benefit and byKey.bagslots.icon == icons.bagslots
 			and byKey.vip.benefit == V.benefit and byKey.vip.detail == V.detail and byKey.vip.icon == icons.vip
 			and byKey.fasterhatch.benefit == F.benefit
-			and byKey.x2money.benefit == "Permanent \u{00D7}2 plant income" and byKey.x2money.icon == PASS.BuffIcon,
+			and byKey.x2money.benefit == "Permanent \u{00D7}2 sprout income" and byKey.x2money.icon == PASS.BuffIcon,
 		"each says its own words under its own icon; x2 Money its multiplier")
 	local others = {}
 	for _, spec in ipairs(STORE.Sections) do

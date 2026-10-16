@@ -620,7 +620,7 @@ local function fillWords()
 	local credited = tonumber(player:GetAttribute(ATTR.Seconds)) or 0
 	local away = tonumber(player:GetAttribute(ATTR.Away)) or credited
 	local capped = credited >= OFF.MaxCreditSeconds
-	local plants = string.format('<font color="%s">%d plant%s</font>', hex(CASH_GREEN), grown,
+	local plants = string.format('<font color="%s">%d sprout%s</font>', hex(CASH_GREEN), grown,
 		if grown == 1 then "" else "s")
 	if capped and away > credited then
 		info.Text = string.format('Your %s grew for the max <font color="%s">%s</font>\n(you were gone %s)',

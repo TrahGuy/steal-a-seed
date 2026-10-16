@@ -309,7 +309,7 @@ local ok, err = pcall(function()
 	local s1 = InventoryModel.storage(4, false, 24)
 	local s2, full2 = InventoryModel.storage(23, true, 24)
 	local s3 = InventoryModel.storage(23, true, 24, 1)
-	check(s1 == "Plant storage: 4/24" and s2 == "Plant storage: 23 stored + 1 carried / 24" and full2,
+	check(s1 == "Sprout storage: 4/24" and s2 == "Sprout storage: 23 stored + 1 carried / 24" and full2,
 		"the storage line, with a carried pod", s2)
 	check(string.find(s3, "1 wheel prize waiting for room", 1, true) ~= nil, "and a prize owed for want of room", s3)
 	local details = InventoryModel.details(podSet[1], InventoryModel.face(podSet[1]), 1, nil, false)

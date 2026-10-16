@@ -157,7 +157,7 @@ for _, o in ipairs(outcomes) do
 		swapLine = o.line
 	end
 end
-check(swapLine == "You own every invite plant, so this pays $30M Cash Jackpot instead",
+check(swapLine == "You own every invite sprout, so this pays $30M Cash Jackpot instead",
 	"the odds list says what the invite slice pays an owner of every plant -- at their own amount", swapLine)
 
 --==============================================================================

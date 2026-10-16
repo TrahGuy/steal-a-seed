@@ -481,7 +481,7 @@ local function body()
 	check(refused(owner, 1) and count("HeldRoom") >= 1,
 		"with plant storage full, the owner's press opens no purchase dialog")
 	check(saidCount("STORAGE_FULL") == 1 and #said == 1 and said[1].player == owner,
-		"and the owner is told PLANT STORAGE FULL, once", #said)
+		"and the owner is told SPROUT STORAGE FULL, once", #said)
 	check(refused(owner, 1) and refused(owner, 3) and #said == 1,
 		"pressing again, on this pod or another, says nothing more: one line, not one a press", #said)
 	check(refused(stranger, 1) and #said == 1,
@@ -500,10 +500,10 @@ local function body()
 		count("PromptProductPurchase"))
 	local limit = GameConfig.Save.MaxHeld
 	local note = ActionRefusal.Notices.STORAGE_FULL
-	check(note ~= nil and note.title == "PLANT STORAGE FULL"
+	check(note ~= nil and note.title == "SPROUT STORAGE FULL"
 			and string.find(note.detail, string.format("%d/%d", limit, limit), 1, true) ~= nil
-			and ActionRefusal.Text.STORAGE_FULL == string.format("Plant storage full (%d/%d).", limit, limit),
-		"the line is PLANT STORAGE FULL with the limit's own number, and what makes room",
+			and ActionRefusal.Text.STORAGE_FULL == string.format("Sprout storage full (%d/%d).", limit, limit),
+		"the line is SPROUT STORAGE FULL with the limit's own number, and what makes room",
 		note and (note.title .. " / " .. tostring(note.detail)))
 
 	--==========================================================================
@@ -571,7 +571,7 @@ local function body()
 			and promptsOn(modelFor(1), "HatchPrompt") == 0 and promptsOn(modelFor(3), "HatchPrompt") == 0,
 		"and no other pod is touched")
 	local ready = ActionRefusal.notice("STORAGE_FULL_READY")
-	check(ready ~= nil and ready.title == "PLANT STORAGE FULL" and ready.kind == "warning"
+	check(ready ~= nil and ready.title == "SPROUT STORAGE FULL" and ready.kind == "warning"
 			and string.find(string.lower(ready.detail), "ready", 1, true) ~= nil
 			and string.find(string.lower(ready.detail), "free", 1, true) ~= nil
 			and string.find(string.lower(ready.detail), "room", 1, true) ~= nil,

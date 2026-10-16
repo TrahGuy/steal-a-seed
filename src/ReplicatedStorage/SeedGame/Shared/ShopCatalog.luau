@@ -204,9 +204,9 @@ local function passEntry(item: any): Entry
 		title = tostring(item.label),
 		amount = nil,
 		benefit = if type(item.benefit) == "string" then item.benefit
-			else string.format("Permanent \u{00D7}%d plant income", mul),
+			else string.format("Permanent \u{00D7}%d sprout income", mul),
 		detail = if type(item.detail) == "string" then item.detail
-			else string.format("A Game Pass: yours for good. Every grown plant in your garden earns \u{00D7}%d. "
+			else string.format("A Game Pass: yours for good. Every grown sprout in your garden earns \u{00D7}%d. "
 				.. "It does not apply to sales or cash packs.", mul),
 		icon = ICONS[tostring(item.key)] or GameConfig.Pass.BuffIcon or "",
 		fallback = nil,

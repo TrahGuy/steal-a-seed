@@ -154,7 +154,7 @@ placeButton()
 --==============================================================================
 -- THE PANEL
 --==============================================================================
-local menu = MenuKit.modal(gui, PANEL_NAME, "MY PLANTS", RAIL.GardenIcon, nil)
+local menu = MenuKit.modal(gui, PANEL_NAME, "MY SPROUTS", RAIL.GardenIcon, nil)
 UIKit.menuGui(gui, Vector2.new(300, 220))
 local modal = menu.modal
 local body = menu.body
@@ -242,7 +242,7 @@ do
 	fit.MinTextSize = 10
 	fit.Parent = incomeLabel
 end
-local action = MenuKit.button(body, "Action", Z, "SELECT A PLANT", 14)
+local action = MenuKit.button(body, "Action", Z, "SELECT A SPROUT", 14)
 -- The panel's call to action wears the studs (the global UI pass, 2026-10-04).
 local best = MenuKit.button(body, "EquipBest", Z, "EQUIP BEST", 14, { studs = true })
 best.style("go")
@@ -777,7 +777,7 @@ local function paintFooter(plot: Model?, total: number, capacity: number)
 		action.set("WORKING...")
 	elseif not sel then
 		action.style("off")
-		action.set(if tab == "stored" then "SELECT TO PLANT" else "SELECT A PLANT")
+		action.set(if tab == "stored" then "SELECT TO PLANT" else "SELECT A SPROUT")
 	elseif sel.kind == "stored" then
 		action.style(if sel.restoring then "off" else "go")
 		action.set(if sel.restoring then "RESTORING..." else "PLANT")
@@ -843,8 +843,8 @@ refresh = function()
 	padFirst.Value = if first then cards[first.key].button else tabs.buttons[tab]
 	emptyLabel.Visible = #entries == 0
 	emptyLabel.Text = if tab == "planted"
-		then "Nothing planted yet. Plant a creature from STORED, or press EQUIP BEST."
-		else "No hatched creatures in your Bag."
+		then "Nothing planted yet. Plant a sprout from STORED, or press EQUIP BEST."
+		else "No hatched sprouts in your Bag."
 	paintFooter(plot, #planted, capacity)
 	task.defer(buildVisible)
 end
@@ -967,11 +967,11 @@ local WORDS: { [string]: { kind: string, title: string, detail: string? } } = {
 	PLANTED = { kind = "success", title = "PLANTED", detail = "It's earning on your plot." },
 	RETURNED = { kind = "success", title = "RETURNED TO BAG", detail = "It's stored and no longer earning." },
 	UNCHANGED = { kind = "info", title = "ALREADY YOUR BEST", detail = "Your best earners are already planted." },
-	NOTHING = { kind = "info", title = "NOTHING TO UNEQUIP", detail = "No grown plants on your plot." },
-	PLOT_FULL = { kind = "blocked", title = "GARDEN FULL", detail = "Return a plant or upgrade your plot." },
-	STORAGE_FULL = { kind = "blocked", title = "PLANT STORAGE FULL", detail = "Not enough Bag room for that swap." },
+	NOTHING = { kind = "info", title = "NOTHING TO UNEQUIP", detail = "No grown sprouts on your plot." },
+	PLOT_FULL = { kind = "blocked", title = "GARDEN FULL", detail = "Return a sprout or upgrade your plot." },
+	STORAGE_FULL = { kind = "blocked", title = "SPROUT STORAGE FULL", detail = "Not enough Bag room for that swap." },
 	STORAGE_FULL_ALL = { kind = "blocked", title = "NOT ENOUGH BAG ROOM",
-		detail = "Your Bag can't hold every plant. Nothing was moved." },
+		detail = "Your Bag can't hold every sprout. Nothing was moved." },
 	NOT_READY = { kind = "blocked", title = "PLOT NOT READY", detail = "Try again in a moment." },
 	NO_PLOT = { kind = "blocked", title = "NO PLOT YET" },
 	NOT_STORED = { kind = "blocked", title = "NOT IN YOUR BAG", detail = "It may have been planted or sold." },
@@ -1005,9 +1005,9 @@ local function onReply(reply: any)
 	local words = WORDS[code]
 	if code == "EQUIPPED" then
 		local planted, returned = tonumber(reply.planted) or 0, tonumber(reply.returned) or 0
-		say("success", "BEST PLANTS EQUIPPED", string.format("%d in, %d to your Bag.", planted, returned))
+		say("success", "BEST SPROUTS EQUIPPED", string.format("%d in, %d to your Bag.", planted, returned))
 	elseif code == "UNEQUIPPED" then
-		say("success", "ALL PLANTS RETURNED",
+		say("success", "ALL SPROUTS RETURNED",
 			string.format("%d to your Bag. Pods stay planted.", tonumber(reply.returned) or 0))
 	elseif words then
 		say(words.kind, words.title, words.detail)
@@ -1040,7 +1040,7 @@ local function showConfirm(want: boolean)
 	confirm.Visible = want
 	if want then
 		local _, _, grown = plantedEntries(myPlot())
-		confirmText.Text = string.format("Return all %d grown plant%s to your Bag? Growing pods stay planted.",
+		confirmText.Text = string.format("Return all %d grown sprout%s to your Bag? Growing pods stay planted.",
 			grown, if grown == 1 then "" else "s")
 		MenuKit.bindBack("SeedPlantsConfirm", function()
 			showConfirm(false)

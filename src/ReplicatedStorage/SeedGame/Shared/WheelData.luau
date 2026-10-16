@@ -285,7 +285,7 @@ WheelData.Rewards = {
 		label = "POD", title = "Big Pod", colour = rgb(147, 87, 214), icon = "pod",
 		short = "Pod", rarity = "Uncommon" },
 	{ id = "boost_income", kind = "boost", boost = "income", weight = 950,
-		label = "+25% INCOME", title = "+25% Plant Income, 2 min", colour = rgb(31, 158, 140), icon = "boost",
+		label = "+25% INCOME", title = "+25% Sprout Income, 2 min", colour = rgb(31, 158, 140), icon = "boost",
 		short = "+25% Income", rarity = "Rare" },
 	{ id = "cash_medium", kind = "cash", amount = 20000, weight = 1000, scale = { per = "income", seconds = 360 },
 		label = "$20,000", title = "$20,000 Cash", colour = rgb(43, 138, 69), icon = "cash",
@@ -318,8 +318,8 @@ WheelData.Rewards = {
 	-- unsellable; owed while the Bag is full); with every one owned it pays its
 	-- swap, as the trail does. Its 20 came off cash_small (2200 -> 2180).
 	{ id = "invite", kind = "invite", swap = "cash_jackpot", weight = 20,
-		label = "INVITE PLANT", title = "Invite Plant", colour = rgb(232, 84, 156), icon = "invite",
-		short = "Invite Plant", rarity = "Mythic", note = "one you don't own yet" },
+		label = "INVITE SPROUT", title = "Invite Sprout", colour = rgb(232, 84, 156), icon = "invite",
+		short = "Invite Sprout", rarity = "Mythic", note = "one you don't own yet" },
 } :: { Reward }
 
 WheelData.TotalWeight = 10000
@@ -794,12 +794,12 @@ function WheelData.outcomes(ownsTrail: boolean, ownsEveryInvite: boolean?, amoun
 				prize = reward.title,
 				line = if reward.kind == "trail"
 					then string.format("You own the %s, so this pays %s instead", reward.title, swapTitle)
-					else string.format("You own every invite plant, so this pays %s instead", swapTitle),
+					else string.format("You own every invite sprout, so this pays %s instead", swapTitle),
 				probability = share,
 				note = "replacement",
 			})
 		elseif reward.kind == "invite" then
-			table.insert(out, { prize = reward.title, line = "The next invite plant you don't own yet",
+			table.insert(out, { prize = reward.title, line = "The next invite sprout you don't own yet",
 				probability = share })
 		else
 			table.insert(out, { prize = title, line = title, probability = share })

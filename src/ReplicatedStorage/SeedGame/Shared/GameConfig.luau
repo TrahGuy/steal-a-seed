@@ -479,10 +479,10 @@ GameConfig.Plot = {
 		-- The server folds a burst (EQUIP BEST, an upgrade's re-render, a
 		-- garden restored) into one publish this long after its first change.
 		PublishDelaySeconds = 0.25,
-		Title = "TOP CREATURES",
+		Title = "TOP SPROUTS",
 		-- A claimed plot with nothing grown in it (once its garden is known).
-		EmptyTitle = "NO CREATURES YET",
-		EmptyLine = "Grown creatures show up here",
+		EmptyTitle = "NO SPROUTS YET",
+		EmptyLine = "Grown sprouts show up here",
 		-- The second card while only one creature stands.
 		EmptySlot = "EMPTY",
 		-- The plain attributes PlotShowcaseService writes on the board, per slot.
@@ -980,12 +980,12 @@ GameConfig.SellOne = {
 	-- Empty hands, a bat, a trap, an unhatched pod, a raid pod on the back:
 	-- everything that is not a grown plant in the hands gets the one line that
 	-- says what would work.
-	EmptyHandsText = "Hold a grown plant to sell it.",
+	EmptyHandsText = "Hold a grown sprout to sell it.",
 	-- An Invite a Friend reward in the hands (2026-10-06): never sold.
 	UnsellableText = "Invite rewards can't be sold.",
 	-- The plant left the hands, or was sold another way, between the quote and
 	-- the answer. Nothing else is ever put in its place.
-	ChangedText = "That plant is no longer in your hands.",
+	ChangedText = "That sprout is no longer in your hands.",
 	TooFarText = "Stand at the SELL ONE sign to sell.",
 	ExpiredText = "That offer expired. Press the sign again.",
 }
@@ -1075,9 +1075,9 @@ GameConfig.Sacrifice = {
 		NOT_A_POD = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
 		NOT_OWNED = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
 		MYSTERY = { title = "HATCH IT FIRST", detail = "Hatch your Mysterious Pod first." },
-		HATCHED = { title = "PODS ONLY", detail = "A grown plant can't be sacrificed." },
+		HATCHED = { title = "PODS ONLY", detail = "A grown sprout can't be sacrificed." },
 		CARRYING = { title = "BANK IT FIRST", detail = "Carry that pod past the red line." },
-		NO_GARDEN = { title = "NOTHING TO BOOST", detail = "Grow a plant on your plot first." },
+		NO_GARDEN = { title = "NOTHING TO BOOST", detail = "Grow a sprout on your plot first." },
 		TOO_FAR = { title = "TOO FAR AWAY", detail = "Stand beside the pedestal." },
 		EXPIRED = { title = "OFFER EXPIRED", detail = "Press the pedestal again." },
 		CHANGED = { title = "POD NOT IN HAND", detail = "Nothing was taken. Press the pedestal again." },
@@ -1404,7 +1404,7 @@ GameConfig.InviteRewards = {
 		RulesTitle = "HOW INVITES WORK",
 		Rules = {
 			"A friend counts once: their first time playing",
-			"1 - 5 - 10 - 20 friends: 4 invite plants",
+			"1 - 5 - 10 - 20 friends: 4 invite sprouts",
 			"Played before? You still get 1 free spin",
 		},
 		-- A friend who had played before came back through your invite: 1 free
@@ -1442,7 +1442,7 @@ GameConfig.InviteRewards = {
 		SomeFriend = "a friend",
 		Earned = "INVITE REWARD: %s",
 		EarnedDetail = "%s, %s -- in your Bag, ready to place.",
-		Full = "PLANT STORAGE FULL",
+		Full = "SPROUT STORAGE FULL",
 		FullDetail = "Make room in your Bag for your invite reward.",
 	},
 	--==========================================================================
@@ -1883,7 +1883,7 @@ GameConfig.OtherPlants = {
 	Icon = "\u{26A1}",
 	OwnQualityAttribute = "SeedOwnAfterimageQuality",
 	-- Said once each time the switch reaches ULTRA.
-	UltraNotice = { Title = "YOUR PLANTS ARE HIDDEN TOO", Detail = "They still grow and earn." },
+	UltraNotice = { Title = "YOUR SPROUTS ARE HIDDEN TOO", Detail = "They still grow and earn." },
 	-- ULTRA's thumb (the owner, 2026-10-13: no word, "an extra spark effect"):
 	-- Sparks little four-point stars twinkling inside the thumb, each Twinkle
 	-- seconds out and back, Stagger apart; a gold Aura round the thumb. Under
@@ -5287,7 +5287,7 @@ GameConfig.Weather = {
 	Toast = {
 		Title = "A mysterious biome has emerged through the rain!",
 		-- %d is the percentage, from SeedData.Rain.IncomeFactor.
-		Detail = "+%d%% plant income while it rains",
+		Detail = "+%d%% sprout income while it rains",
 	},
 	Warning = { Title = "THE RAIN IS PASSING", Detail = "The biome closes in %d s. Make for the bridge." },
 	Evacuated = { Title = "BACK AT THE ENTRANCE", Detail = "The rain has stopped and the biome is fading away." },
@@ -5306,7 +5306,7 @@ GameConfig.Weather = {
 	},
 	ThunderToast = {
 		Title = "A thunderstorm has rolled in! A mysterious biome has emerged!",
-		Detail = "+%d%% plant income while it storms",
+		Detail = "+%d%% sprout income while it storms",
 	},
 	--==========================================================================
 	-- THE THUNDERSTORM'S LOOK (2026-10-02): heavier rain, thicker white clouds,
@@ -6971,7 +6971,7 @@ GameConfig.Rebirth = {
 	Keep = {
 		{ Text = "Speed", Icon = "SourceIcons.speed" },
 		{ Text = "Plot level", Icon = nil },
-		{ Text = "Plants", Icon = "Rail.GardenIcon" },
+		{ Text = "Sprouts", Icon = "Rail.GardenIcon" },
 		{ Text = "Pods", Icon = "Store.Icons.pod1" },
 		{ Text = "Weapons", Icon = nil },
 		{ Text = "Spin tickets", Icon = "BagLook.IconImages.tickets" },
@@ -7022,7 +7022,7 @@ GameConfig.Rebirth = {
 		NextChip = "NEXT",
 		Locked = "LOCKED",
 		KeepTitle = "YOU KEEP",
-		Keep = "Speed, your plot level, every plant (garden and Bag), pods, weapons, spin tickets, "
+		Keep = "Speed, your plot level, every sprout (garden and Bag), pods, weapons, spin tickets, "
 			.. "the Index, passes and running boosts.",
 		LoseTitle = "YOU LOSE",
 		Lose = "All your cash. Your mill goes back to Compost Walk.",
@@ -7170,7 +7170,7 @@ function GameConfig.plotStatsText(grown: any, pods: any, capacity: any, income: 
 		return nil, nil, nil, nil
 	end
 	local cap = tonumber(capacity) or 0
-	local plants = string.format("PLANTS %d/%d", grown + pods, math.max(0, math.floor(cap)))
+	local plants = string.format("SPROUTS %d/%d", grown + pods, math.max(0, math.floor(cap)))
 	local hatching = if pods > 0 then string.format("%d hatching", pods) else ""
 	local earning = "$" .. GameConfig.compact(income) .. "/s"
 	local boosted = if type(boost) == "number" and boost > 1
@@ -7961,8 +7961,8 @@ GameConfig.Store = {
 			--==================================================================
 			{ key = "bagslots", label = "+12 BAG SLOTS", robux = 149, pass = 2026034867,
 				kind = "pass", bagSlots = 12,
-				benefit = "Room for 12 more plants in your Bag",
-				detail = "A Game Pass: yours for good. Your Bag holds 12 more plants. Pods keep their own room." },
+				benefit = "Room for 12 more sprouts in your Bag",
+				detail = "A Game Pass: yours for good. Your Bag holds 12 more sprouts. Pods keep their own room." },
 			{ key = "fasterhatch", label = "FASTER HATCH", robux = 129, pass = 2026400906,
 				kind = "pass", hatchFactor = 0.75,
 				benefit = "Pods hatch 25% faster",
@@ -7972,7 +7972,7 @@ GameConfig.Store = {
 				kind = "pass", vip = true, multiplier = 1.1,
 				benefit = "Gold name, [VIP] chat tag, +10% money",
 				detail = "A Game Pass: yours for good. Your name shows in gold over your head, your chat "
-					.. "carries a [VIP] tag, and every grown plant earns 10% more -- on top of x2 Money." },
+					.. "carries a [VIP] tag, and every grown sprout earns 10% more -- on top of x2 Money." },
 		},
 		--======================================================================
 		-- THE OWNER'S THREE DEVELOPER PRODUCTS (2026-10-12, item 9B; ids and
@@ -8009,7 +8009,7 @@ GameConfig.Store = {
 			{ key = "summonrain", label = "SUMMON RAIN", robux = 199, product = 3717932732,
 				kind = "rain",
 				benefit = "Start the Rain for the whole server",
-				detail = "Starts the Rain now, for everybody in this server: more plant income while it falls, "
+				detail = "Starts the Rain now, for everybody in this server: more sprout income while it falls, "
 					.. "and the Rain biome opens over the bridge. Then 30 minutes before anyone can summon it "
 					.. "again." },
 			-- The owner's words for it on the dashboard, said here too.
@@ -8017,8 +8017,8 @@ GameConfig.Store = {
 				kind = "rebirth",
 				benefit = "Rebirth now: no cash or mill needed",
 				detail = "An instant rebirth with no cash or mill needed: the permanent bonus (+50% training, "
-					.. "+25% plant income), your next title and a fence upgrade. Your cash is spent and your mill "
-					.. "goes back to Compost Walk; your Speed, plot, plants, pods and items are kept. Can be "
+					.. "+25% sprout income), your next title and a fence upgrade. Your cash is spent and your mill "
+					.. "goes back to Compost Walk; your Speed, plot, sprouts, pods and items are kept. Can be "
 					.. "bought again." },
 		},
 		Speed = {
@@ -8199,7 +8199,7 @@ GameConfig.AdminAnnounce = {
 		Give = "%s gave %s %s",
 		-- A folded burst of different things.
 		Pods = "%d pods",
-		Plants = "%d grown plants",
+		Plants = "%d grown sprouts",
 		Items = "%d items",
 		Somebody = "An admin",
 		-- THE MIST'S TOOLS (2026-10-12, the owner's item 12). Never a lowering of
@@ -8566,7 +8566,7 @@ GameConfig.BonusChest = {
 	BoostSeconds = 120,
 	Rewards = {
 		{ Id = "income", Multiplier = 1.25, Weight = 1,
-			Title = "+25% PLANT INCOME", Detail = "passive plant income" },
+			Title = "+25% SPROUT INCOME", Detail = "passive sprout income" },
 		{ Id = "training", Multiplier = 1.25, Weight = 1,
 			Title = "+25% TRAINING", Detail = "Speed earned on your treadmill" },
 	},
@@ -10018,7 +10018,7 @@ GameConfig.BoostIcons = {
 	Words = {
 		Rain = "Rain",
 		Thunder = "Thunderstorm",
-		WeatherEffect = "+%d%% plant income while it lasts",
+		WeatherEffect = "+%d%% sprout income while it lasts",
 		WeatherOpening = "A temporary biome is about to open east of the hub.",
 		WeatherOpen = "A temporary biome is open east of the hub, over the bridge.",
 		Disco = "Disco",
@@ -10040,7 +10040,7 @@ GameConfig.BoostIcons = {
 		PodRushEffect = "Bank pods taken from nests: %d bronze, %d silver, %d gold.",
 		PodRushProgress = "%d banked this rush.",
 		Boost = "Bonus Chest or Reward Wheel",
-		IncomeEffect = "+%d%% plant income",
+		IncomeEffect = "+%d%% sprout income",
 		TrainingEffect = "+%d%% treadmill training",
 		BoostHint = "Claim the Bonus Chest again when it is ready.",
 		Sacrifice = "Sacrifice Pedestal",
@@ -12502,7 +12502,7 @@ GameConfig.PodGuide = {
 	CheckSeconds = 0.25,
 	Words = {
 		Title = "%s PODS",
-		Sub = "EACH POD HATCHES ITS OWN PLANT. HOW OFTEN A NEST HAS IT:",
+		Sub = "EACH POD HATCHES ITS OWN SPROUT. HOW OFTEN A NEST HAS IT:",
 		Sizes = "SIZE",
 		SizeChance = "CHANCE",
 		SizeWorth = "INCOME",

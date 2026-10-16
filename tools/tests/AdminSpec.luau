@@ -1013,7 +1013,7 @@ local ok, err = pcall(function()
 	local formsRefused = true
 	for _, form in ipairs({ "seed", "POD", "grown", "Plant", "" }) do
 		local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask("nubkin", form, 1))
-		if r.ok or not string.find(r.message, "POD or GROWN PLANT", 1, true) then
+		if r.ok or not string.find(r.message, "POD or GROWN SPROUT", 1, true) then
 			formsRefused = false
 		end
 	end

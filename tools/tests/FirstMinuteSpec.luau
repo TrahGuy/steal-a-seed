@@ -613,8 +613,8 @@ local function plantBody()
 			end
 		end
 		local wanted = "It earns $" .. GameConfig.compact(income) .. "/s"
-		check(noticed and notice ~= nil and notice.title == "Your first plant hatched!" and notice.detail == wanted,
-			"the owner is told: \"Your first plant hatched! " .. wanted .. "\"",
+		check(noticed and notice ~= nil and notice.title == "Your first sprout hatched!" and notice.detail == wanted,
+			"the owner is told: \"Your first sprout hatched! " .. wanted .. "\"",
 			notice and (tostring(notice.title) .. " / " .. tostring(notice.detail)))
 		local post = notice and Notice.readServerNotice(notice)
 		check(post ~= nil and post.title == notice.title and post.detail == notice.detail,

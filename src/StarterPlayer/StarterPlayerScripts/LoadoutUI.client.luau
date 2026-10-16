@@ -2307,7 +2307,7 @@ if channel then
 		if reply.ok == true then
 			setOpen(false)
 		elseif reply.code == "STORAGE_FULL" then
-			panel.say("No free bed, and no room for another plant.", 3)
+			panel.say("No free bed, and no room for another sprout.", 3)
 		elseif reply.code == "NOT_READY" then
 			panel.say("Not ready yet.", 2)
 		end

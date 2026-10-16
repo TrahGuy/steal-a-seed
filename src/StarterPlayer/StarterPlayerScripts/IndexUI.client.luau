@@ -205,7 +205,7 @@ placeButton()
 --==============================================================================
 -- On the studded kit's green collection band (2026-10-08, the owner: "do the
 -- index and bag next"; MenuKit.studdedTheme, GameConfig.StuddedLook.Index).
-local menu = MenuKit.modal(gui, PANEL_NAME, "Plant Almanac", GameConfig.BagLook.IconImages.plants, nil, nil, nil,
+local menu = MenuKit.modal(gui, PANEL_NAME, "Sprout Almanac", GameConfig.BagLook.IconImages.plants, nil, nil, nil,
 	MenuKit.studdedTheme(GameConfig.StuddedLook.Index))
 -- This gui holds only the panel, so it takes the player's menu size whole.
 UIKit.menuGui(gui, Vector2.new(300, 220))
@@ -1069,7 +1069,7 @@ local function paintGrid()
 	local first = list[1]
 	padFirst.Value = if first then cards[first.species.Id].button else nil
 	if searching and #list == 0 then
-		emptyLabel.Text = "No matches. Only plants you have grown can be found by name."
+		emptyLabel.Text = "No matches. Only sprouts you have grown can be found by name."
 		emptyLabel.Visible = detailId == nil
 	else
 		emptyLabel.Visible = false
@@ -1164,7 +1164,7 @@ relayout = function()
 	local function header(titleWidth: number): { [string]: MenuLayout.Rect }
 		return MenuLayout.indexHeader(p, titleWidth)
 	end
-	modal.title.Text = "Plant Almanac"
+	modal.title.Text = "Sprout Almanac"
 	local row = header(MenuKit.titleWidth(menu, p.short))
 	if not row.search then
 		modal.title.Text = "Almanac"

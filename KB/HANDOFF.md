@@ -1,5 +1,52 @@
 # Steal a Seed — Session Handoff
 
+## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
+
+The owner: "should we change the "plants" "creatures" into sprouts? ask me querstions". Eight answers, every recommendation taken: KB/SPROUT-RENAME-PLAN.md (new; what changed and what was tested).
+
+**What changed:**
+- About 85 player-facing strings in 20 files say "sprout" where they said "plant" or "creature", in the same case. Among them:
+  - the plot sign "SPROUTS 1/5", the Garden's "MY SPROUTS", the "Sprout Almanac";
+  - the Bag's "Sprout storage" and its "Sprouts" tab; "SPROUT STORAGE FULL"; the boards' "TOP SPROUTS";
+  - the guide's "Hatch your first sprout!" and "You hatched your first sprout!";
+  - "+25% SPROUT INCOME", the wheel's "Invite Sprout", the Mist odds' "Sprouts";
+  - the admin console and its broadcasts ("GROWN SPROUT", "RANDOM SPROUT · RANDOM SIZE").
+- **Kept, as the owner chose:**
+  - the verb ("SELECT TO PLANT", "Plant or sell one to make room.");
+  - logs, asserts and spec labels; ids, attributes and saved fields; asset folders;
+  - the analytics names (the funnel's "First Plant Hatched"); the older What's New entries.
+- An Edit scan of Studio found no hand-made sign or prompt saying either word.
+- The Roblox page's text, badge names and store listings are the owner's to check.
+
+**Specs:**
+- Fifteen specs pinned the old words and follow them: AdminConsole, AdminMist, Admin, FirstMinute, HatchStorage, InstantHatch, InventoryModel, Notice (the owner's own "Pick up a plant…" example), OtherPlants, PassBenefits, PlotRelease, StorageDoors, Tutorial, TutorialSpotlight, WheelScale.
+- Then the whole suite ran 164 of 164 green, and the Bag-tab and Mist-heading readers again: InventoryModel 56, BagMenu 13, Inventory 47, EnchantedMistBerry 73, MysteryPod 39, and 13 more.
+
+**Live (one guarded Play, SeedTest_20261016, the owner's phone emulator 705 x 338, touch):**
+- The first hatch's harness was recovered from this session's transcript as ZZSproutSteps.server.luau, now also gated on the throwaway store, and deleted after.
+- Seen, each fitting on the phone:
+  - "Hatch your first sprout!" and "CONGRATULATIONS! YOU HATCHED YOUR FIRST SPROUT!";
+  - "SPROUTS 1/5" and "TOP SPROUTS";
+  - "MY SPROUTS" with "SELECT A SPROUT", and "SPROUT ALMANAC";
+  - the Bag's "Sprout storage: 0/36 · Pods: 1/60".
+- The Bag's "Plants" tab and the Mist odds heading were found in that Play and fixed after it (spec-checked, not re-seen).
+- Clicks under the emulator land 47 px left of the x sent, instance_path clicks too (the emulator's letterbox); the panels were opened at x + 47.
+- Studio is clean afterwards: test_store_off removed 1 key (0 left) and the marker, the harness is gone, and the probe shows 387 compared, 0 differ, 0 ZZ leftovers.
+- Captures in output/sprout-rename-2026-10-16 (untracked).
+
+**FOUND, NOT FIXED: on that phone the first hatch's card (fa60c69) never shows.**
+- The pod was banked and ready, FirstHatchPending was true, and nothing was open.
+- But FirstHatchCard.rect gave 0 x 0: the gui's safe area is 705 x 280, with 16 HUD rects, and the guide's block (x 144–325, y 62–152) is between the top row and the hotbar. No spot is clear even at MinScale.
+- So the guide fell back to the Bag: "Open your Bag and hold HATCH".
+- FirstHatchSpec covers 705 x 338 but without the guide's rects, so it passed.
+- Likely every phone up to about 390 px tall is the same while the guide shows. The fix is the owner's call; it was reported with options.
+
+**Files:**
+- Shared: ActionRefusal, EnchantedMistConfig, FirstMinute, GameConfig, InventoryModel, ShopCatalog, TutorialData, WheelData;
+- AdminService (init, AdminConsoleUI, SpawnCatalog), SellService;
+- BonusChestUI, GardenUI, IndexUI, LoadoutUI, OfflineUI, SellUI, TutorialUI, WheelUI;
+- 15 specs; KB/SPROUT-RENAME-PLAN.md (new).
+
 ## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as be1abbe with the owner's OK, NOT PUBLISHED; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner, on the Sprout Journey talk: "i like that cheaper idea" (POD RUSH on a schedule), then "ask me a lot of question". Sixteen answers, every recommendation taken: KB/POD-RUSH-HOURLY-PLAN.md (new; with where each lives and what was tested).

@@ -373,12 +373,12 @@ local function nameplate()
 	check(a == nil and b == nil and c == nil and d == nil,
 		"no published numbers: the plaque has nothing to say (never 0/10)")
 	a, b, c, d = GameConfig.plotStatsText(6, 2, 10, 15992, 2)
-	check(a == "PLANTS 8/10" and b == "2 hatching" and c == "$" .. GameConfig.compact(15992) .. "/s"
+	check(a == "SPROUTS 8/10" and b == "2 hatching" and c == "$" .. GameConfig.compact(15992) .. "/s"
 			and d == "with x2 boost",
 		"grown and hatching count against capacity; the income carries its boost", string.format(
 			"%s | %s | %s | %s", tostring(a), tostring(b), tostring(c), tostring(d)))
 	a, b, c, d = GameConfig.plotStatsText(3, 0, 5, 40, nil)
-	check(a == "PLANTS 3/5" and b == "" and d == "", "nothing hatching and no boost: those lines stay empty")
+	check(a == "SPROUTS 3/5" and b == "" and d == "", "nothing hatching and no boost: those lines stay empty")
 
 	local B = GameConfig.Plot.OwnerBadge
 	check(B.HeightStuds - B.TallStuds * 0.5 > 5.8 + 7,

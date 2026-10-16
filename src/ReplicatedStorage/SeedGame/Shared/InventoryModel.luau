@@ -44,7 +44,7 @@ local InventoryModel = {}
 
 InventoryModel.Categories = {
 	{ id = "all", label = "All Items" },
-	{ id = "plants", label = "Plants" },
+	{ id = "plants", label = "Sprouts" },
 	{ id = "pods", label = "Pods" },
 	{ id = "equipment", label = "Equipment" },
 	{ id = "tickets", label = "Spin Tickets" },
@@ -803,7 +803,7 @@ function InventoryModel.emptyText(category: string, owned: number, filtered: boo
 		return "Everything here is on your hotbar."
 	end
 	if category == "plants" then
-		return "Hatch a pod to grow a plant here."
+		return "Hatch a pod to grow a sprout here."
 	elseif category == "pods" then
 		return "Steal a pod and bring it home."
 	elseif category == "equipment" then
@@ -821,13 +821,13 @@ end
 --==============================================================================
 function InventoryModel.storage(rows: number?, carrying: boolean, limit: number, waiting: number?): (string, boolean, boolean)
 	if rows == nil then
-		return "Plant storage: …", false, false
+		return "Sprout storage: …", false, false
 	end
 	local stored = math.max(0, math.floor(rows))
 	local count = stored + (if carrying then 1 else 0)
 	local text = if carrying
-		then string.format("Plant storage: %d stored + 1 carried / %d", stored, limit)
-		else string.format("Plant storage: %d/%d", count, limit)
+		then string.format("Sprout storage: %d stored + 1 carried / %d", stored, limit)
+		else string.format("Sprout storage: %d/%d", count, limit)
 	local owed = math.floor(tonumber(waiting) or 0)
 	if owed >= 1 then
 		text ..= string.format(" · %d wheel prize%s waiting for room", owed, if owed == 1 then "" else "s")

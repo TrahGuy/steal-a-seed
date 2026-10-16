@@ -29,7 +29,7 @@ check(Data.Steps[3].Id == "steal" and Data.Steps[4].Id == "bank" and Data.Steps[
 		and Data.Steps[6].Id == "place" and Data.Steps[STEPS].Id == "travel",
 	"steal, bank, then the hatch (step 5) and the place (step 6) -- pods hatch in the Bag (2026-10-09) -- and the "
 		.. "guide ends with the travel lesson (2026-10-08)")
-check(Data.Steps[5].Detail == "Tap HATCH when your pod is ready!" and Data.Steps[6].Title == "Place your plant!",
+check(Data.Steps[5].Detail == "Tap HATCH when your pod is ready!" and Data.Steps[6].Title == "Place your sprout!",
 	"the hatch step says to tap HATCH when the pod is ready (its card, 2026-10-16; it said to hold HATCH in the "
 		.. "Bag); the place step places a plant")
 check(Data.Steps[STEPS].Title == "Get around fast!", "titled Get around fast!")

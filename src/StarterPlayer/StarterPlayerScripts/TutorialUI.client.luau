@@ -582,7 +582,7 @@ bigLine.ZIndex = 9
 local smallLine = outlined(party, "Small", 26, CREAM, 3)
 smallLine.Position = UDim2.fromOffset(0, 68)
 smallLine.Size = UDim2.new(1, 0, 0, 34)
-smallLine.Text = "You hatched your first plant!"
+smallLine.Text = "You hatched your first sprout!"
 smallLine.ZIndex = 9
 
 --==============================================================================
@@ -2366,7 +2366,7 @@ local function refresh()
 		if not plantTool then
 			-- Never point at soil with nothing to put in it.
 			if bagPodDue() then
-				instruction.Text = "Hatch your first plant!"
+				instruction.Text = "Hatch your first sprout!"
 				subline.Text = "Open your Bag when your pod is ready."
 			elseif type(player:GetAttribute(ATTR.CarryingSpecies)) == "string" then
 				instruction.Text = "Bring it to your plot!"
@@ -2380,19 +2380,19 @@ local function refresh()
 		end
 		local spot = freeSpot(plot, soil :: BasePart, here)
 		if not spot then
-			subline.Text = "Your plot is full -- lift a plant or upgrade to make room."
+			subline.Text = "Your plot is full -- lift a sprout or upgrade to make room."
 			clearWorld()
 			return
 		end
 		highlight.Adornee = soil
 		highlight.Enabled = true
 		if not plantTool.Parent or plantTool.Parent ~= player.Character then
-			-- Not in the hand yet: its hotbar slot, lit once -- "EQUIP YOUR PLANT".
+			-- Not in the hand yet: its hotbar slot, lit once -- "EQUIP YOUR SPROUT".
 			local face = slotFaceFor(plantTool)
 			if face then
-				pointAt(face, "EQUIP YOUR PLANT", "slot", face)
+				pointAt(face, "EQUIP YOUR SPROUT", "slot", face)
 			else
-				pointAt(hotbarSlotFor(plantTool), "EQUIP YOUR PLANT")
+				pointAt(hotbarSlotFor(plantTool), "EQUIP YOUR SPROUT")
 			end
 		else
 			-- In the hand: the hand over a free spot of soil.

@@ -677,7 +677,7 @@ local function resetProgress(admin: any, target: Player, typed: any): Reply
 	record(admin, target, "ResetPlayerProgress", nil, nil)
 	return {
 		ok = true,
-		message = string.format("%s was reset to a fresh account and saved (%d plant(s) and %d item(s) "
+		message = string.format("%s was reset to a fresh account and saved (%d sprout(s) and %d item(s) "
 			.. "removed). Purchases and game passes were kept.", target.Name, plants, #tools),
 	}
 end
@@ -945,7 +945,7 @@ local function spawn(admin: any, targetId: any, request: any, confirmName: any):
 		return refuse(string.format("%s cannot be spawned from the console. Nothing was spawned.", species.Name))
 	end
 	if not SpawnCatalog.isForm(form) then
-		return refuse("Choose POD or GROWN PLANT. Nothing was spawned.")
+		return refuse("Choose POD or GROWN SPROUT. Nothing was spawned.")
 	end
 	if not SpawnCatalog.allows(species, size) then
 		return refuse(string.format("%s does not come in that size. Nothing was spawned.", species.Name))
@@ -1348,16 +1348,16 @@ local function podChoice(choice: any): (boolean, PodChoice?, string?)
 		return true, nil, nil
 	end
 	if type(choice) ~= "table" then
-		return false, nil, "Choose RANDOM or a creature. Nothing was given."
+		return false, nil, "Choose RANDOM or a sprout. Nothing was given."
 	end
 	for key in pairs(choice) do
 		if key ~= "species" and key ~= "size" then
-			return false, nil, "Choose RANDOM or a creature. Nothing was given."
+			return false, nil, "Choose RANDOM or a sprout. Nothing was given."
 		end
 	end
 	local entry = MysteryPodService.PoolEntry(choice.species)
 	if not entry then
-		return false, nil, "That creature is not in the Mysterious Pod. Nothing was given."
+		return false, nil, "That sprout is not in the Mysterious Pod. Nothing was given."
 	end
 	local size = choice.size
 	if EnchantedMistData.isSized(entry.Rarity) then
@@ -1841,7 +1841,7 @@ function AdminService.Start()
 	end
 	log(string.format("Ready. %d account(s) on the allowlist; up to %s cash and %s Speed a request, "
 		.. "progress resets saved or refused, night and day for the whole server, one request a second; "
-		.. "spawning any plant or pod to anybody here %s (natural Secret spawning %s); the Rain event and "
+		.. "spawning any sprout or pod to anybody here %s (natural Secret spawning %s); the Rain event and "
 		.. "mini events by any admin account.", count,
 		commas(AdminService.Config.MaxMoney), commas(AdminService.Config.MaxSpeed),
 		if AdminService.Config.Spawning == true then "ON" else "off",

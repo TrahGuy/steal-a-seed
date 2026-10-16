@@ -43,8 +43,8 @@ local SpawnCatalog = {}
 -- THE TWO FORMS
 --==============================================================================
 SpawnCatalog.Forms = { "pod", "plant" }
-local NOUN: { [string]: string } = { pod = "pod", plant = "grown plant" }
-local NOUNS: { [string]: string } = { pod = "pods", plant = "grown plants" }
+local NOUN: { [string]: string } = { pod = "pod", plant = "grown sprout" }
+local NOUNS: { [string]: string } = { pod = "pods", plant = "grown sprouts" }
 
 function SpawnCatalog.isForm(form: any): boolean
 	return type(form) == "string" and NOUN[form] ~= nil

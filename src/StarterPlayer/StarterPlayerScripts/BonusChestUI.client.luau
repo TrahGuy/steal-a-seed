@@ -82,7 +82,7 @@ end
 local REFUSED: { [string]: { title: string, detail: string? } } = {
 	-- It opens at the first hatch (TutorialData.FirstLoopDone), not at the end of
 	-- the guide, whose step 7 comes after (the owner's words, 2026-10-08).
-	LOCKED = { title = "CHEST LOCKED", detail = "Hatch your first plant to open it." },
+	LOCKED = { title = "CHEST LOCKED", detail = "Hatch your first sprout to open it." },
 	COOLDOWN = { title = "CHEST NOT READY" },
 	BUSY = { title = "CHEST OPENING", detail = "One moment." },
 	NOT_READY = { title = "CHEST NOT READY", detail = "Still loading. Try again in a moment." },

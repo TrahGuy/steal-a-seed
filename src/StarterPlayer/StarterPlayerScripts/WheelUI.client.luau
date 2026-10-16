@@ -2648,13 +2648,13 @@ local function showResult(payload: { [string]: any })
 	local _, short, title = WheelData.wordsFor(prize, tonumber(payload.amount))
 	local plant = if prize.kind == "invite" then SeedData.Get(tostring(payload.species)) else nil
 	if plant then
-		short = string.format("%s, an invite plant", plant.Name)
-		title = string.format("%s (invite plant)", plant.Name)
+		short = string.format("%s, an invite sprout", plant.Name)
+		title = string.format("%s (invite sprout)", plant.Name)
 	end
 	local line = string.format("You won: %s!", short)
 	if payload.swapped == true then
 		note = string.format("You own %s already, so it paid %s instead.",
-			if rolled.kind == "invite" then "every invite plant" else "the " .. rolled.title, title)
+			if rolled.kind == "invite" then "every invite sprout" else "the " .. rolled.title, title)
 		line = string.format("%s slice! You own it, so: %s", if rolled.kind == "invite" then "Invite" else "Trail", short)
 	end
 	if payload.owed == true then

@@ -556,8 +556,8 @@ local ok, err = pcall(function()
 		{ { species = "petalpip" }, "not in the Mysterious Pod" },
 		{ { species = "elderbough", size = 9 }, "Tiny to Colossal" },
 		{ { species = "elderbough", size = 2.5 }, "Tiny to Colossal" },
-		{ { species = "elderbough", size = 3, extra = true }, "RANDOM or a creature" },
-		{ "surprise", "RANDOM or a creature" },
+		{ { species = "elderbough", size = 3, extra = true }, "RANDOM or a sprout" },
+		{ "surprise", "RANDOM or a sprout" },
 	}) do
 		local reply = act(admin, "MistPod", admin.UserId, case[1], nil)
 		if reply.ok or #said > 0 or not has(reply.message, case[2]) then

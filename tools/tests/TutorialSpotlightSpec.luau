@@ -525,9 +525,9 @@ local ok, err = pcall(function()
 			end
 		end
 	end
-	check(lockedTitle == "CHEST LOCKED" and lockedDetail == "Hatch your first plant to open it."
+	check(lockedTitle == "CHEST LOCKED" and lockedDetail == "Hatch your first sprout to open it."
 			and #chestProblems == 0 and phonesMeasured >= 6,
-		string.format("the locked chest says \"Hatch your first plant to open it.\" and it fits a notice on all %d "
+		string.format("the locked chest says \"Hatch your first sprout to open it.\" and it fits a notice on all %d "
 			.. "listed phones (two lines at the most, at the phone's size)", phonesMeasured),
 		table.concat(chestProblems, "; "))
 

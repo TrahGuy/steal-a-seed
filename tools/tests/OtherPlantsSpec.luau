@@ -540,7 +540,7 @@ local ok, err = pcall(function()
 			.. "the switch's edge; still under Reduced Motion; no particles in the world")
 	check(ui2:find("if nextLevel == \"ultra\" then\n\t\tNotice.post({ kind = \"info\", title = OTHERS.UltraNotice.Title", 1,
 				true) ~= nil
-			and OP.UltraNotice.Title == "YOUR PLANTS ARE HIDDEN TOO" and OP.UltraNotice.Detail == "They still grow and earn.",
+			and OP.UltraNotice.Title == "YOUR SPROUTS ARE HIDDEN TOO" and OP.UltraNotice.Detail == "They still grow and earn.",
 		"reaching ULTRA says once that the player's own plants are hidden too, and still grow and earn")
 	-- OFF and ON fit beside the thumb where they are drawn (the rail's and
 	-- compact's tracks), in LuckiestGuy at the word's size.

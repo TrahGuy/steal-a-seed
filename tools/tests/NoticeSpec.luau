@@ -278,8 +278,8 @@ do
 	check(#bad == 0, "headlines are short, upper case, plain; next steps are one short sentence",
 		table.concat(bad, ", "))
 	local owner = ActionRefusal.Notices.PLOT_FULL
-	check(owner.title == "GARDEN FULL" and owner.detail == "Pick up a plant or upgrade your plot.",
-		"the owner's own example, word for word")
+	check(owner.title == "GARDEN FULL" and owner.detail == "Pick up a sprout or upgrade your plot.",
+		"the owner's own example, word for word (its plant a sprout since 2026-10-16)")
 	check(ActionRefusal.plotFull(true, true) == "PLOT_FULL", "full, something grown, a level to buy: both steps")
 	check(ActionRefusal.plotFull(false, true) == "PLOT_FULL_MAX", "at the top level: pick up only")
 	check(ActionRefusal.plotFull(true, false) == "PLOT_FULL_GROWING", "nothing grown yet: upgrade only")

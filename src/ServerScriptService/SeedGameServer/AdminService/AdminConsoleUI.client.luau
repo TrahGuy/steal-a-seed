@@ -928,7 +928,7 @@ local function statsLine(row: any): string
 	if row.ready ~= true then
 		return "PROFILE LOADING"
 	end
-	return string.format("$%s  \u{00B7}  %s SPEED  \u{00B7}  PLANTS %d/%d  \u{00B7}  PODS %d/%d",
+	return string.format("$%s  \u{00B7}  %s SPEED  \u{00B7}  SPROUTS %d/%d  \u{00B7}  PODS %d/%d",
 		GameConfig.money(tonumber(row.cash) or 0), GameConfig.compact(tonumber(row.speed) or 0),
 		tonumber(row.held) or 0, MAX_HELD, tonumber(row.pods) or 0, GameConfig.Save.MaxPods)
 end
@@ -1048,7 +1048,7 @@ do
 	local only = MenuKit.body(rRow.frame, "Only", 12, LOOK.Muted, Z + 1)
 	only.TextWrapped = true
 	only.TextXAlignment = Enum.TextXAlignment.Left
-	only.Text = "The count only: never a rebirth, never their cash or plants."
+	only.Text = "The count only: never a rebirth, never their cash or sprouts."
 	rRow.left = only
 	rRow.inset = 0
 	ui.closeRebirths, ui.rebirthReset = rRow.buttons[1], rRow.buttons[2]
@@ -1061,7 +1061,7 @@ do
 	build.heading(card, "RESET PROGRESS", Color3.fromRGB(255, 196, 188))
 	ui.resetWho = build.line(card, "Who", 14, TEXT)
 	ui.resetWho.Font = LOOK.BodyBoldFont
-	build.line(card, "Erases", 12, TEXT).Text = "ERASES AND SAVES: cash, Speed, every plant and pod, the bag, bought "
+	build.line(card, "Erases", 12, TEXT).Text = "ERASES AND SAVES: cash, Speed, every sprout and pod, the bag, bought "
 		.. "weapons, plot and mill upgrades, the Almanac and harvests, tutorial progress, offline earnings. KEPT: game "
 		.. "passes, Robux purchase records, the Walk Mode setting, the rebirth count. This cannot be undone."
 	ui.typeCaption = build.line(card, "TypeCaption", 12, BAD)
@@ -1174,7 +1174,7 @@ do
 	local options = build.list(controls, "Options", ROW_GAP)
 	options.ZIndex = Z + 1
 	ui.options = options
-	local forms = build.buttons(options, 2, M.FormMinW, "controls", { { "Pod", "POD" }, { "Grown", "GROWN PLANT" } })
+	local forms = build.buttons(options, 2, M.FormMinW, "controls", { { "Pod", "POD" }, { "Grown", "GROWN SPROUT" } })
 	ui.pickPod, ui.pickGrown = forms[1], forms[2]
 	-- THE SIZE (2026-10-12): stepped through the sizes the species comes in,
 	-- beside how many (relayout: placeSizeQty).
@@ -2058,12 +2058,12 @@ local function poolEntry(id: string?): any
 	return nil
 end
 
--- The pod chosen, in words: "RANDOM CREATURE · RANDOM SIZE", "ELDERBOUGH ·
+-- The pod chosen, in words: "RANDOM SPROUT · RANDOM SIZE", "ELDERBOUGH ·
 -- COLOSSAL", "SNARLBLOOM · ITS OWN SIZE".
 local function podWords(): string
 	local entry = poolEntry(state.podSpecies)
 	if not entry then
-		return "RANDOM CREATURE  \u{00B7}  RANDOM SIZE"
+		return "RANDOM SPROUT  \u{00B7}  RANDOM SIZE"
 	end
 	local size = if not EnchantedMistData.isSized(entry.Rarity) then "ITS OWN SIZE"
 		elseif state.podSize then string.upper(SeedData.TierName(state.podSize :: number))

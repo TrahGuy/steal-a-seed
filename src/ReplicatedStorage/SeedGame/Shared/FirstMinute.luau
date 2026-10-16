@@ -49,7 +49,7 @@ FirstMinute.StarterTier = 1
 -- The step words the guide adds while it grows (TutorialUI, steps 1 and 2).
 FirstMinute.GrowingWords = "Your first pod is growing!"
 -- The notice at its reveal, sent by the server (Notice.ServerNotice).
-FirstMinute.HatchedTitle = "Your first plant hatched!"
+FirstMinute.HatchedTitle = "Your first sprout hatched!"
 FirstMinute.NoticeKey = "first-plant"
 
 -- "It earns $5/s": the reveal's own figure (SeedData.IncomePerSecond), in the

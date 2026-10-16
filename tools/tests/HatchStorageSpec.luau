@@ -983,7 +983,7 @@ local function body()
 		check(payload == nil and profile.Almanac.novaorb == nil and #tutorials == tutorialsBefore,
 			"no success is reported: no announcement, nothing learned, nothing counted")
 		check(saidTo(p.Name, "STORAGE_FULL") == 1 and saidTo(p.Name) == 1,
-			"the player is told PLANT STORAGE FULL, once", saidTo(p.Name))
+			"the player is told SPROUT STORAGE FULL, once", saidTo(p.Name))
 
 		-- Held again and again.
 		for _ = 1, 4 do
@@ -1399,7 +1399,7 @@ local function body()
 		check(offered == false and #w.prompts == 0,
 			"with plant storage full, pressing Instant Hatch opens no purchase dialog", #w.prompts)
 		check(saidTo(buyer.Name, "STORAGE_FULL") == 1 and saidTo(buyer.Name) == 1,
-			"and the player is told PLANT STORAGE FULL", saidTo(buyer.Name))
+			"and the player is told SPROUT STORAGE FULL", saidTo(buyer.Name))
 		w.PlantService.OfferInstantHatch(buyer, buyerPlot, 1)
 		w.PlantService.OfferInstantHatch(buyer, buyerPlot, 2)
 		check(#w.prompts == 0 and saidTo(buyer.Name) == 1, "pressing again opens nothing and says nothing more")
@@ -2378,15 +2378,15 @@ local function body()
 	do
 		local count = string.format("%d/%d", MAX, MAX)
 		local full = ActionRefusal.notice("STORAGE_FULL")
-		check(full ~= nil and full.kind == "blocked" and full.title == "PLANT STORAGE FULL"
+		check(full ~= nil and full.kind == "blocked" and full.title == "SPROUT STORAGE FULL"
 				and string.find(full.detail, count, 1, true) ~= nil
 				and string.find(string.lower(full.detail), "room", 1, true) ~= nil
-				and ActionRefusal.Text.STORAGE_FULL == string.format("Plant storage full (%s).", count),
-			"a refused hatch: PLANT STORAGE FULL, the limit's own number, and what makes room",
+				and ActionRefusal.Text.STORAGE_FULL == string.format("Sprout storage full (%s).", count),
+			"a refused hatch: SPROUT STORAGE FULL, the limit's own number, and what makes room",
 			full and (full.title .. " / " .. tostring(full.detail)))
 		local made = ActionRefusal.notice("STORAGE_FULL_READY")
 		local madeWords = string.lower(made and made.detail or "")
-		check(made ~= nil and made.kind == "warning" and made.title == "PLANT STORAGE FULL"
+		check(made ~= nil and made.kind == "warning" and made.title == "SPROUT STORAGE FULL"
 				and string.find(madeWords, "ready", 1, true) ~= nil
 				and string.find(madeWords, "free", 1, true) ~= nil
 				and string.find(madeWords, "room", 1, true) ~= nil,
@@ -2394,7 +2394,7 @@ local function body()
 			made and (made.title .. " / " .. tostring(made.detail)))
 		local kept = ActionRefusal.notice("STORAGE_FULL_CREDIT")
 		local keptWords = string.lower(kept and kept.detail or "")
-		check(kept ~= nil and kept.kind == "warning" and kept.title == "PLANT STORAGE FULL"
+		check(kept ~= nil and kept.kind == "warning" and kept.title == "SPROUT STORAGE FULL"
 				and string.find(keptWords, "saved", 1, true) ~= nil and string.find(keptWords, "free", 1, true) ~= nil,
 			"a purchase kept as a credit: storage full, the Instant Hatch saved, the next one free",
 			kept and (kept.title .. " / " .. tostring(kept.detail)))

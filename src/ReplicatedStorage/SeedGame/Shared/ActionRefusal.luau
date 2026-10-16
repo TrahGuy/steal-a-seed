@@ -165,7 +165,7 @@ ActionRefusal.Text = {
 	-- no pod it can still hatch while others grow. INSTANT_CREDIT_USED is the
 	-- credit spent.
 	--==========================================================================
-	STORAGE_FULL = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
+	STORAGE_FULL = string.format("Sprout storage full (%d/%d).", MAX_HELD, MAX_HELD),
 	-- The owner's approved wording (2026-10-03), "Storage full — free a slot
 	-- to bank this pod.", held to forty characters; the toast's own detail
 	-- below says it whole. Since 2026-10-09 the room is the POD room
@@ -213,8 +213,8 @@ ActionRefusal.Notices = {
 	SAFE_ZONE_TARGET = { title = "SAFE ZONE", detail = "Players here can't be hit." },
 	TRAP_SAFE_ZONE = { title = "NO TRAPS HERE", detail = "Set traps outside the Safe Zone." },
 	PLANT_OUT_OF_RANGE = { title = "TOO FAR AWAY", detail = "Move closer to your plot." },
-	PLOT_FULL = { title = "GARDEN FULL", detail = "Pick up a plant or upgrade your plot." },
-	PLOT_FULL_MAX = { title = "GARDEN FULL", detail = "Pick up a grown plant to make room." },
+	PLOT_FULL = { title = "GARDEN FULL", detail = "Pick up a sprout or upgrade your plot." },
+	PLOT_FULL_MAX = { title = "GARDEN FULL", detail = "Pick up a grown sprout to make room." },
 	PLOT_FULL_GROWING = { title = "GARDEN FULL", detail = "Upgrade your plot for more room." },
 	PLOT_FULL_WAIT = { title = "GARDEN FULL", detail = "Pick one up once it has grown." },
 	CARRYING_POD = { title = "CARRYING A POD", detail = "Bank it at your plot first." },
@@ -241,7 +241,7 @@ ActionRefusal.Notices = {
 	-- takes a plant or a pod out of the bag: putting it in the ground, or
 	-- selling it.
 	STORAGE_FULL = {
-		title = "PLANT STORAGE FULL",
+		title = "SPROUT STORAGE FULL",
 		detail = string.format("%d/%d. Plant or sell one to make room.", MAX_HELD, MAX_HELD),
 	},
 	-- A pod at the red line: it stays in the arms, and is banked by itself the
@@ -266,7 +266,7 @@ ActionRefusal.Notices = {
 	-- THE PURCHASE WAS USED: it ended the pod's wait. Not a refusal, so not red:
 	-- the player is told the storage is full AND what they now have.
 	STORAGE_FULL_READY = {
-		title = "PLANT STORAGE FULL",
+		title = "SPROUT STORAGE FULL",
 		detail = "Your pod is ready. Make room to hatch it free.",
 		kind = "warning",
 	},
@@ -274,7 +274,7 @@ ActionRefusal.Notices = {
 	-- credit, and the next Instant Hatch that works costs nothing. Not a
 	-- refusal either: the player is told what their purchase became.
 	STORAGE_FULL_CREDIT = {
-		title = "PLANT STORAGE FULL",
+		title = "SPROUT STORAGE FULL",
 		detail = "Instant Hatch saved. Your next one is free.",
 		kind = "warning",
 	},

@@ -319,7 +319,7 @@ local ok, err = pcall(function()
 		"the confirm for anybody else names them: \"Give 3 Colossal Lanterncap pods to <name>?\"",
 		Model.giveQuestion(lantern, 7, "pod", 3, "SpecTarget"))
 	local snarl = SeedData.Get("snarlbloom")
-	check(Model.preview(snarl, SeedData.SecretTier, "plant", 1, nil) == "1x Snarlbloom grown plant -> you"
+	check(Model.preview(snarl, SeedData.SecretTier, "plant", 1, nil) == "1x Snarlbloom grown sprout -> you"
 			and Model.defaultSize(snarl, 7) == SeedData.SecretTier,
 		"a fixed-size species shows no size word and keeps its one size", Model.preview(snarl, 1, "plant", 1, nil))
 	check(Model.quantityMax(21) == 21 and Model.quantityMax(99) == GameConfig.Save.MaxHeld and Model.quantityMax(nil) == 0

@@ -142,15 +142,15 @@ Tutorial.Steps = {
 	--==========================================================================
 	{
 		Id = "hatch",
-		Title = "Hatch your first plant!",
+		Title = "Hatch your first sprout!",
 		-- The card's one tap since 2026-10-16 (GameConfig.FirstHatch); the Bag's
 		-- HATCH still works.
 		Detail = "Tap HATCH when your pod is ready!",
 	},
 	{
 		Id = "place",
-		Title = "Place your plant!",
-		Detail = "Equip the plant from your hotbar, then tap or click an empty spot on your own soil.",
+		Title = "Place your sprout!",
+		Detail = "Equip the sprout from your hotbar, then tap or click an empty spot on your own soil.",
 	},
 	{
 		Id = "travel",

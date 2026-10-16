@@ -465,7 +465,7 @@ local function showAll(payload: { [string]: any })
 
 	local parts: { string } = {}
 	if plants > 0 then
-		table.insert(parts, plural(plants, "PLANT"))
+		table.insert(parts, plural(plants, "SPROUT"))
 	end
 	if pods > 0 then
 		table.insert(parts, plural(pods, "POD"))
@@ -477,8 +477,8 @@ local function showAll(payload: { [string]: any })
 	local kept = math.max(0, math.floor(tonumber(payload.kept) or 0))
 	incomeLabel.Text = if kept > 0
 		then string.format(GameConfig.SellAll.KeptText, kept, if kept == 1 then "" else "s")
-			.. ", with garden plants, bats and traps."
-		else "Favourites, garden plants, bats and traps are kept."
+			.. ", with garden sprouts, bats and traps."
+		else "Favourites, garden sprouts, bats and traps are kept."
 	question.Text = string.format("Sell %s for $%s?",
 		if plants + pods == 1 then "it" else "all " .. (plants + pods), withCommas(total))
 
@@ -537,7 +537,7 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 		end
 	elseif phase == "sold" then
 		close()
-		local name = if type(payload.name) == "string" then payload.name else "plant"
+		local name = if type(payload.name) == "string" then payload.name else "sprout"
 		local paid = tonumber(payload.paid) or 0
 		say(string.format("Sold %s for $%s", name, withCommas(paid)))
 	end
