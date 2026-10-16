@@ -112,7 +112,13 @@ export type FormSpec = {
 	Owner: { [string]: any }?,
 	-- The base the owner's pod stood on, left out of the form by name (the owner, 2026-10-09).
 	Removed: { string }?,
+	-- BiomeSecretForms (2026-10-16): a Beam joins two attachments BY INDEX (the Dustbowl pod's four), and the
+	-- owner's model pivot in the form's frame -- their scripts measure from it.
+	Beams: { BeamSpec }?,
+	Pivot: CFrame?,
 }
+
+export type BeamSpec = { [string]: any }
 
 local SecretForms = {}
 

@@ -187,11 +187,19 @@ check(sizesOk, "the sizes' chances match SeedData.RollTier's draws with each bio
 say("\n4. The secret row and the words")
 --==============================================================================
 local secretOk = true
+-- Since 2026-10-16 one roll a cycle for the whole server lands on one biome with a secret: each one's share.
+local withSecret = 0
+for _, id in ipairs(BIOMES) do
+	if BiomeData.ById[id].Secret and SeedData.SecretByBiome[id] then
+		withSecret += 1
+	end
+end
 for _, id in ipairs(BIOMES) do
 	local row = PodGuide.secret(id)
 	local cfg = BiomeData.ById[id].Secret
 	if GameConfig.Secret.Enabled then
-		if (cfg ~= nil) ~= (row ~= nil) or (row and (row.chance ~= cfg.SpawnChance or row.speciesId ~= SeedData.SecretByBiome[id])) then
+		local share = GameConfig.Secret.CycleChance / math.max(1, withSecret)
+		if (cfg ~= nil) ~= (row ~= nil) or (row and (math.abs(row.chance - share) > 1e-12 or row.speciesId ~= SeedData.SecretByBiome[id])) then
 			secretOk = false
 		end
 	elseif row ~= nil then
@@ -423,14 +431,16 @@ check(has(ui, "if e.carousel == nil and d <= CFG.BuildStuds then") and has(ui, "
 	"PodGuideUI: pods built near and freed far, pictures near only, checked every CheckSeconds; a first discovery waits "
 		.. "for its reveal; still for reduced motion")
 local index = source(Scripts, "IndexUI")
-check(has(index, "chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))")
-		and has(index, "showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)),")
+check(has(index, "else string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))")
+		and has(index, "else string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)), biome and biome.DisplayName or \"\")")
+		and has(index, "chance.Text = if secretOdds then string.format(GUIDE.Words.SecretCardChance, PodGuide.odds(secretOdds.chance))")
+		and has(index, "showHatch.Text = if secretOdds then string.format(GUIDE.Words.SecretHatchesFrom, PodGuide.odds(secretOdds.chance),")
 		and not has(index, "PodGuide.percent(")
 		and has(index, "podSizes.Visible = not searching") and has(index, "for i, rate in ipairs(PodGuide.incomes(id)) do")
-		and has(index, "showHatch.Text = string.format(GUIDE.Words.HatchesFrom") and has(index, "openAt.Name = \"OpenAt\"")
+		and has(index, "openAt.Name = \"OpenAt\"")
 		and has(index, "stagePodPreview.setModel(podKey, podBuilder, podKind)"),
-	"the Almanac: each card's chance, POD SIZES over the page, a plant's income at every size, its own pod and where it "
-		.. "hatches from, and an OpenAt for the Bag")
+	"the Almanac: each card's chance (a secret's a dawn), POD SIZES over the page, a plant's income at every size, its "
+		.. "own pod and where it hatches from, and an OpenAt for the Bag")
 local loadout = source(Scripts, "LoadoutUI")
 check(has(loadout, "table.insert(actions, { id = \"inside\", label = GameConfig.PodGuide.Words.WhatsInside })")
 		and has(loadout, "openAt:Fire(it.speciesId)"),

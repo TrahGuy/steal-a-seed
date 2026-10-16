@@ -227,8 +227,8 @@ local function paint()
 		return
 	end
 	local species = SeedData.Get(pod.speciesId)
-	local view = FirstHatchCard.view(pod, Workspace:GetServerTimeNow(), SeedData.TierName(pod.tier),
-		if species then species.Name else "Pod")
+	local view = FirstHatchCard.view(pod, Workspace:GetServerTimeNow(),
+		if SeedData.Unsized(species) then nil else SeedData.TierName(pod.tier), if species then species.Name else "Pod")
 	if shownItem ~= pod.item then
 		shownItem = pod.item
 		local key = "firsthatch:" .. pod.speciesId .. ":" .. tostring(pod.tier)

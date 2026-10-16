@@ -118,28 +118,32 @@ export type Biome = {
 	MasteryCash: number,
 	MasterySpeed: number,
 	--==========================================================================
-	-- THE SECRET ENCOUNTER (2026-10-01) -- Greenhollow and Starbloom only.
+	-- THE SECRET ENCOUNTER (2026-10-01; every biome since 2026-10-16, the
+	-- owner's five, KB/BIOME-SECRETS-PLAN.md).
 	--
 	-- Which secret this biome's nest may spawn is SeedData.SecretByBiome; these
-	-- are the numbers of the encounter, approved for TESTING by the owner and
-	-- subject to it. Absent on a biome means it has no secret.
+	-- are the numbers of the encounter. Absent on a biome means it has no secret.
+	-- How often one spawns is no longer the biome's: ONE roll for the whole
+	-- server each cycle (GameConfig.Secret.CycleChance, NestService).
 	--
-	--   SpawnChance     one server roll per nest, at the nest's initial stocking
-	--                   and at each dawn restock -- never per slot, player, frame
-	--                   or returned pod. Skipped while the spot is occupied.
 	--   SpotX           the dedicated spot: across the road from the nest, this
 	--                   far from the centre line (the nest is at |x| = 38).
-	--   WakeDelaySeconds, ChaseSpeed / OpeningSpeed, TopSpeed, RampSeconds
-	--                   the guardian while the thief carries THIS nest's secret;
-	--                   everything else about the chase is the biome's own.
+	--   WakeDelaySeconds  the guardian's wake while the thief carries THIS nest's
+	--                   secret.
+	--   Chase           the guardian profile whose chase it runs then, whatever
+	--                   guardian the biome has (2026-10-16, the owner: "Storm
+	--                   Strider exactly, everywhere" -- "stormstrider").
+	--   ChaseSpeed / OpeningSpeed, TopSpeed, RampSeconds
+	--                   the older numbers (Snarlbloom's 19, Petalfawn's 86 / 104
+	--                   / 2.4 s), read only where no Chase is named.
 	--==========================================================================
 	Secret: SecretEncounter?,
 }
 
 export type SecretEncounter = {
-	SpawnChance: number,
 	SpotX: number,
 	WakeDelaySeconds: number,
+	Chase: string?,
 	ChaseSpeed: number?,
 	OpeningSpeed: number?,
 	TopSpeed: number?,
@@ -225,9 +229,8 @@ BiomeData.Biomes = {
 		PodsPerNest = 5,
 		RarityBonus = 1.0,
 		LiveInPhaseA = true,
-		-- The Snarlbloom's pod. 15 is this biome's stated chase speed; 19 is the
-		-- owner's number for the secret, under test.
-		Secret = { SpawnChance = 0.05, SpotX = 42, WakeDelaySeconds = 0.6, ChaseSpeed = 19 },
+		-- Grovemaw's pod (2026-10-16; Snarlbloom's, chased at 19, before).
+		Secret = { SpotX = 42, WakeDelaySeconds = 0.6, Chase = "stormstrider" },
 	},
 	{
 		Id = "dustbowl",
@@ -269,6 +272,8 @@ BiomeData.Biomes = {
 		-- reading the flag itself, because species presence opens by itself and
 		-- something had to be able to say "not yet".
 		LiveInPhaseA = true,
+		-- Scourwheel's pod (2026-10-16).
+		Secret = { SpotX = 42, WakeDelaySeconds = 0.6, Chase = "stormstrider" },
 	},
 	{
 		Id = "tanglemire",
@@ -291,6 +296,8 @@ BiomeData.Biomes = {
 		-- soon as a biome HAS species and would otherwise have stood a
 		-- Greenhollow brute over Tanglemire pods.
 		LiveInPhaseA = true,
+		-- Mirehydra's pod (2026-10-16).
+		Secret = { SpotX = 42, WakeDelaySeconds = 0.6, Chase = "stormstrider" },
 	},
 	{
 		Id = "emberroot",
@@ -308,6 +315,8 @@ BiomeData.Biomes = {
 		PodsPerNest = 3,
 		RarityBonus = 4.5,
 		LiveInPhaseA = true,
+		-- Cinderdrake's pod (2026-10-16).
+		Secret = { SpotX = 42, WakeDelaySeconds = 0.6, Chase = "stormstrider" },
 	},
 	{
 		Id = "starbloom",
@@ -329,9 +338,8 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 2,
 		RarityBonus = 9.0,
-		-- The Petalfawn's pod. Astralmaw's profile is 78 / 96 / 3.4 s; these are
-		-- the owner's numbers for the secret, under test.
-		Secret = { SpawnChance = 0.05, SpotX = 42, WakeDelaySeconds = 0.6, OpeningSpeed = 86, TopSpeed = 104, RampSeconds = 2.4 },
+		-- Nebulisk's pod (2026-10-16; Petalfawn's, at 86 / 104 / 2.4 s, before).
+		Secret = { SpotX = 42, WakeDelaySeconds = 0.6, Chase = "stormstrider" },
 		-- LIVE. The last biome on the road, and everything it needs landed before
 		-- this line moved: five species with their own void eyes, the alien-stem
 		-- pod through Titan and Colossal, and Astralmaw on the nest carrying all

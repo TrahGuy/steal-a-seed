@@ -37,6 +37,11 @@
 -- tier's size: the same replay, plus each part's SpecialMesh (sphere,
 -- cylinder), the owner's folder and fixed parts as part attributes, and stud
 -- textures that grow with the pod (`scaleStuds`), as the owner built them.
+--
+-- AND A SECRET IN EVERY BIOME (BiomeSecretForms, 2026-10-16): the owner's five
+-- secret creatures and their pods, by the same routes at 1, every part marked
+-- with its index in the owner's model (INDEX_ATTRIBUTE) for the client's ports
+-- of their scripts (SecretIdle, SecretPodMotion).
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -53,15 +58,18 @@ local PlantForms = require(Shared:WaitForChild("PlantForms"))
 -- The Invite a Friend rewards' supplied rigs (2026-10-06): one size each, like the
 -- Secrets and the Rain event's first forms, so they replay through BuildPlant at 1.
 local InviteForms = require(Shared:WaitForChild("InviteForms"))
+-- A secret in every biome (2026-10-16): the owner's five creatures and their pods, one size each.
+local BiomeSecretForms = require(Shared:WaitForChild("BiomeSecretForms"))
 
 local SecretModel = {}
 
 local function plantSpec(formId: string): SecretForms.FormSpec?
 	return SecretForms.Plants[formId] or RainForms.Plants[formId] or InviteForms.Plants[formId]
+		or BiomeSecretForms.Plants[formId]
 end
 
 local function podSpec(formId: string): SecretForms.FormSpec?
-	return SecretForms.Pods[formId] or RainForms.Pods[formId]
+	return SecretForms.Pods[formId] or RainForms.Pods[formId] or BiomeSecretForms.Pods[formId]
 end
 
 -- The tag SecretIdle animates by. HatchFX's scrub and the hotbar's preview strip
@@ -78,6 +86,11 @@ SecretModel.SCALE_ATTRIBUTE = "RigScale"
 -- (SizeSeam, GlowAccents), and whether it stood still in the owner's idle.
 SecretModel.GROUP_ATTRIBUTE = "FormGroup"
 SecretModel.FIXED_ATTRIBUTE = "FormFixed"
+-- BiomeSecretForms (2026-10-16): on every replayed part of a form that records
+-- the owner's pivot, its index in the form. A client receives the parts in
+-- replication's order, and the ported scripts staggered their pulses by the
+-- owner's order (SecretIdle) and found their pods' moving parts by it.
+SecretModel.INDEX_ATTRIBUTE = "FormIndex"
 
 local SHAPES: { [string]: Enum.PartType } = {
 	Block = Enum.PartType.Block,
@@ -224,6 +237,9 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 	local parts: { BasePart } = table.create(#spec.Parts)
 	for i, p in ipairs(spec.Parts) do
 		parts[i] = makePart(p, cf, model, loose, s)
+		if spec.Pivot then
+			parts[i]:SetAttribute(SecretModel.INDEX_ATTRIBUTE, i)
+		end
 	end
 	for _, j in ipairs(spec.Joints) do
 		local a, b = parts[j.a], parts[j.b]
@@ -315,6 +331,35 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 			trail.TextureMode = tr.textureMode
 			trail.Enabled = tr.enabled
 			trail.Parent = host
+		end
+	end
+	-- Beams (2026-10-16): the Dustbowl secret pod's four, between two of its attachments.
+	for _, bm in ipairs(spec.Beams or {}) do
+		local a0, a1 = attachments[bm.a0], attachments[bm.a1]
+		local host = parts[bm.h] or (if a0 then a0.Parent else nil)
+		if a0 and a1 and host then
+			local beam = Instance.new("Beam")
+			beam.Name = bm.n
+			beam.Attachment0 = a0
+			beam.Attachment1 = a1
+			beam.Color = bm.color
+			beam.Transparency = bm.transparency
+			beam.Width0 = bm.width0 * s
+			beam.Width1 = bm.width1 * s
+			beam.LightEmission = bm.lightEmission
+			beam.LightInfluence = bm.lightInfluence
+			beam.Brightness = bm.brightness
+			beam.Texture = bm.texture
+			beam.TextureMode = bm.textureMode
+			beam.TextureLength = bm.textureLength
+			beam.TextureSpeed = bm.textureSpeed
+			beam.Segments = bm.segments
+			beam.CurveSize0 = bm.curveSize0 * s
+			beam.CurveSize1 = bm.curveSize1 * s
+			beam.FaceCamera = bm.faceCamera
+			beam.ZOffset = bm.zOffset
+			beam.Enabled = bm.enabled
+			beam.Parent = host
 		end
 	end
 	for _, b in ipairs(spec.Billboards or {}) do
@@ -467,6 +512,10 @@ end
 -- grip through the roof. At the base, the overhead carry lifts the whole thing
 -- by its foot and the prompt is where the player stands.
 --==============================================================================
+-- How far above the base the Shell's centre stands (SecretPodMotion finds the
+-- base, and the owner's pivot on it, from the Shell).
+SecretModel.SHELL_LIFT = 0.1
+
 function SecretModel.BuildPod(formId: string, cf: CFrame, model: Model): BasePart?
 	local spec = podSpec(formId)
 	if not spec then
@@ -475,7 +524,7 @@ function SecretModel.BuildPod(formId: string, cf: CFrame, model: Model): BasePar
 	local shell = Instance.new("Part")
 	shell.Name = "Shell"
 	shell.Size = Vector3.new(1, 0.2, 1)
-	shell.CFrame = cf * CFrame.new(0, 0.1, 0)
+	shell.CFrame = cf * CFrame.new(0, SecretModel.SHELL_LIFT, 0)
 	shell.Transparency = 1
 	shell.Anchored = true
 	shell.CanCollide = false
@@ -484,6 +533,13 @@ function SecretModel.BuildPod(formId: string, cf: CFrame, model: Model): BasePar
 	shell.Parent = model
 	SecretModel.Replay(spec, cf, model)
 	model:SetAttribute(SecretModel.FORM_ATTRIBUTE, formId)
+	-- A biome secret's pod is animated by its client (SecretPodMotion), so it
+	-- streams in and out whole, never part by part -- PodModel's rule. Seen in
+	-- Play (2026-10-16): far from the player the cradle pod arrived without its
+	-- Shell.
+	if spec.Pivot then
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	end
 	return shell
 end
 

@@ -81,6 +81,16 @@
 --     its foot to keep leaning toward where its top stood.
 --==============================================================================
 
+--==============================================================================
+-- AND A SECRET IN EVERY BIOME (2026-10-16)
+--
+-- The owner's five biome secrets (BiomeSecretForms) are the same kind of rig.
+-- Three came with a script, ported below as written: NebuliskIdle (the slither,
+-- the cobra sway, the hiss), MirehydraAura and CinderdrakeAura (the pulses, the
+-- lights, the 8 s flare and its burst; the halo). Grovemaw and Scourwheel had
+-- none. Their walks, and new idles for the four, are step 2's.
+--==============================================================================
+
 local SecretIdle = {}
 
 -- The supplied forms' recorded sizes: a Pod 2 form's size over its Pod 1
@@ -93,6 +103,9 @@ local PlantIdles = require(script.Parent:WaitForChild("PlantIdles"))
 -- (SecretModel.BuildPlant), and played exactly as PlantForms' rigs are -- their
 -- idles and walks are PlantIdles', from InviteForms' per-species numbers.
 local InviteForms = require(script.Parent:WaitForChild("InviteForms"))
+-- A secret in every biome (2026-10-16): each form's Unit and ModelScale, and its
+-- parts as the owner built them (for the order the pulses were staggered in).
+local BiomeSecretForms = require(script.Parent:WaitForChild("BiomeSecretForms"))
 
 type Node = {
 	part: BasePart,
@@ -110,6 +123,10 @@ type Node = {
 }
 
 type Sized = { part: BasePart, size: Vector3 }
+
+-- A part a biome secret's script pulsed between its BaseColor and its HotColor,
+-- `lag` seconds behind the first (BiomeSecretForms, 2026-10-16).
+type Glow = { part: BasePart, base: Color3, hot: Color3, lag: number }
 
 -- One leg of the gait, resolved once off the rest pose: where its three joints
 -- sit (in the model's pivot frame), how long its two bones are in the plane it
@@ -299,6 +316,8 @@ export type Rig = {
 	lastEvent: number,
 	-- An ordinary plant's eyes, glows, lights and tints (PlantIdles.Scan), or nil.
 	plant: PlantIdles.Plant?,
+	-- A biome secret's pulsing parts, in the owner's order (scanBiome).
+	glows: { Glow },
 }
 
 -- The pose key of a virtual body (see WalkProfile.virtual): no Motor6D is ever
@@ -306,6 +325,7 @@ export type Rig = {
 local BODY = " body"
 
 local scanRain: (Rig, Model, { BasePart }) -> ()
+local scanBiome: (Rig, Model, { BasePart }, any) -> ()
 
 
 local IDENTITY = CFrame.identity
@@ -1214,6 +1234,92 @@ function scanRain(rig: Rig, model: Model, parts: { BasePart })
 end
 
 --==============================================================================
+-- WHAT A BIOME SECRET'S SCRIPT TOUCHES BESIDES ITS JOINTS (2026-10-16)
+--
+-- Every part with Pulse and a HotColor (pulsed from its BaseColor), the parts
+-- called Eye (blinked), the emitters by name, and EVERY light with its
+-- BaseBrightness (the Mirehydra's two and the Cinderdrake's two are each
+-- called AuraLight). An eye's
+-- rest is its BUILT size, kept as the Rain forms' are: these models were rescaled
+-- after their attributes were written, so a BaseSize there is the old size.
+--
+-- The pulses' stagger is each script's own: Mirehydra's 0.4 s apart in the
+-- order its parts were built, Cinderdrake's later the nearer each part stands to
+-- the head (the tail is +Z), 1.4 s from the tail's tip to the snout's. The
+-- order is the owner's, by the index SecretModel wrote on each part.
+--==============================================================================
+local INDEX = "FormIndex"
+
+function scanBiome(rig: Rig, model: Model, parts: { BasePart }, spec: any)
+	type Found = { glow: Glow, index: number }
+	local found: { Found } = {}
+	for _, part in ipairs(parts) do
+		if part.Name == "Eye" then
+			local list = rig.named.Eye
+			if not list then
+				list = {}
+				rig.named.Eye = list
+			end
+			table.insert(list, part)
+			local seen = part:GetAttribute(REST_SIZE)
+			if typeof(seen) ~= "Vector3" then
+				seen = part.Size
+				part:SetAttribute(REST_SIZE, seen)
+			end
+			rig.rest[part] = seen :: Vector3
+		end
+		local hot = part:GetAttribute("HotColor")
+		if part:GetAttribute("Pulse") and typeof(hot) == "Color3" then
+			local base = part:GetAttribute("BaseColor")
+			table.insert(found, {
+				glow = { part = part, base = if typeof(base) == "Color3" then base else part.Color, hot = hot, lag = 0 },
+				index = tonumber(part:GetAttribute(INDEX)) or 0,
+			})
+		end
+	end
+	table.sort(found, function(a, b)
+		return a.index < b.index
+	end)
+	-- Cinderdrake's ripple runs by where each part stands along the body.
+	local minZ, maxZ = math.huge, -math.huge
+	local function zOf(f: Found): number
+		local p = spec.Parts[f.index]
+		return if p then p.cf.Position.Z else 0
+	end
+	for _, f in ipairs(found) do
+		minZ = math.min(minZ, zOf(f))
+		maxZ = math.max(maxZ, zOf(f))
+	end
+	local span = math.max(maxZ - minZ, 0.001)
+	for n, f in ipairs(found) do
+		if rig.form == "mirehydra" then
+			f.glow.lag = (n * 0.4) % 1.6
+		elseif rig.form == "cinderdrake" then
+			f.glow.lag = (maxZ - zOf(f)) / span * 1.4
+		end
+		table.insert(rig.glows, f.glow)
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ParticleEmitter") and not rig.emitters[d.Name] then
+			rig.emitters[d.Name] = d
+		elseif d:IsA("PointLight") then
+			if not rig.lights[d.Name] then
+				rig.lights[d.Name] = d
+			end
+			local base = d:GetAttribute("BaseBrightness")
+			if type(base) ~= "number" then
+				base = d:GetAttribute(REST_SIZE)
+				if type(base) ~= "number" then
+					base = d.Brightness
+					d:SetAttribute(REST_SIZE, base)
+				end
+			end
+			rig.lightRest[d] = base :: number
+		end
+	end
+end
+
+--==============================================================================
 -- THE TREE
 --==============================================================================
 function SecretIdle.Rig(model: Model): Rig?
@@ -1351,6 +1457,7 @@ function SecretIdle.Rig(model: Model): Rig?
 		lightRest = {},
 		lastEvent = -1,
 		plant = nil,
+		glows = {},
 	}
 	rig.gait = buildGait(idleKey, nodes, order, scale)
 	local seed = tonumber(model:GetAttribute("PlacementId"))
@@ -1389,6 +1496,13 @@ function SecretIdle.Rig(model: Model): Rig?
 	end
 	if RainForms.Plants[form] then
 		scanRain(rig, model, parts)
+	end
+	local biome = BiomeSecretForms.Plants[form]
+	if biome then
+		-- The owner's scripts' `unit`, at the size the model is now: their models
+		-- were rescaled after the scripts' distances were written.
+		rig.unit = (biome.Unit or 1) * (biome.ModelScale or 1)
+		scanBiome(rig, model, parts, biome)
 	end
 	return rig
 end
@@ -1882,6 +1996,145 @@ local function thundermaw(rig: Rig, t: number)
 	glow(rig, "BulbLight", 0.8 + 0.4 * sin(t * 3) + 1.5 * roar)
 end
 
+--==============================================================================
+-- A SECRET IN EVERY BIOME: THE OWNER'S THREE SCRIPTS, AS WRITTEN (2026-10-16)
+--
+-- NebuliskIdle, MirehydraAura and CinderdrakeAura, number for number. Their one
+-- distance (the Nebulisk's tongue, in its script's `unit`) is taken at the size
+-- the model is now (`rig.unit`). An angle the clock keeps turning is wrapped to
+-- a turn before it becomes a CFrame (a raw os.clock angle quantizes). The two
+-- auras' haze spheres are left out of the forms (the owner, 2026-10-16), and
+-- with them their breathing; every other line plays.
+--==============================================================================
+-- The scripts' colour tweens: BaseColor to HotColor over `half` seconds, Sine
+-- InOut, reversing forever -- a cosine of period 2 x half -- each glow its own
+-- `lag` behind.
+local function pulseGlows(rig: Rig, t: number, half: number)
+	for _, g in ipairs(rig.glows) do
+		g.part.Color = g.base:Lerp(g.hot, 0.5 - 0.5 * cos(pi * (t - g.lag) / half))
+	end
+end
+
+-- NebuliskIdle's hiss: every 7 s it rears back, flares its hood and hisses.
+local function hissAt(t: number): number
+	local k = t % 7
+	if k < 0.5 then
+		return sin(k / 0.5 * pi / 2)
+	elseif k < 1.6 then
+		return 1
+	elseif k < 2.2 then
+		return 1 - (k - 1.6) / 0.6
+	end
+	return 0
+end
+
+local function nebulisk(rig: Rig, t: number)
+	local hiss = hissAt(t)
+	-- the coil slithers: a slow sideways wave travelling down to the tail
+	for i = 7, 1, -1 do
+		set(rig, "Tail" .. i, CFrame.Angles(0, rad(4) * wave(t, 3.6, (8 - i) * 0.6), 0))
+	end
+	set(rig, "Spine9", CFrame.Angles(0, rad(3) * wave(t, 3.6, -0.6), 0))
+	set(rig, "Spine10", CFrame.Angles(0, rad(3) * wave(t, 3.6, -1.2), 0))
+	-- the raised neck sways like a cobra's, and rears back to hiss
+	set(rig, "Spine11", CFrame.Angles(rad(3) * wave(t, 4.2) + rad(4) * hiss, 0, rad(3) * wave(t, 5.0)))
+	set(rig, "Spine12", CFrame.Angles(rad(3) * wave(t, 4.2, 0.6) + rad(4) * hiss, 0, rad(3) * wave(t, 5.0, 0.6)))
+	set(rig, "Spine13", CFrame.Angles(rad(2) * wave(t, 4.2, 1.2) + rad(3) * hiss, 0, rad(2.5) * wave(t, 5.0, 1.2)))
+	set(rig, "Spine14", CFrame.Angles(rad(2) * wave(t, 4.2, 1.8), 0, rad(2) * wave(t, 5.0, 1.8)))
+	-- the head looks about, and lifts its snout when it hisses
+	local look = wave(t, 8)
+	set(rig, "Head", CFrame.Angles(-rad(6) * hiss + rad(3) * wave(t, 3.1), rad(24) * look * (1 - hiss), rad(5) * wave(t, 4.6)))
+	set(rig, "Jaw", CFrame.Angles(-rad(22) * hiss, 0, 0))
+	-- the tongue flicks every couple of seconds
+	local f = t % 2.3
+	local flick = if f < 0.35 then sin(f / 0.35 * pi) else 0
+	set(rig, "Tongue", CFrame.new(0, 0, -0.07 * rig.unit * flick) * CFrame.Angles(0, rad(10) * sin(t * 40) * flick, 0))
+	-- the hood flares open to hiss, and breathes gently otherwise
+	for k = 1, 6 do
+		local s = if k <= 3 then -1 else 1
+		local spread = rad(4) * wave(t, 3.0, k * 0.3) + rad(16) * hiss
+		set(rig, "Hood" .. k, CFrame.Angles(-rad(10) * hiss, 0, -s * spread))
+	end
+	-- the back fins ripple; the tail blossom turns
+	for k = 1, 8 do
+		set(rig, "Fin" .. k, CFrame.Angles(rad(10) * wave(t, 1.8, k * 0.5), 0, 0))
+	end
+	set(rig, "Blossom", CFrame.Angles(0, (t * 0.7) % (2 * pi), 0))
+	glow(rig, "GemLight", 1 + 0.2 * wave(t, 2.4) + 1.6 * hiss)
+	-- a blink every few seconds; the glowing parts pulse together
+	blinkEyes(rig, t, 4.7)
+	pulseGlows(rig, t, 1.5)
+end
+
+-- The two auras' flare: every 8 s it rises, holds and fades (0 to 1 and back).
+local function smooth(x: number): number
+	return x * x * (3 - 2 * x)
+end
+
+local function flareAt(t: number): number
+	local k = t % 8
+	if k < 0.8 then
+		return smooth(k / 0.8)
+	elseif k < 1.8 then
+		return 1
+	elseif k < 3.0 then
+		return 1 - smooth((k - 1.8) / 1.2)
+	end
+	return 0
+end
+
+-- MirehydraAura turned its halo by dt x (0.6 + 1.6 x flare) a frame, so by `t`
+-- it has turned 0.6 t plus 1.6 x the flare's running total: 2 a whole cycle, and
+-- this cycle's share (the smoothstep's own integral is x^3 - x^4 / 2).
+local function flareSoFar(t: number): number
+	local cycle = math.floor(t / 8)
+	local k = t - cycle * 8
+	local total = 2 * cycle
+	if k < 0.8 then
+		local x = k / 0.8
+		return total + 0.8 * (x ^ 3 - x ^ 4 / 2)
+	elseif k < 1.8 then
+		return total + 0.4 + (k - 0.8)
+	elseif k < 3.0 then
+		local x = (k - 1.8) / 1.2
+		return total + 1.4 + (k - 1.8) - 1.2 * (x ^ 3 - x ^ 4 / 2)
+	end
+	return total + 2
+end
+
+-- Both auras' lights flicker and surge in a flare, each from its own brightness.
+local function surge(rig: Rig, t: number, flare: number)
+	for light, base in pairs(rig.lightRest) do
+		light.Brightness = base * (1 + 0.2 * sin(t * 2.2) + 1.4 * flare)
+	end
+end
+
+local function mirehydra(rig: Rig, t: number)
+	local flare = flareAt(t)
+	local cycle = math.floor(t / 8)
+	if flare > 0.95 and cycle ~= rig.lastEvent then
+		rig.lastEvent = cycle
+		burst(rig, "AuraBurst", 36)
+	end
+	-- the thorn halo over the lotus turns, faster in a flare
+	set(rig, "Halo", CFrame.Angles(0, (0.6 * t + 1.6 * flareSoFar(t)) % (2 * pi), 0))
+	surge(rig, t, flare)
+	-- the glowing parts pulse, staggered
+	pulseGlows(rig, t, 1.6)
+end
+
+local function cinderdrake(rig: Rig, t: number)
+	local flare = flareAt(t)
+	local cycle = math.floor(t / 8)
+	if flare > 0.95 and cycle ~= rig.lastEvent then
+		rig.lastEvent = cycle
+		burst(rig, "AuraBurst", 40)
+	end
+	surge(rig, t, flare)
+	-- a ripple of glow runs down the body from the tail to the head
+	pulseGlows(rig, t, 1.4)
+end
+
 local IDLES: { [string]: (Rig, number) -> () } = {
 	snarlbloom = snarlbloom,
 	petalfawn = petalfawn,
@@ -1890,6 +2143,9 @@ local IDLES: { [string]: (Rig, number) -> () } = {
 	lotusling = lotusling,
 	tempestoak = tempestoak,
 	thundermaw = thundermaw,
+	nebulisk = nebulisk,
+	mirehydra = mirehydra,
+	cinderdrake = cinderdrake,
 }
 
 --==============================================================================

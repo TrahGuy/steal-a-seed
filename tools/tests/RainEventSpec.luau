@@ -1117,7 +1117,8 @@ local ok, err = pcall(function()
 			.. "clouds, and starts at full for a late joiner")
 	check(W.Light.FadeOutSeconds == W.ThickenSeconds + W.FadeSeconds, "the light goes as the clouds and the biome go")
 	check(string.find(sourceOf(Server, "RainBiome"), "buildFog", 1, true) == nil, "the server builds no fog any more")
-	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is off (the owner, 2026-10-10: \"turn off secrets for now\")")
+	check(GameConfig.Secret.Enabled == true and GameConfig.Secret.CycleChance == 0.05,
+		"natural Secret spawning is on again: one roll a cycle for the whole server (the owner, 2026-10-16)")
 	check(Workspace:FindFirstChild(B.FolderName) == nil, "no event terrain is left in the workspace")
 end)
 

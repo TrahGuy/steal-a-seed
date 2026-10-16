@@ -615,11 +615,16 @@ local ok, err = pcall(function()
 	--==========================================================================
 	say("10. What's New")
 	--==========================================================================
-	local newest = UpdateLog.Entries[1]
+	-- One of the newest shown (the same day's biome secrets lead it since 2026-10-16).
+	local newest = nil
+	for _, entry in ipairs(UpdateLog.shown()) do
+		if entry.id == "2026-10-16-hourly-rush" then
+			newest = entry
+		end
+	end
 	local problems = UpdateLog.problems()
-	check(newest.id == "2026-10-16-hourly-rush" and newest.title == "POD RUSH every hour" and #newest.bullets == 2
-			and #problems == 0,
-		"What's New leads with it, in the panel's own shape", table.concat(problems, "; "))
+	check(newest ~= nil and newest.title == "POD RUSH every hour" and #newest.bullets == 2 and #problems == 0,
+		"What's New shows it, in the panel's own shape", table.concat(problems, "; "))
 end)
 
 if not ok then

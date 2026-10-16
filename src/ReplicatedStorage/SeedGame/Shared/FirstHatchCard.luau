@@ -83,13 +83,15 @@ function FirstHatchCard.pick(pods: { Pod }): Pod?
 	return best
 end
 
--- What it says at `now` for `pod`, whose size word and species name are given.
-function FirstHatchCard.view(pod: Pod, now: number, sizeWord: string, name: string): View
+-- What it says at `now` for `pod`, whose size word and species name are given;
+-- no size word for a species that has none (a Secret, SeedData.Unsized:
+-- 2026-10-16, a first pod banked from a cradle read "TINY Nebulisk").
+function FirstHatchCard.view(pod: Pod, now: number, sizeWord: string?, name: string): View
 	local left = math.max(0, pod.hatchAt - now)
 	local ready = left <= 0
 	return {
 		title = if ready then WORDS.Ready else WORDS.Growing,
-		pod = string.format(WORDS.Pod, string.upper(sizeWord), name),
+		pod = if sizeWord then string.format(WORDS.Pod, string.upper(sizeWord), name) else name,
 		line = if ready then nil else string.format(WORDS.ReadyIn, FirstHatchCard.clock(left)),
 		ready = ready,
 		left = left,

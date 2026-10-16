@@ -983,8 +983,11 @@ do
 		local secret = makeNest(green)
 		secret.secret = { id = "spec-secret" }
 		NestService.SpecProvoke(secret, beginner, true, "spec-secret")
-		check(secret.firstRaid == nil and NestService.SpecChaseSpeed(secret) == green.Secret.ChaseSpeed + RAGE,
-			"the Secret's thief, beginner or not, meets the Secret's own numbers", NestService.SpecChaseSpeed(secret))
+		-- Since 2026-10-16 a secret's thief meets Storm Strider's chase ("Storm Strider exactly, everywhere").
+		local storm = GameConfig.guardianProfile(green.Secret.Chase)
+		check(secret.firstRaid == nil and storm ~= nil
+			and math.abs(NestService.SpecChaseSpeed(secret) - (storm.OpeningSpeed + RAGE) * storm.SpeedScale) < 1,
+			"the Secret's thief, beginner or not, meets the Secret's own chase: Storm Strider's", NestService.SpecChaseSpeed(secret))
 
 		local dustA, dustB = makeNest(dustbowl), makeNest(dustbowl)
 		NestService.SpecProvoke(dustA, beginner, true)
@@ -1112,8 +1115,8 @@ do
 		"income: a Tiny Nubkin $4/s, a Big $28/s, the Tiny Petalpip starter $5/s",
 		string.format("%s %s %s", SeedData.IncomePerSecond(nubkin, 1), SeedData.IncomePerSecond(nubkin, 2),
 			SeedData.IncomePerSecond(starterSpecies, 1)))
-	check(green.GuardianChaseSpeed == 15 and green.Secret.ChaseSpeed == 19 and green.RecommendedSpeed == 0,
-		"Greenhollow's own numbers are as they were: 15, the Secret's 19, recommends nothing")
+	check(green.GuardianChaseSpeed == 15 and green.Secret.Chase == "stormstrider" and green.RecommendedSpeed == 0,
+		"Greenhollow's own numbers are as they were: 15, recommends nothing; its Secret is chased as Storm Strider chases")
 end
 
 say(string.format("\nFirstMinuteSpec: %d passed, %d failed", pass, fail))

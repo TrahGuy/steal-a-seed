@@ -23,6 +23,7 @@
 local Shared = script.Parent
 local AlmanacData = require(Shared:WaitForChild("AlmanacData"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local AlmanacView = {}
 
@@ -37,11 +38,19 @@ export type Entry = {
 	known: boolean,
 }
 
--- The road and each biome's shelf, read once.
+-- The road and each biome's shelf, read once. Since 2026-10-16 a shelf ends on
+-- its biome's SECRET (SeedData.SecretByBiome; KB/BIOME-SECRETS-PLAN.md): a sixth
+-- card, ??? until grown like the rest, and never in the shelf's CLAIM, which
+-- AlmanacData counts over the listed species alone.
 local road = AlmanacData.Biomes()
 local shelves: { [string]: { any } } = {}
 for _, biome in ipairs(road) do
-	shelves[biome.Id] = AlmanacData.SpeciesIn(biome.Id)
+	local shelf = AlmanacData.SpeciesIn(biome.Id)
+	local secret = SeedData.Get(SeedData.SecretByBiome[biome.Id] or "")
+	if secret then
+		table.insert(shelf, secret)
+	end
+	shelves[biome.Id] = shelf
 end
 
 function AlmanacView.road(): { any }

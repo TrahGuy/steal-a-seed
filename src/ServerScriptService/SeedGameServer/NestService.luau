@@ -481,15 +481,19 @@ end
 --==============================================================================
 -- THE SECRET POD -- 2026-10-01
 --
--- Greenhollow and Starbloom each have one secret (SeedData.SecretByBiome): a
--- pod the owner inserted by hand, at its authored size, standing on a dedicated
--- spot ACROSS THE ROAD from the nest on a platform in the biome's colours. It is
+-- Every biome has one secret (SeedData.SecretByBiome; Greenhollow and Starbloom
+-- alone until 2026-10-16): a pod the owner made by hand, at its authored size,
+-- standing on a dedicated spot ACROSS THE ROAD from the nest on a platform in
+-- the biome's colours. It is
 -- an ADDITION to the ring: the ring's own pods, rolls and slots are untouched.
 --
--- ONE ROLL PER NEST, at the nest's initial stocking and at each dawn restock
--- (StockAll), at BiomeData Secret.SpawnChance -- never per slot, per player,
--- per frame or when a confiscated pod comes back. Skipped while the spot is
--- occupied or the encounter unresolved, with no attempt carried over.
+-- ONE ROLL FOR THE WHOLE SERVER (2026-10-16, the owner; every biome has a
+-- secret since): at the first stocking and at each dawn restock (StockAll),
+-- after every slot, at GameConfig.Secret.CycleChance -- on a hit, one biome
+-- at random. Never per slot, per player, per frame or when a confiscated pod
+-- comes back, and skipped -- no attempt carried over -- while ANY secret is
+-- out (on its cradle or carried: one at a time, server-wide) or a POD RUSH
+-- runs. (Until then: one roll per nest at its biome's SpawnChance.)
 --
 -- NOTHING ROLLS WHILE GameConfig.Secret.Enabled IS FALSE: the only spawn then is
 -- the Studio-only DebugService action, through NestService.SpawnSecret.
@@ -677,16 +681,36 @@ local function resolveSecret(nest: Nest, why: string)
 	log(string.format("%s's secret %s is over: %s.", nest.id, secret.id, why))
 end
 
-local function rollSecret(nest: Nest, why: string)
-	if not SECRET.Enabled then
+-- Whether any nest of `among` has a secret out: on its cradle, or in a thief's
+-- arms.
+local function anySecretOut(among: { Nest }): boolean
+	for _, nest in ipairs(among) do
+		if nest.secret then
+			return true
+		end
+	end
+	return false
+end
+
+-- The server's roll over its nests; a spec's over the nests it raised, on its
+-- own Random (SpecRollSecret).
+local function rollSecret(why: string, among: { Nest }?, rng: Random?)
+	local list = among or nests
+	local dice = rng or secretRng
+	if not SECRET.Enabled or rushOn or anySecretOut(list) then
 		return
 	end
-	local cfg = secretConfig(nest)
-	if not cfg or nest.secret then
+	if dice:NextNumber() >= SECRET.CycleChance then
 		return
 	end
-	if secretRng:NextNumber() < cfg.SpawnChance then
-		spawnSecret(nest, why)
+	local candidates: { Nest } = {}
+	for _, nest in ipairs(list) do
+		if nest.event == nil and secretConfig(nest) and SeedData.SecretByBiome[nest.biome.Id] then
+			table.insert(candidates, nest)
+		end
+	end
+	if #candidates > 0 then
+		spawnSecret(candidates[dice:NextInteger(1, #candidates)], why)
 	end
 end
 
@@ -752,8 +776,6 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		growPod(nest, i, luckOf())
 	end
 	pinToServer(nest)
-	-- The one roll of the initial stocking.
-	rollSecret(nest, "the nest was stocked")
 	return nest
 end
 
@@ -834,6 +856,28 @@ local function profileOf(nest: Nest): any
 end
 
 --==============================================================================
+-- A SECRET'S THIEF IS CHASED AS STORMSTRIDER CHASES (2026-10-16)
+--
+-- The owner: "Storm Strider exactly, everywhere". While the guardian is after
+-- the thief carrying its nest's secret, an encounter that names a Chase runs
+-- that profile's chase -- Stormstrider's opening, top, ramp and SpeedScale, and
+-- the sweep widened by the same factor -- whatever guardian the biome has, a
+-- profiled one or not. Its rage and the thief's shortfall stay the biome's.
+-- The gait, the throw and everything else stay the guardian's own.
+--==============================================================================
+local function chaseProfileOf(nest: Nest): any
+	local secret = secretPursuit(nest)
+	local named = if secret then (secret :: any).Chase else nil
+	if type(named) == "string" then
+		local prof = GameConfig.guardianProfile(named)
+		if prof then
+			return prof
+		end
+	end
+	return profileOf(nest)
+end
+
+--==============================================================================
 -- THE CHASE THAT GETS WORSE
 --
 -- The profile replaces the biome's flat speed and keeps everything that was
@@ -846,7 +890,7 @@ end
 -- the opening is survivable and it is the third second that is frightening.
 --==============================================================================
 local function ruleSpeedFor(nest: Nest, now: number): number
-	local prof = profileOf(nest)
+	local prof = chaseProfileOf(nest)
 	if not prof then
 		return speedFor(nest)
 	end
@@ -856,7 +900,11 @@ local function ruleSpeedFor(nest: Nest, now: number): number
 	-- both -- Greenhollow's guardian has no profile -- but a future one adding a
 	-- profile must not silently un-do the override sitting in its own data.
 	local secret = secretPursuit(nest)
-	local stated = if secret and secret.ChaseSpeed then secret.ChaseSpeed else tonumber((nest.biome :: any).GuardianChaseSpeed)
+	-- A named Chase is the whole chase: no stated speed under it.
+	local named = secret ~= nil and type((secret :: any).Chase) == "string"
+	local stated = if named then nil
+		elseif secret and secret.ChaseSpeed then secret.ChaseSpeed
+		else tonumber((nest.biome :: any).GuardianChaseSpeed)
 	if stated and stated == stated and stated > 0 then
 		return stated + rage
 	end
@@ -866,7 +914,7 @@ local function ruleSpeedFor(nest: Nest, now: number): number
 	-- The secret encounter's ramp (Astralmaw: 86 / 104 / 2.4 s against the
 	-- profile's 78 / 96 / 3.4 s), under test.
 	local opening, top, ramp = prof.OpeningSpeed, prof.TopSpeed, prof.RampSeconds
-	if secret and secret.OpeningSpeed then
+	if secret and secret.OpeningSpeed and not named then
 		opening = secret.OpeningSpeed
 		top = secret.TopSpeed or top
 		ramp = secret.RampSeconds or ramp
@@ -3471,7 +3519,7 @@ local function step(nest: Nest, now: number)
 		-- Stormstrider's 2.5) gets its OWN travel allowance widened by that
 		-- factor, so its ordinary ticks still sweep; the target's stays
 		-- MAX_TICK_TRAVEL, and every unscaled guardian is exactly as it was.
-		local sweepProf = profileOf(nest)
+		local sweepProf = chaseProfileOf(nest)
 		local parentTravel = MAX_TICK_TRAVEL * math.max(1, tonumber(sweepProf and sweepProf.SpeedScale) or 1)
 		if last and GuardianPursuit.sampleUsable(last, victimNow, body, parentNow, pos, now,
 			MAX_TICK_TRAVEL, SAMPLE_MAX_AGE, parentTravel) then
@@ -3894,6 +3942,19 @@ function NestService.SpecSpawnSecret(nest: any, why: string?): (boolean, string?
 	return spawnSecret(nest, why or "spec")
 end
 
+-- Studio specs (2026-10-16, A SECRET IN EVERY BIOME): the whole server's roll --
+-- one secret at a time, none in a POD RUSH, a random biome on a hit -- over
+-- nests the spec raised, on the spec's own Random.
+function NestService.SpecRollSecret(among: { any }, why: string?, rng: Random?)
+	if not RunService:IsStudio() then
+		return
+	end
+	for _, nest in ipairs(among) do
+		specRecord(nest)
+	end
+	rollSecret(why or "spec", among, rng)
+end
+
 --==============================================================================
 -- WHAT THE WORLD CYCLE DOES TO A NEST
 --
@@ -4037,9 +4098,9 @@ function NestService.StockAll(): (number, number)
 				built += 1
 			end
 		end
-		-- The one roll of the restock, per nest, after its slots.
-		rollSecret(nest, "the dawn restock")
 	end
+	-- The restock's one roll, for the whole server, after every slot.
+	rollSecret("the dawn restock")
 	return built, wanted
 end
 
@@ -4047,8 +4108,15 @@ end
 -- THE SECRET, FROM OUTSIDE
 --==============================================================================
 -- A spawn on demand, for the Studio-only debug action. The same spawn the roll
--- makes, refused for the same reasons.
+-- makes, refused for the same reasons: one secret in the server at a time, and
+-- none during a POD RUSH.
 function NestService.SpawnSecret(biomeId: string, why: string?): (boolean, string?)
+	if rushOn then
+		return false, "a POD RUSH is on"
+	end
+	if anySecretOut(nests) then
+		return false, "another secret is out"
+	end
 	for _, nest in ipairs(nests) do
 		if nest.biome.Id == biomeId then
 			return spawnSecret(nest, why or "asked for")
@@ -4249,6 +4317,8 @@ function NestService.Start()
 			end
 		end
 	end
+	-- The first stocking's one roll, for the whole server (the secret banner).
+	rollSecret("the nests were stocked")
 
 	running = true
 	task.spawn(function()

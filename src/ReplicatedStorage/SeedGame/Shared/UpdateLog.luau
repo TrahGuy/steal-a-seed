@@ -17,9 +17,10 @@
 --
 -- No remote and no server: the words ship with a publish, like any config.
 --
--- THE OWNER APPROVED THE FIVE ENTRIES UNDER THE NEWEST ON 2026-10-13 (the one
--- below them is the 2026-10-05 draft, kept; its 4 Oct partner dropped, the
--- owner's call). The newest, 2026-10-16's hourly POD RUSH, is the owner's ask.
+-- THE OWNER APPROVED THE FIVE ENTRIES UNDER THE TWO NEWEST ON 2026-10-13 (the
+-- one below them is the 2026-10-05 draft, kept; its 4 Oct partner dropped, the
+-- owner's call). The two newest, 2026-10-16's hourly POD RUSH and its secret in
+-- every biome, are the owner's asks.
 -- Every line was checked against the code and KB/HANDOFF.md's record of the
 -- publish that carried it; a date is the owner's day (UTC+8) of that publish.
 --
@@ -47,6 +48,21 @@ export type Entry = {
 -- THE ENTRIES, NEWEST FIRST (the owner approved the wording, 2026-10-13)
 --==============================================================================
 UpdateLog.Entries = {
+	-- A secret in every biome (2026-10-16; the owner's "What's New? Yes",
+	-- KB/BIOME-SECRETS-PLAN.md). The day the owner publishes it: a later day moves
+	-- its date and id together.
+	{
+		id = "2026-10-16-biome-secrets",
+		date = "16 Oct 2026",
+		title = "A secret in every biome",
+		bullets = {
+			"Every biome has its own very rare SECRET pod now.",
+			"Grovemaw, Scourwheel, Mirehydra, Cinderdrake and Nebulisk!",
+			"Only one is out at a time, across the road from a nest.",
+			"Carry it and the guardian runs as fast as Storm Strider.",
+			"Each one has a card on its biome's row in the Index.",
+		},
+	},
 	-- The hourly POD RUSH (2026-10-16; the owner: "Yes, one line" -- the second
 	-- is the panel's two-line least, the levels' own numbers). The day the owner
 	-- publishes it: a later day moves its date and id together.

@@ -170,7 +170,8 @@ local ok, err = pcall(function()
 	check(SeedData.RainPods.rainpod3.Rarity == "Divine" and SeedData.RainPods.rainpod1.Rarity == "Mythic"
 		and SeedData.RainPods.rainpod2.Rarity == "Mythic" and SeedData.RainPods.rainpod3.Name == "Thunderstorm pod",
 		"Pod 3 is still Divine and still the Thunderstorm pod; the Rain pods are untouched")
-	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is off (the owner, 2026-10-10: \"turn off secrets for now\"); the toast itself adds no egg")
+	check(GameConfig.Secret.Enabled == true and GameConfig.Secret.CycleChance == 0.05,
+		"natural Secret spawning is on again, one roll a cycle for the whole server (the owner, 2026-10-16); the toast itself adds no egg")
 	local rng = Random.new(51005)
 	local thunderOne, rainNone = true, true
 	for _ = 1, 300 do
@@ -370,7 +371,10 @@ local ok, err = pcall(function()
 		"a spawn that stood its pod announces once, with its own id and its biome", #told)
 	local okAgain, whyAgain = NestService.SpecSpawnSecret(green, "spec")
 	check(not okAgain and #told == 1, "a refused spawn (the spot is taken) announces nothing", whyAgain)
-	local dust = raise(biomeOf("dustbowl"))
+	-- Every road biome has a Secret since 2026-10-16: one without, as a copy.
+	local plain = table.clone(biomeOf("dustbowl"))
+	plain.Secret = nil
+	local dust = raise(plain)
 	local okDust = NestService.SpecSpawnSecret(dust, "spec")
 	check(not okDust and #told == 1, "a biome with no Secret: refused, nothing announced")
 	-- Confiscated: the guardian carries it home and its rig is lost on the way.

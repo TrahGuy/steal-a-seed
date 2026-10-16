@@ -4028,7 +4028,10 @@ local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: nu
 	local region: PlantWander.Region? = nil
 	for _, entry in pairs(byPlot) do
 		local model = entry.model
-		if entry.stage == CreatureModel.STAGE_GROWN and model and model.Parent then
+		-- A species that stands where it was planted (SeedData Still: the biome
+		-- secrets until their walks are built, 2026-10-16) takes no leg.
+		if entry.stage == CreatureModel.STAGE_GROWN and model and model.Parent
+			and not (entry.species and entry.species.Still == true) then
 			-- The rung it walks on: its own tier's, or its species' (a Secret walks
 			-- the Colossal rung for its authored size, SeedData.WanderTierOf). Its
 			-- legs step to the leg it is handed on every client (SecretIdle).

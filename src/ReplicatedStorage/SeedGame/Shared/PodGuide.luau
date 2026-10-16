@@ -95,10 +95,18 @@ function PodGuide.secret(biomeId: string): SecretOdds?
 	local biome = BiomeData.ById[biomeId]
 	local cfg = biome and (biome :: any).Secret
 	local id = SeedData.SecretByBiome[biomeId]
-	if not (cfg and type(id) == "string" and type(cfg.SpawnChance) == "number") then
+	if not (cfg and type(id) == "string") then
 		return nil
 	end
-	return { speciesId = id, chance = cfg.SpawnChance }
+	-- Since 2026-10-16 ONE roll a cycle for the whole server, landing on one of the
+	-- biomes that have a secret (NestService): this biome's share of it.
+	local biomes = 0
+	for _, b in ipairs(BiomeData.Biomes) do
+		if (b :: any).Secret and SeedData.SecretByBiome[b.Id] then
+			biomes += 1
+		end
+	end
+	return { speciesId = id, chance = GameConfig.Secret.CycleChance / math.max(1, biomes) }
 end
 
 -- A chance as the guide writes it: three significant figures, trailing zeros

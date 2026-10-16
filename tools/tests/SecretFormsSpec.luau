@@ -133,8 +133,13 @@ local ok, err = pcall(function()
 	check(fawn and fawn.Animator == "secret" and fawn.Carry == "overhead" and fawn.NoWander == nil
 			and fawn.WanderTier == SeedData.TierCount and fawn.Pod == "starbloomsecretpod",
 		"Petalfawn carries the secret flags")
-	check(SeedData.SecretByBiome.greenhollow == "snarlbloom" and SeedData.SecretByBiome.starbloom == "petalfawn",
-		"SecretByBiome names the two")
+	-- Since 2026-10-16 every biome spawns its new secret (BiomeSecretsSpec); these two are owned ones, kept.
+	local spawnsOld = false
+	for _, id in pairs(SeedData.SecretByBiome) do
+		spawnsOld = spawnsOld or id == "snarlbloom" or id == "petalfawn"
+	end
+	check(SeedData.SecretByBiome.greenhollow == "grovemaw" and SeedData.SecretByBiome.starbloom == "nebulisk" and not spawnsOld,
+		"SecretByBiome names the new secrets; the two spawn no more")
 	check(#SeedData.Species == 25, "the listed species are still 25", #SeedData.Species)
 	for _, biome in ipairs({ "greenhollow", "starbloom" }) do
 		local inPool = false

@@ -359,8 +359,10 @@ local function podVisual(species: SeedData.Species, tier: number): (string, stri
 	end
 	local biome = (species :: any).Biome :: string
 	local order = BIOME_ORDER[biome] or 50
+	-- A Secret's shell is its own pod: keyed by that pod, not its biome, since a
+	-- biome has had two (2026-10-16: an owned Snarlbloom's pod beside a Grovemaw's).
 	if species.Secret == true then
-		return "pod|s:" .. biome .. "|" .. tier, species.Id, 2, order
+		return "pod|s:" .. (SeedData.PodFormOf(species, tier) or biome) .. "|" .. tier, species.Id, 2, order
 	end
 	if PodForms.Has(species.Id) then
 		return "pod|p:" .. species.Id .. "|" .. tier, species.Id, 1, order

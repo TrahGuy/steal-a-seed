@@ -4954,9 +4954,17 @@ GameConfig.Carry = {
 -- roll never runs and the Pod Guide shows no secret row; the only secret pod in
 -- a server is one the Studio-only DebugService `SpawnSecret` action asked for
 -- or an admin's console grant. Secrets players already own are untouched.
+--
+-- ON AGAIN SINCE 2026-10-16 (the owner's five new secrets, one per biome;
+-- KB/BIOME-SECRETS-PLAN.md): ONE roll for the whole server at each stocking --
+-- the first and every dawn -- at CycleChance; on a hit, one biome at random
+-- spawns its secret. Never while any secret is out (on its cradle or carried)
+-- or a POD RUSH runs; gone at dusk like every pod.
 --==============================================================================
 GameConfig.Secret = {
-	Enabled = false,
+	Enabled = true,
+	-- The owner's "very rare": about one every 20 cycles, some 2.4 hours a server.
+	CycleChance = 0.05,
 	-- The spawn toast: everyone in the server, once per actual spawn, never on a
 	-- return, a respawn or across servers.
 	Toast = {
@@ -8908,6 +8916,8 @@ GameConfig.Almanac = {
 		Epic = { Color3.fromRGB(232, 121, 249), Color3.fromRGB(112, 26, 117) }, -- #E879F9 -> #701A75
 		Legendary = { Color3.fromRGB(253, 224, 71), Color3.fromRGB(146, 64, 14) }, -- #FDE047 -> #92400E
 		Mythic = { Color3.fromRGB(251, 113, 133), Color3.fromRGB(136, 19, 55) }, -- #FB7185 -> #881337
+		-- Each biome's secret card (2026-10-16): its holo studs' own two colours (BagLook).
+		Secret = { Color3.fromRGB(52, 40, 150), Color3.fromRGB(44, 20, 120) },
 	},
 	-- An undiscovered plant: the form, in one dark flat colour.
 	Silhouette = Color3.fromRGB(26, 34, 30),
@@ -12518,6 +12528,11 @@ GameConfig.PodGuide = {
 		CardChance = "%s pods",
 		HatchesFrom = "Hatches from its own pod: %s %s nest pods",
 		IncomeTitle = "Income by size",
+		-- A biome's SECRET (2026-10-16): one size, one fixed rate, and a pod that only the
+		-- whole server's dawn roll stands across the road (PodGuide.secret's share of it).
+		SecretCardChance = "%s dawns",
+		SecretHatchesFrom = "Hatches from a SECRET pod: %s dawns, across the road on %s",
+		SecretIncomeTitle = "Income",
 		SizesTitle = "POD SIZES",
 	},
 }

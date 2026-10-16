@@ -435,7 +435,9 @@ local ok, err = pcall(function()
 		allCommon = allCommon and string.find(string.lower(e.species.Rarity), "common", 1, true) ~= nil and not e.known
 	end
 	check(allCommon, "a rarity word finds the cards that show it, locked or not, and nothing else")
+	-- A shelf is AlmanacData's species and, since 2026-10-16, its biome's secret last.
 	local shelf = AlmanacData.SpeciesIn("greenhollow")
+	table.insert(shelf, SeedData.Get(SeedData.SecretByBiome.greenhollow))
 	local listed = AlmanacView.list(grownOne, "greenhollow", "all", "")
 	local same = #listed == #shelf
 	for i, e in ipairs(listed) do
@@ -444,16 +446,17 @@ local ok, err = pcall(function()
 	local grown = AlmanacView.list(grownOne, "greenhollow", "grown", "")
 	local missing = AlmanacView.list(grownOne, "greenhollow", "missing", "")
 	check(same and #grown == 1 and grown[1].species.Id == "nubkin" and #missing == #shelf - 1,
-		"a biome lists its shelf in AlmanacData's order; Grown and Missing split it")
+		"a biome lists its shelf in AlmanacData's order, its secret last; Grown and Missing split it")
 	local _, isSearch = AlmanacView.list(none, "greenhollow", "all", "   ")
 	check(not isSearch and AlmanacView.normalise("  NuB ") == "nub", "blank words are no search; case and spaces do not count")
 	local everyBiome = true
 	for _, biome in ipairs(AlmanacData.Biomes()) do
 		local list = AlmanacView.list(none, biome.Id, "all", "")
-		everyBiome = everyBiome and #list == #AlmanacData.SpeciesIn(biome.Id) and #list > 0
+		everyBiome = everyBiome and #list == #AlmanacData.SpeciesIn(biome.Id) + 1 and #list > 1
+			and list[#list].species.Id == SeedData.SecretByBiome[biome.Id]
 	end
 	check(everyBiome and #AlmanacView.road() == #AlmanacData.Biomes() and AlmanacView.road()[#AlmanacView.road()].Id == "starbloom",
-		"every biome is reachable, Starbloom last, each with its whole shelf")
+		"every biome is reachable, Starbloom last, each with its whole shelf and its secret")
 
 	--==========================================================================
 	-- 5. THE CATALOGUE

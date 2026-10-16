@@ -558,7 +558,10 @@ local function cardFor(species: any): Card
 	chance.Position = UDim2.new(0, 5, 1, -6)
 	chance.Size = UDim2.new(1, -10, 0, 14)
 	chance.TextXAlignment = Enum.TextXAlignment.Left
-	chance.Text = string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))
+	-- A secret comes from no nest pod: its odds are its biome's share of the dawn roll.
+	local secretOdds = if species.Secret == true then PodGuide.secret(species.Biome) else nil
+	chance.Text = if secretOdds then string.format(GUIDE.Words.SecretCardChance, PodGuide.odds(secretOdds.chance))
+		else string.format(GUIDE.Words.CardChance, PodGuide.odds(PodGuide.chanceOf(species.Id)))
 	local view = Instance.new("ViewportFrame")
 	view.Name = "Plant"
 	view.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -958,7 +961,12 @@ local function paintDetail()
 	-- itself runs. The x2 pass is a fact about the player, not about the plant.
 	-- Still ??? until grown, as the Tiny yield alone was.
 	--==========================================================================
-	if known then
+	-- A secret has one size and one fixed rate (2026-10-16).
+	local secretOdds = if species.Secret == true then PodGuide.secret(species.Biome) else nil
+	yieldKey.Text = if species.Secret == true then GUIDE.Words.SecretIncomeTitle else GUIDE.Words.IncomeTitle
+	if known and species.Secret == true then
+		yieldValue.Text = string.format("$%s/s", GameConfig.compact(SeedData.IncomePerSecond(species, SeedData.SecretTier)))
+	elseif known then
 		local parts = {}
 		for i, rate in ipairs(PodGuide.incomes(id)) do
 			local tier = SeedData.Tiers[i]
@@ -971,8 +979,9 @@ local function paintDetail()
 	else
 		yieldValue.Text = "???"
 	end
-	showHatch.Text = string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)),
-		biome and biome.DisplayName or "")
+	showHatch.Text = if secretOdds then string.format(GUIDE.Words.SecretHatchesFrom, PodGuide.odds(secretOdds.chance),
+			biome and biome.DisplayName or "")
+		else string.format(GUIDE.Words.HatchesFrom, PodGuide.odds(PodGuide.chanceOf(id)), biome and biome.DisplayName or "")
 	local podKey = "pod|p:" .. id .. "|" .. tostring(GUIDE.PodTier)
 	local podArt: ItemArt.Art = { kind = "pod", speciesId = id, tier = GUIDE.PodTier }
 	local podBuilder, podKind = ItemArt.builder(podKey, podArt)

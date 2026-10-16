@@ -138,6 +138,12 @@ local function body()
 		"a part second reads 0:01, never 0:00 while time is left; at its time: YOUR POD IS READY!, no countdown")
 	check(FirstHatchCard.clock(60) == "1:00" and FirstHatchCard.clock(0) == "0:00",
 		"its clock: minutes and seconds")
+	-- 2026-10-16, seen in Play: a first pod banked from a secret's cradle read "TINY Nebulisk".
+	local secretView = FirstHatchCard.view(pods[2], 1003, nil, "Nebulisk")
+	local cardSrc = sourceOf(Scripts, "FirstHatchCard")
+	check(secretView.pod == "Nebulisk" and string.find(cardSrc,
+			"if SeedData.Unsized(species) then nil else SeedData.TierName(pod.tier)", 1, true) ~= nil,
+		"a secret's pod has no size word on the card: just its name")
 	check(FirstHatchCard.shown(true, pods[1], false, false) and not FirstHatchCard.shown(false, pods[1], false, false)
 			and not FirstHatchCard.shown(true, nil, false, false) and not FirstHatchCard.shown(true, pods[1], true, false)
 			and not FirstHatchCard.shown(true, pods[1], false, true),

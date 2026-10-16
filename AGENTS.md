@@ -268,6 +268,11 @@ src/
                                 one-size forms and three pods, Stormstrider, and (2026-10-05) the
                                 second family's seven sized pods, one per tier, never scaled again
                                 (which tier uses which: SeedData species PodForms / PodFormOf)
+    Shared/BiomeSecretForms/    A SECRET IN EVERY BIOME (2026-10-16): the owner's five secret creatures
+                                and their pods as data, one size each (generated from the ServerStorage
+                                originals; .rbxm backups in output/model-backups; the Cinderdrake's and
+                                Mirehydra's Aura spheres left out at the owner's word). Their scripts are
+                                ported: SecretIdle (creatures), SecretPodMotion (pods)
     Shared/StatusText.luau      the text-led line every lasting indicator is drawn with (chase
                                 warning, boost row, obby run line) and the notices' icons;
                                 placed by HudLayout (statusRows, statusLine, boostRows) -- no
@@ -391,6 +396,9 @@ src/
     Shared/PodModel.luau        builds one of the owner's 25 pods (PodForms/, one per plant) at a
                                 tier's size -- the one pod builder (CreatureModel.BuildPod)
     Shared/PodMotion.luau       the 25 pods' idles as maths; PodMotion.client plays them
+    Shared/SecretPodMotion.luau the biome secrets' pod scripts as maths (2026-10-16): SunPulse and MawPulse
+                                on a cradle pod, Grovemaw's lid opening in the hands once its pod is
+                                ready; SecretPodMotion.client plays them
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
@@ -771,6 +779,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 with its "!", 2026-10-12) and the shrine's words; plays RebirthFX
     PodGuideUI.client.luau      the Pod Guide's stands, built on this client (2026-10-09)
     PodMotion.client.luau       plays the pods' idles over every pod this screen should see move
+    SecretPodMotion.client.luau plays the biome secrets' pod scripts: the cradle idles, and a ready
+                                Grovemaw pod's lid in anyone's hands (2026-10-16)
     MarigoldSign.client.luau    "BAT SHOP!" over Marigold's stall (2026-10-08)
 ```
 
