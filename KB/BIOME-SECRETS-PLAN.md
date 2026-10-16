@@ -46,6 +46,7 @@ The owner's brief:
 | Where do they move? | **In the world** (cradle, carried, planted). **Still in the Index.** |
 | Planted, do they walk? | **Walk like the other creatures** (the owner, asked after "scourwheel and grovemaw is idle right?"): each gets a walk cycle in step 2 -- Grovemaw's six legs, Scourwheel rolling, Mirehydra's tentacles, Cinderdrake's legs, Nebulisk slithering. |
 | Can the Cinderdrake fly? | **Walk, fly sometimes** (step 2): he walks his plot like the others, and every so often takes off, flies a loop over his garden and lands. His wings are rigged (three joints and six spars a side). |
+| Should a secret take more garden slots? | **Keep 1 slot** (the owner, asked after "is it essential to do this? example a secret sprout takes 10 of your garden slots"). Several on one plot overlap, which only looks crowded; plots hold 5 to 30. |
 | The Greenhollow pod's lid? | **Opens when the pod is ready to hatch.** |
 | How it ships? | **Two steps:** step 1, the secrets working with the owner's own scripts; step 2, the new idles. Each tested, and pushed on the owner's OK. |
 
@@ -66,4 +67,16 @@ The owner's brief:
 - A held secret pod fills the view (Grovemaw's pod is 30 studs).
 - At that speed a guardian catches a slow thief within 1.5 s; the Starbloom guardian's throw sent the test player out of the world twice (put back at the gate, as the game does).
 
-**Step 2 (next)**: walks and new idles for all five; the Cinderdrake walks and sometimes takes off, loops his garden and lands; `Still` removed.
+## Step 2 — built 2026-10-16 (Claude, desktop)
+
+**Where it lives** (SecretIdle, and the `Still` flag gone from SeedData and PlantService):
+- **Walks.** Grovemaw: six radial legs in an alternating tripod. Mirehydra: eight radial tentacles, every other one together; they rest within a twentieth of straight, so it takes short steps. Cinderdrake: four chain legs in the lateral sequence, through his joints' own frames. Scourwheel: its wheel rolls the ground it covers. Nebulisk: a wave down its coil as it goes.
+- **Turns.** A biome secret's planted foot may stray half again as far as a turn on the spot carries it in one stance, so a wide-legged giant's feet are not set down again mid-stance.
+- **New idles.** Grovemaw: trunk, canopies, boughs, leaves, vines, arms, a snapping maw. Scourwheel: chimes, ruff, pads, a clacking jaw, the rider's bob. Mirehydra: five weaving necks, heads that strike, a blinking lid, curling tentacles, over its aura. Cinderdrake: breath, an S-necked look, a jaw that opens with the flare's flame, blinks, a swaying tail, stirring wings, over his aura.
+- **The Cinderdrake's flights.** Planted, every 75 s he flies for 12 s: up 26 studs in 2.2 s, a loop 22 studs across on his left, banking, and down where he rose. The timing comes from the server's clock with his placement's offset, so every viewer sees the same flight. His legs tuck and his wings beat; never when he isn't planted.
+
+**Tested**:
+- BiomeSecretsSpec 55/0. Walking 36 studs and turning a quarter, the worst planted-foot slide is Grovemaw 0.10, Mirehydra 0.53 and Cinderdrake 0.51 studs. The wheel rolled 67.9 of 68.8 degrees. The coil swings 13 degrees walking against 4 standing. The flight reaches 26 studs, and still flies while his walk goes on beneath. The new idles move.
+- Mutants; the whole suite.
+- One guarded Play: four planted walked 22 to 36 studs in 20 s, and the Cinderdrake flew (26 studs up, by the server's clock).
+- Edit captures of each walk.

@@ -198,13 +198,13 @@ local ok, err = pcall(function()
 		routed = routed and SecretModel.HasPlant(id) and SecretModel.HasPod(SeedData.PodFormOf(sp, SeedData.SecretTier))
 			and BiomeSecretForms.Plants[id] ~= nil
 		chase = chase and cfg ~= nil and cfg.Chase == "stormstrider" and cfg.SpotX == 42 and cfg.SpawnChance == nil
-		still = still and sp ~= nil and sp.Still == true
+		still = still and sp ~= nil and (sp :: any).Still == nil and sp.WanderTier == SeedData.TierCount
 	end
 	check(everyBiome, "every biome's secret is its new one (Grovemaw, Scourwheel, Mirehydra, Cinderdrake, Nebulisk)")
 	check(ladder, "the income ladder: $155K, $165K, $172K, $180K, $189K a second")
 	check(routed, "each is built from the owner's model, and so is its pod")
 	check(chase, "each biome's encounter names Storm Strider's chase, on the cradle 42 studs across the road")
-	check(still, "planted, each stands still until its walk is built (step 2)")
+	check(still, "planted, each walks its plot like every creature, on the Colossal rung (step 2)")
 	local snarl, fawn = SeedData.Get("snarlbloom"), SeedData.Get("petalfawn")
 	local spawnsOld = false
 	for _, id in pairs(SeedData.SecretByBiome) do
@@ -522,10 +522,199 @@ local ok, err = pcall(function()
 	check(has(clientSrc, "HATCH_AT") and has(clientSrc, "GetServerTimeNow") and has(clientSrc, "IsDescendantOf(Workspace)"),
 		"and it opens once the pod's HatchAt has come, in the world only")
 	local plantSrc = sourceOf(Server, "PlantService")
-	check(has(plantSrc, "not (entry.species and entry.species.Still == true)"), "a Still secret is never sent wandering")
+	check(not has(plantSrc, "species.Still"), "no creature is held still: every grown one is handed legs")
 
 	--==========================================================================
-	say("7. What's New")
+	say("7. They walk (step 2): legs, a wheel, a coil, and the Cinderdrake's flights")
+	--==========================================================================
+	-- Each walked 36 studs at 6 studs a second, then turned a quarter on the
+	-- spot, by moving its pivot as PlantSway does; never aloft meanwhile.
+	local walks = 0
+	local function walked(form)
+		walks += 1
+		local start = CFrame.new(walks * 240, HIGH + 900, 0)
+		local m = Instance.new("Model")
+		local b = Instance.new("Part")
+		b.Anchored = true
+		b.Transparency = 1
+		b.Size = Vector3.new(6, 0.06, 6)
+		b.CFrame = start
+		b.Parent = m
+		m.PrimaryPart = b
+		SecretModel.BuildPlant(form, start, m)
+		m.Parent = scratch
+		local r = SecretIdle.Rig(m)
+		r.walks = true
+		SecretIdle.useFlightClock(function()
+			return 70 - r.phase * 7.3
+		end)
+		local motors = {}
+		for _, d in ipairs(m:GetDescendants()) do
+			if d:IsA("Motor6D") then
+				motors[d.Name] = d
+			end
+		end
+		local function jointAt(name)
+			local j = motors[name]
+			return (j.Part0.CFrame * j.C0).Position
+		end
+		-- A planted foot's slide (its ankle's ground position) and tilt (the foot's own turn, which stays flat
+		-- and on its heading), since it touched down.
+		local slide, tilt, downAt, tick = 0, 0, {}, 100
+		local pivot = start
+		local function frame()
+			tick += 1 / 60
+			SecretIdle.Step(r, tick - r.phase)
+			for _, leg in ipairs(r.gait and r.gait.legs or {}) do
+				local at = jointAt(leg.ankle)
+				local foot = motors[leg.ankle].Part1
+				if leg.down then
+					local was = downAt[leg]
+					if was then
+						slide = math.max(slide, Vector3.new(at.X - was.at.X, 0, at.Z - was.at.Z).Magnitude)
+						local _, angle = (was.rot:Inverse() * foot.CFrame.Rotation):ToAxisAngle()
+						tilt = math.max(tilt, math.abs(angle))
+					else
+						downAt[leg] = { at = at, rot = foot.CFrame.Rotation }
+					end
+				else
+					downAt[leg] = nil
+				end
+			end
+		end
+		for _ = 1, 30 do
+			frame()
+		end
+		for _ = 1, 360 do
+			pivot = pivot * CFrame.new(0, 0, -0.1)
+			m:PivotTo(pivot)
+			frame()
+		end
+		local walking = r.gait and r.gait.weight or 0
+		for _ = 1, 120 do
+			pivot = pivot * CFrame.Angles(0, math.rad(0.75), 0)
+			m:PivotTo(pivot)
+			frame()
+		end
+		for _ = 1, 120 do
+			frame()
+		end
+		return { model = m, rig = r, slide = slide, tilt = tilt, walking = walking, motors = motors, tick = tick, start = start }
+	end
+	local LEGS = { grovemaw = 6, mirehydra = 8, cinderdrake = 4, scourwheel = 0, nebulisk = 0 }
+	-- The worst slide a planted foot may make, in studs (measured 2026-10-16: 0.10, 0.53 and 0.51 -- the
+	-- tentacles and the forelegs stand within a twentieth of straight).
+	local SLIDE = { grovemaw = 0.15, mirehydra = 0.8, cinderdrake = 0.8, scourwheel = 0, nebulisk = 0 }
+	-- And how far a planted foot may turn while it stands (measured: 0.2, 5.7 and 1.8 degrees).
+	local TILT = math.rad(8)
+	local runs = {}
+	for form, legs in pairs(LEGS) do
+		local run = walked(form)
+		runs[form] = run
+		local gait = run.rig.gait
+		check(gait ~= nil and #gait.legs == legs and run.walking > 0.95 and run.slide <= SLIDE[form] and run.tilt <= TILT,
+			string.format("%s walks on its %d legs: every planted foot stays put and flat (slid %.2f studs, turned %.1f degrees at most)",
+				form, legs, run.slide, math.deg(run.tilt)), gait and #gait.legs)
+	end
+	local wheel = runs.scourwheel.motors.Wheel
+	local _, turned = (wheel.C0:Inverse() * wheel.Part0.CFrame:Inverse() * wheel.Part1.CFrame * wheel.C1):ToAxisAngle()
+	check(math.abs(math.deg(turned) - math.deg(36 / 30)) < 3,
+		string.format("the Scourwheel's wheel rolled %.1f degrees over 36 studs (%.1f for a 30-stud wheel)", math.deg(turned),
+			math.deg(36 / 30)))
+	-- The coil's wave grows as it walks: Tail4's sideways turn, walking against standing.
+	local function tailSwing(run, moving)
+		local r, m = run.rig, run.model
+		local tail = run.motors.Tail4
+		local most = 0
+		local pivot = m:GetPivot()
+		for f = 1, 240 do
+			if moving then
+				pivot = pivot * CFrame.new(0, 0, -0.1)
+				m:PivotTo(pivot)
+			end
+			SecretIdle.Step(r, run.tick + f / 60 - r.phase)
+			local pose = (tail.Part0.CFrame * tail.C0):Inverse() * tail.Part1.CFrame * tail.C1
+			local _, y = pose:ToOrientation()
+			most = math.max(most, math.abs(y))
+		end
+		return most
+	end
+	local standingSway = tailSwing(runs.nebulisk, false)
+	local walkingSway = tailSwing(runs.nebulisk, true)
+	check(walkingSway > standingSway + math.rad(4),
+		string.format("the Nebulisk slithers: its coil swings %.1f degrees walking, %.1f standing", math.deg(walkingSway),
+			math.deg(standingSway)))
+	-- The flights: by the clock, only planted.
+	local drake = runs.cinderdrake
+	local pelvis = nil
+	for _, p in ipairs(drake.model:GetChildren()) do
+		if p:IsA("BasePart") and p.Name == "Pelvis" then
+			pelvis = p
+		end
+	end
+	local restY = pelvis.Position.Y
+	local function at(k, planted)
+		drake.rig.walks = planted
+		SecretIdle.useFlightClock(function()
+			return k - drake.rig.phase * 7.3
+		end)
+		SecretIdle.Step(drake.rig, drake.tick - drake.rig.phase)
+		return pelvis.Position.Y - restY, drake.rig.airborne
+	end
+	local midUp, midAir = at(6, true)
+	local downUp, downAir = at(12.5, true)
+	local heldUp = at(6, false)
+	-- Aloft while his garden walk goes on beneath him, the flight still wins.
+	local walkingUp = 0
+	do
+		drake.rig.walks = true
+		SecretIdle.useFlightClock(function()
+			return 6 - drake.rig.phase * 7.3
+		end)
+		local pivot = drake.model:GetPivot()
+		for f = 1, 90 do
+			pivot = pivot * CFrame.new(0, 0, -0.1)
+			drake.model:PivotTo(pivot)
+			SecretIdle.Step(drake.rig, drake.tick + f / 60 - drake.rig.phase)
+		end
+		walkingUp = pelvis.Position.Y - restY
+	end
+	check(walkingUp > 25, string.format("and flies even while his walk carries him along (%.1f up)", walkingUp))
+	check(midUp > 25 and midAir == 1 and math.abs(downUp) < 0.1 and downAir == 0 and math.abs(heldUp) < 0.1,
+		string.format("the Cinderdrake flies a loop 26 studs up and lands where he rose (%.1f up mid-flight, %.2f after); never unplanted",
+			midUp, downUp))
+	SecretIdle.useFlightClock(nil)
+	-- The two new idles move their bodies while they stand.
+	for _, form in ipairs({ "grovemaw", "scourwheel" }) do
+		local run = runs[form]
+		run.rig.walks = false
+		-- Standing a while first, so what moves is the idle and not the walk fading out.
+		for f = 1, 90 do
+			SecretIdle.Step(run.rig, run.tick + f / 60 - run.rig.phase)
+		end
+		run.tick += 1.5
+		local before = {}
+		for _, p in ipairs(run.model:GetChildren()) do
+			if p:IsA("BasePart") then
+				before[p] = p.CFrame
+			end
+		end
+		SecretIdle.Step(run.rig, run.tick + 1.3 - run.rig.phase)
+		local moved = 0
+		for p, cf in pairs(before) do
+			if (p.Position - cf.Position).Magnitude > 0.02 then
+				moved += 1
+			end
+		end
+		check(moved > 20, string.format("%s's new idle moves its body (%d parts)", form, moved))
+	end
+	local idleWalks = sourceOf(Shared, "SecretIdle")
+	check(has(idleWalks, "\tgrovemaw = grovemaw,") and has(idleWalks, "\tscourwheel = scourwheel,")
+		and has(idleWalks, "wheel = { joint = \"Wheel\", radius = 30 }") and has(idleWalks, "return Workspace:GetServerTimeNow()"),
+		"the walks and idles are SecretIdle's, the flights timed by the server's clock")
+
+	--==========================================================================
+	say("8. What's New")
 	--==========================================================================
 	local entry = UpdateLog.Entries[1]
 	check(entry.id == "2026-10-16-biome-secrets" and #UpdateLog.problems() == 0,
@@ -535,6 +724,7 @@ end)
 NestService.SpecAnnouncer(nil)
 NestService.SpecStealDone(nil)
 NestService.SetRush(false)
+SecretIdle.useFlightClock(nil)
 scratch:Destroy()
 if not ok then
 	say("  ERROR " .. tostring(err))

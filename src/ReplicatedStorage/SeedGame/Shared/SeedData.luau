@@ -206,9 +206,6 @@ export type Species = {
 	-- -- like every other creature their size (2026-10-02). Implementation only:
 	-- never shown, never a size. Absent on every listed species.
 	WanderTier: number?,
-	-- Planted, it stands where it was put and never takes a leg (PlantService's
-	-- wander): the biome secrets until their walks are built (2026-10-16).
-	Still: boolean?,
 	-- The SecretForms pod replayed for this species' pod, by form id. A Rain
 	-- species' Pod is also its pod in RainPods (the same name, for the first
 	-- family's three); the second family's is RainPods' rainpod4, and its shell
@@ -1252,8 +1249,8 @@ SeedData.SecretSpecies = {
 	-- supplied one, everywhere), the secret each biome's nest spawns since that
 	-- day (SecretByBiome) in Snarlbloom's and Petalfawn's place. Rates are the
 	-- owner's ladder in road order, from Snarlbloom's to Petalfawn's (x2 under the
-	-- pass). Colours feed the UI and the invisible Base plate only. `Still` keeps
-	-- each standing where it was planted until its walk is built (step 2).
+	-- pass). Colours feed the UI and the invisible Base plate only. Planted, each
+	-- walks its plot like every creature (SecretIdle's walks for them).
 	--==========================================================================
 	{
 		Id = "grovemaw", Name = "Grovemaw", Rarity = "Secret", Biome = "greenhollow",
@@ -1261,7 +1258,7 @@ SeedData.SecretSpecies = {
 		Body = Color3.fromRGB(92, 60, 44), Crown = Color3.fromRGB(196, 255, 110), Accent = Color3.fromRGB(100, 66, 48),
 		Leaf = LEAF, Stem = STEM, Soil = SOIL,
 		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "grovemawpod",
-		Secret = true, Still = true,
+		Secret = true,
 		FixedIncome = 155000,
 	},
 	{
@@ -1270,7 +1267,7 @@ SeedData.SecretSpecies = {
 		Body = Color3.fromRGB(178, 158, 106), Crown = Color3.fromRGB(239, 116, 25), Accent = Color3.fromRGB(198, 124, 62),
 		Leaf = LEAF, Stem = STEM, Soil = SOIL,
 		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "scourwheelpod",
-		Secret = true, Still = true,
+		Secret = true,
 		FixedIncome = 165000,
 	},
 	{
@@ -1279,7 +1276,7 @@ SeedData.SecretSpecies = {
 		Body = Color3.fromRGB(96, 136, 72), Crown = Color3.fromRGB(190, 255, 110), Accent = Color3.fromRGB(104, 78, 52),
 		Leaf = LEAF, Stem = STEM, Soil = SOIL,
 		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "mirehydrapod",
-		Secret = true, Still = true,
+		Secret = true,
 		FixedIncome = 172000,
 	},
 	{
@@ -1288,7 +1285,7 @@ SeedData.SecretSpecies = {
 		Body = Color3.fromRGB(88, 60, 44), Crown = Color3.fromRGB(255, 120, 40), Accent = Color3.fromRGB(226, 96, 40),
 		Leaf = LEAF, Stem = STEM, Soil = SOIL,
 		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "cinderdrakepod",
-		Secret = true, Still = true,
+		Secret = true,
 		FixedIncome = 180000,
 	},
 	{
@@ -1297,7 +1294,7 @@ SeedData.SecretSpecies = {
 		Body = Color3.fromRGB(72, 56, 142), Crown = Color3.fromRGB(100, 222, 255), Accent = Color3.fromRGB(255, 140, 226),
 		Leaf = LEAF, Stem = STEM, Soil = SOIL,
 		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "nebuliskpod",
-		Secret = true, Still = true,
+		Secret = true,
 		FixedIncome = 189000,
 	},
 } :: { Species }

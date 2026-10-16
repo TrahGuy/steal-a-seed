@@ -87,11 +87,22 @@
 -- The owner's five biome secrets (BiomeSecretForms) are the same kind of rig.
 -- Three came with a script, ported below as written: NebuliskIdle (the slither,
 -- the cobra sway, the hiss), MirehydraAura and CinderdrakeAura (the pulses, the
--- lights, the 8 s flare and its burst; the halo). Grovemaw and Scourwheel had
--- none. Their walks, and new idles for the four, are step 2's.
+-- lights, the 8 s flare and its burst; the halo). The other four bodies have new
+-- idles of their own, and all five walk:
+--
+--   * Grovemaw's six legs and Mirehydra's eight tentacles are RADIAL legs: each
+--     reaches out from the body in a plane through its hip, which a yaw turns
+--     onto the step, and its hip and knee are the two-bone solution in it.
+--   * The Cinderdrake walks on the chain legs above, laid on through his
+--     joints' own frames (they run along his bones), and now and then FLIES:
+--     a loop over his garden on the server's clock (THE CINDERDRAKE'S FLIGHTS).
+--   * The Scourwheel's wheel rolls over the ground it covers; the Nebulisk's
+--     coil carries a wave down it as it goes.
 --==============================================================================
 
 local SecretIdle = {}
+
+local Workspace = game:GetService("Workspace")
 
 -- The supplied forms' recorded sizes: a Pod 2 form's size over its Pod 1
 -- form's is the scale its walk and its idle's distances are taken at.
@@ -175,6 +186,16 @@ type Leg = {
 	brace: string?,
 	braceAt: Vector3?,
 	topAt: Vector3?,
+	-- A RADIAL leg (the biome secrets, 2026-10-16): the joint that turns its
+	-- plane (its own, or the hip itself), where its knee rests, the way it reaches
+	-- out at rest (flat, a unit) and the line its hip and knee bend about then.
+	yaw: string?,
+	kneeAt: Vector3?,
+	out0: Vector3?,
+	axis0: Vector3?,
+	-- How far its planted foot may stray from under its hip before it is set
+	-- down there again (nil: STRAY at the gait's scale).
+	stray: number?,
 }
 
 -- One leg as a profile names it: a chain (hip, knee, ankle) or a foot, with
@@ -191,6 +212,11 @@ type LegSpec = {
 	swing: string?,
 	brace: string?,
 	top: string?,
+	-- A RADIAL leg (2026-10-16): `hip`, `knee` and `ankle` reach out from the
+	-- body like a spider's, in a plane through the hip that `yaw` turns (a joint
+	-- of its own, or the hip itself).
+	radial: boolean?,
+	yaw: string?,
 }
 
 -- A form's walk, as numbers. `reach`: how far a planted foot travels either side
@@ -220,6 +246,12 @@ type WalkProfile = {
 	lean: number,
 	arms: { { joint: string, leg: number, gain: number } },
 	nod: { joint: string, amp: number }?,
+	-- The biome secrets (2026-10-16): a WHEEL rolled by the ground covered (its
+	-- joint, which turns about its own X, and the wheel's radius in studs), and a
+	-- SLITHER: a sideways wave down the named joints, `waves` of it a stride,
+	-- each joint `lag` behind the one before.
+	wheel: { joint: string, radius: number }?,
+	slither: { joints: { string }, amp: number, lag: number, waves: number }?,
 }
 
 type Gait = {
@@ -268,6 +300,8 @@ type Gait = {
 	-- pose worked out square is applied through the joint's own frame. Nil for
 	-- every other rig, whose frames are square.
 	frames: { [string]: { rot: CFrame, forward: boolean } }?,
+	-- The ground a wheel has rolled over (studs, forward), for WalkProfile.wheel.
+	rolled: number,
 }
 
 export type Rig = {
@@ -318,6 +352,9 @@ export type Rig = {
 	plant: PlantIdles.Plant?,
 	-- A biome secret's pulsing parts, in the owner's order (scanBiome).
 	glows: { Glow },
+	-- How much of it is in the air (the Cinderdrake's flights, 2026-10-16): 0 on
+	-- the ground, 1 aloft. The walk shows by what is left.
+	airborne: number,
 }
 
 -- The pose key of a virtual body (see WalkProfile.virtual): no Motor6D is ever
@@ -521,6 +558,135 @@ local WALKS: { [string]: WalkProfile } = {
 		},
 		nod = { joint = "Neck1", amp = rad(1.5) },
 	},
+	--==========================================================================
+	-- A SECRET IN EVERY BIOME (2026-10-16; the owner: "Walk like the others").
+	-- One size each, the supplied one, so every distance is in studs at it.
+	--
+	--   Grovemaw     six spider legs (yaw, hip, knee and ankle each), an
+	--                alternating tripod: the front and back legs of one side with
+	--                the middle one of the other, three feet down at once, the
+	--                trunk riding level.
+	--   Scourwheel   no legs: its wheel rolls over the ground it covers, the
+	--                rider bobbing a little on top.
+	--   Mirehydra    eight tentacles reaching out like spider legs, every other
+	--                one stepping together.
+	--   Cinderdrake  four legs in the lateral sequence, a heavy low walk, the
+	--                neck nodding with each pair of steps. His flights are his
+	--                idle's (cinderdrake, below).
+	--   Nebulisk     no legs: a sideways wave down its coil, one a stride,
+	--                travelling head to tail as it goes, over its own idle's sway.
+	--==========================================================================
+	grovemaw = {
+		legs = {
+			{ radial = true, yaw = "FrontLeftYaw", hip = "FrontLeftHip", knee = "FrontLeftKnee", ankle = "FrontLeftAnkle", offset = 0 },
+			{ radial = true, yaw = "MidRightYaw", hip = "MidRightHip", knee = "MidRightKnee", ankle = "MidRightAnkle", offset = 0 },
+			{ radial = true, yaw = "RearLeftYaw", hip = "RearLeftHip", knee = "RearLeftKnee", ankle = "RearLeftAnkle", offset = 0 },
+			{ radial = true, yaw = "FrontRightYaw", hip = "FrontRightHip", knee = "FrontRightKnee", ankle = "FrontRightAnkle",
+				offset = 0.5 },
+			{ radial = true, yaw = "MidLeftYaw", hip = "MidLeftHip", knee = "MidLeftKnee", ankle = "MidLeftAnkle", offset = 0.5 },
+			{ radial = true, yaw = "RearRightYaw", hip = "RearRightHip", knee = "RearRightKnee", ankle = "RearRightAnkle",
+				offset = 0.5 },
+		},
+		duty = 0.56,
+		reach = 4,
+		lift = 3,
+		footSwing = 0,
+		crouch = 0.3,
+		bob = 0.35,
+		bobPeak = 0.25,
+		roll = 0,
+		rollPeak = 0,
+		lean = 0,
+		arms = {},
+		nod = nil,
+	},
+	scourwheel = {
+		legs = {},
+		duty = 0.5,
+		reach = 6,
+		lift = 0,
+		footSwing = 0,
+		crouch = 0,
+		bob = 0.3,
+		bobPeak = 0.25,
+		roll = 0,
+		rollPeak = 0,
+		lean = -rad(2),
+		arms = {},
+		nod = nil,
+		-- The hub stands 30 studs up: the wheel's own radius.
+		wheel = { joint = "Wheel", radius = 30 },
+	},
+	mirehydra = {
+		legs = {
+			{ radial = true, hip = "Tent1_1", knee = "Tent1_2", ankle = "Tent1_3", offset = 0 },
+			{ radial = true, hip = "Tent2_1", knee = "Tent2_2", ankle = "Tent2_3", offset = 0.5 },
+			{ radial = true, hip = "Tent3_1", knee = "Tent3_2", ankle = "Tent3_3", offset = 0 },
+			{ radial = true, hip = "Tent4_1", knee = "Tent4_2", ankle = "Tent4_3", offset = 0.5 },
+			{ radial = true, hip = "Tent5_1", knee = "Tent5_2", ankle = "Tent5_3", offset = 0 },
+			{ radial = true, hip = "Tent6_1", knee = "Tent6_2", ankle = "Tent6_3", offset = 0.5 },
+			{ radial = true, hip = "Tent7_1", knee = "Tent7_2", ankle = "Tent7_3", offset = 0 },
+			{ radial = true, hip = "Tent8_1", knee = "Tent8_2", ankle = "Tent8_3", offset = 0.5 },
+		},
+		duty = 0.6,
+		-- Its tentacles lie within a twentieth of straight: a short reach, and a
+		-- deep settle to give them the slack for it.
+		reach = 1.2,
+		lift = 2,
+		footSwing = 0,
+		crouch = 0.8,
+		bob = 0.3,
+		bobPeak = 0.25,
+		roll = 0,
+		rollPeak = 0,
+		lean = 0,
+		arms = {},
+		nod = nil,
+	},
+	cinderdrake = {
+		virtual = true,
+		legs = {
+			{ hip = "HindL_1", knee = "HindL_2", ankle = "HindL_3", offset = 0 },
+			{ hip = "ForeL_1", knee = "ForeL_2", ankle = "ForeL_3", offset = 0.25 },
+			{ hip = "HindR_1", knee = "HindR_2", ankle = "HindR_3", offset = 0.5 },
+			{ hip = "ForeR_1", knee = "ForeR_2", ankle = "ForeR_3", offset = 0.75 },
+		},
+		duty = 0.66,
+		-- His forelegs stand within a twentieth of straight: a shorter stride,
+		-- and lower to the ground while he walks.
+		reach = 2.5,
+		lift = 2.5,
+		footSwing = rad(12),
+		crouch = 1.2,
+		bob = 0.3,
+		bobPeak = 0.2,
+		roll = rad(1.2),
+		rollPeak = 0.45,
+		lean = 0,
+		arms = {},
+		nod = { joint = "Neck1", amp = rad(2) },
+	},
+	nebulisk = {
+		legs = {},
+		duty = 0.5,
+		reach = 8,
+		lift = 0,
+		footSwing = 0,
+		crouch = 0,
+		bob = 0,
+		bobPeak = 0,
+		roll = 0,
+		rollPeak = 0,
+		lean = 0,
+		arms = {},
+		nod = nil,
+		slither = {
+			joints = { "Spine10", "Spine9", "Tail7", "Tail6", "Tail5", "Tail4", "Tail3", "Tail2", "Tail1" },
+			amp = rad(9),
+			lag = 0.7,
+			waves = 1,
+		},
+	},
 }
 
 -- Below MOVING studs a second it is standing; from FULL the gait is all on.
@@ -621,7 +787,10 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 	if not profile then
 		return nil
 	end
+	-- The biome secrets' joint frames run along their bones, like the lotus forms'
+	-- legs, so their walks are laid on through each joint's own frame too.
 	local plantForm = PlantForms.Plants[form] ~= nil or InviteForms.Plants[form] ~= nil
+		or BiomeSecretForms.Plants[form] ~= nil
 	local joints = restJoints(nodes, order)
 	-- The body: the joint called Root, or (virtual) the rig's own root part,
 	-- which the walk then moves with the whole tree.
@@ -647,6 +816,74 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 	local names: { string } = { bodyKey }
 	local radius = 0
 	for _, spec in ipairs(profile.legs) do
+		if spec.radial then
+			--==================================================================
+			-- A RADIAL LEG: hip, knee and ankle in one plane through the hip,
+			-- reaching out from the body; `yaw` turns that plane.
+			--==================================================================
+			local hipName, kneeName, ankleName = spec.hip :: string, spec.knee :: string, spec.ankle :: string
+			local yawName = spec.yaw or hipName
+			local hip, knee, ankle, yawJoint = joints[hipName], joints[kneeName], joints[ankleName], joints[yawName]
+			if not (hip and knee and ankle and yawJoint) then
+				return nil
+			end
+			local h, k, a = hip.Position, knee.Position, ankle.Position
+			local flat = Vector3.new(a.X - h.X, 0, a.Z - h.Z)
+			if flat.Magnitude < 1e-3 then
+				return nil
+			end
+			local out0 = flat.Unit
+			-- In the leg's plane: along `out0`, and up.
+			local function inPlane(v: Vector3): (number, number)
+				return v:Dot(out0), v.Y
+			end
+			local ts, ty = inPlane(k - h)
+			local ss, sy = inPlane(a - k)
+			local rs, ry = inPlane(a - h)
+			local thigh0 = math.atan2(ty, ts)
+			table.insert(legs, {
+				hip = hipName,
+				knee = kneeName,
+				ankle = ankleName,
+				offset = spec.offset,
+				hipAt = h,
+				ankleAt = a,
+				l1 = math.sqrt(ts * ts + ty * ty),
+				l2 = math.sqrt(ss * ss + sy * sy),
+				thigh0 = thigh0,
+				shin0 = math.atan2(sy, ss),
+				-- The side of the hip-to-ankle line the knee rests on (a spider's
+				-- knee arches above it).
+				bend = if thigh0 >= math.atan2(ry, rs) then 1 else -1,
+				walkHip = IDENTITY,
+				walkKnee = IDENTITY,
+				walkAnkle = IDENTITY,
+				swing = 0,
+				down = true,
+				planted = nil,
+				plantedYaw = 0,
+				liftFrom = nil,
+				liftYaw = 0,
+				home = true,
+				kind = "radial",
+				foot = nil,
+				aim = nil,
+				onBody = true,
+				yaw = if yawName ~= hipName then yawName else nil,
+				kneeAt = k,
+				out0 = out0,
+				-- A turn about this line lifts `out0` toward the sky.
+				axis0 = out0:Cross(Vector3.yAxis),
+			})
+			if yawName ~= hipName then
+				table.insert(names, yawName)
+			end
+			table.insert(names, hipName)
+			table.insert(names, kneeName)
+			table.insert(names, ankleName)
+			radius += math.sqrt(a.X * a.X + a.Z * a.Z)
+			continue
+		end
 		local swingName = spec.swing
 		if swingName then
 			-- A SWING LEG: one joint at the hip, its sole straight under it (or
@@ -802,6 +1039,23 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		table.insert(names, ankleName)
 		radius += math.sqrt(a.X * a.X + a.Z * a.Z)
 	end
+	-- A wheel's joint and a slither's are the walk's too, cleared before each
+	-- idle like a leg's.
+	local wheel, slither = profile.wheel, profile.slither
+	if wheel then
+		if not joints[wheel.joint] then
+			return nil
+		end
+		table.insert(names, wheel.joint)
+	end
+	if slither then
+		for _, name in ipairs(slither.joints) do
+			if not joints[name] then
+				return nil
+			end
+			table.insert(names, name)
+		end
+	end
 	-- Every posed joint's rest frame, for a PlantForms rig (see Gait.frames).
 	local frames: { [string]: { rot: CFrame, forward: boolean } }? = nil
 	if plantForm then
@@ -815,6 +1069,21 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		end
 		frames = list
 	end
+	-- A legless hop, or feet that all hang from the middle (Crookreed's root
+	-- feet), still turns as if it had a stance to turn on.
+	local turnRadius = if radius > 1e-3 then radius / math.max(#legs, 1) else 0.3 * scale
+	local stride = 2 * profile.reach * scale / profile.duty
+	-- A BIOME SECRET'S FEET (2026-10-16) may stray half again as far as a turn on
+	-- the spot carries each in one stance: a 26-stud-wide giant's outer feet
+	-- travel further than STRAY while they stand, and were set down again
+	-- mid-stance, sliding. Every other rig keeps STRAY.
+	if BiomeSecretForms.Plants[form] then
+		local halfTurn = 0.5 * profile.duty * stride / (turnRadius * TURN_STEP)
+		for _, leg in ipairs(legs) do
+			local r = math.sqrt(leg.ankleAt.X * leg.ankleAt.X + leg.ankleAt.Z * leg.ankleAt.Z)
+			leg.stray = math.max(STRAY * scale, 1.5 * r * halfTurn)
+		end
+	end
 	return {
 		profile = profile,
 		legs = legs,
@@ -822,10 +1091,8 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		scale = scale,
 		joints = names,
 		rootAt = rootAt,
-		-- A legless hop, or feet that all hang from the middle (Crookreed's
-		-- root feet), still turns as if it had a stance to turn on.
-		turnRadius = if radius > 1e-3 then radius / math.max(#legs, 1) else 0.3 * scale,
-		stride = 2 * profile.reach * scale / profile.duty,
+		turnRadius = turnRadius,
+		stride = stride,
 		phase = 0,
 		weight = 0,
 		legWeight = 0,
@@ -841,6 +1108,7 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		lastT = nil,
 		lastMoveT = nil,
 		frames = frames,
+		rolled = 0,
 	}
 end
 
@@ -892,6 +1160,11 @@ local function stepGait(rig: Rig, gait: Gait, now: number)
 					end
 					if moved > 1e-6 then
 						local here = pivot.Rotation:Inverse() * Vector3.new(pos.X - last.X, 0, pos.Z - last.Z)
+						-- Forward is -Z: what a wheel rolls over, kept to one turn of it.
+						local wheel = gait.profile.wheel
+						if wheel then
+							gait.rolled = (gait.rolled - here.Z) % (2 * pi * wheel.radius)
+						end
 						local x = gait.dirX + (here.X / moved - gait.dirX) * k
 						local z = gait.dirZ + (here.Z / moved - gait.dirZ) * k
 						local length = math.sqrt(x * x + z * z)
@@ -992,7 +1265,9 @@ end
 -- The walk's pose for this frame, laid over the idle's: the body by the walk's
 -- weight, the legs by their own.
 local function walkPose(rig: Rig, gait: Gait)
-	local w, lw = gait.weight, gait.legWeight
+	-- Aloft (a Cinderdrake's flight), the walk gives way to the flight.
+	local ground = 1 - rig.airborne
+	local w, lw = gait.weight * ground, gait.legWeight * ground
 	if w <= 0 and lw <= 0 then
 		return
 	end
@@ -1066,7 +1341,7 @@ local function walkPose(rig: Rig, gait: Gait)
 				leg.down = true
 				goal = toPivot * (leg.planted :: Vector3)
 				footYaw = (leg.plantedYaw - yaw + pi) % (2 * pi) - pi
-				if Vector3.new(goal.X - rest.X, 0, goal.Z - rest.Z).Magnitude > STRAY * scale then
+				if Vector3.new(goal.X - rest.X, 0, goal.Z - rest.Z).Magnitude > (leg.stray or STRAY * scale) then
 					leg.planted = pivot * landing
 					leg.plantedYaw = yaw + landingYaw
 					goal, footYaw = landing, landingYaw
@@ -1085,6 +1360,49 @@ local function walkPose(rig: Rig, gait: Gait)
 				footPitch = p.footSwing * sin(pi * s)
 				local fromYaw = (leg.liftYaw - yaw + pi) % (2 * pi) - pi
 				footYaw = fromYaw + (landingYaw - fromYaw) * e
+			end
+			if leg.kind == "radial" then
+				--==============================================================
+				-- A RADIAL LEG (2026-10-16): the yaw turns its plane onto the
+				-- goal, round the vertical through the hip; the hip and knee are
+				-- the two-bone solution in that plane, the knee on its authored
+				-- side; the ankle turns the foot back flat on its own heading.
+				-- All of it worked out square to the model and laid on through
+				-- each joint's own frame.
+				--==============================================================
+				local hipNow = moved * leg.hipAt
+				local rel = goal - hipNow
+				local flat = Vector3.new(rel.X, 0, rel.Z)
+				local out0 = leg.out0 :: Vector3
+				local turn = if flat.Magnitude > 1e-4
+					then (math.atan2(flat.X, flat.Z) - math.atan2(out0.X, out0.Z) + pi) % (2 * pi) - pi
+					else 0
+				local s, up = flat.Magnitude, rel.Y
+				local l1, l2 = leg.l1, leg.l2
+				local d = math.clamp(math.sqrt(s * s + up * up), math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3)
+				local cosA = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)
+				local thigh = math.atan2(up, s) + leg.bend * math.acos(math.clamp(cosA, -1, 1))
+				local kneeS, kneeY = l1 * cos(thigh), l1 * sin(thigh)
+				local shin = math.atan2(up - kneeY, s - kneeS)
+				local axis = leg.axis0 :: Vector3
+				local lift = thigh - leg.thigh0
+				local bendBy = shin - leg.shin0
+				local yawTurn = CFrame.Angles(0, turn, 0)
+				local hipTurn = CFrame.fromAxisAngle(axis, lift)
+				leg.walkKnee = CFrame.fromAxisAngle(axis, bendBy - lift)
+				leg.walkAnkle = CFrame.fromAxisAngle(axis, -bendBy) * CFrame.Angles(0, footYaw - turn, 0)
+				leg.swing = turn
+				local yawName = leg.yaw
+				if yawName then
+					leg.walkHip = hipTurn
+					put(yawName, unbody * yawTurn, lw)
+				else
+					leg.walkHip = unbody * yawTurn * hipTurn
+				end
+				put(leg.hip, leg.walkHip, lw)
+				put(leg.knee, leg.walkKnee, lw)
+				put(leg.ankle, leg.walkAnkle, lw)
+				continue
 			end
 			if leg.kind == "foot" then
 				--==============================================================
@@ -1181,6 +1499,16 @@ local function walkPose(rig: Rig, gait: Gait)
 	local nod = p.nod
 	if nod then
 		pose[nod.joint] = (pose[nod.joint] or IDENTITY) * CFrame.Angles(nod.amp * w * cos(4 * pi * phase), 0, 0)
+	end
+	-- A slither (2026-10-16): the sideways wave travels down the body as it goes,
+	-- laid over the idle's own sway in each joint's frame, as the owner's idle
+	-- writes it.
+	local slither = p.slither
+	if slither then
+		for i, name in ipairs(slither.joints) do
+			local yaw = slither.amp * w * sin(2 * pi * slither.waves * phase - (i - 1) * slither.lag)
+			pose[name] = (pose[name] or IDENTITY) * CFrame.Angles(0, yaw, 0)
+		end
 	end
 end
 
@@ -1458,6 +1786,7 @@ function SecretIdle.Rig(model: Model): Rig?
 		lastEvent = -1,
 		plant = nil,
 		glows = {},
+		airborne = 0,
 	}
 	rig.gait = buildGait(idleKey, nodes, order, scale)
 	local seed = tonumber(model:GetAttribute("PlacementId"))
@@ -2109,6 +2438,14 @@ local function surge(rig: Rig, t: number, flare: number)
 	end
 end
 
+--==============================================================================
+-- AND THEIR BODIES' NEW IDLES (2026-10-16; the owner: "new idles for all four",
+-- the Nebulisk's being its owner's). Each sways what its rig has joints for and
+-- leaves its legs to stand: a planted foot never moves while it stands. The
+-- auras' scripts above play under them as they were.
+--==============================================================================
+local HEADS = { "A", "B", "C", "D", "E" }
+
 local function mirehydra(rig: Rig, t: number)
 	local flare = flareAt(t)
 	local cycle = math.floor(t / 8)
@@ -2121,6 +2458,86 @@ local function mirehydra(rig: Rig, t: number)
 	surge(rig, t, flare)
 	-- the glowing parts pulse, staggered
 	pulseGlows(rig, t, 1.6)
+	-- the five necks weave, each on its own beat; each head looks about, and now
+	-- and then strikes forward and draws back; the lids of the middle one blink
+	for n, h in ipairs(HEADS) do
+		local lag = n * 1.3
+		for seg = 1, 4 do
+			set(rig, "Neck" .. h .. seg, CFrame.Angles(rad(3) * wave(t, 4 + n * 0.3, lag + seg * 0.5), rad(5) * wave(t, 5.5 + n * 0.4,
+				lag + seg * 0.6), 0))
+		end
+		local k = (t + n * 1.9) % 9
+		local strike = if k < 0.5 then sin(k / 0.5 * pi) else 0
+		set(rig, "Head" .. h, CFrame.Angles(rad(4) * wave(t, 3.3, lag) + rad(18) * strike, rad(15) * wave(t, 7 + n, lag), 0))
+	end
+	set(rig, "LidD", CFrame.Angles(if (t % 3.9) < 0.14 then rad(25) else 0, 0, 0))
+	-- the tentacles curl a little where they lie
+	for i = 1, 8 do
+		set(rig, "Tent" .. i .. "_2", CFrame.Angles(rad(3) * wave(t, 3.6, i * 0.8), 0, 0))
+		set(rig, "Tent" .. i .. "_3", CFrame.Angles(rad(4) * wave(t, 3.6, i * 0.8 + 0.6), 0, 0))
+	end
+end
+
+--==============================================================================
+-- THE CINDERDRAKE'S FLIGHTS (2026-10-16, the owner: "Walk, fly sometimes")
+--
+-- Planted, every FLIGHT_EVERY seconds he takes off, flies one loop over his
+-- garden and lands where he rose from: FLIGHT_SECONDS in all, timed by the
+-- SERVER's clock with his placement's own offset, so everyone watching sees the
+-- same flight. He rises FLIGHT_HEIGHT studs in TAKEOFF seconds, circles a loop
+-- FLIGHT_RADIUS studs across on his left, banking into it, and comes down in
+-- LANDING. His body is the rig's root part (a virtual body), so the whole tree
+-- flies; the walk gives way while he is aloft (Rig.airborne) and his legs tuck
+-- up. Only a planted one flies: never one carried, in a viewport or a reveal.
+--==============================================================================
+local FLIGHT_EVERY, FLIGHT_SECONDS = 75, 12
+local TAKEOFF, LANDING = 2.2, 2.2
+local FLIGHT_HEIGHT, FLIGHT_RADIUS = 26, 22
+-- Seconds his legs take to leave the ground, and to find it again.
+local LIFT_OFF = 0.4
+
+local flightClock = function(): number
+	return Workspace:GetServerTimeNow()
+end
+
+-- Studio specs: the clock the flights are timed by; nil puts the server's back.
+function SecretIdle.useFlightClock(fn: (() -> number)?)
+	flightClock = fn or function(): number
+		return Workspace:GetServerTimeNow()
+	end
+end
+
+-- Seconds into a flight, or nil on the ground.
+local function flightTime(rig: Rig): number?
+	if not rig.walks then
+		return nil
+	end
+	local k = (flightClock() + rig.phase * 7.3) % FLIGHT_EVERY
+	return if k < FLIGHT_SECONDS then k else nil
+end
+
+-- The body's place in a flight `k` seconds in (from where he stood, in his own
+-- frame), how far up off the ground he is to be read as (0..1), and his wings'
+-- beat (a fast one going up and coming down, a glide's slow one in the loop).
+local function flightPose(k: number): (CFrame, number, number)
+	local loop = FLIGHT_SECONDS - TAKEOFF - LANDING
+	local air = smooth01(k / LIFT_OFF) * smooth01((FLIGHT_SECONDS - k) / LIFT_OFF)
+	if k < TAKEOFF then
+		local e = smooth01(k / TAKEOFF)
+		return CFrame.new(0, FLIGHT_HEIGHT * e, -3 * e) * CFrame.Angles(rad(12) * sin(pi * k / TAKEOFF), 0, 0), air,
+			rad(38) * sin(2 * pi * k / 0.55)
+	elseif k < TAKEOFF + loop then
+		local u = (k - TAKEOFF) / loop
+		local theta = -2 * pi * u
+		local bank = rad(24) * smooth01(u / 0.15) * smooth01((1 - u) / 0.15)
+		local at = Vector3.new(-FLIGHT_RADIUS + FLIGHT_RADIUS * cos(theta), FLIGHT_HEIGHT + 2 * sin(2 * pi * u),
+			FLIGHT_RADIUS * sin(theta) - 3)
+		return CFrame.new(at) * CFrame.Angles(0, -theta, 0) * CFrame.Angles(0, 0, bank), air, rad(22) * sin(2 * pi * k / 1.1)
+	end
+	local s = (k - TAKEOFF - loop) / LANDING
+	local e = smooth01(s)
+	return CFrame.new(0, FLIGHT_HEIGHT * (1 - e), -3 * (1 - e)) * CFrame.Angles(-rad(8) * sin(pi * s), 0, 0), air,
+		rad(38) * sin(2 * pi * k / 0.55)
 end
 
 local function cinderdrake(rig: Rig, t: number)
@@ -2133,6 +2550,99 @@ local function cinderdrake(rig: Rig, t: number)
 	surge(rig, t, flare)
 	-- a ripple of glow runs down the body from the tail to the head
 	pulseGlows(rig, t, 1.4)
+	-- he breathes; the neck sways in an S and the head looks about; the jaw
+	-- opens as the flare's flame leaves the snout; the lids blink
+	-- (his forelegs hang off his chest, so it breathes only while he stands)
+	local standing = 1 - (if rig.gait then rig.gait.weight else 0)
+	set(rig, "Spine1", CFrame.Angles(rad(1) * standing * wave(t, 3.6), 0, 0))
+	set(rig, "Spine2", CFrame.Angles(rad(1) * standing * wave(t, 3.6, 0.5), 0, 0))
+	for i = 1, 5 do
+		set(rig, "Neck" .. i, CFrame.Angles(rad(2.5) * wave(t, 4.2, i * 0.5), rad(3) * wave(t, 6, i * 0.6), 0))
+	end
+	set(rig, "Head", CFrame.Angles(rad(3) * wave(t, 3.3), rad(14) * wave(t, 8), rad(2) * wave(t, 5)))
+	set(rig, "Jaw", CFrame.Angles(-rad(2) * (1 + wave(t, 2.4)) / 2 - rad(20) * flare, 0, 0))
+	set(rig, "Tongue1", CFrame.Angles(rad(8) * flare * sin(t * 18), 0, 0))
+	local lid = if (t % 4.4) < 0.12 then rad(30) else 0
+	set(rig, "EyelidL", CFrame.Angles(lid, 0, 0))
+	set(rig, "EyelidR", CFrame.Angles(lid, 0, 0))
+	-- the tail sways from side to side, a little behind at every joint
+	for i = 1, 7 do
+		set(rig, "Tail" .. i, CFrame.Angles(rad(1.5) * wave(t, 3.4, i * 0.45), rad(4) * wave(t, 3.4, i * 0.45), 0))
+	end
+	-- his wings rest spread, stirring; aloft they beat
+	local k = flightTime(rig)
+	if not k then
+		rig.airborne = 0
+		set(rig, "WingL_1", CFrame.Angles(0, 0, -rad(3) * wave(t, 5)))
+		set(rig, "WingR_1", CFrame.Angles(0, 0, rad(3) * wave(t, 5)))
+		return
+	end
+	local body, air, beat = flightPose(k)
+	rig.airborne = air
+	set(rig, BODY, body)
+	set(rig, "WingL_1", CFrame.Angles(0, 0, -beat))
+	set(rig, "WingR_1", CFrame.Angles(0, 0, beat))
+	-- his legs tuck up behind him and his tail streams out
+	for _, name in ipairs({ "HindL_1", "HindR_1" }) do
+		set(rig, name, CFrame.Angles(-rad(40) * air, 0, 0))
+	end
+	for _, name in ipairs({ "ForeL_1", "ForeR_1" }) do
+		set(rig, name, CFrame.Angles(-rad(25) * air, 0, 0))
+	end
+end
+
+local function grovemaw(rig: Rig, t: number)
+	-- the trunk sways above its six legs, the crown and canopies a little after
+	set(rig, "Trunk2", CFrame.Angles(rad(1.2) * wave(t, 5), rad(2) * wave(t, 7), rad(1.2) * wave(t, 6.1)))
+	set(rig, "Trunk3", CFrame.Angles(rad(1.2) * wave(t, 5, 0.6), rad(2) * wave(t, 7, 0.6), rad(1.2) * wave(t, 6.1, 0.6)))
+	set(rig, "Crown", CFrame.Angles(rad(2) * wave(t, 5.5, 1), 0, rad(2) * wave(t, 6.4, 1)))
+	for i, name in ipairs({ "CanopyA", "CanopyB", "CanopyC" }) do
+		set(rig, name, CFrame.Angles(rad(3) * wave(t, 4.6, i * 1.1), 0, rad(3) * wave(t, 5.3, i * 1.1)))
+	end
+	for i = 1, 4 do
+		set(rig, "Bough" .. i, CFrame.Angles(rad(4) * wave(t, 3.8, i * 0.8), 0, rad(2) * wave(t, 4.4, i * 0.8)))
+	end
+	-- the leaves flutter; the vines swing, each piece behind the one above
+	for i = 1, 8 do
+		set(rig, "Leaf" .. i, CFrame.Angles(rad(9) * wave(t, 1.6, i * 0.45), 0, 0))
+	end
+	for v = 1, 4 do
+		for seg = 1, 3 do
+			set(rig, "Vine" .. v .. seg, CFrame.Angles(rad(7) * wave(t, 2.9, v * 1.1 + seg * 0.5), 0, rad(4) * wave(t, 3.7, v + seg * 0.5)))
+		end
+	end
+	-- the arms reach and settle
+	for i, side in ipairs({ "L", "R" }) do
+		local lag = (i - 1) * 1.4
+		set(rig, "Arm" .. side .. "Shoulder", CFrame.Angles(rad(5) * wave(t, 4.4, lag), 0, 0))
+		set(rig, "Arm" .. side .. "Elbow", CFrame.Angles(rad(6) * wave(t, 4.4, lag + 0.7), 0, 0))
+		set(rig, "Arm" .. side .. "Wrist", CFrame.Angles(rad(8) * wave(t, 3.1, lag), 0, 0))
+	end
+	-- the maw breathes, and every 6.5 s gapes and snaps shut
+	local k = t % 6.5
+	local gape = if k < 0.6 then sin(k / 0.6 * pi / 2) elseif k < 0.75 then 1 - (k - 0.6) / 0.15 else 0
+	set(rig, "Jaw", CFrame.Angles(-rad(2) * (1 + wave(t, 3.2)) / 2 - rad(16) * gape, 0, 0))
+end
+
+local function scourwheel(rig: Rig, t: number)
+	-- the rider bobs on its wheel; the wheel rocks a little where it stands
+	set(rig, "Root", CFrame.new(0, 0.2 * wave(t, 3.4), 0))
+	set(rig, "Wheel", CFrame.Angles(rad(1.5) * wave(t, 5), 0, 0))
+	-- the chimes swing, one after another; the ruff stirs
+	for i = 1, 3 do
+		set(rig, "Chime" .. i, CFrame.Angles(rad(10) * wave(t, 2.4, i * 0.9), 0, rad(4) * wave(t, 3.1, i * 0.9)))
+	end
+	set(rig, "Ruff", CFrame.Angles(rad(3) * wave(t, 2.6), 0, 0))
+	-- the pads on their stalks wave like ears, a beat apart
+	for i, side in ipairs({ "L", "R" }) do
+		local lag = (i - 1) * 1.2
+		set(rig, "Pad" .. side .. "Stalk", CFrame.Angles(rad(6) * wave(t, 3.2, lag), 0, rad(4) * wave(t, 4.1, lag)))
+		set(rig, "Pad" .. side .. "Pad", CFrame.Angles(rad(10) * wave(t, 2, lag + 0.5), 0, 0))
+	end
+	-- the jaw breathes, and every 5.2 s clacks open
+	local k = t % 5.2
+	local clack = if k < 0.25 then sin(k / 0.25 * pi) else 0
+	set(rig, "Jaw", CFrame.Angles(-rad(3) * (1 + wave(t, 2.8)) / 2 - rad(14) * clack, 0, 0))
 end
 
 local IDLES: { [string]: (Rig, number) -> () } = {
@@ -2146,6 +2656,8 @@ local IDLES: { [string]: (Rig, number) -> () } = {
 	nebulisk = nebulisk,
 	mirehydra = mirehydra,
 	cinderdrake = cinderdrake,
+	grovemaw = grovemaw,
+	scourwheel = scourwheel,
 }
 
 --==============================================================================
@@ -2207,6 +2719,11 @@ function SecretIdle.Step(rig: Rig, now: number)
 	end
 	if gait then
 		walkPose(rig, gait)
+		-- A wheel stays turned as far as it rolled, walking or standing.
+		local wheel = gait.profile.wheel
+		if wheel then
+			rig.pose[wheel.joint] = (rig.pose[wheel.joint] or IDENTITY) * CFrame.Angles(-gait.rolled / wheel.radius, 0, 0)
+		end
 	end
 	apply(rig)
 end
