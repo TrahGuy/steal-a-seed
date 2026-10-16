@@ -1,5 +1,49 @@
 # Steal a Seed — Session Handoff
 
+## A SECRET IN EVERY BIOME, STEP 1: THE OWNER'S FIVE, WORKING WITH THEIR OWN SCRIPTS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 67af52a with the owner's OK ("push it when green"), NOT PUBLISHED; BiomeSecretsSpec 43/0 (NEW); THE WHOLE SUITE 165 OF 165 (twelve specs' pins moved to the new state); FirstHatchSpec 36/0; MUTANTS 19/19 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+**The owner's brief and answers:** KB/BIOME-SECRETS-PLAN.md (the table, and the record of step 1 at its foot).
+- Asked mid-way: "what is the sphere around cinderdrake? if not necesarry we should remove it, and can he fly too?"
+  - The sphere was the model's Aura ball (90 studs; the Mirehydra has a 61-stud one). It set each model's box and lowest point, so it stood the Cinderdrake's claws 21.5 studs up.
+  - The owner: remove both. Fly: "Walk, fly sometimes", in step 2.
+
+**Built:**
+- Shared/BiomeSecretForms: the ten ServerStorage models as data (the generator and its omit list are in the scratchpad; .rbxm backups in output/model-backups/2026-10-16-biome-secrets-originals). The two spheres are out (`Removed`).
+- The five species (SeedData) replace Snarlbloom and Petalfawn in SecretByBiome; owned ones are kept. `Still` keeps them standing until step 2.
+- NestService: one roll for the whole server at each stocking (5%), a random biome on a hit. Never while a secret is out; never in a POD RUSH. The thief carrying it meets Storm Strider's chase (`chaseProfileOf`). `SpecRollSecret` for specs. The debug spawn is refused the same way.
+- The owner's scripts on the client: SecretIdle (NebuliskIdle, MirehydraAura, CinderdrakeAura) and SecretPodMotion (SunPulse, MawPulse on the cradle; Grovemaw's lid opening in the hands once the pod is ready). Their pre-rescale distances are taken times each model's scale.
+- The Index's sixth card (outside CLAIM), the guide's odds a dawn, What's New.
+
+**Found in Play and fixed:**
+- An owned Snarlbloom pod and a Grovemaw pod would share one Bag tile (InventoryModel keyed a secret's shell by biome).
+- The first-hatch card read "TINY Nebulisk" for a secret.
+- A far cradle pod streamed in without its Shell (now Atomic, like PodModel's).
+
+**Live (one guarded Play, SeedTest_20261016; a gated ZZSecretHost, deleted after):**
+- Every cradle spot is clear of decor in the rebuilt map (nearest prop 27-29 studs out).
+- Cinderdrake's, Nebulisk's and Scourwheel's pods stood on their cradles at full size. A second spawn was refused while one was out. The toast was on screen.
+- MawPulse and SunPulse moved in Play.
+- A steal met 283 studs/s: Storm Strider's 195 opening, plus rage and a 0-Speed thief's shortfall, x2.5.
+- A bank went into the Bag. Grovemaw's lid opened 70 degrees in the hands once ready, then the pod hatched from the Bag.
+- Four secrets were planted: they stood still with their idles playing.
+- The Grovemaw card showed in the Index, outside CLAIM.
+- Studio is clean afterwards: 400 compared, 0 differ, 0 ZZ leftovers, the marker and its key removed.
+- Captures are in output/biome-secrets-2026-10-16 (untracked).
+
+**Seen, not changed (for the owner):**
+- Four secrets on one plot overlap heavily (full size).
+- A held secret pod fills the view.
+- The Starbloom guardian's throw put the test player out of the world twice (recovered at the gate).
+
+**Next:** step 2 (walks and new idles, the Cinderdrake's flights, `Still` removed): the owner, "go ahead with step 2 and so on".
+
+**Files:**
+- Shared/BiomeSecretForms/ (new), SecretPodMotion.luau (new), SecretPodMotion.client.luau (new);
+- SecretIdle, SecretModel, SecretForms, SeedData, BiomeData, GameConfig, PodGuide, AlmanacView, InventoryModel, FirstHatchCard, UpdateLog;
+- NestService, PlantService, IndexUI.client, FirstHatchCard.client;
+- tools/tests/BiomeSecretsSpec.luau (new) and twelve specs' pins, FirstHatchSpec;
+- KB/BIOME-SECRETS-PLAN.md (new), AGENTS.md.
+
 ## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 71245c2 with the owner's OK, NOT PUBLISHED; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
 
 **The bug** (found by the sprout rename's phone Play, above):
