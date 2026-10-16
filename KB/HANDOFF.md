@@ -1,5 +1,43 @@
 # Steal a Seed — Session Handoff
 
+## SUMMON A SECRET IN THE ADMIN CONSOLE, AND A MYSTERIOUS WHAT'S NEW — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as e0bc058 with the owner's OK ("push it when green"), NOT PUBLISHED; AdminSummonSpec 27/0 (NEW); AdminAnnounceSpec 44/0 and AdminMistSpec 69/0 (the new sibling stood in); CompactMenusSpec 48/0 (seventeen actions); THE WHOLE SUITE 166 OF 166 RAN; ITS ONE FAILURE, CompactMenusSpec's old sixteen-action pin, 48/0 ONCE UPDATED; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+**Checked first, the owner's "published it, check it":**
+- v1065, at 12:00:31 UTC (Studio's log, its clock in step), shipped the tree at 71245c2. It held the hourly rush, the sprout rename and the card fix.
+  - The transcript dates it: my last src edit was at 11:59:14Z, and the secrets work began at 12:05Z.
+- v1066, at 14:21:53 UTC, shipped 855a406: both secret steps.
+- Studio is clean afterwards: 400 compared, 0 differ, 0 ZZ, no test marker. HANDOFF marked them live (123c554).
+
+**What's New made mysterious (2b33369, pushed with the owner's pick "Own commit first"):**
+- The owner: "the whats new info seems to be so specific, we need to make it sound more mysterious".
+- Their pick: "Something stirs in every biome", with the five names hidden (the Index keeps them ???).
+- It lives in the next publish; v1066 still shows the old words. BiomeSecretsSpec checks that the entry names none of the five.
+
+**SUMMON A SECRET:**
+- The owner asked for admin console ideas, then "ask a lot of questions". The answers are in KB/ADMIN-SECRET-SUMMON-PLAN.md: secret tools only, and of those only spawn one now.
+- The Events page's SECRET card: a biome or RANDOM, THIS SERVER or ALL SERVERS (behind YES, ALL SERVERS), SUMMON. Every admin account.
+- NestService.SummonSecret runs the game's own spawn under the roll's rules. A refusal says why: a secret is already out (named), or a POD RUSH is on.
+- Everybody reads the secret's toast and "{admin} summoned a SECRET!" (GameConfig.AdminAnnounce.Words.Secret).
+- ALL SERVERS:
+  - It summons here, then one MessagingService message (topic SeedSecretSummon) reaches every server, acted on once each under its own rules.
+  - Studio never publishes or subscribes, and says so.
+  - The reply is "Sent to every server. Here: ...".
+
+**Live (one guarded Play, SeedTest_20261016):**
+- From the console: "Summoned Mirehydra in Tanglemire.", with the admin line at the top.
+- Again: "A secret is already out (Mirehydra in Tanglemire). Nothing changed."
+- ALL SERVERS asked "Summon a secret in Tanglemire on EVERY server?", then answered "In Studio nothing goes to other servers. Here: A secret is already out (...)".
+- The server log has the spawn ("summoned by nicnicniccoal") and both audit lines.
+- Studio is clean afterwards (400, 0 differ, 0 ZZ, the marker and its key removed).
+- Captures are in output/admin-summon-2026-10-16 (untracked).
+
+**Not tested: a real ALL SERVERS publish** (only a live server can make one).
+
+**Files:**
+- NestService (SummonSecret), AdminService/init.luau, ConsoleModel, AdminConsoleUI.client, AdminAnnounce, GameConfig (the words), UpdateLog;
+- tools/tests/AdminSummonSpec.luau (new), AdminAnnounceSpec, AdminMistSpec, CompactMenusSpec, BiomeSecretsSpec;
+- KB/ADMIN-SECRET-SUMMON-PLAN.md (new), AGENTS.md.
+
 ## A SECRET IN EVERY BIOME, STEP 2: ALL FIVE WALK, FOUR NEW IDLES, THE CINDERDRAKE FLIES — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 855a406 with the owner's OK ("push it when green"); LIVE as v1066, the owner's publish at 14:21:53 UTC 2026-10-16, Studio matching 855a406 (400 compared, 0 differ, 0 ZZ, no test marker); BiomeSecretsSpec 55/0; THE WHOLE SUITE 165 OF 165; MUTANTS 11/11 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **The owner:** "go ahead with step 2 and so on". Their answers are in KB/BIOME-SECRETS-PLAN.md: "Walk like the others", new idles for the four without a script, and for the Cinderdrake "Walk, fly sometimes".
