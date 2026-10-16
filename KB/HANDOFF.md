@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as be1abbe with the owner's OK, NOT PUBLISHED; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 The owner, on the Sprout Journey talk: "i like that cheaper idea" (POD RUSH on a schedule), then "ask me a lot of question". Sixteen answers, every recommendation taken: KB/POD-RUSH-HOURLY-PLAN.md (new; with where each lives and what was tested).
 
