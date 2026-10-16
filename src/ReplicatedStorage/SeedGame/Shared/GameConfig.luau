@@ -5046,39 +5046,35 @@ GameConfig.Weather = {
 	MinSeconds = 20,
 	MaxSeconds = 1800,
 	--==========================================================================
-	-- AUTOMATIC WEATHER (2026-10-05, the owner's approved settings; briefs:
-	-- art/references/automatic-weather-2026-10-05/CLAUDE_PROMPT.md, and
-	-- LOWER_RATE_FOLLOWUP.md, which made it rarer the same day: 5% a check, not
-	-- 15%; 90/10, not 80/20; sure at 60 minutes, not 30)
+	-- AUTOMATIC WEATHER, ON THE HOUR (2026-10-16, the owner's picks: every 60
+	-- minutes, fixed; every server at the same minute; 3 minutes, as before;
+	-- Rain or a Thunderstorm 90/10, as before; it may fall during the Enchanted
+	-- Mist, as before). It replaced the draws of 2026-10-05 (briefs:
+	-- art/references/automatic-weather-2026-10-05/: 5% a check every five
+	-- minutes of populated clear weather, 90/10, sure at 60 minutes -- about 49
+	-- minutes apart on average), which no timer could count down to.
 	--
-	-- WeatherService's own scheduler, per server, inside its one loop. While
-	-- the weather is FULLY clear (no event in any state) and at least one player
-	-- is here, it checks every CheckSeconds: each check starts weather with
-	-- probability Chance, and the mode is then drawn from ModeWeights (weights
-	-- after a start, not separate rolls). At GuaranteeSeconds of continuously
-	-- populated clear weather a start is made whatever the draws said. Started
-	-- weather runs DurationSeconds, opening included.
-	--
-	-- The quiet window starts when the first player arrives, or when the last
-	-- weather -- automatic OR the console's -- has finished all its cleanup; an
-	-- empty server resets it. No roll at startup, none during an event, and at
-	-- most one attempt per check however late the loop runs.
-	--
-	-- TWO DRAWS, NOT ONE PER MODE: an ordinary check is weather 5 times in 100,
-	-- and that weather is Rain 9 times in 10 -- so 4.5% Rain, 0.5% Thunderstorm,
-	-- 95% nothing. The 60-minute check skips the first draw, not the second: a
-	-- sure start is Rain or a Thunderstorm 90/10 as well. With these numbers
-	-- the eleven draws at 5 .. 55 minutes all miss in about 57% of windows, and
-	-- the expected clear wait is about 46.0 minutes (starts about 49 minutes
-	-- apart with the three-minute weather) -- an average, not a timer.
+	-- WeatherService's own scheduler, inside its one loop. Weather is DUE at
+	-- every OffsetSeconds + k * PeriodSeconds of the server clock
+	-- (Workspace:GetServerTimeNow(), Unix seconds) -- with 3600 and 0, every
+	-- hour on the hour, the same moment on every server -- and runs to that MARK
+	-- + DurationSeconds. A server that cannot start it at the mark (weather
+	-- already running, the console's or a summon; nobody here; just started)
+	-- starts it later inside that window for what is left, so it ends with
+	-- everybody else's; with under MinSeconds left, the mark is missed. One
+	-- start per mark. The mode comes from ModeWeights by a draw SEEDED WITH THE
+	-- MARK, so every server picks the same weather for the same hour. The next
+	-- mark is published as the Workspace attribute NextAtAttribute (a server
+	-- time) for the RAIN BIOME sign's countdown (Sign, below); absent while the
+	-- scheduler is off. AutoWeatherSpec holds it.
 	--==========================================================================
 	Auto = {
 		Enabled = true,
-		CheckSeconds = 300,
-		Chance = 0.05,
+		PeriodSeconds = 3600,
+		OffsetSeconds = 0,
 		ModeWeights = { rain = 0.9, thunder = 0.1 },
 		DurationSeconds = 180,
-		GuaranteeSeconds = 3600,
+		NextAtAttribute = "RainNextAt",
 	},
 	-- The opening toast comes this long after the rain begins, and never before
 	-- the entrance is open.
@@ -5189,6 +5185,57 @@ GameConfig.Weather = {
 			{ Name = "Outer", Width = 17, Transparency = 0.78, Colour = Color3.fromRGB(85, 150, 245), Phase = 3.8 },
 			{ Name = "Haze", Width = 25, Transparency = 0.88, Colour = Color3.fromRGB(80, 145, 240), Phase = 5,
 				Rich = true },
+		},
+	},
+	--==========================================================================
+	-- THE RAIN BIOME SIGN (2026-10-16, the owner: "add a Huge Rain Text biome
+	-- with a timer"; their picks: over the rain bridge, "RAIN BIOME" over "Next
+	-- rain in 42:10", and "OPEN · Closes in 2:31" while it is open).
+	--
+	-- RainSign.client draws it for every player, always, on a local anchor of
+	-- its own (never streamed out): FloatingSign's family -- LuckiestGuy, the
+	-- dark outline, sized in studs, no backing, nothing to press -- the OBBY
+	-- sign's size (Height) and its read-from-afar rule (FloatingSign.clampScale:
+	-- the header at least MinHeaderUnits tall on any screen, at most
+	-- MaxHeaderShare of it up close), growing upward from its bottom edge. It
+	-- stands over the foot of the bridge (X, over the ramp) on the deck's south
+	-- half (Z): from there no plot shows it over the hub's ENCHANTED MIST sign
+	-- or the OBBY sign on a 1280 x 720 or 942 x 739 screen (over the deck's
+	-- middle, plot 1 saw it behind the Mist sign). On a small phone every
+	-- floating sign grows to stay readable and some overlap from far plots, as
+	-- those two already do (RainSignSpec counts it). Its bottom edge is
+	-- BottomAbove the ground, over the gate's top (Biome.Gate.Height), so the
+	-- bridge, its gate and its walkers never meet it -- and no higher: from a
+	-- plot it then stands under the HUD's top row (at 45 it went under BIOMES and
+	-- TELEPORT TO PLOT). It draws out to MaxDistance, past every plot. Its words come from
+	-- the published weather (Attributes.State, EndsAt) and the scheduler's next
+	-- mark (Auto.NextAtAttribute), counted down on the client once a second
+	-- (Shared/RainSign). "RAIN BIOME" is 5.26 times as wide as tall in
+	-- LuckiestGuy and the longest status line ("OPEN · Closes in 30:00", the
+	-- console's longest rain) about 10.3: both whole at these heights in this
+	-- width. A rain blue deeper than the OBBY sign's sky blue, with white words
+	-- under it. RainSignSpec holds it.
+	--==========================================================================
+	Sign = {
+		Header = "RAIN BIOME",
+		HeaderColour = Color3.fromRGB(78, 160, 255),
+		SubColour = Color3.fromRGB(240, 248, 255),
+		Width = 33,
+		Height = 6,
+		SubHeight = 3,
+		X = 248,
+		Z = 50,
+		BottomAbove = 31,
+		MaxDistance = 600,
+		MinHeaderUnits = 22,
+		MaxHeaderShare = 0.08,
+		Words = {
+			Next = "Next rain in %s",
+			-- The mark has come and the server has not yet started it (a moment).
+			Starting = "Starting\u{2026}",
+			Opening = "Opening\u{2026}",
+			Open = "OPEN \u{00B7} Closes in %s",
+			Closing = "Closing\u{2026}",
 		},
 	},
 	--==========================================================================

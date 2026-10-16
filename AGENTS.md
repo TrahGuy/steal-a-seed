@@ -279,6 +279,10 @@ src/
                                 SACRIFICE A POD! (words in GameConfig *.FloatingWords);
                                 clampScale (2026-10-13): the Mist sign's read-from-afar size
                                 rule for any sign (a header's least and most screen size)
+    Shared/RainSign.luau        the RAIN BIOME sign over the rain bridge (2026-10-16): its line at a
+                                moment from the published weather and the next on-the-hour mark
+                                (Next rain in 42:10 / Starting… / Opening… / OPEN · Closes in 2:31 /
+                                Closing…), where it stands, its size (clampScale) -- pure (RainSignSpec)
     Shared/HotbarSlots.luau     pure: the freely assignable hotbar's grammar (2026-10-03; it
                                 replaced HotbarRoles) -- a slot is a shortcut ref (i:<Item>,
                                 w:<weapon>, ticket, a faint +bat/+trap/+ticket), what a profile
@@ -727,6 +731,10 @@ src/StarterPlayer/StarterPlayerScripts/
                                 everybody (2026-10-13, item 8; ObbyData.Sign): a FloatingSign on a
                                 local anchor, its bottom edge over the arch's crown, sized each
                                 frame by FloatingSign.clampScale to read from the hub
+    RainSign.client.luau        "RAIN BIOME" over the rain bridge's foot for everybody (2026-10-16;
+                                GameConfig.Weather.Sign): the countdown to the next on-the-hour rain
+                                (WeatherService publishes the mark, Weather.Auto.NextAtAttribute),
+                                OPEN · Closes in while it is open; repainted once a second, nothing sent
     WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
                                 species cards, owed prizes) and this player's copy of the world
                                 wheel's face; GET SPINS and its card, shown only while the

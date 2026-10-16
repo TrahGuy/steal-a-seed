@@ -535,21 +535,21 @@ local ok, err = pcall(function()
 		"a Rain opens, is asked, and announces nothing")
 	finishEvent()
 
-	-- The automatic thunderstorm: the real settings, a scripted draw (a start
-	-- needs a draw under 0.05; a mode draw from 0.9 is a Thunderstorm).
-	local draws, used = { 0.01, 0.95 }, 0
+	-- The automatic thunderstorm: the real settings (on the hour since
+	-- 2026-10-16), at a mark, with a scripted mode draw (from 0.9 a
+	-- Thunderstorm).
 	WeatherService.useRandom(function()
-		used += 1
-		return draws[used] or 0.99
+		return 0.95
 	end)
 	WeatherService.useAutoConfig(nil)
-	now += 1
+	local P, O = W.Auto.PeriodSeconds, W.Auto.OffsetSeconds
+	now = O + (math.floor((now - O) / P) + 2) * P - 1
 	WeatherService.AutoStep(now)
-	now += W.Auto.CheckSeconds
+	now += 1
 	local what = WeatherService.AutoStep(now)
 	local idA = WeatherService.State() and WeatherService.State().id
 	check(what == "started:thunder" and idA ~= nil and #told == before + 1,
-		"the scheduler starts a thunderstorm (draws 0.01 then 0.95); nothing announced yet", what)
+		"the scheduler starts a thunderstorm at the mark (its draw 0.95); nothing announced yet", what)
 	now += W.ToastDelaySeconds
 	WeatherService.Step(now)
 	WeatherService.AutoStep(now)

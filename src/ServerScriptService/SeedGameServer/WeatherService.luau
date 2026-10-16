@@ -3,7 +3,8 @@
 --
 -- The Rain event (2026-10-02): an admin starts it from the console -- any of
 -- the three allowlisted accounts since 2026-10-07, the owner's alone before --
--- or, since 2026-10-05, this file's own scheduler does (AUTOMATIC WEATHER, below);
+-- or, since 2026-10-05, this file's own scheduler does (AUTOMATIC WEATHER, below:
+-- every hour on the hour since 2026-10-16);
 -- this server's garden earns a quarter more while it falls, fog closes round the
 -- island, a temporary biome is uncovered off the east edge, and when the rain
 -- stops everyone inside is put back at its entrance and it fades away.
@@ -683,8 +684,9 @@ function WeatherService.EndRain(by: any): (boolean, string, boolean)
 end
 
 --==============================================================================
--- AUTOMATIC WEATHER (2026-10-05, the owner's approved settings; GameConfig
--- .Weather.Auto)
+-- AUTOMATIC WEATHER, ON THE HOUR (2026-10-16, the owner; GameConfig.Weather
+-- .Auto says why). It replaced the 2026-10-05 draws, which no sign could count
+-- down to.
 --
 -- A scheduler, not a second event: state here, advanced by AutoStep from the
 -- SAME loop that steps the event (so a re-run, a Stop or an Init can never
@@ -693,53 +695,69 @@ end
 -- attributes, icons, bonus and cleanup. Nothing a client can send reaches it,
 -- and it is no admin: its starts are logged as "automatic weather".
 --
---   THE QUIET WINDOW opens on the first step that finds the weather FULLY
---   clear (no event in any state) with a player here: the first arrival, or
---   the step after the last weather -- automatic or the console's -- finished
---   all its cleanup. An event in any state, or an empty server, closes it, so
---   nothing is ever rolled during weather or for nobody, and a fresh window
---   starts over.
---   A CHECK every CheckSeconds of the window, on the window's own grid: one
---   draw against Chance; a start draws the mode from ModeWeights. At
---   GuaranteeSeconds the check starts weather whatever the draws said.
---   AT MOST ONE ATTEMPT PER STEP, however late the step: the next check is the
---   window's next grid point after now -- no catch-up rolls.
---   A START THAT FAILS waits for the next check, with one warning per attempt
---   (so at most one per CheckSeconds). A start whose biome does not build is
---   not a failure: the existing event runs and cleans up as it always has.
+--   THE MARKS: OffsetSeconds + k * PeriodSeconds of the server clock -- every
+--   hour on the hour, the same moment on every server.
+--   ONE START PER MARK, inside its WINDOW (the mark to the mark +
+--   DurationSeconds): at the mark when it can; later, for what is left of the
+--   window, when the weather was busy (the console's, a summon), nobody was
+--   here, or the server had only just started -- so it ends with every other
+--   server's. With under Weather.MinSeconds left the mark is MISSED (logged)
+--   and the next one is next. A server's first step takes the latest mark as
+--   it finds it -- inside its window or past it, never a catch-up for an hour
+--   it was not up for -- and so does a step after a loop held up past a whole
+--   mark.
+--   THE MODE comes from ModeWeights with a draw SEEDED BY THE MARK: every
+--   server picks the same weather for the same hour.
+--   THE NEXT MARK is published (Auto.NextAtAttribute) for the RAIN BIOME
+--   sign's countdown: the mark still due while its window waits, the one after
+--   once it has had its start; gone while the scheduler is off.
+--   A START THAT FAILS uses its mark all the same: one warning, no retry spam.
+--   A start whose biome does not build is not a failure: the existing event
+--   runs and cleans up as it always has.
 --
--- The draw and the settings are seams (useRandom, useAutoConfig) so
--- AutoWeatherSpec can walk hours of windows on its own clock.
+-- The draw, the settings and the clock are seams (useRandom, useAutoConfig,
+-- useClock) so AutoWeatherSpec can walk days of marks on its own clock.
 --==============================================================================
 export type AutoConfig = {
 	Enabled: boolean,
-	CheckSeconds: number,
-	Chance: number,
+	PeriodSeconds: number,
+	OffsetSeconds: number,
 	ModeWeights: { [string]: number },
 	DurationSeconds: number,
-	GuaranteeSeconds: number,
 }
 
 -- What a start by the scheduler is logged as: a name, not a player or an admin.
 local AUTOMATIC = { Name = "automatic weather" }
+-- Where the next mark is published, for the sign.
+local NEXT_AT: string = W.Auto.NextAtAttribute
 
-local random = Random.new()
-local draw: () -> number = function()
-	return random:NextNumber()
+-- The mode draw for a mark, in [0, 1): the same number on every server.
+local function seeded(mark: number): number
+	return Random.new(mark):NextNumber()
 end
+local draw: (number) -> number = seeded
 local autoConfig: AutoConfig = W.Auto :: any
 
--- The window: when it opened, the next check, and what the last attempts did.
+-- The last mark that had its one start (or was missed), what the sign was
+-- told, and what the marks did.
 local auto = {
-	quietSince = nil :: number?,
-	nextCheckAt = nil :: number?,
-	rolls = 0,
+	usedMark = nil :: number?,
+	nextAt = nil :: number?,
+	starts = 0,
+	missed = 0,
 	failures = 0,
 	lastFailure = nil :: string?,
 }
 
 local function finiteNumber(v: any): boolean
 	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+end
+
+-- A mark as the log says it: its UTC hour and minute (os.date's "!*t", the
+-- only kind Roblox has).
+local function stamp(mark: number): string
+	local t = os.date("!*t", math.floor(mark))
+	return string.format("%02d:%02d UTC", t.hour, t.min)
 end
 
 -- Whether `cfg` is usable, and why not. Pure.
@@ -750,11 +768,13 @@ function WeatherService.ValidateAuto(cfg: any): (boolean, string)
 	if type(cfg.Enabled) ~= "boolean" then
 		return false, "Enabled must be true or false"
 	end
-	if not finiteNumber(cfg.CheckSeconds) or cfg.CheckSeconds <= 0 then
-		return false, "CheckSeconds must be a positive number"
+	local period = cfg.PeriodSeconds
+	if not finiteNumber(period) or period <= 0 then
+		return false, "PeriodSeconds must be a positive number"
 	end
-	if not finiteNumber(cfg.Chance) or cfg.Chance < 0 or cfg.Chance > 1 then
-		return false, "Chance must be from 0 to 1"
+	local offset = cfg.OffsetSeconds
+	if not finiteNumber(offset) or offset < 0 or offset >= period then
+		return false, "OffsetSeconds must be from 0 to under PeriodSeconds"
 	end
 	if type(cfg.ModeWeights) ~= "table" then
 		return false, "ModeWeights must be a table"
@@ -776,30 +796,42 @@ function WeatherService.ValidateAuto(cfg: any): (boolean, string)
 	if not finiteNumber(d) or d ~= math.floor(d) or d < W.MinSeconds or d > W.MaxSeconds then
 		return false, string.format("DurationSeconds must be a whole number from %d to %d", W.MinSeconds, W.MaxSeconds)
 	end
-	if not finiteNumber(cfg.GuaranteeSeconds) or cfg.GuaranteeSeconds < cfg.CheckSeconds then
-		return false, "GuaranteeSeconds must be a number no smaller than CheckSeconds"
+	if d >= period then
+		return false, "DurationSeconds must be shorter than PeriodSeconds"
 	end
 	return true, "ok"
 end
 
 local autoValid, autoWhy = WeatherService.ValidateAuto(autoConfig)
 
-local function resetWindow()
-	auto.quietSince = nil
-	auto.nextCheckAt = nil
+-- What the sign counts down to: written only when it changes.
+local function publishNext(at: number?)
+	if auto.nextAt ~= at then
+		auto.nextAt = at
+		Workspace:SetAttribute(NEXT_AT, at)
+	end
 end
 
-function WeatherService.useRandom(fn: (() -> number)?)
-	draw = fn or function()
-		return random:NextNumber()
+-- Forgets the marks and takes the countdown down: Init, Start, Stop, and a
+-- scheduler switched off.
+local function resetWindow()
+	auto.usedMark = nil
+	auto.nextAt = nil
+	if Workspace:GetAttribute(NEXT_AT) ~= nil then
+		Workspace:SetAttribute(NEXT_AT, nil)
 	end
+end
+
+-- The mode draw for a mark; a spec stands in its own.
+function WeatherService.useRandom(fn: ((number) -> number)?)
+	draw = fn or seeded
 end
 
 function WeatherService.useAutoConfig(cfg: AutoConfig?)
 	autoConfig = cfg or (W.Auto :: any)
 	autoValid, autoWhy = WeatherService.ValidateAuto(autoConfig)
 	resetWindow()
-	auto.rolls, auto.failures, auto.lastFailure = 0, 0, nil
+	auto.starts, auto.missed, auto.failures, auto.lastFailure = 0, 0, 0, nil
 end
 
 -- A copy of the scheduler's state, for the spec and the command bar.
@@ -808,12 +840,20 @@ function WeatherService.AutoState(): { [string]: any }
 		enabled = autoValid and autoConfig.Enabled == true,
 		valid = autoValid,
 		why = autoWhy,
-		quietSince = auto.quietSince,
-		nextCheckAt = auto.nextCheckAt,
-		rolls = auto.rolls,
+		usedMark = auto.usedMark,
+		nextAt = auto.nextAt,
+		starts = auto.starts,
+		missed = auto.missed,
 		failures = auto.failures,
 		lastFailure = auto.lastFailure,
 	}
+end
+
+-- The latest mark at or before `now`. Pure.
+function WeatherService.MarkAt(now: number, cfg: AutoConfig?): number
+	local c = cfg or autoConfig
+	local period, offset = c.PeriodSeconds, c.OffsetSeconds
+	return offset + math.floor((now - offset) / period) * period
 end
 
 -- The mode for a draw in [0, 1): the weights in a fixed order, so one draw is
@@ -841,63 +881,61 @@ function WeatherService.PickMode(r: number, weights: { [string]: number }?): str
 end
 
 -- One step of the scheduler at `now`. Answers what it did: nil (nothing),
--- "armed", "clear" (a check that drew no weather), "started:<mode>" or
--- "failed".
+-- "started:<mode>", "missed" or "failed".
 function WeatherService.AutoStep(now: number): string?
 	local cfg = autoConfig
 	if not (autoValid and cfg.Enabled) then
 		resetWindow()
 		return nil
 	end
-	if current ~= nil or #playersNow() == 0 then
-		-- Weather in any state, or nobody here: no window. It opens afresh once
-		-- the weather has gone completely and somebody is present.
-		resetWindow()
+	local period = cfg.PeriodSeconds
+	local mark = WeatherService.MarkAt(now, cfg)
+	local first = auto.usedMark == nil
+	if first or (auto.usedMark :: number) < mark - period then
+		-- The first step, or a loop held up past a whole mark: the marks before
+		-- this one are gone, never caught up; this one is due while its window is.
+		auto.usedMark = mark - period
+	end
+	if (auto.usedMark :: number) >= mark then
+		publishNext(mark + period)
 		return nil
 	end
-	local since = auto.quietSince
-	if since == nil then
-		auto.quietSince = now
-		auto.nextCheckAt = now + math.min(cfg.CheckSeconds, cfg.GuaranteeSeconds)
-		return "armed"
-	end
-	local due = auto.nextCheckAt or (since + cfg.CheckSeconds)
-	if now < due then
-		return nil
-	end
-	-- ONE attempt, however overdue; the next check is the window's next grid
-	-- point after now, and never later than the guarantee while that is ahead.
-	local function nextCheck(): number
-		local k = math.floor((now - since) / cfg.CheckSeconds) + 1
-		local at = since + k * cfg.CheckSeconds
-		local guarantee = since + cfg.GuaranteeSeconds
-		if guarantee > now then
-			at = math.min(at, guarantee)
+	-- This mark is due: what is left of its window, in whole seconds.
+	local left = math.floor(mark + cfg.DurationSeconds - now + 0.5)
+	if left < W.MinSeconds then
+		auto.usedMark = mark
+		publishNext(mark + period)
+		if first then
+			-- A server that came up after this mark's window: nothing was missed.
+			return nil
 		end
-		return at
+		auto.missed += 1
+		log(string.format("Automatic weather: the %s mark was missed (%s); the next is in %s.", stamp(mark),
+			if current ~= nil then "weather was still running" else "nobody was here", mmss(mark + period - now)))
+		return "missed"
 	end
-	local quiet = now - since
-	local forced = quiet >= cfg.GuaranteeSeconds
-	auto.rolls += 1
-	if not forced and not (draw() < cfg.Chance) then
-		auto.nextCheckAt = nextCheck()
-		log(string.format("Automatic weather: clear for %s; no weather this check, the next in %s.", mmss(quiet),
-			mmss(auto.nextCheckAt - now)))
-		return "clear"
+	publishNext(mark)
+	if current ~= nil or #playersNow() == 0 then
+		-- Weather in any state, or nobody here: it waits inside its window.
+		return nil
 	end
-	local mode = WeatherService.PickMode(draw(), cfg.ModeWeights)
-	local ok, started, message = pcall(WeatherService.StartWeather, AUTOMATIC, cfg.DurationSeconds, mode)
+	auto.usedMark = mark
+	publishNext(mark + period)
+	local mode = WeatherService.PickMode(draw(mark), cfg.ModeWeights)
+	local seconds = math.min(left, cfg.DurationSeconds)
+	local ok, started, message = pcall(WeatherService.StartWeather, AUTOMATIC, seconds, mode)
 	if ok and started then
-		resetWindow()
-		log(string.format("Automatic weather: %s after %s of clear weather%s.", W.Modes[mode].Name, mmss(quiet),
-			if forced then " (the guarantee)" else ""))
+		auto.starts += 1
+		log(string.format("Automatic weather: %s for %s, the %s mark%s.", W.Modes[mode].Name, mmss(seconds), stamp(mark),
+			if now - mark >= 1
+				then string.format(" (%s late; it ends with every other server's)", mmss(now - mark))
+				else ""))
 		return "started:" .. mode
 	end
 	auto.failures += 1
 	auto.lastFailure = tostring(if ok then message else started)
-	auto.nextCheckAt = nextCheck()
-	warn(string.format("[Seed/WeatherService] automatic %s did not start (%s); the next try in %s.",
-		string.lower(W.Modes[mode].Name), auto.lastFailure, mmss(auto.nextCheckAt - now)))
+	warn(string.format("[Seed/WeatherService] automatic %s for the %s mark did not start (%s); the next mark is in %s.",
+		string.lower(W.Modes[mode].Name), stamp(mark), auto.lastFailure, mmss(mark + period - now)))
 	return "failed"
 end
 
@@ -949,8 +987,9 @@ function WeatherService.Start()
 		W.MinSeconds, W.MaxSeconds, W.DefaultSeconds, math.round((SeedData.Rain.IncomeFactor - 1) * 100),
 		W.ToastDelaySeconds, W.ThickenSeconds + W.FadeSeconds,
 		if autoValid and A.Enabled
-			then string.format("ON: a %d%% check every %s of populated clear weather, sure at %s; %s each",
-				math.round(A.Chance * 100), mmss(A.CheckSeconds), mmss(A.GuaranteeSeconds), mmss(A.DurationSeconds))
+			then string.format("ON: every %s of the server clock from %s past (every hour on the hour), the same moment "
+				.. "and the same weather on every server, %s each", mmss(A.PeriodSeconds), mmss(A.OffsetSeconds),
+				mmss(A.DurationSeconds))
 			else "OFF"))
 end
 

@@ -1,5 +1,71 @@
 # Steal a Seed — Session Handoff
 
+## RAIN EVERY HOUR ON THE HOUR, AND A "RAIN BIOME" SIGN WITH ITS TIMER OVER THE BRIDGE — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; AutoWeatherSpec 45/0 (rewritten), RainSignSpec 21/0 (NEW), SecretToastSpec 61/0 (its automatic storm now at a mark); RainEventSpec 98/0, RainBeaconSpec 18/0, RainPodsSpec 67/0, RainFamilySpec 38/0, RainAudioSpec 39/0, ServerBoostSpec 65/0, AdminSpec 137/0, AdminConsoleSpec 64/0, AdminAnnounceSpec 44/0, MiniEventSpec 90/0, FloatingSignSpec 49/0, ObbySignSpec 10/0, ObbyViewSpec 112/0, EventHubSpec 53/0, the Mist's specs green; MUTANTS 11/11 CAUGHT; GUARDED PLAYS, DESKTOP)
+
+The owner: "add a Huge Rain Text biome with a timer too 1 hour might be acceptable, ask me a lot of questions if needed". Their picks when asked:
+- rain every 60 minutes, fixed, so a timer can be true (it was random: 5% every 5 minutes of clear weather, sure by 60);
+- the same time on every server, on the hour;
+- 3 minutes long, as before;
+- rain and the Enchanted Mist may fall together, as before;
+- the sign over the rain bridge, saying "RAIN BIOME" over "Next rain in 42:10", and "OPEN · Closes in 2:31" while the biome is open;
+- built in this desktop session (no Steal a Seed terminal was running).
+
+**The schedule (WeatherService's scheduler, GameConfig.Weather.Auto):**
+- Weather is due at every OffsetSeconds + k * PeriodSeconds of the server clock (Workspace:GetServerTimeNow(), Unix seconds): with 3600 and 0, every whole UTC hour. That is on the hour for the owner's clock too (UTC+8), and the same moment on every server.
+- It runs to the mark + 180 s. A server that cannot start at the mark starts later inside that window, for what is left of it, so it ends with everybody else's. That covers the console's or a summon's rain still falling, nobody here yet, or a server just started. With under Weather.MinSeconds (20) left, the mark is missed and logged. One start per mark.
+- A server's first step takes the latest mark as it finds it: no catch-up for an hour it was not up for, and nothing called "missed" at boot. A loop held up past whole marks never catches up either.
+- The mode is Rain or a Thunderstorm 90/10 as before, but the draw is SEEDED BY THE MARK (Random.new(mark)), so every server gets the same weather for the same hour.
+- The next mark is published as the Workspace attribute RainNextAt (Auto.NextAtAttribute), only when it changes; it is absent while the scheduler is off.
+- The old knobs (CheckSeconds, Chance, GuaranteeSeconds) are gone. The console's START RAIN / THUNDERSTORM and the Summon Rain product are untouched. The scheduler still never looks at the Mist or a Pod Rush.
+- The Ready line now says "Automatic weather ON: every 60:00 of the server clock from 0:00 past (every hour on the hour) ...". A start logs "Automatic weather: Rain for 3:00, the 03:10 UTC mark."
+
+**The sign (Shared/RainSign, RainSign.client, GameConfig.Weather.Sign):**
+- What it is: FloatingSign's family -- LuckiestGuy, the dark outline, sized in studs, no backing -- on a local anchor in Workspace.SeedRainSign, shown to everybody, always.
+- Its size: "RAIN BIOME" at the OBBY sign's height (6 studs, 33 wide; the measured aspect is 5.26), the status line 3 studs. The OBBY sign's read-from-afar rule applies (FloatingSign.clampScale, MinHeaderUnits 22, MaxHeaderShare 0.08), growing upward from its bottom edge. MaxDistance 600, past every plot (the farthest eye is 401).
+- Its colours: a rain blue (78, 160, 255), deeper than the OBBY sign's sky blue, over white.
+- Its words (RainSign.describe):
+  - "Next rain in 42:10" (rounded up, never 0:00 while time is left; an hour reads 60:00);
+  - "Starting…" for the moment between the mark and the start;
+  - "Opening…";
+  - "OPEN · Closes in 2:31" (to the event's own end);
+  - "Closing…";
+  - nothing under the header while there is no schedule.
+  - It counts down on the client from the published state, deadline and mark: repainted on a change and once a second, nothing sent. A Thunderstorm reads the same.
+- **Where:** x 248 (over the ramp, between the landing and the gate), z 50 (the deck's south half), its bottom edge 31 up (3 over the gate's top).
+  - The first spot, over the deck's middle line (z 70), stood behind the hub's ENCHANTED MIST sign from plot 1, measured over 37 eyes.
+  - 45 up stood under the HUD's top row (BIOMES / TELEPORT TO PLOT) from a plot, so it stays at 31.
+  - Measured (RainSignSpec): from every plot's gate and back, the road's mouth and the landing, its header is in sight past the map and the hub's set.
+  - From the hub's grove, a camera 12 up sees it from all 60 spots 6-30 studs out; a standing eye 5 up sees it from 44 of them, the rest looking through grove trees.
+  - On 1280 x 720 and 942 x 739 screens it stands over neither the Mist sign nor the OBBY sign from any of 37 plot and road eyes.
+  - On a 640 x 360 phone every floating sign grows to stay readable: over the Mist sign from 12 eyes, over the OBBY sign from 25. The existing OBBY and Mist signs already overlap each other from 6. Not seen on a real phone.
+
+**Live (two guarded Plays, SeedTest_20261016, desktop 942-1046 x 739):**
+- First Play, at the first spot: the plot-view capture showed it beside the Mist sign. A probe then found the plot-1 overlap; the Play was stopped by Claude, which had started it.
+- Second Play, at the final spot:
+  - The Ready lines: the test store, and "Automatic weather ON ... every hour on the hour". The Mist first eligible 1763 s in.
+  - RainNextAt 04:00:00 UTC; the sign read "RAIN BIOME / Next rain in 50:58".
+  - To watch an automatic start without waiting the hour, a temporary Studio-only file, src/ServerScriptService/ZZRainSoon.server.luau, moved the mark 45 s ahead. It was inert unless a Workspace attribute was set, was deleted after the Play, and was never committed. Its effect: RainNextAt 03:10:04 UTC, the sign "Next rain in 0:42".
+  - At 03:10:04.4 the server started Rain on its own ("Automatic weather: Rain for 3:00, the 03:10 UTC mark", 3 pods laid). The sign went "Opening…", then at 03:10:07 "OPEN · Closes in 2:57", counting down; "Closing…" at 03:13:04; "Next rain in 56:54" at 03:13:10 (the shifted next mark).
+  - With the file's attribute cleared, RainNextAt was back at 04:00:00 UTC and the sign read "Next rain in 46:36".
+  - The hub sign read "Next Mist in 11:58 / Begins after biome reset" (the new 30-minute Mist).
+  - No script errors.
+- Studio is clean afterwards: test_store_off removed 1 key (0 left) and the marker; the probe shows 385 compared, 0 differ, 0 ZZ leftovers.
+- Captures: output/rain-sign-2026-10-16/ (7 PNGs, untracked like the other output folders):
+  - 01 the plot's view, waiting;
+  - 02 from the hub, waiting;
+  - 03 from the hub, 42 s to the mark;
+  - 04 from the hub, open, with the beacon and the toast;
+  - 05 the plot's view, open;
+  - 06 near the bridge, open;
+  - 07 from the hub, after.
+  - The new-player guide's "Train your speed!" line covers part of the sign in the plot views; it shows only during the guide.
+
+**Mutants (11 OF 11 CAUGHT):** UnseededDraw, LateFullLength, BootCallsMissed, NextAtNeverPublished, RainForNobody, OpenCountsToNextMark, ClockRoundsDown, NoStartingLine, NoSecondRepaint, SignInTheGate, SignBehindTheMist.
+
+**For the owner's eye:** the sign's blue, its spot on the bridge's south half and its height are Claude's. The phone overlap above is unverified on a device.
+
+**Files**: Shared/GameConfig.luau (Weather.Auto replaced, Weather.Sign), WeatherService.luau (the scheduler), Shared/RainSign.luau (new), StarterPlayerScripts/RainSign.client.luau (new), tools/tests/AutoWeatherSpec.luau (rewritten), RainSignSpec.luau (new), SecretToastSpec.luau, AGENTS.md (the two new files).
+
 ## THE ENCHANTED MIST EVERY 30 MINUTES, NOT EVERY HOUR — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; EnchantedMistSpec 62/0 (pins moved), AdminMistSpec 69/0, EnchantedMistBerrySpec 73/0, MistAudioSpec 19/0, MosskeeperSpec 69/0, MistLookSpec 17/0, EventHubSpec 53/0; MUTANT 1/1 CAUGHT)
 
 The owner: "Adjust the event from 1 hour to 30mins". Their pick when asked which event: the Enchanted Mist.
