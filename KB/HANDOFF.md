@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUBLISHED; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
+## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 71245c2 with the owner's OK, NOT PUBLISHED; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
 
 **The bug** (found by the sprout rename's phone Play, above):
 - On the owner's phone emulator, the first hatch card (fa60c69, live since v1063) never appeared.
@@ -32,7 +32,7 @@
 - tools/tests/FirstHatchSpec.luau;
 - KB/FIRST-HATCH-FIX-PLAN.md, AGENTS.md.
 
-## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
+## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 919590d with the owner's OK, NOT PUBLISHED; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
 
 The owner: "should we change the "plants" "creatures" into sprouts? ask me querstions". Eight answers, every recommendation taken: KB/SPROUT-RENAME-PLAN.md (new; what changed and what was tested).
 
