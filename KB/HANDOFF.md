@@ -1,5 +1,33 @@
 # Steal a Seed — Session Handoff
 
+## A SECRET IN EVERY BIOME, STEP 2: ALL FIVE WALK, FOUR NEW IDLES, THE CINDERDRAKE FLIES — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 855a406 with the owner's OK ("push it when green"), NOT PUBLISHED; BiomeSecretsSpec 55/0; THE WHOLE SUITE 165 OF 165; MUTANTS 11/11 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+**The owner:** "go ahead with step 2 and so on". Their answers are in KB/BIOME-SECRETS-PLAN.md: "Walk like the others", new idles for the four without a script, and for the Cinderdrake "Walk, fly sometimes".
+- Asked mid-way: "is it essential to do this? example a secret sprout takes 10 of your garden slots".
+  - Not essential: the overlap is cosmetic, and plots hold 5 to 30 slots, so 10 would shut Level 1-2 out.
+  - The owner: "Keep 1 slot".
+
+**Built (SecretIdle; the `Still` flag gone from SeedData and PlantService):**
+- Radial legs for Grovemaw (six, an alternating tripod) and Mirehydra (eight tentacles, every other one together; short steps, since they rest within a twentieth of straight). A yaw turns each leg's plane onto the step, and the hip and knee are the two-bone solution in it.
+- The Cinderdrake walks on chain legs through his joints' own frames. The Scourwheel's wheel rolls the ground it covers. The Nebulisk's coil carries a wave down it.
+- A biome secret's planted foot may stray far enough to last a turn's stance (before, Grovemaw's feet were set down again mid-turn, sliding 10 studs).
+- New idles for Grovemaw and Scourwheel; bodies for the Mirehydra and Cinderdrake over their aura scripts.
+- The Cinderdrake's flights: planted, every 75 s, 12 s long, 26 studs up, a 22-stud loop banking left, landing where he rose. Timed by the server's clock (`SecretIdle.useFlightClock` for specs); the walk gives way while he is aloft.
+
+**Measured:**
+- Edit: walking 36 studs and turning a quarter, the worst planted-foot slide is Grovemaw 0.10, Mirehydra 0.53 and Cinderdrake 0.51 studs. The wheel rolled 67.9 of 68.8 degrees. The coil swings 13 degrees walking, 4 standing.
+- Play: four planted walked 22 to 36 studs in 20 s. The Cinderdrake flew, his Pelvis 44 studs above his base, 26 up.
+- Edit captures of each walk are in output/biome-secrets-2026-10-16 (untracked).
+
+**A slip, recovered:**
+- I edited SecretIdle on disk during a mutant run. Rojo wrote the disk copy over the mutant, so its verdict was void and the rest refused to run.
+- Re-ran them all; the probe showed 0 differ throughout. Memory note mutant-run-rojo-overwrites.
+
+**Files:**
+- Shared/SecretIdle.luau, SeedData.luau, PlantService.luau;
+- tools/tests/BiomeSecretsSpec.luau;
+- KB/BIOME-SECRETS-PLAN.md.
+
 ## A SECRET IN EVERY BIOME, STEP 1: THE OWNER'S FIVE, WORKING WITH THEIR OWN SCRIPTS — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 67af52a with the owner's OK ("push it when green"), NOT PUBLISHED; BiomeSecretsSpec 43/0 (NEW); THE WHOLE SUITE 165 OF 165 (twelve specs' pins moved to the new state); FirstHatchSpec 36/0; MUTANTS 19/19 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **The owner's brief and answers:** KB/BIOME-SECRETS-PLAN.md (the table, and the record of step 1 at its foot).
