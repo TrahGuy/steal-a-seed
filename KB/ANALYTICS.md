@@ -146,6 +146,13 @@ stays where it always was, at the end of the first loop (which is also when the 
 series keeps its meaning across the update.
 The onboarding funnel keeps its six steps and their numbers; `travel` is not in it.
 | `TutorialSkipped` | The player hid the guide (Skip) | none | Once per session; Resume is not counted |
+| `FirstPodReady` | The first pod a player ever banked turned ready (10 s after that bank) while they were still in the game and had not hatched it. `CarryService`'s one timer at that bank | none | Once: there is one first bank |
+| `FirstHatchCardPressed` | The player's first hatch came through the first hatch card's one tap (`PlantService.FirstHatch`), once the hatch succeeded | none | Once per session; it happens once |
+
+**The first hatch (2026-10-16, the owner's fix for step 4; KB/FIRST-HATCH-FIX-PLAN.md).** Step 3 minus
+`FirstPodReady` is the players who left in the 10 s after their first bank; `FirstPodReady` minus step 4
+is those who saw their pod ready and did not hatch it; `FirstHatchCardPressed` against step 4 is how many
+hatched through the card rather than the Bag. Compare step 4 from the publish that carries this.
 
 These are sent only for the new-player cohort.
 

@@ -256,6 +256,8 @@ local function garden()
 			PlantWander = PlantWander,
 			-- The saved garden's frame (2026-10-07): pure, so the real one.
 			GardenFrame = require(Server:WaitForChild("GardenFrame")),
+			-- The first hatch's card (2026-10-16): its two analytics events, sent nowhere here.
+			Metrics = { firstHatchCard = function() end, firstPodReady = function() end },
 			-- The item 9 passes (2026-10-12): owned by no stand-in player here.
 			PassService = require(Server:WaitForChild("PassService")),
 			-- The Mysterious Pod (2026-10-11): no shells in this fixture.

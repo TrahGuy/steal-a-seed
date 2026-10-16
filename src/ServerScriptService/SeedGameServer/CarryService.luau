@@ -2013,7 +2013,11 @@ local function bank(player: Player): boolean
 	-- wait a planted pod of this species and size was given. Stamped on the Tool
 	-- before it is parented, and onto its row by the record below (rowOf).
 	--==========================================================================
-	local hatchAt = os.time() + PassService.GrowSeconds(player, species, tier)
+	-- THE FIRST BANK'S WAIT (2026-10-16, the owner; FirstMinute.bankWait): the
+	-- first pod a player ever banks -- `bank` not yet done -- is ready
+	-- FirstMinute.FirstHatchSeconds after it, never later than the ladder.
+	local firstBank = PlayerDataService.TutorialDone(player, "bank") == false
+	local hatchAt = os.time() + FirstMinute.bankWait(PassService.GrowSeconds(player, species, tier), firstBank)
 	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false, nil, hatchAt)
 	if not tool then
 		return false
@@ -2050,6 +2054,16 @@ local function bank(player: Player): boolean
 	log(string.format("%s banked a %s (%d tier).", player.Name, species.Name, tier))
 	PlayerDataService.RecordTutorial(player, "bank")
 	Metrics.raidEnded(player, "banked")
+	-- THE FIRST POD'S READY MOMENT (2026-10-16; Metrics.firstPodReady): still here
+	-- when it turned ready, and not yet hatched. Once per profile: there is one
+	-- first bank.
+	if firstBank then
+		task.delay(math.max(0, hatchAt - os.time()), function()
+			if player.Parent == Players and PlayerDataService.TutorialDone(player, "hatch") == false then
+				Metrics.firstPodReady(player)
+			end
+		end)
+	end
 	local info: Banked = { species = species, tier = tier, fromNest = held.fromNest, stolenAt = held.stolenAt }
 	for _, listener in ipairs(table.clone(onBanked)) do
 		task.spawn(function()

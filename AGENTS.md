@@ -279,6 +279,11 @@ src/
                                 SACRIFICE A POD! (words in GameConfig *.FloatingWords);
                                 clampScale (2026-10-13): the Mist sign's read-from-afar size
                                 rule for any sign (a header's least and most screen size)
+    Shared/FirstHatchCard.luau  the first hatch's card as arithmetic (2026-10-16; GameConfig.FirstHatch): its
+                                pod (the Bag's soonest), its words (GROWING… / Ready in 0:07, then READY!),
+                                when it stands, its rect (low over the hotbar, clear of the HUD and the
+                                guide's block, never over 38% of the screen), the landing facing the plant's
+                                bed -- pure (FirstHatchSpec)
     Shared/RainSign.luau        the RAIN BIOME sign over the rain bridge (2026-10-16): its line at a
                                 moment from the published weather and the next on-the-hour mark
                                 (Next rain in 42:10 / Starting… / Opening… / OPEN · Closes in 2:31 /
@@ -731,6 +736,11 @@ src/StarterPlayer/StarterPlayerScripts/
                                 everybody (2026-10-13, item 8; ObbyData.Sign): a FloatingSign on a
                                 local anchor, its bottom edge over the arch's crown, sized each
                                 frame by FloatingSign.clampScale to read from the hub
+    FirstHatchCard.client.luau  the first hatch's card (2026-10-16; GameConfig.FirstHatch): from the first
+                                pod a player ever banks (ready in FirstMinute.FirstHatchSeconds) to their
+                                first hatch, the pod's picture and countdown, then one green HATCH, which
+                                sends HatchInBag.FirstHatch -- home first, facing the bed, then the hatch
+                                (PlantService.FirstHatch); no close, stands down for menus and moments
     RainSign.client.luau        "RAIN BIOME" over the rain bridge's foot for everybody (2026-10-16;
                                 GameConfig.Weather.Sign): the countdown to the next on-the-hour rain
                                 (WeatherService publishes the mark, Weather.Auto.NextAtAttribute),

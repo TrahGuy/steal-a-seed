@@ -3097,6 +3097,73 @@ function PlantService.HatchFromBag(player: Player, item: string): (boolean, stri
 	return true, if bed then "PLANTED" else "BAGGED"
 end
 
+--==============================================================================
+-- THE FIRST HATCH'S ONE TAP (2026-10-16, the owner; GameConfig.FirstHatch)
+--
+-- The card's HATCH (FirstHatchCard.client) for the first pod a player ever
+-- banked: home first -- TELEPORT TO PLOT's rules (PlotService.TeleportTo), onto
+-- the plot's spawn facing the bed its plant will come up in (FirstHatchCard.
+-- landing; the same first free spot the hatch takes a moment later) -- and the
+-- Bag's own one-pod hatch HatchDelaySeconds later, in front of them, with the
+-- full reveal. The landing goes back with the answer, for the camera. A refused teleport (outside the Safe Zone, a pod in the
+-- arms, the cooldown) leaves them where they are and hatches at once, as the
+-- Bag would. Only while their first hatch is still to come: after it the Bag's
+-- verb answers. A pod not ready yet, or one already asked for, is refused and
+-- nothing moves. Its result follows on BAG.Reply once the hatch has run.
+--==============================================================================
+do
+	local FirstHatchCard = require(Shared:WaitForChild("FirstHatchCard"))
+	local Metrics = require(script.Parent:WaitForChild("Metrics"))
+	local FIRST = GameConfig.FirstHatch
+	local asked: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+	function PlantService.FirstHatch(player: Player, item: string): (boolean, string?, CFrame?)
+		if PlayerDataService.TutorialDone(player, "hatch") ~= false then
+			return PlantService.HatchFromBag(player, item)
+		end
+		local row = bagPod(player, item)
+		local due = if row then tonumber(row.HatchAt) else nil
+		if not due then
+			return false, "NO_POD"
+		end
+		if os.time() < due then
+			return false, "NOT_READY"
+		end
+		if asked[player] then
+			return false, "BUSY"
+		end
+		asked[player] = true
+		local plot = PlotService.PlotOf(player)
+		local home = false
+		local landing: CFrame? = nil
+		if plot then
+			local soil = soilOf(plot)
+			local bed = if soil and countIn(plot) < capacityOf(plot) then topOf(soil, spotsFor(plot, 1)[1]).Position
+				else nil
+			landing = FirstHatchCard.landing(PlotService.SpawnCFrameFor(plot), bed)
+			home = PlotService.TeleportTo(player, landing :: CFrame, "TELEPORT_BLOCKED")
+		end
+		task.delay(if home then FIRST.HatchDelaySeconds else 0, function()
+			asked[player] = nil
+			if player.Parent ~= Players then
+				return
+			end
+			local ok, code = PlantService.HatchFromBag(player, item)
+			if ok then
+				Metrics.firstHatchCard(player)
+			end
+			local channel = revealChannel
+			if channel then
+				pcall(function()
+					channel:FireClient(player, BAG.Reply, { op = BAG.FirstHatch, item = item, ok = ok, code = code,
+						done = true })
+				end)
+			end
+		end)
+		return true, if home then "HOME" else "HERE", if home then landing else nil
+	end
+end
+
 -- HATCH ALL: every ready Bag pod, the soonest due first. Answers ok, a code, and
 -- how many were planted, how many went to the Bag, and how many are left ready.
 function PlantService.HatchAllFromBag(player: Player): (boolean, string, number, number, number)
@@ -3420,13 +3487,15 @@ local function onBagHatch(player: Player, action: string, payload: any)
 	end
 	lastBagHatch[player] = now
 	local reply: { [string]: any } = { op = action }
-	if action == BAG.Hatch or action == BAG.Instant then
+	if action == BAG.Hatch or action == BAG.Instant or action == BAG.FirstHatch then
 		if type(payload) ~= "string" or #payload == 0 or #payload > 24 then
 			return
 		end
 		reply.item = payload
 		if action == BAG.Hatch then
 			reply.ok, reply.code = PlantService.HatchFromBag(player, payload)
+		elseif action == BAG.FirstHatch then
+			reply.ok, reply.code, reply.landing = PlantService.FirstHatch(player, payload)
 		else
 			reply.ok, reply.code = PlantService.OfferInstantHatchBag(player, payload)
 		end
@@ -4348,9 +4417,9 @@ function PlantService.Start()
 					or action == MY_PLANTS.Clear then
 					onMyPlants(player, action, payload)
 				elseif action == BAG.Hatch or action == BAG.HatchAll or action == BAG.Instant
-					or action == BAG.OpenAll then
+					or action == BAG.OpenAll or action == BAG.FirstHatch then
 					-- Pods hatch in the Bag (2026-10-09): HATCH, HATCH ALL and
-					-- Instant Hatch on a Bag pod.
+					-- Instant Hatch on a Bag pod; the first hatch's card (2026-10-16).
 					onBagHatch(player, action, payload)
 				elseif action == PICKUP_ACTION then
 					--==========================================================

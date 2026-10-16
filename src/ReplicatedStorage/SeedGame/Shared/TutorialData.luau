@@ -143,7 +143,9 @@ Tutorial.Steps = {
 	{
 		Id = "hatch",
 		Title = "Hatch your first plant!",
-		Detail = "Open your Bag when your pod's timer ends, then hold HATCH.",
+		-- The card's one tap since 2026-10-16 (GameConfig.FirstHatch); the Bag's
+		-- HATCH still works.
+		Detail = "Tap HATCH when your pod is ready!",
 	},
 	{
 		Id = "place",

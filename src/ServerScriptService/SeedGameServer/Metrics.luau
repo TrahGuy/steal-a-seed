@@ -94,6 +94,9 @@ Metrics.Events = {
 	WheelSpun = "WheelSpun",
 	-- The Pod Rush's (2026-10-09, see THE POD RUSH below).
 	PodRushEnded = "PodRushEnded",
+	-- The first hatch's (2026-10-16, see THE FIRST HATCH below).
+	FirstPodReady = "FirstPodReady",
+	FirstHatchCard = "FirstHatchCardPressed",
 }
 
 -- The custom-field keys Roblox reads (Enum.AnalyticsCustomFieldKeys), by name.
@@ -447,6 +450,41 @@ function Metrics.milestone(player: any, milestone: string, progress: any)
 			validation(player, "tutorial " .. milestone)
 		end
 	end)
+end
+
+--==============================================================================
+-- THE FIRST HATCH (2026-10-16, the owner's fix for the onboarding funnel's step
+-- 4; KB/FIRST-HATCH-FIX-PLAN.md): where the first loop loses people between the
+-- first bank and the first hatch. Once per player each, the cohort only.
+--
+--   FirstPodReady          the first pod they ever banked turned ready while they
+--                          were still here and had not hatched (CarryService: one
+--                          timer at that bank, which happens once)
+--   FirstHatchCardPressed  their first hatch came through the card's one tap
+--                          (PlantService.FirstHatch, once the hatch succeeded)
+--==============================================================================
+local function firstHatchEvent(player: any, key: string, name: string, stands: string)
+	pcall(function()
+		local s = states[player]
+		if not s or not s.cohort or s.seen[key] then
+			return
+		end
+		s.seen[key] = true
+		local who = audience(player)
+		if who == "count" then
+			send("custom", "tutorial", player, name, 1)
+		elseif who == "validate" then
+			validation(player, stands)
+		end
+	end)
+end
+
+function Metrics.firstPodReady(player: any)
+	firstHatchEvent(player, "firstPodReady", Metrics.Events.FirstPodReady, "first pod ready")
+end
+
+function Metrics.firstHatchCard(player: any)
+	firstHatchEvent(player, "firstHatchCard", Metrics.Events.FirstHatchCard, "first hatch card")
 end
 
 -- Garden income landed (EconomyService, the one positive AddCash). The funnel's

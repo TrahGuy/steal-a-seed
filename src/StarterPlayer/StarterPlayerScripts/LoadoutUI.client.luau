@@ -1662,7 +1662,9 @@ openMenuFor = function(key: string?, slotIndex: number?, anchor: HudLayout.Rect)
 		if now >= podDue then
 			table.insert(actions, 1, { id = "hatch", label = HATCH_BAG.Words.HoldHatch,
 				hold = GameConfig.Plant.HatchHoldSeconds, icon = HATCH_BAG.Icons.Hatch })
-		else
+		-- No Instant Hatch on a first pod (2026-10-16, the owner): ten seconds,
+		-- and its card hatches it (GameConfig.FirstHatch).
+		elseif player:GetAttribute(GameConfig.FirstHatch.PendingAttribute) ~= true then
 			local credits = tonumber(player:GetAttribute(HATCH_BAG.CreditsAttribute)) or 0
 			local price = podsNow.price
 			-- Its price on the green Robux tag (2026-10-12, the owner), right of the

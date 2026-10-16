@@ -2409,6 +2409,25 @@ local function refresh()
 	--== 5: hatch it -- in the Bag since 2026-10-09; an old save's pod in the
 	-- ground still hatches where it stands ===================================
 	if id == "hatch" then
+		-- The first hatch's card while it stands (2026-10-16, GameConfig.FirstHatch),
+		-- before anything in the ground -- a brand-new garden's starter pod there
+		-- hatches itself: no hand while the card counts down (it says so itself),
+		-- then the hand on the card -- from outside it, never over its words -- for
+		-- its HATCH.
+		local cardHatch = bagGuiButton("FirstHatchButton")
+		local cardFrame = if cardHatch then cardHatch.Parent else nil
+		local cardDue = bagPodDue()
+		if cardDue and cardHatch and shown(cardHatch) and cardFrame and cardFrame:IsA("GuiObject") then
+			clearWorld()
+			local left = math.max(0, math.ceil(cardDue - workspace:GetServerTimeNow()))
+			subline.Text = if left > 0 then "Your pod is growing: ready in " .. left .. "s" else "Tap HATCH!"
+			if left > 0 then
+				pointAt(nil, "", nil, nil)
+			else
+				pointAt(cardFrame, "TAP HATCH", nil, cardHatch)
+			end
+			return
+		end
 		local pod = podIn(plot)
 		if pod then
 			local point = pod:GetPivot().Position

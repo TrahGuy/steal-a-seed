@@ -12205,6 +12205,9 @@ GameConfig.HatchInBag = {
 	-- grid of what came out (PlantService.OpenAllMystery).
 	OpenAll = "BagOpenAllMystery",
 	Instant = "BagInstantHatch",
+	-- THE FIRST HATCH'S ONE TAP (2026-10-16; GameConfig.FirstHatch): one ready
+	-- pod by its item id, from the card -- home first, then the hatch.
+	FirstHatch = "BagFirstHatch",
 	Reply = "BagHatchResult",
 	-- One request per player this often; a second inside it is not heard.
 	Cooldown = 0.3,
@@ -12279,6 +12282,46 @@ GameConfig.HatchInBag = {
 	},
 	IconCropOffset = Vector2.new(41, 41),
 	IconCropSize = Vector2.new(430, 430),
+}
+
+--==============================================================================
+-- THE FIRST HATCH (2026-10-16, the owner's fix for the onboarding funnel's step
+-- 4 -- 43% of the players who banked a first pod never hatched it; the plan and
+-- the owner's fourteen answers: KB/FIRST-HATCH-FIX-PLAN.md)
+--
+-- The first pod a player ever banks is ready in FirstMinute.FirstHatchSeconds.
+-- From that bank until their first hatch, FirstHatchCard.client shows a card in
+-- the lower middle, over the hotbar and clear of the whole HUD (Shared/
+-- FirstHatchCard): the pod's own picture, its size and name, "YOUR POD IS
+-- GROWING…" over its countdown with a grey HATCH, then "YOUR POD IS READY!"
+-- with a green one and the Mist's pod-ready ping (Sound). No close: it stays
+-- until the pod hatches, by the card or the Bag, and stands down while a menu
+-- or a reward moment is up. Its HATCH is HatchInBag.FirstHatch: home first --
+-- TELEPORT TO PLOT's rules, onto the plot's spawn turned to face into the
+-- garden -- and the hatch HatchDelaySeconds later, in front of them, with the
+-- full reveal (PlantService.FirstHatch). The Bag shows no Instant Hatch on it,
+-- and the guide points at the card. Two analytics events say where the step
+-- loses people: Metrics.firstPodReady, Metrics.firstHatchCard.
+--==============================================================================
+GameConfig.FirstHatch = {
+	-- On the player, the server's (PlayerDataService.PublishFirstHatch): true from
+	-- the first bank until the first hatch, absent otherwise.
+	PendingAttribute = "FirstHatchPending",
+	-- On the local player, this client's own: the frame the card's HATCH is about
+	-- to put the body on, so ObbyCamera turns the camera once when it lands.
+	AskedAttribute = "SeedFirstHatchAsked",
+	-- From the teleport to the hatch: the body has landed and the camera turned.
+	HatchDelaySeconds = 0.6,
+	-- The owner's (2026-10-16): the Mist's pod-ready ping, at its own level.
+	Sound = "MistPodReady",
+	Words = {
+		Growing = "YOUR POD IS GROWING\u{2026}",
+		Ready = "YOUR POD IS READY!",
+		ReadyIn = "Ready in %s",
+		-- Its size word and its species: "BIG Petalpip".
+		Pod = "%s %s",
+		Hatch = "HATCH!",
+	},
 }
 
 --==============================================================================

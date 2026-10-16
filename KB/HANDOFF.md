@@ -1,5 +1,68 @@
 # Steal a Seed — Session Handoff
 
+## THE FIRST HATCH: THE FIRST POD READY IN 10 S, AND A ONE-TAP CARD THAT TAKES YOU HOME TO HATCH IT — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; FirstHatchSpec 28/0 (NEW); TutorialSpec 121/0 and PassBenefitsSpec 31/0 (pins followed); the 12 strict-sibling specs green with a Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); TutorialSpotlightSpec 51/0, TutorialPodSpec 263, PodHatchSpec 22/0, MetricsSpec 66/0, PodRushSpec 98/0, EnchantedMistBerrySpec 73/0, ObbyViewSpec 112/0, ObbySpec 69/0, MysteryPodSpec 39/0, InventorySpec 47/0, BagMenuSpec 13/0, SfxWiringSpec 202, UsabilityAudioSpec 95; MUTANTS 21/21 CAUGHT; TWO GUARDED PLAYS, DESKTOP)
+
+The owner, from the onboarding funnel: "ask a lot of question, and do what must be done to fix the leak".
+- **The leak:** step 4, "First Plant Hatched". Since 10 Oct pods hatch in the Bag first, and 280 of 525 new players banked a pod but only 159 hatched one: a 43% drop, the funnel's biggest.
+- **Why:** the first pod (the first catch, at least Big) waited 60 s, and then had to be found in the Bag and held.
+- **The plan and the owner's fourteen answers:** KB/FIRST-HATCH-FIX-PLAN.md (committed with this).
+
+**What changed:**
+- **The 10 s:**
+  - The first pod a player ever banks (`bank` not yet done; also when the first pod taken was lost on the way) is ready FirstMinute.FirstHatchSeconds = 10 after the bank, never later than its ladder.
+  - Every later pod is unchanged. CarryService's bank stamps it; its size and income are its own.
+- **The pending flag:** PlayerDataService.PublishFirstHatch sets the FirstHatchPending attribute. It is true from the first bank until the first hatch, published on load (a pod banked on an earlier visit finds its card) and on those two milestones.
+- **The card (Shared/FirstHatchCard, FirstHatchCard.client):**
+  - Lower middle, over the hotbar, no dimmer.
+  - At the bank: the pod's own picture, "YOUR POD IS GROWING…", "BIG Petalpip" (its size and name), "Ready in 0:07" and a grey HATCH.
+  - At 0:00: "YOUR POD IS READY!", a green HATCH and the Mist's pod-ready ping (MistPodReady, the owner's own upload), the ping only as it turns ready in front of them.
+  - No close: it stays until the pod hatches (card or Bag) and stands down while a menu or a reward moment is up.
+  - It keeps 8 px clear of the whole HUD (HudLayout.occupied) and the guide's block.
+  - It is never taller than 38% of the screen: 320 x 160 on a desktop, about 229 x 114 on a 772 x 360 phone (FirstHatchSpec checks 5 desktop sizes and 9 phones).
+- **The tap (HatchInBag.FirstHatch, PlantService.FirstHatch):**
+  - After the first hatch, the Bag's verb answers. No pod, not ready, or already asked: refused before anything moves.
+  - Otherwise, home by TELEPORT TO PLOT's rules (PlotService.TeleportTo, never TeleportHome, so the guide's travel lesson stays the buttons'). The player lands on their plot's spawn, facing the bed the plant will come up in: the same first free spot the hatch takes.
+  - Then the Bag's own HatchFromBag, 0.6 s later, in front of them, with the full reveal. A refused teleport hatches where they stand.
+  - The landing goes back with the answer, and ObbyCamera turns the camera to it once.
+- **The Bag:** no Instant Hatch (no Robux price) on that pod.
+- **The guide:**
+  - The hatch step's words are now "Tap HATCH when your pod is ready!".
+  - There is no hand while the card counts down; once it is ready, the hand points at the card from outside it with "TAP HATCH".
+  - The card comes before a pod in the ground: a new garden's starter pod hatches by itself and never shows a second timer.
+- **Analytics (Metrics, KB/ANALYTICS.md):** `FirstPodReady` and `FirstHatchCardPressed`, once each, for the cohort only. Step 3 minus FirstPodReady is the players who left in those 10 s; FirstPodReady minus step 4 is those who saw it ready and left.
+- **Specs:** the 12 strict sibling maps gained a Metrics stand-in (the repo's convention for a new PlantService require). TutorialSpec and PassBenefitsSpec pins followed.
+
+**Live (two guarded Plays, SeedTest_20261016, a brand-new test profile, desktop 942-1046 x 739):**
+- A temporary Studio-only file (src/ServerScriptService/ZZFirstHatchSteps.server.luau, deleted after, never committed) fast-forwarded the profile through the real services: AddSpeed for train and speed, CarryService.TryTake for the steal, and a server move inside the red line, where the Safe Zone's own poll banked the pod.
+- First Play:
+  - The guardian knocked the first pod out between two steps. The second take banked it.
+  - The server said "pod ready in 9 s"; the card counted down, turned ready, and HATCH took them home and hatched it ("CONGRATULATIONS! YOU HATCHED YOUR FIRST PLANT!").
+  - hatch and place were recorded, and the flag cleared.
+  - Two things it showed, both fixed before the second Play: the guide's hand stood over the card's words, and the plant came up off to the side.
+- Second Play:
+  - No hand over the card while it grows, and the hand outside it once ready.
+  - The landing faced the plant's bed, and the plant hatched straight ahead, with the guide on to step 7.
+  - In its capture 01 the guide line counts the starter pod still growing in the ground ("Ready in 14s"; the fast-forward got there before the starter's 30 s). The guide's card-first order was fixed after that capture, is spec-covered, and was not re-captured.
+- The analytics dry run stayed empty: the owner's account is staff, never counted. The two events are spec-proven.
+- Studio is clean afterwards: test_store_off removed 1 key each time (0 left) and the marker, and the probe shows 387 compared, 0 differ, 0 ZZ leftovers.
+- Captures in output/first-hatch-2026-10-16 (untracked like the other output folders):
+  - 01 card growing;
+  - 02 card ready, the hand outside;
+  - 03 home, the congratulations;
+  - 04 the plant in front.
+- Not seen on a real phone.
+
+**Mutants (21 OF 21):** FirstWaitSixty, FirstWaitOverLadder, EveryBankIsFirst, EventsForVeterans, EventsTwice, PendingForever, NoReadyGuard, ShowsUnderAMenu, PhoneCardHuge, CardOverTheGuide, NoReadyPing, GuideIgnoresCard, RobuxOnFirstPod, HomeTeachesTravel, LandingIgnoresBed, LandingFacesAway, FacesOutOfTheGate, NoLandingForCamera, HandOverTheWords, HandWhileGrowing, GroundBeforeCard (this one survived once, then the spec pinned the card branch).
+
+**Afterwards:** read funnel step 4 from the publish that carries this, and the two events.
+
+**Files**:
+- FirstMinute.luau, GameConfig.luau (FirstHatch, HatchInBag.FirstHatch), Shared/FirstHatchCard.luau (new), TutorialData.luau;
+- CarryService.luau, PlayerDataService.luau, PlantService.luau, Metrics.luau;
+- FirstHatchCard.client.luau (new), LoadoutUI, ObbyCamera, TutorialUI;
+- tools/tests/FirstHatchSpec.luau (new), TutorialSpec, PassBenefitsSpec, the 12 sibling-map specs;
+- KB/ANALYTICS.md, KB/FIRST-HATCH-FIX-PLAN.md, AGENTS.md.
+
 ## RAIN EVERY HOUR ON THE HOUR, AND A "RAIN BIOME" SIGN WITH ITS TIMER OVER THE BRIDGE — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; AutoWeatherSpec 45/0 (rewritten), RainSignSpec 21/0 (NEW), SecretToastSpec 61/0 (its automatic storm now at a mark); RainEventSpec 98/0, RainBeaconSpec 18/0, RainPodsSpec 67/0, RainFamilySpec 38/0, RainAudioSpec 39/0, ServerBoostSpec 65/0, AdminSpec 137/0, AdminConsoleSpec 64/0, AdminAnnounceSpec 44/0, MiniEventSpec 90/0, FloatingSignSpec 49/0, ObbySignSpec 10/0, ObbyViewSpec 112/0, EventHubSpec 53/0, the Mist's specs green; MUTANTS 11/11 CAUGHT; GUARDED PLAYS, DESKTOP)
 
 The owner: "add a Huge Rain Text biome with a timer too 1 hour might be acceptable, ask me a lot of questions if needed". Their picks when asked:

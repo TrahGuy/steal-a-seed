@@ -29,9 +29,9 @@ check(Data.Steps[3].Id == "steal" and Data.Steps[4].Id == "bank" and Data.Steps[
 		and Data.Steps[6].Id == "place" and Data.Steps[STEPS].Id == "travel",
 	"steal, bank, then the hatch (step 5) and the place (step 6) -- pods hatch in the Bag (2026-10-09) -- and the "
 		.. "guide ends with the travel lesson (2026-10-08)")
-check(string.find(Data.Steps[5].Detail, "Bag", 1, true) ~= nil and string.find(Data.Steps[5].Detail, "HATCH", 1, true) ~= nil
-		and Data.Steps[6].Title == "Place your plant!",
-	"the hatch step says to hold HATCH in the Bag; the place step places a plant")
+check(Data.Steps[5].Detail == "Tap HATCH when your pod is ready!" and Data.Steps[6].Title == "Place your plant!",
+	"the hatch step says to tap HATCH when the pod is ready (its card, 2026-10-16; it said to hold HATCH in the "
+		.. "Bag); the place step places a plant")
 check(Data.Steps[STEPS].Title == "Get around fast!", "titled Get around fast!")
 check(Data.SpeedTarget == 400 and Data.SpeedTargetText == "400",
 	"readiness target is 400 (FIRST MINUTE, 2026-10-08; it was 1,000)")

@@ -273,6 +273,18 @@ player:GetAttributeChangedSignal(SELL_ASKED):Connect(function()
 	end
 end)
 
+-- The first hatch's card (2026-10-16, GameConfig.FirstHatch): its HATCH takes
+-- the body home, onto the plot's spawn turned to face into the garden -- the
+-- very frame the server lands on, which the card writes here as it asks -- so
+-- the hatch that follows plays in front of the camera.
+local FIRST_ASKED = GameConfig.FirstHatch.AskedAttribute
+player:GetAttributeChangedSignal(FIRST_ASKED):Connect(function()
+	local landing = player:GetAttribute(FIRST_ASKED)
+	if typeof(landing) == "CFrame" and not ObbyData.onCourse(player) then
+		expect(landing.Position, landing.LookVector, ObbyView.EntranceWaitSeconds)
+	end
+end)
+
 -- A body going takes the placement with it: the next one is put down by the
 -- ordinary spawn, which the engine's camera already stands behind.
 player.CharacterRemoving:Connect(function()

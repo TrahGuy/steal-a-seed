@@ -160,6 +160,10 @@ function PlayerDataService.RecordTutorial(player: Player, milestone: string): bo
 	touch(player)
 	-- The first time ever, and only then: Record said so.
 	Metrics.milestone(player, milestone, entry.profile.Tutorial)
+	-- The first hatch's card (2026-10-16) follows the first bank and the first hatch.
+	if milestone == "bank" or milestone == "hatch" then
+		PlayerDataService.PublishFirstHatch(player)
+	end
 	return true
 end
 
@@ -675,6 +679,19 @@ function PlayerDataService.PublishInvites(player: Player)
 	-- The invite plants ever given, by the track or the wheel (2026-10-08).
 	player:SetAttribute(A.Owned, table.concat(p.InviteOwned or {}, ","))
 	player:SetAttribute(A.Seen, p.InviteSeen == true)
+end
+
+-- THE FIRST HATCH (2026-10-16, GameConfig.FirstHatch): true from the first bank
+-- until the first hatch, for the card (FirstHatchCard.client), the Bag (no
+-- Instant Hatch on that pod) and the guide; absent otherwise.
+function PlayerDataService.PublishFirstHatch(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local done = entry.profile.Tutorial.Done
+	player:SetAttribute(GameConfig.FirstHatch.PendingAttribute,
+		if done.bank == true and done.hatch ~= true then true else nil)
 end
 
 --==============================================================================
@@ -1734,6 +1751,9 @@ local function onPlayerAdded(player: Player)
 		PlayerDataService.PublishRebirth(player)
 		-- And Enchanted Mist's saved Dewberries (2026-10-11).
 		PlayerDataService.PublishDewberries(player)
+		-- And the first hatch's card (2026-10-16): a first pod banked on an earlier
+		-- visit and never hatched finds its card waiting.
+		PlayerDataService.PublishFirstHatch(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)

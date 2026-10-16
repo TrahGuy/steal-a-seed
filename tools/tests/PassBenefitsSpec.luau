@@ -244,7 +244,7 @@ local ok, err = pcall(function()
 			and has(carry, "local limit = limitOf(player, pods)")
 			and has(carry, "if countKind(kept, not hatched) >= limitOf(player, not hatched) then"),
 		"CarryService: every plant room is the player's own (the snapshot, the merge, the room, the record)")
-	check(has(carry, "local hatchAt = os.time() + PassService.GrowSeconds(player, species, tier)")
+	check(has(carry, "local hatchAt = os.time() + FirstMinute.bankWait(PassService.GrowSeconds(player, species, tier), firstBank)")
 			and has(carry, "os.time() + PassService.GrowSeconds(player, species, size))"),
 		"a banked pod's wait and a given pod's: the player's own")
 	local plant = sourceOf(Server, "PlantService")

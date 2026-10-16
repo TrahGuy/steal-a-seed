@@ -121,6 +121,29 @@ function FirstMinute.catchTier(tier: number): number
 	return math.max(math.clamp(whole, 1, SeedData.TierCount), FirstMinute.CatchTier)
 end
 
+--==============================================================================
+-- THE FIRST BANK'S WAIT (2026-10-16, the owner's fix for the onboarding funnel's
+-- step 4: 43% of the players who banked their first pod never hatched it --
+-- KB/FIRST-HATCH-FIX-PLAN.md)
+--
+-- The first pod a player ever banks -- whichever it is, also when the first one
+-- taken was lost on the way home -- is ready FirstHatchSeconds after the bank,
+-- never later than the ladder would have made it. Its size and its income are
+-- its own; every later pod waits the ladder's time. CarryService stamps it at
+-- the bank, the one moment `bank` is not yet done; GameConfig.FirstHatch has
+-- the card that hatches it with one tap.
+--==============================================================================
+FirstMinute.FirstHatchSeconds = 10
+
+-- The wait for a pod banked now: the ladder's `grow`, or, for a first bank, the
+-- shorter of it and FirstHatchSeconds.
+function FirstMinute.bankWait(grow: number, firstBank: boolean): number
+	if firstBank then
+		return math.min(grow, FirstMinute.FirstHatchSeconds)
+	end
+	return grow
+end
+
 -- "BIG! Your first catch." -- the size it hatched at, in its own word.
 function FirstMinute.catchWords(tier: number): string
 	return string.upper(SeedData.TierName(tier)) .. "! Your first catch."
