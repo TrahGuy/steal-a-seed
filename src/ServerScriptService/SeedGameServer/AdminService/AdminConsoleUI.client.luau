@@ -100,6 +100,8 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+-- SUMMON A SECRET (2026-10-16): the biomes that have one, by name.
+local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local MenuKit = require(Shared:WaitForChild("MenuKit"))
@@ -371,6 +373,9 @@ local state = {
 	podSpecies = nil :: string?,
 	podSize = nil :: number?,
 	scope = "server",
+	-- SUMMON A SECRET (2026-10-16): the biome (or "random") and THIS SERVER or ALL SERVERS.
+	secretBiome = "random",
+	secretScope = "server",
 }
 
 local ui: any = {}
@@ -1508,6 +1513,34 @@ do
 	ui.miniSync.AutomaticSize = Enum.AutomaticSize.None
 	ui.miniSync.TextWrapped = false
 	ui.miniSync.TextTruncate = Enum.TextTruncate.AtEnd
+
+	--== SUMMON A SECRET (2026-10-16; KB/ADMIN-SECRET-SUMMON-PLAN.md): a biome or RANDOM, THIS SERVER or
+	--== ALL SERVERS (behind YES, ALL SERVERS), SUMMON.
+	local sCard = build.card(page, "Secret")
+	local sRow = build.action(sCard, "Summon", "full", { { "SummonSecret", "SUMMON" } })
+	ui.secretLabel, ui.secretDot, sRow.left = build.state(sRow.frame, "SecretStatus", "SUMMON A SECRET")
+	ui.summon = sRow.buttons[1]
+	ui.summon.style("go")
+	ui.secretRow = ui.summon.hit.Parent
+	ui.secretAsk = build.question(sCard, "SecretQuestion", "full", "YES, ALL SERVERS")
+	local specs: { { string } } = {}
+	ui.secretChoices = {}
+	for _, biome in ipairs(BiomeData.Biomes) do
+		if (biome :: any).Secret and SeedData.SecretByBiome[biome.Id] then
+			table.insert(specs, { "Secret_" .. biome.Id, string.upper(biome.DisplayName) })
+			table.insert(ui.secretChoices, { biome = biome.Id, name = biome.DisplayName })
+		end
+	end
+	table.insert(specs, { "Secret_random", "RANDOM" })
+	table.insert(ui.secretChoices, { biome = "random", name = "a random biome" })
+	local choices = build.buttons(sCard, #specs, M.ModeMinW, "full", specs)
+	for i, choice in ipairs(ui.secretChoices) do
+		choice.button = choices[i]
+	end
+	local scopes = build.buttons(sCard, 2, M.ScopeMinW, "full", { { "SecretThisServer", "THIS SERVER" },
+		{ "SecretAllServers", "ALL SERVERS" } })
+	ui.secretThis, ui.secretAll = scopes[1], scopes[2]
+	ui.secretHelp = build.line(sCard, "SecretWords", 12, TEXT)
 end
 
 --==============================================================================
@@ -2042,8 +2075,20 @@ function paint.world()
 	local miniAsk = state.asking == "mini"
 	ui.miniAsk.block.Visible = miniAsk
 	ui.miniRow.Visible = not miniAsk
+	-- SUMMON A SECRET: the biome and the servers chosen, and its YES while asked.
+	for _, choice in ipairs(ui.secretChoices) do
+		choice.button.style(if choice.biome == state.secretBiome then "on" else "idle")
+	end
+	local secretAll = state.secretScope == "all"
+	ui.secretThis.style(if secretAll then "idle" else "on")
+	ui.secretAll.style(if secretAll then "on" else "idle")
+	ui.secretHelp.Text = "A secret spawns on its cradle, the game's rules kept: refused while one is out or a POD "
+		.. "RUSH runs. Everybody reads its toast, and a line naming you."
+	local secretAsk = state.asking == "secret"
+	ui.secretAsk.block.Visible = secretAsk
+	ui.secretRow.Visible = not secretAsk
 	for _, b in ipairs({ ui.startNight, ui.startDay, ui.startRain, ui.startThunder, ui.endRain, ui.startMist,
-		ui.endMist, ui.startMini, ui.endMini }) do
+		ui.endMist, ui.startMini, ui.endMini, ui.summon }) do
 		b.label.TextTransparency = if state.busy then 0.5 else 0
 	end
 end
@@ -2782,6 +2827,51 @@ ui.miniAsk.confirm.hit.Activated:Connect(function()
 	local secs = state.askSeconds
 	setAsking(nil, nil)
 	task.spawn(send, Model.args.miniEvent(verb, if verb == "end" then nil else secs))
+end)
+
+-- SUMMON A SECRET (2026-10-16): THIS SERVER at once; ALL SERVERS behind its YES.
+for _, choice in ipairs(ui.secretChoices) do
+	choice.button.hit.Activated:Connect(function()
+		state.secretBiome = choice.biome
+		if state.asking == "secret" then
+			setAsking(nil, nil)
+		else
+			paint.world()
+		end
+	end)
+end
+for _, pick in ipairs({ { button = ui.secretThis, scope = "server" }, { button = ui.secretAll, scope = "all" } }) do
+	pick.button.hit.Activated:Connect(function()
+		state.secretScope = pick.scope
+		if state.asking == "secret" then
+			setAsking(nil, nil)
+		else
+			paint.world()
+		end
+	end)
+end
+ui.summon.hit.Activated:Connect(function()
+	if state.secretScope == "all" then
+		local name = "a random biome"
+		for _, choice in ipairs(ui.secretChoices) do
+			if choice.biome == state.secretBiome then
+				name = choice.name
+			end
+		end
+		ui.secretAsk.words.Text = string.format("Summon a secret in %s on EVERY server?", name)
+		setAsking("secret", nil)
+		selectIfPad(ui.secretAsk.cancel.hit)
+	else
+		task.spawn(send, Model.args.summonSecret(state.secretBiome, "server", false))
+	end
+end)
+ui.secretAsk.cancel.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	note("No secret summoned.", nil)
+end)
+ui.secretAsk.confirm.hit.Activated:Connect(function()
+	setAsking(nil, nil)
+	task.spawn(send, Model.args.summonSecret(state.secretBiome, "all", true))
 end)
 
 --==============================================================================

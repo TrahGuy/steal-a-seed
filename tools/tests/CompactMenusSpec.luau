@@ -650,7 +650,7 @@ local ok, err = pcall(function()
 		StartNight = "startNight", StartDay = "startDay", Announce = "announce", Spawn = "spawn",
 		Weather = "weather", MiniEvent = "miniEvent", Mist = "mist", MistBerries = "mistBerries",
 		MistProgress = "mistProgress", MistPod = "mistPod", MistReady = "mistReady", AddRebirths = "addRebirths",
-		ResetRebirths = "resetRebirths" }
+		ResetRebirths = "resetRebirths", SummonSecret = "summonSecret" }
 	local missing = {}
 	for _, action in ipairs(actions) do
 		local builder = BUILDER[action]
@@ -660,9 +660,9 @@ local ok, err = pcall(function()
 			table.insert(missing, action)
 		end
 	end
-	check(#actions == 16 and #missing == 0, "every one of the server's sixteen actions is reachable from the console "
+	check(#actions == 17 and #missing == 0, "every one of the server's seventeen actions is reachable from the console "
 		.. "(the Enchanted Mist's since 2026-10-11, its tools for a player since 2026-10-12, the rebirth count's two "
-		.. "since 2026-10-13)",
+		.. "since 2026-10-13, SUMMON A SECRET since 2026-10-16)",
 		table.concat(actions, ",") .. " | missing: " .. table.concat(missing, ","))
 	-- One handler per control: no duplicate connections.
 	local doubled = {}

@@ -295,6 +295,10 @@ local ok, err = pcall(function()
 			table.insert(calls.bubbles, text)
 			return world.mossShown
 		end },
+		-- SUMMON A SECRET (2026-10-16) reaches the nests; nothing here summons.
+		NestService = { SummonSecret = function()
+			return false, "NO_SECRET", nil, nil
+		end },
 	}
 	local outerRequire = require
 	local function standInRequire(target)

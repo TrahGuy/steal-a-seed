@@ -347,6 +347,10 @@ local ok, err = pcall(function()
 		MosskeeperService = { Say = function()
 			return false
 		end },
+		-- SUMMON A SECRET (2026-10-16) reaches the nests; nothing here summons.
+		NestService = { SummonSecret = function()
+			return false, "NO_SECRET", nil, nil
+		end },
 	}
 	local module = Server:WaitForChild("AdminService")
 	local chunk, lerr = loadstring(module.Source, "=AdminService")

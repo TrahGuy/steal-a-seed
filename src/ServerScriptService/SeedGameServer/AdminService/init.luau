@@ -99,6 +99,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -126,6 +127,10 @@ local EnchantedMistConfig = require(Shared:WaitForChild("EnchantedMistConfig"))
 local EnchantedMistBerryService = require(script.Parent:WaitForChild("EnchantedMistBerryService"))
 local MysteryPodService = require(script.Parent:WaitForChild("MysteryPodService"))
 local MosskeeperService = require(script.Parent:WaitForChild("MosskeeperService"))
+-- SUMMON A SECRET (2026-10-16): the nests' own spawn, and the biomes' names.
+local NestService = require(script.Parent:WaitForChild("NestService"))
+local BiomeData = require(Shared:WaitForChild("BiomeData"))
+local MessagingService = game:GetService("MessagingService")
 
 local SAVE = GameConfig.Save
 
@@ -232,6 +237,10 @@ local ACTIONS: { [string]: boolean } = {
 	-- their username.
 	AddRebirths = true,
 	ResetRebirths = true,
+	-- 2026-10-16 (KB/ADMIN-SECRET-SUMMON-PLAN.md): a biome's secret -- the second
+	-- word its id or "random" -- summoned on "server" or "all" (the third word);
+	-- the fourth, true, is ALL SERVERS confirmed. By ANY allowlisted account.
+	SummonSecret = true,
 }
 
 -- The mini event's verbs: each start verb names its mode, and "end".
@@ -1117,6 +1126,177 @@ local function miniEvent(admin: any, verb: any, seconds: any): Reply
 end
 
 --==============================================================================
+-- SUMMON A SECRET (2026-10-16; the owner's answers, KB/ADMIN-SECRET-SUMMON-PLAN.md)
+--
+-- Any allowlisted account. A biome's secret -- or RANDOM's, a biome picked as
+-- the dawn roll picks one -- spawned at once on THIS SERVER or ALL SERVERS (ALL
+-- SERVERS only confirmed), by the nests' own spawn and its own rules
+-- (NestService.SummonSecret): refused while a secret is out, the reply naming
+-- it, or while a POD RUSH runs. Everybody reads the secret's usual toast and,
+-- where it spawned, the admin's line ("{admin} summoned a SECRET!").
+--
+-- ALL SERVERS summons here first -- this server's answer is the console's --
+-- then sends one MessagingService message: an id, the biome, the admin's
+-- display name and badge, when. Every server summons under its own rules, a
+-- refusal silent there, and shows the admin's line where it spawned. An id is
+-- never acted on twice (this server knows its own), and one older than
+-- SummonTtlSeconds is dropped. A publish is best-effort and the reply says so.
+-- IN STUDIO NOTHING IS PUBLISHED OR SUBSCRIBED: it would reach the live game's
+-- servers (AnnouncementService knows the same).
+--==============================================================================
+local SUMMON = {
+	Topic = "SeedSecretSummon",
+	TtlSeconds = 60,
+	SkewSeconds = 30,
+	SubscribeTries = 3,
+	-- What the console reads for a refusal, by NestService.SummonSecret's reason.
+	Refusals = {
+		RUSH = "A POD RUSH is on: no secret spawns until it ends. Nothing changed.",
+		OUT = "A secret is already out (%s in %s). Nothing changed.",
+		NO_NEST = "%s has no nest in this server. Nothing changed.",
+		NO_SECRET = "No biome in this server has a secret to summon. Nothing changed.",
+	},
+}
+
+local summonFn: (string?, string) -> (boolean, string?, string?, string?) = function(biome, why)
+	return NestService.SummonSecret(biome, why)
+end
+local function unixNow(): number
+	return DateTime.now().UnixTimestampMillis / 1000
+end
+local summonClock: () -> number = unixNow
+local function robloxSummonPublish(payload: { [string]: any }): (boolean, string?)
+	if RunService:IsStudio() then
+		return false, "STUDIO"
+	end
+	local ok, err = pcall(function()
+		MessagingService:PublishAsync(SUMMON.Topic, payload)
+	end)
+	return ok, if ok then nil else tostring(err)
+end
+local summonPublish: ({ [string]: any }) -> (boolean, string?) = robloxSummonPublish
+-- Every summon id acted on here, until it no longer matters.
+local summonSeen: { [string]: number } = {}
+
+-- Studio specs: the spawn, the publish and the clock a summon uses; nil puts each back.
+function AdminService.useSummon(fn: ((string?, string) -> (boolean, string?, string?, string?))?)
+	if not RunService:IsStudio() then
+		return
+	end
+	summonFn = fn or function(biome, why)
+		return NestService.SummonSecret(biome, why)
+	end
+end
+function AdminService.useSummonPublish(fn: (({ [string]: any }) -> (boolean, string?))?)
+	if not RunService:IsStudio() then
+		return
+	end
+	summonPublish = fn or robloxSummonPublish
+end
+function AdminService.useSummonClock(fn: (() -> number)?)
+	if not RunService:IsStudio() then
+		return
+	end
+	summonClock = fn or unixNow
+end
+
+local function biomeName(id: string?): string
+	local biome = if id then BiomeData.ById[id] else nil
+	return if biome then biome.DisplayName else tostring(id)
+end
+
+-- The summon in this server, by `name` (badge `badge`): (spawned, the console's words).
+local function summonHere(biome: string?, name: string, badge: string?, userId: number): (boolean, string)
+	local ok, why, biomeId, speciesId = summonFn(biome, "summoned by " .. name)
+	if ok then
+		local line = AdminAnnounce.line(name, { kind = "secret" })
+		if line then
+			AdminService.TellEveryone(line, AdminAnnounce.key(userId, "secret", nil), false, { name = name, badge = badge })
+		end
+		local species = SeedData.Get(speciesId or "")
+		return true, string.format("Summoned %s in %s.", if species then species.Name else "a secret", biomeName(biomeId))
+	end
+	local words = SUMMON.Refusals[why or ""]
+	if why == "OUT" then
+		local species = SeedData.Get(speciesId or "")
+		return false, string.format(words, if species then species.Name else "a secret", biomeName(biomeId))
+	elseif why == "NO_NEST" then
+		return false, string.format(words, biomeName(biomeId))
+	end
+	return false, words or ("Not summoned: " .. tostring(why) .. ". Nothing changed.")
+end
+
+local function summonSecret(admin: any, biome: any, scope: any, confirmed: any): Reply
+	local known = biome == "random"
+	if type(biome) == "string" and not known then
+		local cfg = BiomeData.ById[biome]
+		known = cfg ~= nil and (cfg :: any).Secret ~= nil and SeedData.SecretByBiome[biome] ~= nil
+	end
+	if not known then
+		return refuse("Choose a biome, or RANDOM. Nothing changed.")
+	end
+	if scope ~= "server" and scope ~= "all" then
+		return refuse("Choose THIS SERVER or ALL SERVERS. Nothing changed.")
+	end
+	if scope == "all" and confirmed ~= true then
+		return refuse("ALL SERVERS needs its YES first. Nothing changed.")
+	end
+	local name, badge, userId = AdminAnnounce.nameOf(admin), AdminService.BadgeOf(admin), userIdOf(admin) or 0
+	local wanted = if biome == "random" then nil else biome :: string
+	local ok, words = summonHere(wanted, name, badge, userId)
+	if ok then
+		record(admin, nil, "SummonSecret:" .. tostring(biome) .. ":" .. tostring(scope), nil, nil)
+	end
+	if scope == "server" then
+		return { ok = ok, message = words }
+	end
+	local id = HttpService:GenerateGUID(false)
+	local now = summonClock()
+	summonSeen[id] = now + SUMMON.TtlSeconds
+	local sent, err = summonPublish({ id = id, biome = biome, name = name, badge = badge, userId = userId, at = now })
+	record(admin, nil, "SummonSecret:all:" .. (if sent then "sent" else "not-sent"), nil, nil)
+	local head = if sent then "Sent to every server."
+		elseif err == "STUDIO" then "In Studio nothing goes to other servers."
+		else "The other servers could not be told (" .. tostring(err) .. ")."
+	return { ok = ok or sent, message = head .. " Here: " .. words }
+end
+
+-- ONE MESSAGE FROM ANY SERVER (this one's own included): checked, then summoned
+-- here under this server's own rules. Whether it spawned here.
+function AdminService.ReceiveSummon(data: any): boolean
+	if type(data) ~= "table" then
+		return false
+	end
+	local id, biome, name, at = data.id, data.biome, data.name, data.at
+	if type(id) ~= "string" or #id == 0 or #id > 64 or type(name) ~= "string" or #name == 0 or #name > 50
+		or type(at) ~= "number" or at ~= at then
+		return false
+	end
+	local now = summonClock()
+	for seenId, untilAt in pairs(summonSeen) do
+		if untilAt < now then
+			summonSeen[seenId] = nil
+		end
+	end
+	if summonSeen[id] or now - at > SUMMON.TtlSeconds or at - now > SUMMON.SkewSeconds then
+		return false
+	end
+	local known = biome == "random"
+	if type(biome) == "string" and not known then
+		local cfg = BiomeData.ById[biome]
+		known = cfg ~= nil and (cfg :: any).Secret ~= nil and SeedData.SecretByBiome[biome] ~= nil
+	end
+	if not known then
+		return false
+	end
+	summonSeen[id] = now + SUMMON.TtlSeconds
+	local badge = if type(data.badge) == "string" and #data.badge <= 50 then data.badge else nil
+	local userId = if type(data.userId) == "number" and data.userId == data.userId then data.userId else 0
+	local ok = summonHere(if biome == "random" then nil else biome, name, badge, userId)
+	return ok
+end
+
+--==============================================================================
 -- ENCHANTED MIST: START MIST NOW, END MIST NOW, FOR THIS SERVER (2026-10-11)
 --
 -- The owner's: any allowlisted account (Handle's first check, by UserId).
@@ -1597,6 +1777,11 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	if action == "MiniEvent" then
 		return miniEvent(sender, targetId, amount)
 	end
+	-- SUMMON A SECRET is any allowlisted admin's (checked above): the second word
+	-- is the biome or "random", the third the scope, the fourth ALL SERVERS' YES.
+	if action == "SummonSecret" then
+		return summonSecret(sender, targetId, amount, confirmName)
+	end
 	-- AN ENCHANTED MIST is any allowlisted admin's (checked above): the second
 	-- word is the verb, the third a start's length or his line to say (mist).
 	if action == "Mist" then
@@ -1828,6 +2013,24 @@ end
 
 function AdminService.Start()
 	keepStatus()
+	-- Every server hears a summon (never in Studio); in a thread of its own, as
+	-- nothing in Start may wait.
+	if not RunService:IsStudio() then
+		task.spawn(function()
+			for try = 1, SUMMON.SubscribeTries do
+				local ok, err = pcall(function()
+					return MessagingService:SubscribeAsync(SUMMON.Topic, function(message: any)
+						AdminService.ReceiveSummon(if type(message) == "table" then message.Data else nil)
+					end)
+				end)
+				if ok then
+					return
+				end
+				log(string.format("Summon subscription failed (try %d): %s", try, tostring(err)))
+				task.wait(2 * try)
+			end
+		end)
+	end
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(function(player)
 		task.spawn(AdminService.ProvideConsole, player)
 	end))

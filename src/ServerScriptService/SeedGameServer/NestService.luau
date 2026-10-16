@@ -4125,6 +4125,51 @@ function NestService.SpawnSecret(biomeId: string, why: string?): (boolean, strin
 	return false, "no nest in " .. tostring(biomeId)
 end
 
+--==============================================================================
+-- AN ADMIN'S SUMMON (2026-10-16; KB/ADMIN-SECRET-SUMMON-PLAN.md)
+--
+-- A biome's secret -- or, given none, a biome picked as the dawn roll picks one
+-- -- spawned at once by the same spawn, refused as the roll is: one secret in
+-- the server at a time, none in a POD RUSH. (true, nil, biome, species), or
+-- (false, why, biome?, species?): `why` RUSH; OUT, with the secret that is out;
+-- NO_NEST (that biome has no nest here); NO_SECRET (no nest here has one).
+-- `among` is a spec's nests, Studio only.
+--==============================================================================
+function NestService.SummonSecret(biomeId: string?, why: string, among: { any }?): (boolean, string?, string?, string?)
+	local list: { Nest } = nests
+	if among and RunService:IsStudio() then
+		for _, nest in ipairs(among) do
+			specRecord(nest)
+		end
+		list = among :: any
+	end
+	if rushOn then
+		return false, "RUSH", nil, nil
+	end
+	for _, nest in ipairs(list) do
+		if nest.secret then
+			return false, "OUT", nest.biome.Id, nest.secret.speciesId
+		end
+	end
+	local candidates: { Nest } = {}
+	for _, nest in ipairs(list) do
+		if nest.event == nil and secretConfig(nest) and SeedData.SecretByBiome[nest.biome.Id]
+			and (biomeId == nil or nest.biome.Id == biomeId) then
+			table.insert(candidates, nest)
+		end
+	end
+	if #candidates == 0 then
+		return false, if biomeId then "NO_NEST" else "NO_SECRET", biomeId, nil
+	end
+	local nest = candidates[secretRng:NextInteger(1, #candidates)]
+	local ok, err = spawnSecret(nest, why)
+	if not ok then
+		return false, err, nest.biome.Id, nil
+	end
+	local secret = nest.secret
+	return true, nil, nest.biome.Id, if secret then secret.speciesId else nil
+end
+
 -- CarryService says the pod left the road: banked into a Tool, or forfeited.
 function NestService.SecretResolved(secretId: string, why: string?): boolean
 	for _, nest in ipairs(nests) do

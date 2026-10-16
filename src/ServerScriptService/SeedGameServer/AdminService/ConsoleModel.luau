@@ -301,6 +301,11 @@ ConsoleModel.args = {
 	miniEvent = function(verb: string, seconds: number?): Args
 		return args("MiniEvent", verb, seconds, nil)
 	end,
+	-- SUMMON A SECRET (2026-10-16): a biome's id or "random", "server" or "all",
+	-- and ALL SERVERS' YES.
+	summonSecret = function(biome: string, scope: string, confirmed: boolean): Args
+		return args("SummonSecret", biome, scope, confirmed)
+	end,
 	-- "start" (START MIST NOW, the third word its length since 2026-10-12: one of
 	-- MistSeconds) or "end" (END MIST NOW); since 2026-10-12 "eligible" (MAKE
 	-- ELIGIBLE NOW), "burst" (a BERRY BURST around you) and "say" (MOSSKEEPER

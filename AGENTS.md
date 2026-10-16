@@ -502,7 +502,10 @@ src/
                                   AnnouncementService after the allowlist); Roster on the admins' guis;
                                   REBIRTHS (2026-10-13, item 9): the count raised (1 to MaxRebirths, said
                                   to everybody) or set to 0 behind the username (silent) -- the COUNT only,
-                                  through PlayerDataService.UpdateRebirth, never a rebirth or its wipe
+                                  through PlayerDataService.UpdateRebirth, never a rebirth or its wipe;
+                                  SUMMON A SECRET (2026-10-16): a biome's secret or RANDOM's on THIS SERVER
+                                  or ALL SERVERS (MessagingService, never from Studio) by NestService.SummonSecret
+                                  and the roll's rules, "{admin} summoned a SECRET!" where it spawned
       SpawnCatalog.luau           what SPAWN can make, read off SeedData: the groups, the sizes each species
                                   comes in (Rain pods by their real rules), the words -- the server refuses
                                   what it does not allow and the console draws from it

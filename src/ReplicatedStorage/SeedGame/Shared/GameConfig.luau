@@ -8193,6 +8193,9 @@ GameConfig.AdminAnnounce = {
 	Words = {
 		Rain = "%s started the Rain!",
 		Thunder = "%s summoned a Thunderstorm!",
+		-- The console's SUMMON (2026-10-16, the owner's words; KB/ADMIN-SECRET-SUMMON-PLAN.md), beside the
+		-- secret's own toast.
+		Secret = "%s summoned a SECRET!",
 		RainEnd = "%s ended the Rain",
 		ThunderEnd = "%s ended the Thunderstorm",
 		MistStart = "%s started the Enchanted Mist!",

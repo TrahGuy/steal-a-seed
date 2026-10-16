@@ -53,6 +53,7 @@ end
 --   weatherend (+ thunder)      the weather ended, the Thunderstorm or the Rain
 --   miststart, mistend          an Enchanted Mist started or ended
 --   night, day                  the cycle turned
+--   secret                      a secret summoned (2026-10-16), wherever it spawned
 --   mini, miniend (+ mode)      a GLOBAL mini event started or ended
 --   spawn (+ words)             a give: SpawnCatalog's words, "5 Giant Petalpip pods"
 --   money, speed (+ amount)     a give of cash or Speed
@@ -103,6 +104,8 @@ function AdminAnnounce.line(admin: string, what: What): string?
 		return string.format(W.MistStart, admin)
 	elseif kind == "mistend" then
 		return string.format(W.MistEnd, admin)
+	elseif kind == "secret" then
+		return string.format(W.Secret, admin)
 	elseif kind == "night" then
 		return string.format(W.Night, admin)
 	elseif kind == "day" then
