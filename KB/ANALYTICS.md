@@ -162,9 +162,9 @@ The onboarding funnel keeps its six steps and their numbers; `travel` is not in 
 - Compare step 4 from the publish that carries the fix (v1063).
 
 **The rename (2026-10-16).** In v1063 (live from 09:32 UTC on 2026-10-16), `FirstHatchCardPressed` was
-sent once, on the success, with no field: what `FirstHatchCardSucceeded` is now. From the next publish,
-it is every press with its 01, and `FirstHatchCardShown` and `FirstHatchCardSucceeded` are new. Read the
-two versions' `FirstHatchCardPressed` apart.
+sent once, on the success, with no field: what `FirstHatchCardSucceeded` is now. From v1064 (live from
+10:10 UTC on 2026-10-16), it is every press with its 01, and `FirstHatchCardShown` and
+`FirstHatchCardSucceeded` are new. Read the two versions' `FirstHatchCardPressed` apart.
 
 These are sent only for the new-player cohort.
 

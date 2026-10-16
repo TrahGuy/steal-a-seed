@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## THE FIRST HATCH'S EVENT NAMES, AND A QUIET FIRST LOOP — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 6214f10 with the owner's OK, NOT PUBLISHED; FirstHatchSpec 33/0 (was 28); the 12 strict-sibling specs green with the renamed Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); every other spec that reads a touched file green: SecretToastSpec 61, NoticeSpec 105, EnchantedMistBerrySpec 73, EnchantedMistSpec 62, AdminMistSpec 69, AdminAnnounceSpec 44, RainEventSpec 98, MiniEventSpec 90, MistAudioSpec 19, MetricsSpec 66, TutorialSpec 121, TutorialSpotlightSpec 51, PodRushSpec 98, PodDropSpec 24, HatchBonusSpec 41, PassBenefitsSpec 31, HudLayoutSpec 1499, InviteRewardsSpec 173, NameBadgeSpec 26, PhoneMenuSpec 29, RebirthCelebrationSpec 92, SacrificeSpec 290, SellOneSpec 98, SourceIconsSpec 21, UsabilityAudioSpec 95; MUTANTS 25/25 CAUGHT; SPEC-ONLY, NO PLAY)
+## THE FIRST HATCH'S EVENT NAMES, AND A QUIET FIRST LOOP — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 6214f10 with the owner's OK; LIVE AS v1064, the owner's publish at 10:10:43 UTC 2026-10-16, Studio matching 6214f10: 387 compared, 0 differ; FirstHatchSpec 33/0 (was 28); the 12 strict-sibling specs green with the renamed Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); every other spec that reads a touched file green: SecretToastSpec 61, NoticeSpec 105, EnchantedMistBerrySpec 73, EnchantedMistSpec 62, AdminMistSpec 69, AdminAnnounceSpec 44, RainEventSpec 98, MiniEventSpec 90, MistAudioSpec 19, MetricsSpec 66, TutorialSpec 121, TutorialSpotlightSpec 51, PodRushSpec 98, PodDropSpec 24, HatchBonusSpec 41, PassBenefitsSpec 31, HudLayoutSpec 1499, InviteRewardsSpec 173, NameBadgeSpec 26, PhoneMenuSpec 29, RebirthCelebrationSpec 92, SacrificeSpec 290, SellOneSpec 98, SourceIconsSpec 21, UsabilityAudioSpec 95; MUTANTS 25/25 CAUGHT; SPEC-ONLY, NO PLAY)
 
 The owner pasted a list of suggestions after v1063 ("how about this:") and picked two:
 - "6: event names (Recommended)";
@@ -17,7 +17,7 @@ Nothing else from the list was built. Daily rewards and points 1, 2, 4 and 5 wer
   - The client says so once a session (GameConfig.FirstHatch.ShownVerb on GameEvent, nothing carried).
   - The server counts it once, and only while a first hatch is pending.
 - All three are for the cohort only, as before. A forged client's presses go through the Bag's own cooldown, and a forged Shown counts at most once.
-- **Read the two versions apart:** v1063's `FirstHatchCardPressed` is the success. From the next publish it is every press.
+- **Read the two versions apart:** v1063's `FirstHatchCardPressed` is the success. From v1064 it is every press.
 
 **The quiet first loop (GameConfig.FirstHatch.QuietAttribute = "FirstLoopQuiet"):**
 - PlayerDataService.PublishFirstHatch sets it true until TutorialData.FirstLoopDone (train through place).
