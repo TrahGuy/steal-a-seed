@@ -177,59 +177,114 @@ local function body()
 		table.insert(cases, { tag = string.format("%dx%d phone", p[1], p[2]), input = screen(p[1], p[2], true) })
 	end
 	local G = FirstHatchCard.Gap
+	local base = FirstHatchCard.Base
+	local function clearOf(r, safe, avoid)
+		if r.x < G or r.y < G or r.x + r.w > safe.X - G or r.y + r.h > safe.Y - G then
+			return false
+		end
+		for _, a in ipairs(avoid) do
+			if a.w > 0 and a.h > 0 and r.x < a.x + a.w + G and a.x < r.x + r.w + G and r.y < a.y + a.h + G
+				and a.y < r.y + r.h + G then
+				return false
+			end
+		end
+		return true
+	end
+	-- Whether a w x h card is clear anywhere up from the bottom at x.
+	local function anyY(x, w, h, safe, avoid)
+		local y = math.floor(safe.Y - G - h)
+		while y >= G do
+			if clearOf({ x = x, y = y, w = w, h = h }, safe, avoid) then
+				return true
+			end
+			y -= 4
+		end
+		return false
+	end
+	-- Whether the middle has room at any scale down to MinScale.
+	local function middleRoom(safe, avoid)
+		local scale = math.min(FirstHatchCard.MaxScale, (safe.X - G * 2) / base.X,
+			FirstHatchCard.MaxHeightShare * safe.Y / base.Y)
+		while scale >= FirstHatchCard.MinScale - 1e-9 do
+			local w, h = math.floor(base.X * scale), math.floor(base.Y * scale)
+			if anyY(math.floor(safe.X / 2 - w / 2), w, h, safe, avoid) then
+				return true
+			end
+			scale -= FirstHatchCard.Step
+		end
+		return false
+	end
 	local bad, smallest, smallestTag = nil, math.huge, ""
+	local placed, beside = 0, {}
+	local owner = nil
 	for _, case in ipairs(cases) do
 		local L = HudLayout.solve(case.input)
-		local avoid = HudLayout.occupied(L)
-		local r, scale = FirstHatchCard.rect(L.safe, avoid)
-		local why = nil
-		if r.w <= 0 or scale < FirstHatchCard.MinScale - 1e-9 then
-			why = "no place"
-		elseif r.x < G or r.y < G or r.x + r.w > L.safe.X - G or r.y + r.h > L.safe.Y - G then
-			why = "off the safe area"
-		elseif math.abs((r.x + r.w / 2) - L.safe.X / 2) > 1 then
-			why = "not centred"
-		elseif r.y + r.h < L.safe.Y * 0.6 then
-			why = "its bottom edge above the lowest 40%"
-		elseif r.h > FirstHatchCard.MaxHeightShare * L.safe.Y + 1 then
-			why = "taller than its share of the screen"
-		else
-			for _, a in ipairs(avoid) do
-				if r.x < a.x + a.w + G and a.x < r.x + r.w + G and r.y < a.y + a.h + G and a.y < r.y + r.h + G then
-					why = string.format("over a HUD rect at %d,%d %dx%d", a.x, a.y, a.w, a.h)
-					break
-				end
+		local hud = HudLayout.occupied(L)
+		-- The guide's words (L.banner, and its counter and Skip row): what the client
+		-- adds from UIKit.guideRects while the guide shows -- always, for a new player.
+		local withGuide = table.clone(hud)
+		local hasGuide = false
+		for _, g in ipairs({ L.banner, L.skip }) do
+			if g and g.w > 0 and g.h > 0 then
+				table.insert(withGuide, g)
+				hasGuide = true
 			end
 		end
-		if not why then
-			-- As low as it can stand: 4 px lower is off the screen or over something.
-			local lower = { x = r.x, y = r.y + 4, w = r.w, h = r.h }
-			local lowerClear = lower.y + lower.h <= L.safe.Y - G
-			if lowerClear then
-				for _, a in ipairs(avoid) do
-					if lower.x < a.x + a.w + G and a.x < lower.x + lower.w + G and lower.y < a.y + a.h + G
-						and a.y < lower.y + lower.h + G then
-						lowerClear = false
-						break
-					end
-				end
-			end
-			if lowerClear then
+		local variants = { { tag = case.tag, avoid = hud } }
+		if hasGuide then
+			table.insert(variants, { tag = case.tag .. " with the guide's words", avoid = withGuide, guide = true })
+		end
+		for _, v in ipairs(variants) do
+			local avoid = v.avoid
+			local r, scale = FirstHatchCard.rect(L.safe, avoid)
+			placed += 1
+			local centred = math.abs((r.x + r.w / 2) - L.safe.X / 2) <= 1
+			local why = nil
+			if r.w <= 0 or scale < FirstHatchCard.MinScale - 1e-9 then
+				why = "no place"
+			elseif not clearOf(r, L.safe, avoid) then
+				why = "off the safe area, or within " .. G .. " px of a HUD rect or the guide's words"
+			elseif r.y + r.h < L.safe.Y * 0.6 then
+				why = "its bottom edge above the lowest 40%"
+			elseif r.h > FirstHatchCard.MaxHeightShare * L.safe.Y + 1 then
+				why = "taller than its share of the screen"
+			elseif clearOf({ x = r.x, y = r.y + 4, w = r.w, h = r.h }, L.safe, avoid) then
 				why = "a lower place was clear"
+			elseif not centred and middleRoom(L.safe, avoid) then
+				why = "off the middle while the middle had room"
+			elseif not centred then
+				local toward = if r.x + r.w / 2 > L.safe.X / 2 then -FirstHatchCard.SideStep else FirstHatchCard.SideStep
+				if anyY(r.x + toward, r.w, r.h, L.safe, avoid) then
+					why = "a place nearer the middle was clear"
+				end
 			end
-		end
-		if why and not bad then
-			bad = case.tag .. ": " .. why
-		end
-		if scale < smallest then
-			smallest, smallestTag = scale, case.tag
+			if why and not bad then
+				bad = v.tag .. ": " .. why
+			end
+			if not centred and r.w > 0 then
+				table.insert(beside, v.tag)
+			end
+			if scale > 0 and scale < smallest then
+				smallest, smallestTag = scale, v.tag
+			end
+			if v.guide and case.tag == "705x338 phone" then
+				owner = { r = r, scale = scale, banner = L.banner, centred = centred }
+			end
 		end
 	end
 	check(bad == nil,
-		string.format("on %d screens (5 desktop sizes, 9 phones with their thumbstick and jump) it stands centred, "
-			.. "as low as it can over the hotbar (its bottom edge in the lowest 40%%), never taller than %d%% of the "
-			.. "screen, inside the safe area and %d px clear of every HUD rect; the smallest, %s, at %.2f", #cases,
-			math.round(FirstHatchCard.MaxHeightShare * 100), G, smallestTag, smallest), bad)
+		string.format("on %d placements (5 desktop sizes and 9 phones with their thumbstick and jump, each with and "
+			.. "without the guide's words) it stands as low as it can over the hotbar (its bottom edge in the lowest "
+			.. "40%%), never taller than %d%% of the screen, inside the safe area and %d px clear of every HUD rect and "
+			.. "the guide's words; centred where the middle has room, else at the place nearest it (%d of them); the "
+			.. "smallest, %s, at %.2f", placed, math.round(FirstHatchCard.MaxHeightShare * 100), G, #beside, smallestTag,
+			smallest), bad)
+	check(owner ~= nil and owner.r.w > 0 and not owner.centred
+			and owner.r.x >= owner.banner.x + owner.banner.w + G - 1,
+		"on the owner's 705 x 338 phone with the guide's words up it stands beside them, right of the guide's box "
+			.. "(2026-10-16: it had no place at all there, and the guide fell back to the Bag)",
+		owner and string.format("%d,%d %dx%d at %.2f; the box %d..%d", owner.r.x, owner.r.y, owner.r.w, owner.r.h,
+			owner.scale, owner.banner.x, owner.banner.x + owner.banner.w))
 
 	--==========================================================================
 	say("4. The analytics events")
@@ -389,6 +444,11 @@ local function body()
 				.. "\t\t\tplayer:SetAttribute(FIRST.AskedAttribute, reply.landing)"),
 		"its HATCH: one verb with the pod's item id, only once it is ready; the server's own landing noted for "
 			.. "the camera; the card's first showing told once, as it goes up")
+	check(has(card, "\t\tif now - lastFailed < 1 then\n\t\t\tcard.Visible = false\n\t\t\treturn\n\t\tend\n\t\tlastPlaced = now\n"
+			.. "\t\tif not placeCard() then\n\t\t\tlastFailed = now")
+			and count(card, "lastFailed = -math.huge") == 3,
+		"a screen with no place at all is asked again once a second, not every paint (the search off the middle walks "
+			.. "the whole width); a new pod or a new screen size asks at once")
 	check(has(card, "\"FirstHatchButton\"") and has(card, "SoundKit.play(FIRST.Sound)")
 			and has(card, "if card.Visible then") and has(card, "gui.DisplayOrder = 35")
 			and count(card, "MenuKit.button(") == 1 and not has(card, "Instance.new(\"TextButton\")")

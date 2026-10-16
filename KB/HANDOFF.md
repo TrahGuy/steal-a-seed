@@ -1,5 +1,37 @@
 # Steal a Seed — Session Handoff
 
+## THE FIRST HATCH CARD ON SHORT PHONES: BESIDE THE GUIDE'S WORDS — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUBLISHED; FirstHatchSpec 35/0 (was 33); MUTANTS 4/4 NEW + 6/6 OLD CARD ONES CAUGHT; ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
+
+**The bug** (found by the sprout rename's phone Play, above):
+- On the owner's phone emulator, the first hatch card (fa60c69, live since v1063) never appeared.
+- The guide's words stand between the top row and the hotbar, so FirstHatchCard.rect found no clear place in the middle, even at MinScale. The guide fell back to the Bag.
+- FirstHatchSpec had that phone size, but without the guide's words.
+
+**The owner's pick:** "Beside the guide box".
+- **Shared/FirstHatchCard.rect:** centred at every scale first, as before. Where the middle has no room at any scale, it takes the clear place nearest the middle (SideStep 8, right before left), as low as it can stand, at the largest scale that has one. On a phone that is right of the guide's words.
+- **FirstHatchCard.client:** a screen with no place at all is asked again once a second, not every paint. A new pod or a new screen size asks at once.
+
+**Specs and mutants:**
+- FirstHatchSpec places the card on 28 screens: 5 desktop sizes and 9 phones, each with and without the guide's words (HudLayout's own banner and skip rects).
+  - Centred where the middle has room; otherwise beside, nearest the middle (5 of the 28).
+  - The owner's 705 x 338 has its own named check. The client's throttle is pinned.
+- Mutants NoSidewaysPass (the bug back), SidewaysFirst, FarSideFirst and NoThrottle: all caught.
+- The older ShowsUnderAMenu, PhoneCardHuge, CardOverTheGuide, NoReadyPing, LandingFacesAway and FacesOutOfTheGate: still caught.
+
+**Live (one guarded Play, SeedTest_20261016, the phone emulator 705 x 338, touch; the steps harness again, deleted after):**
+- Banked, the card stood at 334,78, 212 x 106 (scale 0.66): right of the guide's words, which end at x 325.
+  - First "YOUR POD IS GROWING…", "BIG Toadcap", "Ready in 0:09".
+  - Then "YOUR POD IS READY!" with the guide's "TAP HATCH" pointing at it.
+- HATCH, pressed at x + 47 (the emulator's offset): the landing came back, home, then the sprout hatched in front and FIRST HATCH BONUS showed. The server recorded hatch and place, pending cleared, and the guide moved on to step 7.
+- **Seen, not changed:** a passing biome name ("GREENHOLLOW", on the walk back over the red line) covered the card's title for a moment.
+- Studio is clean afterwards: test_store_off removed 1 key (0 left) and the marker, and the probe shows 387 compared, 0 differ, 0 ZZ leftovers.
+- Captures in output/first-hatch-phone-2026-10-16 (untracked).
+
+**Files:**
+- Shared/FirstHatchCard.luau, FirstHatchCard.client.luau, GameConfig.luau (the FirstHatch note);
+- tools/tests/FirstHatchSpec.luau;
+- KB/FIRST-HATCH-FIX-PLAN.md, AGENTS.md.
+
 ## PLANTS AND CREATURES ARE NOW SPROUTS (WHAT PLAYERS READ) — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; THE WHOLE SUITE 164 OF 164 (15 specs' pins followed); ONE GUARDED PLAY ON THE PHONE EMULATOR, 705 x 338; FOUND: THE FIRST HATCH CARD NEVER SHOWS ON THAT PHONE, NOT FIXED)
 
 The owner: "should we change the "plants" "creatures" into sprouts? ask me querstions". Eight answers, every recommendation taken: KB/SPROUT-RENAME-PLAN.md (new; what changed and what was tested).

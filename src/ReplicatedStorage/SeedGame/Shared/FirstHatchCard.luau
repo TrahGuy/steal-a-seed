@@ -13,7 +13,11 @@
 --   rect     where: the lowest place over the hotbar clear of the whole HUD
 --            (HudLayout.occupied, and the guide's block while it shows),
 --            centred, as large as fits down to MinScale and never taller than
---            MaxHeightShare of the screen (a phone's smaller card)
+--            MaxHeightShare of the screen (a phone's smaller card). Where the
+--            middle has no room -- a short phone, the guide's words standing
+--            between the top row and the hotbar -- the clear place nearest the
+--            middle instead: beside the guide's words (2026-10-16, the owner:
+--            "Beside the guide box")
 --   Blocks   its pieces, in its own units
 --   landing  where its HATCH puts the body: the plot's spawn facing the bed
 --            the plant will come up in -- into the garden when there is none
@@ -47,6 +51,9 @@ FirstHatchCard.MinScale = 0.55
 -- Never taller than this share of the screen: on a 302-px phone about 115 px.
 FirstHatchCard.MaxHeightShare = 0.38
 FirstHatchCard.Step = 0.05
+-- Off the middle, the places tried step this far sideways (right first, at each
+-- distance: on a phone the guide's words stand left of the middle).
+FirstHatchCard.SideStep = 8
 FirstHatchCard.Blocks = {
 	title = rect(14, 8, 292, 30),
 	view = rect(14, 42, 70, 66),
@@ -95,7 +102,9 @@ function FirstHatchCard.shown(pending: boolean, pod: Pod?, busy: boolean, asked:
 end
 
 -- Where it stands on a `safe`-sized screen, clear of `avoid` by Gap, and its
--- scale; an empty rect when nothing fits.
+-- scale; an empty rect when nothing fits. Centred at every scale first; only
+-- where the middle has no room at any, the place nearest the middle at the
+-- largest scale that has one, as low as it can stand there.
 function FirstHatchCard.rect(safe: Vector2, avoid: { Rect }): (Rect, number)
 	local G = FirstHatchCard.Gap
 	local base = FirstHatchCard.Base
@@ -111,21 +120,47 @@ function FirstHatchCard.rect(safe: Vector2, avoid: { Rect }): (Rect, number)
 		end
 		return true
 	end
-	local scale = math.min(FirstHatchCard.MaxScale, (safe.X - G * 2) / base.X,
-		FirstHatchCard.MaxHeightShare * safe.Y / base.Y)
-	while scale >= FirstHatchCard.MinScale - 1e-9 do
-		local w, h = math.floor(base.X * scale), math.floor(base.Y * scale)
-		local x = math.floor(safe.X / 2 - w / 2)
-		-- As low as it can stand: over the hotbar and the bands over it.
+	-- As low as it can stand at `x`: over the hotbar and the bands over it.
+	local function lowest(x: number, w: number, h: number): Rect?
 		local y = math.floor(safe.Y - G - h)
 		while y >= G do
 			local r = rect(x, y, w, h)
 			if clear(r) then
-				return r, w / base.X
+				return r
 			end
 			y -= 4
 		end
-		scale -= FirstHatchCard.Step
+		return nil
+	end
+	local top = math.min(FirstHatchCard.MaxScale, (safe.X - G * 2) / base.X,
+		FirstHatchCard.MaxHeightShare * safe.Y / base.Y)
+	for pass = 1, 2 do
+		local scale = top
+		while scale >= FirstHatchCard.MinScale - 1e-9 do
+			local w, h = math.floor(base.X * scale), math.floor(base.Y * scale)
+			local centre = math.floor(safe.X / 2 - w / 2)
+			if pass == 1 then
+				local r = lowest(centre, w, h)
+				if r then
+					return r, w / base.X
+				end
+			else
+				-- Nearest the middle first, right before left at each distance.
+				local d = FirstHatchCard.SideStep
+				while centre - d >= G or centre + d + w <= safe.X - G do
+					for _, x in ipairs({ centre + d, centre - d }) do
+						if x >= G and x + w <= safe.X - G then
+							local r = lowest(x, w, h)
+							if r then
+								return r, w / base.X
+							end
+						end
+					end
+					d += FirstHatchCard.SideStep
+				end
+			end
+			scale -= FirstHatchCard.Step
+		end
 	end
 	return rect(0, 0, 0, 0), 0
 end

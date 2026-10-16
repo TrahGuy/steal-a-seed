@@ -282,7 +282,8 @@ src/
     Shared/FirstHatchCard.luau  the first hatch's card as arithmetic (2026-10-16; GameConfig.FirstHatch): its
                                 pod (the Bag's soonest), its words (GROWING… / Ready in 0:07, then READY!),
                                 when it stands, its rect (low over the hotbar, clear of the HUD and the
-                                guide's block, never over 38% of the screen), the landing facing the plant's
+                                guide's block, never over 38% of the screen; beside the guide's words on a
+                                short phone), the landing facing the plant's
                                 bed -- pure (FirstHatchSpec)
     Shared/RainSign.luau        the RAIN BIOME sign over the rain bridge (2026-10-16): its line at a
                                 moment from the published weather and the next on-the-hour mark

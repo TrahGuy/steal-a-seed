@@ -12322,7 +12322,8 @@ GameConfig.HatchInBag = {
 --
 -- The first pod a player ever banks is ready in FirstMinute.FirstHatchSeconds.
 -- From that bank until their first hatch, FirstHatchCard.client shows a card in
--- the lower middle, over the hotbar and clear of the whole HUD (Shared/
+-- the lower middle, over the hotbar and clear of the whole HUD -- on a short
+-- phone beside the guide's words, where the middle has no room (Shared/
 -- FirstHatchCard): the pod's own picture, its size and name, "YOUR POD IS
 -- GROWING…" over its countdown with a grey HATCH, then "YOUR POD IS READY!"
 -- with a green one and the Mist's pod-ready ping (Sound). No close: it stays

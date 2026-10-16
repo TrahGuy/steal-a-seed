@@ -190,6 +190,9 @@ local styledReady: boolean? = nil
 local toldShown = false
 local readyRung: { [string]: boolean } = {}
 local lastPlaced = -math.huge
+-- When a screen last had no place at all (FirstHatchCard.rect): asked again once
+-- a second, not every paint -- the search off the middle walks the whole width.
+local lastFailed = -math.huge
 
 local function placeCard(): boolean
 	if gui.AbsoluteSize.X <= 0 then
@@ -232,11 +235,17 @@ local function paint()
 		local builder, category = ItemArt.builder(key, { kind = "pod", speciesId = pod.speciesId, tier = pod.tier })
 		preview.setModel(key, builder, category)
 		lastPlaced = -math.huge
+		lastFailed = -math.huge
 	end
 	local now = os.clock()
 	if not card.Visible or now - lastPlaced > 1 then
+		if now - lastFailed < 1 then
+			card.Visible = false
+			return
+		end
 		lastPlaced = now
 		if not placeCard() then
+			lastFailed = now
 			card.Visible = false
 			return
 		end
@@ -322,6 +331,7 @@ player:GetAttributeChangedSignal(FIRST.PendingAttribute):Connect(paint)
 player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(paint)
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 	lastPlaced = -math.huge
+	lastFailed = -math.huge
 	paint()
 end)
 task.spawn(function()

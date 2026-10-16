@@ -73,3 +73,19 @@ The owner picked two of a pasted list of suggestions: "6: event names" and, for 
 - **What still reaches them:** the weather and the Mist themselves, the rain's warnings and evacuation, a picked berry's answer, and every answer to their own actions.
 - **Where:** GameConfig.FirstHatch.QuietAttribute, set by PlayerDataService.PublishFirstHatch; ActionToastUI; EnchantedMistBerryService's announce.
 - **Tested:** FirstHatchSpec 33/0, 25 mutants caught, and the neighbouring specs (KB/HANDOFF.md has the list). Spec-only: no Play.
+
+## Follow-up: the card on short phones, beside the guide box (2026-10-16)
+
+- **Found:** the sprout rename's phone Play (the owner's emulator, 705 x 338) showed that the card never appeared there.
+  - The guide's words stand between the top row and the hotbar, so FirstHatchCard.rect found no clear place in the middle, even at MinScale.
+  - The guide fell back to the Bag ("Open your Bag and hold HATCH").
+  - FirstHatchSpec had that phone, but not the guide's words.
+- **The owner's pick:** "Beside the guide box".
+  - Where the middle has room the card stands centred, as before.
+  - Where it has none, it takes the clear place nearest the middle, as low as it can stand, at the largest scale that fits there. On a phone that is right of the guide's words.
+  - A screen with no place at all is asked again once a second.
+- **Tested:**
+  - FirstHatchSpec 35/0: every screen with and without the guide's words, and the owner's phone by name;
+  - 4 new mutants and 6 of the old card ones, all caught;
+  - one guarded Play on that phone: the card beside the guide's words (212 x 106 at 0.66), "TAP HATCH" pointing at it, HATCH home, the sprout hatched in front, the guide on to step 7.
+- **Seen, not changed:** a biome name passing at the top (on the walk back across the red line) briefly covers the card's title.
