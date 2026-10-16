@@ -16,6 +16,10 @@
 -- This file drops tickets only for a mode with Tickets; the mill and the
 -- movement factor read the same published state on their own.
 --
+-- AND A POD RUSH EVERY HOUR (2026-10-16, the owner; GameConfig.PodRush.Auto):
+-- not an admin's and not in the shared record -- each server starts it from
+-- the clock at the same moment (HourlyStep, at the end of THE STEP below).
+--
 --==============================================================================
 -- ONE SHARED RECORD, MANY SERVERS
 --
@@ -104,6 +108,7 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local DancerPlacement = require(Shared:WaitForChild("DancerPlacement"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local AdminAnnounce = require(Shared:WaitForChild("AdminAnnounce"))
+local PodRush = require(Shared:WaitForChild("PodRush"))
 local WheelService = require(script.Parent:WaitForChild("WheelService"))
 
 local MiniEventService = {}
@@ -119,6 +124,10 @@ local G = M.Global
 local SAVE = GameConfig.Save
 local MODES: { [string]: any } = M.Modes :: any
 local RECORD_VERSION = 1
+-- The hourly POD RUSH (2026-10-16), and who its pop-ups pass by.
+local AUTO: any = GameConfig.PodRush.Auto
+local RUSH_MODE = GameConfig.PodRush.Mode
+local QUIET = GameConfig.FirstHatch.QuietAttribute
 
 export type Record = {
 	v: number,
@@ -182,6 +191,9 @@ export type Event = {
 	dropped: number,
 	-- When each UserId was last told it could not take a ticket.
 	toldAt: { [number]: number },
+	-- The hourly POD RUSH's (2026-10-16): this server's own, from the clock, in
+	-- no shared record.
+	scheduled: boolean?,
 }
 
 -- What the shared store and the messaging are, behind one seam.
@@ -385,6 +397,32 @@ end
 function MiniEventService.useWorld(target: Instance?, parent: Instance?)
 	attrTarget = target or Workspace
 	ticketParent = parent or ReplicatedStorage
+end
+
+-- The hourly POD RUSH's numbers (GameConfig.PodRush.Auto, frozen like all of
+-- GameConfig): the spec stands its own in; nil puts the config's back.
+function MiniEventService.useHourly(cfg: any?)
+	AUTO = cfg or GameConfig.PodRush.Auto
+end
+
+-- Who a POD RUSH's pop-ups go to (2026-10-16): everybody here but a player
+-- still in their first loop (GameConfig.FirstHatch, A QUIET FIRST LOOP). Nil
+-- -- everybody, as before -- when nobody here is.
+local function loudPlayers(): { any }?
+	local loud: { any } = {}
+	local held = false
+	for _, player in ipairs(playersNow()) do
+		local quiet = false
+		pcall(function()
+			quiet = player:GetAttribute(QUIET) == true
+		end)
+		if quiet then
+			held = true
+		else
+			table.insert(loud, player)
+		end
+	end
+	return if held then loud else nil
 end
 
 --==============================================================================
@@ -1439,7 +1477,9 @@ local function reconcile(now: number, source: string)
 			finish(event)
 		end
 		startLocal(r, now, source)
-	elseif event and event.state == "running" then
+	elseif event and event.state == "running" and not event.scheduled then
+		-- (The hourly POD RUSH is in no record, so a record of nothing running
+		-- leaves it be; an admin's running one, above, still takes its place.)
 		local ended = record ~= nil and record.id == event.globalId and record.state == "ended"
 		close(event, now, if ended then "ended globally by " .. tostring((record :: Record).endedByName)
 			else "no longer running globally")
@@ -1565,7 +1605,11 @@ function MiniEventService.Step(now: number)
 		end
 		if not event.announced and now >= event.startedAt + M.AnnounceDelaySeconds then
 			event.announced = true
-			broadcast(EVENTS.Opened, { id = event.globalId, mode = event.mode }, nil)
+			-- A POD RUSH's pop-up and sting pass a player in their first loop by
+			-- (2026-10-16, GameConfig.PodRush.Auto).
+			local shape = modeOf(event.mode)
+			broadcast(EVENTS.Opened, { id = event.globalId, mode = event.mode },
+				if shape and shape.PodRush == true then loudPlayers() else nil)
 			-- THE ADMIN WHO STARTED IT (2026-10-12, item 10), named in every server
 			-- the event reaches, at its own announcement: every global event is an
 			-- admin's (AdminService is StartGlobal's only caller). A server that
@@ -1607,6 +1651,98 @@ function MiniEventService.Step(now: number)
 end
 
 --==============================================================================
+-- THE POD RUSH EVERY HOUR (2026-10-16, the owner; GameConfig.PodRush.Auto,
+-- KB/POD-RUSH-HOURLY-PLAN.md)
+--
+-- Beside the admins' events, a POD RUSH in every slot (PodRush.slotAt: whole
+-- hours plus :30), on every server at once because each reads the same clock;
+-- the shared record and the messaging are not involved. It is this server's
+-- own event (scheduled), named by its slot (PodRush.autoId), so the counts
+-- PodRushService saves agree across servers. Each slot is decided once, after
+-- the first read of the record has been tried:
+--   * an admin's event running at the slot's start takes the slot: no rush
+--     that hour;
+--   * otherwise the rush runs from the slot's start for the mode's Seconds --
+--     on a server that comes up during it, for what is left, unannounced.
+-- WarnSeconds before a slot, the warning goes to everybody here but a player
+-- in their first loop -- unless an admin's event will still be running then.
+-- Only the live loop calls this; Step never does, so a spec walking an
+-- admin's event on its own clock meets no rush.
+--==============================================================================
+local auto = { warned = nil :: number?, decided = nil :: number? }
+
+-- Whether an admin's event holds the moment `at`: one here running past it,
+-- or the shared record's, started by then and neither over nor ended before.
+local function adminHolds(at: number): boolean
+	local event = current
+	if event and not event.scheduled and event.state == "running" and event.endsAt > at then
+		return true
+	end
+	local r = known
+	if not r or r.startedAt > at or at >= r.endsAt then
+		return false
+	end
+	if r.state == "running" then
+		return not tombstones[r.id]
+	end
+	return r.state == "ended" and type(r.endedAt) == "number" and (r.endedAt :: number) > at
+end
+
+function MiniEventService.HourlyStep(now: number)
+	if not (AUTO and AUTO.Enabled == true) then
+		return
+	end
+	local seconds: number = modeOf(RUSH_MODE).Seconds
+	local slot = PodRush.slotAt(now, AUTO)
+	local nextSlot = slot + AUTO.PeriodSeconds
+	-- THE WARNING: once a slot, at its moment, never much later.
+	local warnAt = nextSlot - AUTO.WarnSeconds
+	if auto.warned ~= nextSlot and now >= warnAt and now < warnAt + AUTO.WarnGraceSeconds then
+		auto.warned = nextSlot
+		if not adminHolds(nextSlot) then
+			broadcast(Notice.ServerNotice, { title = AUTO.Warn.Title, detail = AUTO.Warn.Detail,
+				key = "podrush:soon:" .. PodRush.autoId(nextSlot, AUTO), icon = "podrush" }, loudPlayers())
+			log(string.format("The hourly POD RUSH starts in %s: everybody here warned.", mmss(nextSlot - now)))
+		end
+	end
+	-- THE RUSH: this slot's, decided once.
+	if not sync.ready or auto.decided == slot or now >= slot + seconds then
+		return
+	end
+	auto.decided = slot
+	if adminHolds(slot) then
+		log("The hourly POD RUSH is skipped this hour: an admin's event holds the slot.")
+		return
+	end
+	local event = current
+	if event then
+		-- An event over by its timer this very moment, or fading: it goes now.
+		if event.state == "running" then
+			close(event, now, "the timer")
+		end
+		finish(event)
+	end
+	local record: Record = {
+		v = RECORD_VERSION,
+		ns = seam.ns,
+		id = PodRush.autoId(slot, AUTO),
+		rev = 0,
+		mode = RUSH_MODE,
+		startedAt = slot,
+		endsAt = slot + seconds,
+		by = 0,
+		byName = AUTO.ByName,
+		state = "running",
+		endedIds = {},
+	}
+	startLocal(record, now, AUTO.ByName)
+	local started = current
+	if started then
+		started.scheduled = true
+	end
+end
+
+--==============================================================================
 -- READ API
 --==============================================================================
 -- A copy of this server's presentation, or nil.
@@ -1635,6 +1771,7 @@ function MiniEventService.State(): { [string]: any }?
 		tickets = tickets,
 		collected = event.collected,
 		dropped = event.dropped,
+		scheduled = event.scheduled == true,
 	}
 end
 
@@ -1677,6 +1814,16 @@ function MiniEventService.StatusLine(): string
 			table.insert(parts, "storage: first read pending")
 		end
 		table.insert(parts, if sync.subscribed then "notices on" else "notices OFF (polling only)")
+	end
+	-- The hourly POD RUSH (2026-10-16).
+	local event = current
+	if not (AUTO and AUTO.Enabled == true) then
+		table.insert(parts, "hourly POD RUSH off")
+	elseif event and event.scheduled and event.state == "running" then
+		table.insert(parts, string.format("hourly POD RUSH on, %s left", mmss(event.endsAt - now)))
+	else
+		table.insert(parts, string.format("next hourly POD RUSH in %s",
+			mmss(PodRush.slotAt(now, AUTO) + AUTO.PeriodSeconds - now)))
 	end
 	return table.concat(parts, " · ")
 end
@@ -1780,8 +1927,13 @@ local function startGlobal(by: any, mode: string, seconds: number): (boolean, st
 	local scopeWord = if seam.scope == "local" then "THIS SERVER ONLY" else "saved to shared storage"
 	local tickets = if modeOf(mode).Tickets
 		then string.format(" Up to %d tickets per player for the whole event.", T.PerPlayerCap) else ""
-	return true, string.format("Global %s started for %s: %s (event %s, rev %d) and running on this server.%s %s",
-		name, mmss(seconds), scopeWord, short(record.id), record.rev, tickets, noticeLine(okPub, why))
+	-- Running past the next hourly POD RUSH's start (2026-10-16): that hour has none.
+	local skips = ""
+	if AUTO and AUTO.Enabled == true and record.endsAt > PodRush.slotAt(record.startedAt, AUTO) + AUTO.PeriodSeconds then
+		skips = " It runs past the next hourly POD RUSH's start, so that hour has none."
+	end
+	return true, string.format("Global %s started for %s: %s (event %s, rev %d) and running on this server.%s%s %s",
+		name, mmss(seconds), scopeWord, short(record.id), record.rev, tickets, skips, noticeLine(okPub, why))
 end
 
 local function endGlobal(by: any): (boolean, string, boolean)
@@ -1841,6 +1993,12 @@ function MiniEventService.StartGlobal(by: any, mode: any, seconds: any): (boolea
 		return false, string.format("Duration must be a whole number of seconds from %d to %d. Nothing changed.",
 			M.MinSeconds, M.MaxSeconds)
 	end
+	-- One event at a time, the hourly POD RUSH's included (2026-10-16).
+	local event = current
+	if event and event.scheduled and event.state == "running" then
+		return false, string.format("The hourly POD RUSH is running (%s left). Start yours after it. Nothing "
+			.. "changed.", mmss(event.endsAt - clock()))
+	end
 	if requestBusy then
 		return false, "A global event request is already in progress on this server. Wait for its answer."
 	end
@@ -1859,6 +2017,12 @@ end
 
 -- The third answer: whether this call ended anything (for the record).
 function MiniEventService.EndGlobal(by: any): (boolean, string, boolean)
+	-- The hourly POD RUSH is in no shared record: it ends by its own timer.
+	local event = current
+	if event and event.scheduled and event.state == "running" then
+		return false, string.format("The hourly POD RUSH ends by itself in %s; the console can't end it. Nothing "
+			.. "changed.", mmss(event.endsAt - clock())), false
+	end
 	if requestBusy then
 		return false, "A global event request is already in progress on this server. Wait for its answer.", false
 	end
@@ -1913,6 +2077,8 @@ function MiniEventService.Reset()
 	sync.ready = false
 	sync.pending = {}
 	sync.warned = false
+	auto.warned = nil
+	auto.decided = nil
 	publish(nil)
 	for _, player in ipairs(Players:GetPlayers()) do
 		setCount(player, nil)
@@ -1949,6 +2115,11 @@ function MiniEventService.Start()
 	task.spawn(function()
 		while running and mine == generation do
 			local now = clock()
+			-- The hourly POD RUSH first, so a slot's start is stepped at once.
+			local okHourly, errHourly = pcall(MiniEventService.HourlyStep, now)
+			if not okHourly then
+				warn("[Seed/MiniEventService] the hourly POD RUSH's step failed: " .. tostring(errHourly))
+			end
 			local ok, err = pcall(MiniEventService.Step, now)
 			if not ok then
 				warn("[Seed/MiniEventService] step failed: " .. tostring(err))
@@ -1979,8 +2150,12 @@ function MiniEventService.Start()
 		lastRoot[player] = nil
 	end))
 	log(string.format("Ready (%s). Mini events are the admins' to start, %d to %d s, %d s by default; tickets: "
-		.. "one every ~%d s per server, at most %d unclaimed, %d per player per GLOBAL event, each one free earned spin.",
-		seam.note, M.MinSeconds, M.MaxSeconds, M.DefaultSeconds, T.DropSeconds, T.MaxUnclaimed, T.PerPlayerCap))
+		.. "one every ~%d s per server, at most %d unclaimed, %d per player per GLOBAL event, each one free earned spin. "
+		.. "%s", seam.note, M.MinSeconds, M.MaxSeconds, M.DefaultSeconds, T.DropSeconds, T.MaxUnclaimed, T.PerPlayerCap,
+		if AUTO and AUTO.Enabled == true
+			then string.format("And a POD RUSH every %d min, %d min past the hour, from the clock.",
+				AUTO.PeriodSeconds // 60, (AUTO.OffsetSeconds % 3600) // 60)
+			else "The hourly POD RUSH is off."))
 end
 
 function MiniEventService.Stop()

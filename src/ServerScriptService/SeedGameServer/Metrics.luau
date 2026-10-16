@@ -650,19 +650,23 @@ end
 --==============================================================================
 -- THE POD RUSH (2026-10-09; PodRushService): once per player per rush, at
 -- their end card -- the pods counted as the value, the level reached as a
--- fixed word ("none", "bronze", "silver", "gold"). No names and no ids.
+-- fixed word ("none", "bronze", "silver", "gold"). No names and no ids. Field
+-- 02 (2026-10-16): "scheduled" for the hourly rush, "admin" for an admin's --
+-- and for every rush before that day.
 --==============================================================================
 local RUSH_LEVELS: { [string]: boolean } = { none = true, bronze = true, silver = true, gold = true }
+local RUSH_SOURCES: { [string]: boolean } = { scheduled = true, admin = true }
 
-function Metrics.podRushEnded(player: any, count: number, level: string)
+function Metrics.podRushEnded(player: any, count: number, level: string, source: string?)
 	pcall(function()
 		if not RUSH_LEVELS[level] then
 			return
 		end
 		local banked = if type(count) == "number" and count == count then math.clamp(math.floor(count), 0, 9999) else 0
+		local from = if type(source) == "string" and RUSH_SOURCES[source] then source else "admin"
 		local who = audience(player)
 		if who == "count" then
-			send("custom", "other", player, Metrics.Events.PodRushEnded, banked, { [F1] = level })
+			send("custom", "other", player, Metrics.Events.PodRushEnded, banked, { [F1] = level, [F2] = from })
 		elseif who == "validate" then
 			validation(player, "pod rush " .. level)
 		end

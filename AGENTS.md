@@ -372,7 +372,8 @@ src/
                                 levels 3/7/12 and their rewards, what counts (a nest theft banked
                                 inside the window, 20 s of grace), the owed pods, the tracker's
                                 words and its place clear of the HUD (full, strip or mini), the
-                                end card's place over the hotbar, the nest rings (PodRushSpec)
+                                end card's place over the hotbar, the nest rings (PodRushSpec);
+                                the hourly rush's slots and ids (2026-10-16, PodRushHourlySpec)
     Shared/SproutDash.luau      the mill's minigame, its rules alone: the course a seed makes, one
                                 fixed step, a run replayed from its hop ticks, what a distance
                                 pays and the caps -- the server counts, the client draws
@@ -551,7 +552,8 @@ src/
     PodRushService.luau         POD RUSH on the server (2026-10-09): the rush's window and grace,
                                 counting banked nest thefts (CarryService.OnBanked), paying the
                                 levels (spins, the training boost, a Titan pod or an owed one),
-                                the dusk hold, the saved row (ProfileSchema.PodRush)
+                                the dusk hold, the saved row (ProfileSchema.PodRush); an admin's
+                                rush or, every hour at :30, MiniEventService.HourlyStep's (2026-10-16)
     SproutDashService.luau      the mill's minigame, counted: a seed per run, the hops replayed,
                                 only on the player's own mill, the boost paid (2026-10-08)
     RebirthService.luau         rebirths (2026-10-08): the quote, the reset, the fence and the
@@ -759,7 +761,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 the obby course, like SpeedFX's run streak
     PodRushUI.client.luau       POD RUSH on this screen (2026-10-09): the tracker (or its strip),
                                 the "+1" and medal pops, the end card, the nests' gold rings,
-                                the stings -- transparent, as the owner asked
+                                the stings -- transparent, as the owner asked; a player in their
+                                first loop sees the tracker once a pod of theirs counts (2026-10-16)
     SproutDashUI.client.luau    PLAY MINIGAME on the own mill, and Sprout Dash's screen (the
                                 jump held, the run drawn, the server's count shown); its open
                                 screen switches the music bed (Music.client)

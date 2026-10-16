@@ -3,8 +3,9 @@
 -- Steal a Seed :: PodRushService (2026-10-09; KB/POD-RUSH-PLAN.md)
 --
 -- THE POD RUSH, ON THIS SERVER. The event itself -- its id, and its start and
--- end on every server at once -- is MiniEventService's (mode "podrush"); this
--- watches the Workspace attributes that publishes and runs the rush here:
+-- end on every server at once -- is MiniEventService's (mode "podrush"; an
+-- admin's, or since 2026-10-16 the hourly one, HourlyStep); this watches the
+-- Workspace attributes that publishes and runs the rush here:
 --
 --   BEGIN    the nests regrow and build no rage (NestService.SetRush), dusk is
 --            held (PodRush.Attributes.Until, read by WorldCycleService), and
@@ -49,6 +50,9 @@ local MINI = GameConfig.MiniEvent.Attributes
 local ATTR = CFG.Attributes
 local EVENTS = CFG.Events
 local WORDS = CFG.Words
+-- A player still in their first loop (2026-10-16; GameConfig.FirstHatch, A QUIET
+-- FIRST LOOP): no end card for a rush they took no part in, no one else's GOLD.
+local QUIET = GameConfig.FirstHatch.QuietAttribute
 -- The GOLD level's pod size (SeedData's Titan).
 local TITAN_TIER: number = (CFG.Levels[#CFG.Levels] :: any).PodTier
 
@@ -137,8 +141,8 @@ PodRushService.Hooks = {
 	carrying = function(player: any): number?
 		return CarryService.CarriedTheft(player)
 	end,
-	metric = function(player: any, count: number, level: string)
-		Metrics.podRushEnded(player, count, level)
+	metric = function(player: any, count: number, level: string, source: string)
+		Metrics.podRushEnded(player, count, level, source)
 	end,
 	random = function(): Random
 		return Random.new()
@@ -272,16 +276,20 @@ local function over(player: any, r: Rush)
 	local level = PodRush.levelFor(count)
 	local total = PodRush.rewardsUpTo(level)
 	local biome = if total.podTier and row then biomeOfOrder(row.Top) else nil
-	Hooks.send(player, EVENTS.Over, {
-		id = r.id,
-		count = count,
-		level = level,
-		spins = total.spins,
-		boost = total.boost ~= nil,
-		pod = if biome then biome.DisplayName else nil,
-		podOwed = row ~= nil and row.PodOwed ~= "",
-	})
-	Hooks.metric(player, count, PodRush.levelId(level))
+	-- Not for a player in their first loop who banked nothing in it.
+	if count > 0 or player:GetAttribute(QUIET) ~= true then
+		Hooks.send(player, EVENTS.Over, {
+			id = r.id,
+			count = count,
+			level = level,
+			spins = total.spins,
+			boost = total.boost ~= nil,
+			pod = if biome then biome.DisplayName else nil,
+			podOwed = row ~= nil and row.PodOwed ~= "",
+		})
+	end
+	-- The hourly rush's or an admin's (2026-10-16): field 02.
+	Hooks.metric(player, count, PodRush.levelId(level), if PodRush.isAuto(r.id) then "scheduled" else "admin")
 	player:SetAttribute(ATTR.Carrying, nil)
 end
 
@@ -409,7 +417,7 @@ function PodRushService.Banked(player: any, info: any)
 	if table.find(due, #CFG.Levels) then
 		local line = PodRush.serverLine(nameOf(player))
 		for _, other in ipairs(Hooks.players()) do
-			if other ~= player then
+			if other ~= player and other:GetAttribute(QUIET) ~= true then
 				Hooks.send(other, Notice.ServerNotice, {
 					title = line,
 					key = string.format("podrush:gold:%s:%s", r.id, tostring(player.UserId)),

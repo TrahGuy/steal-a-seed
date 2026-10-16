@@ -17,8 +17,9 @@
 --
 -- No remote and no server: the words ship with a publish, like any config.
 --
--- THE OWNER APPROVED THE FIVE NEWEST ENTRIES ON 2026-10-13 (the one below them
--- is the 2026-10-05 draft, kept; its 4 Oct partner dropped, the owner's call).
+-- THE OWNER APPROVED THE FIVE ENTRIES UNDER THE NEWEST ON 2026-10-13 (the one
+-- below them is the 2026-10-05 draft, kept; its 4 Oct partner dropped, the
+-- owner's call). The newest, 2026-10-16's hourly POD RUSH, is the owner's ask.
 -- Every line was checked against the code and KB/HANDOFF.md's record of the
 -- publish that carried it; a date is the owner's day (UTC+8) of that publish.
 --
@@ -46,6 +47,18 @@ export type Entry = {
 -- THE ENTRIES, NEWEST FIRST (the owner approved the wording, 2026-10-13)
 --==============================================================================
 UpdateLog.Entries = {
+	-- The hourly POD RUSH (2026-10-16; the owner: "Yes, one line" -- the second
+	-- is the panel's two-line least, the levels' own numbers). The day the owner
+	-- publishes it: a later day moves its date and id together.
+	{
+		id = "2026-10-16-hourly-rush",
+		date = "16 Oct 2026",
+		title = "POD RUSH every hour",
+		bullets = {
+			"A POD RUSH now starts every hour, with a 1-minute warning.",
+			"Bank 3, 7 or 12 pods for spins, a boost and a Titan pod!",
+		},
+	},
 	-- The day the owner publishes them: a publish after 13 Oct moves these two
 	-- dates and their ids together.
 	{

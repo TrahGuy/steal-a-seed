@@ -1,5 +1,57 @@
 # Steal a Seed — Session Handoff
 
+## POD RUSH EVERY HOUR AT :30 — 2026-10-16 (CLAUDE, DESKTOP)  (COMMITTED on wip, NOT PUSHED, NOT PUBLISHED; PodRushHourlySpec 35/0 (NEW); MiniEventSpec 90/0, PodRushSpec 98/0 (one pin followed), AutoWeatherSpec 45/0, MetricsSpec 66/0, UpdateLogSpec 22/0, AdminAnnounceSpec 44, AdminMistSpec 69, DiscoPartySpec 19, EnchantedMistBerrySpec 73, HudLayoutSpec 1499, InviteHudSpec 438, NameBadgeSpec 26, NoticeSpec 105, OtherPlantsSpec 75, PhoneMenuSpec 29, PlotLevelsSpec 34, ServerBoostSpec 65, TreadmillFunSpec 116; MUTANTS 27/27 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+
+The owner, on the Sprout Journey talk: "i like that cheaper idea" (POD RUSH on a schedule), then "ask me a lot of question". Sixteen answers, every recommendation taken: KB/POD-RUSH-HOURLY-PLAN.md (new; with where each lives and what was tested).
+
+**What changed:**
+- **Every hour at :30, for 5 minutes, on every server at once** (GameConfig.PodRush.Auto; MiniEventService.HourlyStep).
+  - Each server reads the same clock, as the rain does. Nothing is written to the shared record and nothing is sent between servers.
+  - The rush is the server's own event (`scheduled`), named by its slot ("auto" and the slot's start, Shared/PodRush.autoId), so PodRushService's saved counts agree across servers.
+  - Everything else is the rush's own: the levels (3 / 7 / 12), the rewards, the words, the nests' 15 s regrow, night waiting for it.
+- **A 1-minute warning** to everybody here: "POD RUSH IN 1 MINUTE!", "Get ready to steal and bank as many pods as you can!". Sent once per slot, at its moment, by a server up then; never late.
+- **An admin's event running at :30 takes that hour** (no warning either, when it will still be running then).
+  - While the hourly rush runs, the console starts nothing and ends nothing.
+  - An admin's start that runs past :30 says that hour has none, and the console's status line names the next rush.
+- **The Enchanted Mist is left alone:** both may run.
+- **Players in their first loop (FirstHatch.QuietAttribute):**
+  - no warning and no start pop-up or sting, an admin's rush included;
+  - no end card when they banked nothing, and no one else's GOLD line;
+  - their tracker waits until a pod of theirs counts, or would.
+  - Pods they bank still count and pay.
+- **Analytics:** PodRushEnded gains field 02, `scheduled` or `admin` (KB/ANALYTICS.md now has a POD RUSH section).
+- **What's New:** the newest entry, "POD RUSH every hour": "A POD RUSH now starts every hour, with a 1-minute warning." and "Bank 3, 7 or 12 pods for spins, a boost and a Titan pod!" (the owner asked for one line; the panel needs two at least). Its date is 16 Oct, to move with the publish day.
+- **Off:** GameConfig.PodRush.Auto.Enabled = false, then a publish.
+- **Named HourlyStep, not AutoStep:** AutoWeatherSpec scans every server script for "AutoStep" as WeatherService's own scheduler. The schedule's seam is `useHourly`, since GameConfig is frozen.
+
+**Mutants (27 of 27):**
+- WrongMinute, SlotIgnoresOffset, IdNotAlnum, IsAutoLoose, OffSwitchIgnored;
+- NoWarning, WarnDespiteAdmin, WarnQuietToo, WarnEveryTick, WarnLate;
+- NoScheduleInLoop, StepRunsSchedule, AdminIgnored, BeforeFirstRead, WrongLength, LateServerAnnounces, ReconcileKills, ConsoleStartsDuring, ConsoleEndsDuring, OpenedToAll;
+- EndCardForQuiet, EndCardNeverQuiet, GoldToQuiet, TagAlwaysAdmin, MetricNoField, MetricTrustsAnything, TrackerForQuiet.
+- WarnLate needed a case the spec's first draft lacked (a server up after the warning's moment); it was added before the run.
+
+**Live (one guarded Play, SeedTest_20261016, desktop 942 x 739):**
+- A temporary Studio-only harness (src/ServerScriptService/ZZHourlyRushPlay.server.luau, deleted after, never committed) moved the schedule, not the clock (useHourly: the next slot two minutes out), and took the test player out of the quiet first loop.
+- The warning showed a minute before: "POD RUSH IN 1 MINUTE!" and its line.
+- The rush ran at the slot: "POD RUSH running here (global event auto1792, rev 0, from the hourly schedule)", the tracker "0 banked · 3 more for BRONZE", PodRushService's begin.
+- It ended by its timer, then the grace and "POD RUSH OVER · 0 pods · no level".
+- **The start pop-up was not seen.**
+  - The fresh test profile had the guide's card up. The tracker stood under it, and the notice stack had no room above the screen's middle, so the existing rule (2026-10-12) dropped the toast after waiting.
+  - Re-sent from the server while a panel was open, it showed at the top.
+  - A real player with the guide card up is either in their first loop (held anyway) or on guide step 7. Not checked with the guide hidden: the guide's skip confirm never took.
+  - The owner was clicking in the Play meanwhile (the Almanac that opened was theirs).
+- Studio is clean afterwards: test_store_off removed 1 key (0 left) and the marker, the harness is gone, and the probe shows 387 compared, 0 differ, 0 ZZ leftovers.
+- Captures in output/hourly-rush-2026-10-16 (untracked): 01 warning, 02 start + tracker, 03 the start toast (panel open), 04 end card, and the play log.
+- Not seen on a phone. The analytics are spec-only (the owner's account is staff).
+
+**Files:**
+- GameConfig.luau (PodRush.Auto), Shared/PodRush.luau (slotAt, autoId, isAuto), Shared/UpdateLog.luau;
+- MiniEventService.luau, PodRushService.luau, Metrics.luau;
+- PodRushUI.client.luau;
+- tools/tests/PodRushHourlySpec.luau (new), PodRushSpec.luau;
+- KB/POD-RUSH-HOURLY-PLAN.md (new), KB/POD-RUSH-PLAN.md, KB/ANALYTICS.md, AGENTS.md.
+
 ## THE FIRST HATCH'S EVENT NAMES, AND A QUIET FIRST LOOP — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as 6214f10 with the owner's OK; LIVE AS v1064, the owner's publish at 10:10:43 UTC 2026-10-16, Studio matching 6214f10: 387 compared, 0 differ; FirstHatchSpec 33/0 (was 28); the 12 strict-sibling specs green with the renamed Metrics stand-in (ActionRefusal 74, FirstMinute 117, HatchDelivery 62, HatchInBag 43, HatchReveal 74, HatchRoll 166, HatchStorage 208, HatchTimer 38, InstantHatch 57, PlantStreaming 12, PlotRelease 42, StorageDoors 128); every other spec that reads a touched file green: SecretToastSpec 61, NoticeSpec 105, EnchantedMistBerrySpec 73, EnchantedMistSpec 62, AdminMistSpec 69, AdminAnnounceSpec 44, RainEventSpec 98, MiniEventSpec 90, MistAudioSpec 19, MetricsSpec 66, TutorialSpec 121, TutorialSpotlightSpec 51, PodRushSpec 98, PodDropSpec 24, HatchBonusSpec 41, PassBenefitsSpec 31, HudLayoutSpec 1499, InviteRewardsSpec 173, NameBadgeSpec 26, PhoneMenuSpec 29, RebirthCelebrationSpec 92, SacrificeSpec 290, SellOneSpec 98, SourceIconsSpec 21, UsabilityAudioSpec 95; MUTANTS 25/25 CAUGHT; SPEC-ONLY, NO PLAY)
 
 The owner pasted a list of suggestions after v1063 ("how about this:") and picked two:

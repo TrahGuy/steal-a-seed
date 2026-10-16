@@ -23,6 +23,10 @@
 --                 (SoundKit cues PodRushStart / PodRushFinish; silent while
 --                 their ids are "").
 --
+-- A player still in their first loop (2026-10-16, GameConfig.FirstHatch's
+-- quiet first loop) is sent no announcement and no empty end card, and their
+-- tracker waits until a pod of theirs counts or would.
+--
 -- Reads only; it sends nothing to the server.
 --==============================================================================
 
@@ -349,6 +353,13 @@ local function paintTracker(now: number)
 	-- Aside while the buff popover stands on it, having no place clear of it
 	-- (BoostIconsUI; 2026-10-09).
 	local showing = (running or bankIt) and player:GetAttribute(GameConfig.BoostIcons.CoversAttribute) ~= true
+	-- A player still in their first loop (2026-10-16; GameConfig.FirstHatch, A
+	-- QUIET FIRST LOOP) sees it only once a pod of theirs counts, or would.
+	if showing and player:GetAttribute(GameConfig.FirstHatch.QuietAttribute) == true
+		and myCount(if running then id else player:GetAttribute(ATTR.Id)) == 0
+		and player:GetAttribute(ATTR.Carrying) ~= true then
+		showing = false
+	end
 	tracker.Visible = showing and placedAs == "full"
 	strip.Visible = showing and (placedAs == "strip" or placedAs == "mini")
 	if not showing then

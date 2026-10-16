@@ -8,7 +8,8 @@ taken:
 3. no rage build-up during the rush;
 4. a 15 s regrow;
 5. dusk waits for the rush;
-6. **admin-console start only** (no automatic schedule).
+6. **admin-console start only** (no automatic schedule). **Changed 2026-10-16:** a rush now also
+   starts by itself every hour at :30 (KB/POD-RUSH-HOURLY-PLAN.md).
 
 **BUILT 2026-10-09** (uncommitted, not published): see KB/HANDOFF.md, "POD RUSH: A FIVE-MINUTE STEALING
 EVENT". Added since this plan: the owner's music slots (a bed and two stings, "" until uploaded), the
@@ -111,7 +112,8 @@ gone in the first minute. **The rush has to add supply.**
 ### Analytics
 
 - `PodRushEnded`, once per player per rush: the number banked and the level reached. No names and no
-  ids, as the other events.
+  ids, as the other events. Since 2026-10-16, field 02 says whether the rush was the hourly one
+  (`scheduled`) or an admin's (`admin`).
 
 ### Tests and checks
 

@@ -2,8 +2,9 @@
 -- Steal a Seed :: PodRush (2026-10-09; KB/POD-RUSH-PLAN.md)
 --
 -- The pure half of the POD RUSH (GameConfig.PodRush): what counts, the three
--- levels and what each pays, the words, and where the tracker, the end card
--- and the rings under the nests stand. No clock and no instance: the server's
+-- levels and what each pays, the hourly schedule's slots (2026-10-16), the
+-- words, and where the tracker, the end card and the rings under the nests
+-- stand. No clock and no instance: the server's
 -- PodRushService and the client's PodRushUI both read it, and PodRushSpec
 -- holds it.
 --==============================================================================
@@ -162,6 +163,36 @@ function PodRush.counts(window: Window, stolenAt: number?, now: number): boolean
 		return false
 	end
 	return now <= stopped + CFG.GraceSeconds
+end
+
+--==============================================================================
+-- EVERY HOUR (2026-10-16, GameConfig.PodRush.Auto; MiniEventService.HourlyStep)
+--
+-- The slot a moment is in: the latest start at or before it, every
+-- PeriodSeconds from OffsetSeconds (whole hours plus :30). The same on every
+-- server, which reads the same clock. The slot's rush is named by its start,
+-- so every server -- and a profile's saved row -- agrees which rush it is.
+-- `auto` stands in for GameConfig.PodRush.Auto (the spec's numbers).
+--==============================================================================
+function PodRush.slotAt(now: number, auto: any?): number
+	local A = auto or CFG.Auto
+	local period, offset = A.PeriodSeconds, A.OffsetSeconds
+	return math.floor((now - offset) / period) * period + offset
+end
+
+function PodRush.autoId(slot: number, auto: any?): string
+	local A = auto or CFG.Auto
+	return A.IdPrefix .. string.format("%d", math.floor(slot))
+end
+
+-- Whether a rush's id is the schedule's (an admin's is hex from a GUID, which
+-- never spells the prefix).
+function PodRush.isAuto(id: any, auto: any?): boolean
+	local A = auto or CFG.Auto
+	if type(id) ~= "string" or string.sub(id, 1, #A.IdPrefix) ~= A.IdPrefix then
+		return false
+	end
+	return string.match(string.sub(id, #A.IdPrefix + 1), "^%d+$") ~= nil
 end
 
 --==============================================================================

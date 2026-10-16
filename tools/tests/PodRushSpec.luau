@@ -931,8 +931,8 @@ local ok, err = pcall(function()
 	local Metrics = require(Server:WaitForChild("Metrics"))
 	local metricsSrc = sourceOf(Server, "Metrics")
 	check(Metrics.Events.PodRushEnded == "PodRushEnded" and type(Metrics.podRushEnded) == "function"
-			and has(bodyOf(metricsSrc, "function Metrics.podRushEnded"), "{ [F1] = level }"),
-		"PodRushEnded: the count and the level's word, no names or ids")
+			and has(bodyOf(metricsSrc, "function Metrics.podRushEnded"), "{ [F1] = level, [F2] = from }"),
+		"PodRushEnded: the count, the level's word and (2026-10-16) scheduled or admin; no names or ids")
 
 	local scripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
 	local musicSrc = sourceOf(scripts, "Music")

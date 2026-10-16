@@ -249,6 +249,17 @@ Two custom events from `WheelService`, each sent only after the change it report
 No player detail and no pod species goes into either. With the wheel off (`WheelData.Enabled = false`)
 nothing is earned or spun, so both stop by themselves.
 
+### POD RUSH (2026-10-09; every hour since 2026-10-16)
+
+One custom event from `PodRushService`, at each player's end of a rush (KB/POD-RUSH-PLAN.md,
+KB/POD-RUSH-HOURLY-PLAN.md):
+
+| Event | When | Fields |
+| --- | --- | --- |
+| `PodRushEnded` | Once per player per rush, at their end card's moment, even with nothing banked (a player in their first loop who banked nothing is sent no card, but the event still goes). The value is the pods banked in the rush | 01 = the level reached: `none` / `bronze` / `silver` / `gold`; 02 = `scheduled` (the hourly rush) or `admin` (an admin's) |
+
+**Field 02 is new on 2026-10-16.** Rushes before it carry no field 02; every one of them was an admin's.
+
 ### MetricsValidation (staff only, off)
 
 With `StaffValidation = true`, an admin's actions send only this event instead of real counts. Field 01

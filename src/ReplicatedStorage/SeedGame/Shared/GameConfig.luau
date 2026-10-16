@@ -6123,7 +6123,8 @@ GameConfig.MiniEvent = {
 -- work", every recommendation taken)
 --
 -- The fifth global mini event (MiniEvent.Modes.podrush): started from the
--- admin console like the other four, on every server at once. While it runs:
+-- admin console like the other four, on every server at once -- and, since
+-- 2026-10-16, every hour by itself (Auto, below). While it runs:
 --   * every nest grows a taken pod back RegrowSeconds later -- normal pods,
 --     normal odds and sizes -- and a golden ring of light lies under each nest;
 --   * guardians chase as usual but build no rage past the theft itself
@@ -6146,6 +6147,36 @@ GameConfig.PodRush = {
 	RegrowSeconds = 15,
 	GraceSeconds = 20,
 	DuskMarginSeconds = 10,
+	--==========================================================================
+	-- EVERY HOUR (2026-10-16, the owner; KB/POD-RUSH-HOURLY-PLAN.md)
+	--
+	-- Beside the admins' rushes: one every PeriodSeconds, OffsetSeconds past
+	-- the hour (:30, halfway between the rains), for the mode's own Seconds
+	-- (MiniEvent.Modes.podrush), on every server at once -- each server reads
+	-- the same clock, as the rain does, and nothing is sent between them
+	-- (MiniEventService.HourlyStep). Its id is the slot's (IdPrefix and the
+	-- slot's start, PodRush.autoId), so a count saved on one server is the
+	-- same rush's on another. The levels and what they pay are the rush's own.
+	--   * WarnSeconds before, the Warn notice to everyone here -- from a server
+	--     up at that moment (WarnGraceSeconds late at most), the slot free.
+	--   * An admin's event running when the slot comes takes it: no rush that
+	--     hour, and no warning when it will still be running then.
+	--   * A player still in the first loop (FirstHatch.QuietAttribute) gets no
+	--     warning and no start pop-up; the rush runs round them, and a pod they
+	--     bank still counts and pays.
+	-- Enabled = false switches the schedule off (with a publish).
+	--==========================================================================
+	Auto = {
+		Enabled = true,
+		PeriodSeconds = 3600,
+		OffsetSeconds = 1800,
+		WarnSeconds = 60,
+		WarnGraceSeconds = 5,
+		-- Who started it, for the log and the console.
+		ByName = "the hourly schedule",
+		IdPrefix = "auto",
+		Warn = { Title = "POD RUSH IN 1 MINUTE!", Detail = "Get ready to steal and bank as many pods as you can!" },
+	},
 	--==========================================================================
 	-- THE THREE LEVELS (the owner's defaults: 3 / 7 / 12)
 	--
