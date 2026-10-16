@@ -719,6 +719,15 @@ local ok, err = pcall(function()
 	local entry = UpdateLog.Entries[1]
 	check(entry.id == "2026-10-16-biome-secrets" and #UpdateLog.problems() == 0,
 		"the newest entry is the secrets', and the list keeps every rule", table.concat(UpdateLog.problems(), "; "))
+	-- The owner: "make it sound more mysterious" -- no secret is named, as the Index keeps them ???.
+	local named = {}
+	local words = string.lower(entry.title .. " " .. table.concat(entry.bullets, " "))
+	for _, want in pairs(SECRETS) do
+		if string.find(words, want.id, 1, true) then
+			table.insert(named, want.id)
+		end
+	end
+	check(#named == 0, "and it names none of the five", table.concat(named, ", "))
 end)
 
 NestService.SpecAnnouncer(nil)
