@@ -739,6 +739,7 @@ local ok, err = pcall(function()
 	end
 	local bad, cards, strips = {}, {}, {}
 	local guideCases = 0
+	local phoneCases, phoneTop = 0, 0
 	for _, s in ipairs(SCREENS) do
 		for _, case in ipairs({ { false, false }, { 1, false }, { 2, false }, { 3, false }, { false, true }, { 1, true },
 			{ 2, true }, { 3, true } }) do
@@ -746,9 +747,20 @@ local ok, err = pcall(function()
 			local L = HudLayout.solve(screen(s[2], s[3], s[4], if icons then icons else nil))
 			local phone = GameConfig.titlePhone(Vector2.new(s[2], s[3]), s[4])
 			local k = if phone then RUSH.Tracker.PhoneScale else 1
-			local r, layout = PodRush.trackerRect(L, TOPBAR, k, guide)
+			local r, layout = PodRush.trackerRect(L, TOPBAR, k, guide, nil, phone)
 			local size = PodRush.trackerSize(k, layout)
 			local why = nil
+			-- A phone (2026-10-17, the owner: "top strip", phones only): the strip, never the card; at the top of
+			-- the column, in the boost row's band, wherever the guide's card is not in the way.
+			if phone and r then
+				phoneCases += 1
+				local _, _, boostsBand = HudLayout.statusRows(L, TOPBAR)
+				if layout == "full" then
+					why = "the whole card on a phone"
+				elseif not guide and math.abs(r.y - boostsBand.y) < 1e-6 then
+					phoneTop += 1
+				end
+			end
 			-- The beginner's guide card (its banner and SKIP), seen in Play under the tracker: kept clear.
 			if guide and r then
 				guideCases += 1
@@ -769,13 +781,16 @@ local ok, err = pcall(function()
 				-- already said
 			elseif not r then
 				why = "no spot"
-			elseif r.x < GAP - 1e-6 or r.y < GAP - 1e-6 or r.x + r.w > L.safe.X - GAP + 1e-6
+			-- (A phone's strip stands in the column's first row, nearer the top row's foot than GAP.)
+			elseif r.x < GAP - 1e-6
+				or r.y < (if phone then math.min(GAP, (select(3, HudLayout.statusRows(L, TOPBAR))).y) else GAP) - 1e-6
+				or r.x + r.w > L.safe.X - GAP + 1e-6
 				or r.y + r.h > L.safe.Y - GAP + 1e-6 then
 				why = "off the safe area"
 			elseif math.abs(r.w - size.X) > 1e-3 or math.abs(r.h - size.Y) > 1e-3 then
 				why = "wrong size"
 			else
-				for _, b in ipairs(PodRush.blocked(L, TOPBAR, guide)) do
+				for _, b in ipairs(PodRush.blocked(L, TOPBAR, guide, nil, phone)) do
 					if overlaps(r, b) then
 						why = string.format("meets (%g,%g %gx%g)", b.x, b.y, b.w, b.h)
 						break
@@ -818,8 +833,11 @@ local ok, err = pcall(function()
 	say("    (the one-line strip on: " .. (if #strips > 0 then table.concat(strips, ", ") else "none") .. ")")
 	local full = PodRush.trackerRect(HudLayout.solve(screen(1366, 768, false, 3)), TOPBAR, 1)
 	local _, fullLayout = PodRush.trackerRect(HudLayout.solve(screen(1366, 768, false, 3)), TOPBAR, 1)
-	check(full ~= nil and fullLayout == "full" and #strips < 14 * 8,
-		"a desktop always has the whole tracker; a strip only where a phone has no room for it")
+	check(full ~= nil and fullLayout == "full" and #strips == phoneCases,
+		"a desktop always has the whole tracker; a phone always the strip (2026-10-17)", #strips .. " of " .. phoneCases)
+	check(phoneCases == 72 and phoneTop == 36,
+		"on all 9 phones, 0 to 3 boost icons, the strip stands at the top of the column whenever the guide's card is down",
+		phoneTop .. " of " .. phoneCases)
 	-- The guide's card where it stands now (UIKit.guideRects): 74 px under HudLayout's place while the guide's hand
 	-- points at the top row. Seen in a Play on 2026-10-10 (1148 x 716): the tracker over its STEP and SKIP lines.
 	local movedBad, movedCases = {}, 0
@@ -972,7 +990,7 @@ local ok, err = pcall(function()
 	check(PRS.Priority > 70 and not has(serviceSrc, "OnServerEvent") and has(serviceSrc, "CarryService.OnBanked("),
 		"the service: after the world cycle, takes nothing from a client, hears every bank")
 	local uiSrc = sourceOf(scripts, "PodRushUI")
-	check(has(uiSrc, "PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard)")
+	check(has(uiSrc, "PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard, phone)")
 			and has(uiSrc, "local guideCard = UIKit.guideRects(playerGui, gui.AbsolutePosition)")
 			and has(uiSrc, "c.x, c.y, c.w, c.h = c.x / unit, c.y / unit, c.w / unit, c.h / unit")
 			and has(uiSrc, "return UIKit.guideShowing(playerGui)")
@@ -988,6 +1006,19 @@ local ok, err = pcall(function()
 			and not has(uiSrc, "UIKit.stroke(tracker,") and not has(uiSrc, "UIKit.stroke(strip,")
 			and not has(uiSrc, "UIKit.stroke(card,") and has(uiSrc, "UIKit.stroke(fill, Color3.new(0, 0, 0), 1.5)"),
 		"transparent, as the owner asked: no plate or edge behind the tracker, the strip or the end card")
+	-- Save on a phone's strip (2026-10-17, the owner's pick: "a plate on the phone strip only"): see-through dark.
+	check(has(uiSrc, "strip.BackgroundTransparency = if phone then T.PhonePlateTransparency else 1")
+			and has(uiSrc, "strip.BackgroundColor3 = T.PhonePlate") and RUSH.Tracker.PhonePlateTransparency > 0
+			and RUSH.Tracker.PhonePlateTransparency < 1,
+		"a phone's strip alone stands on a see-through plate")
+	-- And where it ends, for an announcement to stand under (2026-10-17).
+	local annSrc = sourceOf(scripts, "AnnouncementUI")
+	check(has(uiSrc, "publishBottom(if showing and placedAs ~= nil then placedRect else nil)")
+			and has(uiSrc, "player:SetAttribute(ATTR.TrackerBottom, bottom)")
+			and has(annSrc, "local rushBottom = player:GetAttribute(GameConfig.PodRush.Attributes.TrackerBottom)")
+			and has(annSrc, "top = math.max(top, rushBottom + 8)")
+			and has(annSrc, "player:GetAttributeChangedSignal(GameConfig.PodRush.Attributes.TrackerBottom):Connect(place)"),
+		"the restart notice and the admins' announcements stand 8 px under the tracker while it shows")
 	check(has(uiSrc, "bar.BackgroundColor3 = WELL") and has(uiSrc, "bar.BackgroundTransparency = 0")
 			and not has(uiSrc, "bar.BackgroundTransparency = 1") and has(uiSrc, "UIKit.stroke(bar, GOLD, 1.5)"),
 		"but the bar is a progress bar: a solid dark well with a gold edge, its fill outlined on it")

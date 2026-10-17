@@ -283,6 +283,14 @@ strip.BorderSizePixel = 0
 strip.Active = false
 strip.Visible = false
 strip.Parent = gui
+-- ITS PLATE ON A PHONE (2026-10-17, the owner's pick: "a plate on the phone
+-- strip only"): see-through dark behind the line, so a sprout's label in the
+-- world behind it never mixes with its words. Off a phone the 2026-10-09 rule
+-- stands: no plate behind the tracker, the strip or the end card (place()).
+strip.BackgroundColor3 = T.PhonePlate
+local stripCorner = Instance.new("UICorner")
+stripCorner.CornerRadius = UDim.new(0, 8)
+stripCorner.Parent = strip
 local stripIcon = picture(strip, "Icon", ART.Icon, T.StripHeight - 4, 2)
 stripIcon.Position = UDim2.fromOffset(4, 2)
 local stripLine = words(strip, "Line", 14, WHITE, 2, Enum.Font.FredokaOne)
@@ -299,6 +307,20 @@ local function guideShowing(): boolean
 end
 
 local placedAs: string? = nil
+local placedRect: { x: number, y: number, w: number, h: number }? = nil
+
+-- WHERE IT ENDS, FOR AN ANNOUNCEMENT (2026-10-17, the owner's pick: the restart
+-- notice and the admins' announcements stand under the tracker, which keeps its
+-- place): its bottom edge in safe space on the player while it shows, nil
+-- otherwise, written only when it changes. AnnouncementUI reads it.
+local publishedBottom: number? = nil
+local function publishBottom(r: { x: number, y: number, w: number, h: number }?)
+	local bottom = if r then math.floor(r.y + r.h + 0.5) else nil
+	if bottom ~= publishedBottom then
+		publishedBottom = bottom
+		player:SetAttribute(ATTR.TrackerBottom, bottom)
+	end
+end
 -- THE NOTICES' BAND (2026-10-12, the owner): off a phone the notices stack
 -- under the tracker; on a phone there is no room for both, so the tracker GIVES
 -- WAY while a notice is up -- up a little and fading -- and is back after.
@@ -333,8 +355,11 @@ local function place()
 	for _, c in ipairs(guideCard) do
 		c.x, c.y, c.w, c.h = c.x / unit, c.y / unit, c.w / unit, c.h / unit
 	end
-	local r, layout = PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard)
+	-- A phone (2026-10-17): the strip at the top of the column, never the card.
+	local r, layout = PodRush.trackerRect(L, input.insetTop or 0, k, guideShowing(), guideCard, phone)
 	placedAs = if r then layout else nil
+	placedRect = r
+	strip.BackgroundTransparency = if phone then T.PhonePlateTransparency else 1
 	if r and layout == "full" then
 		trackerScale.Scale = k
 		tracker.Position = UDim2.fromOffset(r.x, r.y)
@@ -362,6 +387,7 @@ local function paintTracker(now: number)
 	end
 	tracker.Visible = showing and placedAs == "full"
 	strip.Visible = showing and (placedAs == "strip" or placedAs == "mini")
+	publishBottom(if showing and placedAs ~= nil then placedRect else nil)
 	if not showing then
 		return
 	end

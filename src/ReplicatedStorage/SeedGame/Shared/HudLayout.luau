@@ -808,10 +808,13 @@ local CONFIG = {
 			PadRight = 5,
 		},
 		-- Below the top row's foot, in safe space: the boost row, and where the
-		-- passing lines start.
+		-- passing lines start. The boost row's text became icons over the belt
+		-- (2026-10-04); since 2026-10-17 its row holds the POD RUSH strip on a
+		-- phone (the owner: "top strip", PodRush.trackerRect), the strip's 24 px
+		-- tall, and the passing lines start NoticeGap under it.
 		BoostTop = 2,
-		BoostHeight = 18,
-		NoticeTop = 24,
+		BoostHeight = 24,
+		NoticeTop = 30,
 		-- A passing line stands this far under whatever already stands in the band.
 		NoticeGap = 4,
 		-- The guide's words: a block this wide at most, never past this share of

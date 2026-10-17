@@ -286,8 +286,10 @@ end
 -- (UIKit.guideRects) -- lower than HudLayout's place while the guide's hand
 -- points at the top row (seen in Play 2026-10-10: the tracker over its STEP
 -- and SKIP lines).
+-- `phone` (2026-10-17): the phone's strip stands IN the boost row's band, and
+-- the passing lines' band is under it, so neither is in its way.
 function PodRush.blocked(L: any, insetTop: number, guide: boolean?,
-	extra: { SpeedMilestones.Rect }?): { SpeedMilestones.Rect }
+	extra: { SpeedMilestones.Rect }?, phone: boolean?): { SpeedMilestones.Rect }
 	local out: { SpeedMilestones.Rect } = {}
 	local function add(r: any, lift: number?)
 		if r and r.w > 0 and r.h > 0 then
@@ -299,8 +301,10 @@ function PodRush.blocked(L: any, insetTop: number, guide: boolean?,
 	end
 	local status, notice, boosts = HudLayout.statusRows(L, insetTop)
 	add(status)
-	add(notice)
-	add(boosts)
+	if not phone then
+		add(notice)
+		add(boosts)
+	end
 	add(L.clock, insetTop)
 	add(L.admin, insetTop)
 	add(L.run)
@@ -315,12 +319,39 @@ function PodRush.blocked(L: any, insetTop: number, guide: boolean?,
 end
 
 function PodRush.trackerRect(L: any, insetTop: number, scale: number, guide: boolean?,
-	extra: { SpeedMilestones.Rect }?): (SpeedMilestones.Rect?, string?)
+	extra: { SpeedMilestones.Rect }?, phone: boolean?): (SpeedMilestones.Rect?, string?)
 	local gap = CFG.Tracker.Gap
 	local _, _, boosts = HudLayout.statusRows(L, insetTop)
-	local blocked = PodRush.blocked(L, insetTop, guide, extra)
 	local bounds = { x = gap, y = gap, w = L.safe.X - gap * 2, h = L.safe.Y - gap * 2 }
+	--==========================================================================
+	-- ON A PHONE (2026-10-17, the owner, with a phone's screenshot of the card
+	-- mid-screen: "top strip", phones only): the one-line strip in the boost
+	-- row's band at the top of the column, on its centre, the middle clear --
+	-- never the whole card. Only where the groups, the top row, the clock, ADMIN
+	-- or the guide's card leave it no room there, the nearest clear spot.
+	--==========================================================================
+	if phone then
+		local around = PodRush.blocked(L, insetTop, guide, extra, true)
+		-- The band is the column's first row, nearer the top row's foot than Gap.
+		local top = math.min(gap, boosts.y)
+		local within = { x = gap, y = top, w = L.safe.X - gap * 2, h = L.safe.Y - gap - top }
+		for _, layout in ipairs({ "strip", "mini" }) do
+			local size = PodRush.trackerSize(scale, layout)
+			local band = HudLayout.centreIn(L, { x = boosts.x, y = boosts.y, w = boosts.w, h = size.Y }, size.X)
+			if band.w >= size.X - 0.5 then
+				local spot = SpeedMilestones.clearOf({ x = band.x, y = boosts.y, w = size.X, h = size.Y }, around,
+					within, gap)
+				if spot then
+					return spot, layout
+				end
+			end
+		end
+	end
+	local blocked = PodRush.blocked(L, insetTop, guide, extra)
 	for _, layout in ipairs(PodRush.Layouts) do
+		if phone and layout == "full" then
+			continue
+		end
 		local size = PodRush.trackerSize(scale, layout)
 		local wanted = {
 			x = L.safe.X / 2 - size.X / 2,

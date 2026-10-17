@@ -436,6 +436,13 @@ local function place()
 	if guided then
 		top = math.max(top, layout.banner.y + layout.banner.h + 8, layout.skip.y + layout.skip.h + 8)
 	end
+	-- UNDER THE POD RUSH TRACKER (2026-10-17, the owner's pick after a phone's
+	-- restart notice stood over it: the tracker keeps its place, the notice goes
+	-- below): its bottom edge while it shows, published by PodRushUI.
+	local rushBottom = player:GetAttribute(GameConfig.PodRush.Attributes.TrackerBottom)
+	if type(rushBottom) == "number" and rushBottom == rushBottom then
+		top = math.max(top, rushBottom + 8)
+	end
 	local small = layout.compact or layout.sidebar
 	local want = if small then 340 else 520
 	local band = { x = 0, y = top, w = layout.safe.X, h = 60 }
@@ -453,6 +460,7 @@ local function place()
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
+player:GetAttributeChangedSignal(GameConfig.PodRush.Attributes.TrackerBottom):Connect(place)
 place()
 
 --==============================================================================

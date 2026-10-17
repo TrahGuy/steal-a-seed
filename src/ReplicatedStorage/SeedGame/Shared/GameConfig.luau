@@ -6241,6 +6241,11 @@ GameConfig.PodRush = {
 		-- This player's rush is over: { id, count, level, spins, boost, pod,
 		-- podOwed }.
 		Over = "PodRushOver",
+		-- On the local player, set by PodRushUI (on the client, 2026-10-17): the
+		-- bottom edge of the tracker or strip in safe space while it shows, nil
+		-- otherwise -- so an announcement stands under it (the owner's pick:
+		-- "the notice below the strip"; AnnouncementUI).
+		TrackerBottom = "PodRushTrackerBottom",
 	},
 	Words = {
 		Title = "POD RUSH",
@@ -6268,8 +6273,15 @@ GameConfig.PodRush = {
 	-- (drawn 1:1, so its words stay readable), the bar left out; and where not
 	-- even that fits (the beginner's guide card up as well), the MINI strip,
 	-- MiniWidth: the time and the pods banked.
+	-- ON A PHONE SINCE 2026-10-17 (the owner, with a screenshot of the card
+	-- mid-screen: "top strip", phones only): always the strip, at the top of the
+	-- column in the boost row's band (PodRush.trackerRect), on a see-through
+	-- plate of PhonePlate at PhonePlateTransparency -- the owner's pick over the
+	-- 2026-10-09 "transparent" rule, for the phone's strip alone.
 	Tracker = { Width = 300, Height = 86, PhoneScale = 0.78, Gap = 8, StripWidth = 240, MiniWidth = 150,
 		StripHeight = 24,
+		PhonePlate = Color3.fromRGB(18, 20, 26),
+		PhonePlateTransparency = 0.35,
 		-- BANK IT! is said in this red; the time otherwise in the ring's gold.
 		BankItColour = Color3.fromRGB(255, 104, 86) },
 	-- The end card, centred: its logical size (scaled down to fit inside the
