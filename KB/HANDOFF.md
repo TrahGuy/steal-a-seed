@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## MOBILE HUD FIXES AND THE SUMMON'S SECRET TOAST — 2026-10-17 (CLAUDE, DESKTOP)  (5 COMMITS ON wip: 1e1f977, 8844798, 57fc7a6, e23d219, d4d6649; NOT PUSHED, waiting for the owner's OK; NOT PUBLISHED; AdminSummonSpec 31/0, SecretToastSpec 65/0, FitWordsSpec 14/0 (NEW), PodRushSpec 102/0, HudLayoutSpec 1499/0; THE WHOLE SUITE 167 OF 167 (before d4d6649, whose two specs ran after); ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
+## MOBILE HUD FIXES AND THE SUMMON'S SECRET TOAST — 2026-10-17 (CLAUDE, DESKTOP)  (5 COMMITS, PUSHED on wip with the owner's OK ("push it"): 1e1f977, 8844798, 57fc7a6, e23d219, d4d6649; NOT PUBLISHED; AdminSummonSpec 31/0, SecretToastSpec 65/0, FitWordsSpec 14/0 (NEW), PodRushSpec 102/0, HudLayoutSpec 1499/0; THE WHOLE SUITE 167 OF 167 (before d4d6649, whose two specs ran after); ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
 
 **First, v1067:** the owner published at 15:13:05 UTC 2026-10-16 (Studio's log), the tree at e0bc058, two minutes after that commit: SUMMON A SECRET and the mysterious What's New are live.
 
