@@ -390,9 +390,12 @@ local function build(post: Notice.Post, key: string): Drawn
 	-- The Secret toast's word (2026-10-05) stands wherever the sentence puts it
 	-- -- "A SECRET EGG SPAWNED ON ..." -- so its headline is broken into lines
 	-- here rather than by the engine, and the word's place on its line is known.
+	-- An admin's "summoned a SECRET!" line has it too (2026-10-17, `sheen`), with
+	-- its name badge: both spans are found in the same headline -- the room kept
+	-- for the badge included -- so they break it into the same lines.
 	local span: Notice.WordSpan? = nil
-	if post.kind == "secret" then
-		local found = Notice.wordSpan(post.title, GameConfig.Secret.Toast.Word, room, function(text: string): number
+	if post.kind == "secret" or post.sheen == true then
+		local found = Notice.wordSpan(title, GameConfig.Secret.Toast.Word, room, function(text: string): number
 			return textWidth(text, hs)
 		end)
 		if found.line then

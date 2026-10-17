@@ -148,8 +148,8 @@ local ok, err = pcall(function()
 	say("2. AdminService: SUMMON, its words, its line, its scope")
 	--==========================================================================
 	AdminService.Config.MinInterval = 0
-	AdminService.TellEveryone = function(title, key, quiet, sender)
-		table.insert(told, { title = title, key = key, sender = sender })
+	AdminService.TellEveryone = function(title, key, quiet, sender, sheen)
+		table.insert(told, { title = title, key = key, sender = sender, sheen = sheen })
 	end
 	local asked = {}
 	local outcome = { true, nil, "tanglemire", "mirehydra" }
@@ -184,6 +184,8 @@ local ok, err = pcall(function()
 		"THIS SERVER: summoned by the game's spawn, the reply names it, nothing sent", here.message)
 	check(#told == 1 and told[1].title == line and told[1].sender and told[1].sender.name == "nicnicniccoal",
 		"and everybody reads \"" .. line .. "\"", told[1] and told[1].title)
+	check(told[1] and told[1].sheen == true,
+		"with SECRET in the Secret egg toast's sheen (2026-10-17, the owner's pick)", told[1] and tostring(told[1].sheen))
 	local rnd = AdminService.Handle(ADMIN, "SummonSecret", "random", "server", false)
 	check(rnd.ok and asked[2].biome == nil, "RANDOM leaves the biome to the roll's own pick", asked[2] and tostring(asked[2].biome))
 	outcome = { false, "OUT", "emberroot", "cinderdrake" }
@@ -247,7 +249,22 @@ local ok, err = pcall(function()
 		and has(src, 'task.spawn(send, Model.args.summonSecret(state.secretBiome, "server", false))')
 		and has(src, 'task.spawn(send, Model.args.summonSecret(state.secretBiome, "all", true))'),
 		"the Events page's SECRET card: a biome or RANDOM, THIS SERVER at once, ALL SERVERS behind its YES")
+	-- THE SHEEN (2026-10-17): the flag on the wire, read only as `true`, and the
+	-- renderer's Secret word drawn for it in the same headline as the name badge.
+	local Notice = require(Shared.Notice)
+	local lit = Notice.readServerNotice({ title = "Nicky summoned a SECRET!", bare = true, sheen = true })
+	local odd = Notice.readServerNotice({ title = "Nicky summoned a SECRET!", bare = true, sheen = "yes" })
+	local plain = Notice.readServerNotice({ title = "Nicky summoned a SECRET!", bare = true })
+	check(lit and lit.sheen == true and odd and odd.sheen == nil and plain and plain.sheen == nil,
+		"the notice reads the sheen flag, and only a true one")
+	local toastSrc = game:GetService("StarterPlayer").StarterPlayerScripts.ActionToastUI.Source
+	check(has(toastSrc, 'if post.kind == "secret" or post.sheen == true then')
+		and has(toastSrc, "Notice.wordSpan(title, GameConfig.Secret.Toast.Word, room,"),
+		"the toast draws SECRET's sweep for it, found in the headline the badge's room is kept in")
 	local adminSrc = Server.AdminService.Source
+	check(has(adminSrc, "sheen = if sheen then true else nil })")
+		and has(adminSrc, '{ name = name, badge = badge },\n\t\t\t\ttrue)'),
+		"AdminService sends the flag with the summon's line")
 	check(has(adminSrc, "if not RunService:IsStudio() then\n\t\ttask.spawn(function()")
 		and has(adminSrc, '\tif RunService:IsStudio() then\n\t\treturn false, "STUDIO"'), "Studio never publishes or subscribes")
 	check(GameConfig.AdminAnnounce.Words.Secret == "%s summoned a SECRET!"

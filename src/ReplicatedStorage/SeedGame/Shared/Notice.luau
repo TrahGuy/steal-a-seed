@@ -83,6 +83,11 @@ export type Post = {
 	-- after the name. Both or neither.
 	name: string?,
 	badge: string?,
+	-- The Secret word's sweep in this headline (2026-10-17, the owner: an
+	-- admin's "summoned a SECRET!" line "with that secret text effect"): the
+	-- word GameConfig.Secret.Toast.Word drawn as the Secret egg toast draws it,
+	-- wherever it stands. A Secret egg toast (kind "secret") always has it.
+	sheen: boolean?,
 	-- How long it stays up, when the default for its kind is wrong for it.
 	seconds: number?,
 	-- Asked before it goes up and while it is up; false takes it down at once.
@@ -477,6 +482,9 @@ function Notice.readServerNotice(payload: any): Post?
 		bare = if payload.bare == true then true else nil,
 		name = if badged then payload.name else nil,
 		badge = if badged then payload.badge else nil,
+		-- The Secret word's sweep (2026-10-17): only a flag; the word is the
+		-- renderer's, and a title without it is drawn as any other.
+		sheen = if payload.sheen == true then true else nil,
 	}
 end
 

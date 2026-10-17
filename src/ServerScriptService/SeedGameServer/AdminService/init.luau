@@ -460,9 +460,11 @@ end
 -- records the lines instead of the wire.
 --==============================================================================
 -- `sender`: the admin's name as it stands in the line and their name badge
--- (2026-10-13, GameConfig.NameBadges), drawn after the name.
+-- (2026-10-13, GameConfig.NameBadges), drawn after the name. `sheen`: the
+-- line's SECRET drawn as the Secret egg toast draws it (2026-10-17, the owner:
+-- the summon's line "with that secret text effect"; Notice's `sheen`).
 function AdminService.TellEveryone(title: string, key: string, quiet: boolean?,
-	sender: { name: string, badge: string? }?)
+	sender: { name: string, badge: string? }?, sheen: boolean?)
 	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
 	local remotes = if seedGame then seedGame:FindFirstChild("Remotes") else nil
 	local event = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
@@ -471,7 +473,8 @@ function AdminService.TellEveryone(title: string, key: string, quiet: boolean?,
 			event:FireAllClients(Notice.ServerNotice, { title = title, key = key, bare = true,
 				quiet = if quiet then true else nil,
 				name = if sender and sender.badge then sender.name else nil,
-				badge = if sender then sender.badge else nil })
+				badge = if sender then sender.badge else nil,
+				sheen = if sheen then true else nil })
 		end)
 	end
 end
@@ -1211,7 +1214,10 @@ local function summonHere(biome: string?, name: string, badge: string?, userId: 
 	if ok then
 		local line = AdminAnnounce.line(name, { kind = "secret" })
 		if line then
-			AdminService.TellEveryone(line, AdminAnnounce.key(userId, "secret", nil), false, { name = name, badge = badge })
+			-- With the Secret word's sweep (2026-10-17, the owner's pick: the
+			-- admin's line in sheen).
+			AdminService.TellEveryone(line, AdminAnnounce.key(userId, "secret", nil), false, { name = name, badge = badge },
+				true)
 		end
 		local species = SeedData.Get(speciesId or "")
 		return true, string.format("Summoned %s in %s.", if species then species.Name else "a secret", biomeName(biomeId))

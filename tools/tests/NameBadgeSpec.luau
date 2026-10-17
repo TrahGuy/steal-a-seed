@@ -268,7 +268,8 @@ local ok, err = pcall(function()
 		"an admin's line carries the admin's badge, by UserId then VIP")
 	local adminSrc = sourceOf(Server, "AdminService")
 	check(has(adminSrc, "name = if sender and sender.badge then sender.name else nil,")
-			and has(adminSrc, "badge = if sender then sender.badge else nil })")
+			-- The payload's last field is the summon's sheen since 2026-10-17.
+			and has(adminSrc, "badge = if sender then sender.badge else nil,")
 			and has(adminSrc, "AdminAnnounce.quiet(what.kind), { name = shown, badge = AdminService.BadgeOf(admin) })"),
 		"AdminService sends the name as it stands in the line, with the badge")
 	local okMes, MES = pcall(require, Server:WaitForChild("MiniEventService"))
