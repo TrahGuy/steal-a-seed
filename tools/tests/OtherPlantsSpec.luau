@@ -522,7 +522,7 @@ local ok, err = pcall(function()
 		"the Pod Rush's nest rings follow Reduced FX switched mid-Rush: built again, breathing or still")
 	-- The switch.
 	check(ui2:find("local level = PerformanceMode.level(player)", 1, true) ~= nil
-			and ui2:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
+			and ui2:find("label.Text = if inlineRow then OTHERS.RowLabel else OTHERS.Label\n", 1, true) ~= nil
 			and ui2:find("bolt.Text = OTHERS.Icon", 1, true) ~= nil and ui2:find("bolt.Parent = thumb", 1, true) ~= nil
 			and ui2:find("stateWord.Visible = not inlineRow and level ~= \"ultra\"", 1, true) ~= nil
 			and ui2:find("local x = if level == \"ultra\" then trackW - thumbW elseif level == \"on\" then "

@@ -226,8 +226,11 @@ local function placeSwitch()
 		-- A thinner outline on the row's smaller words, so their counters stay open.
 		labelLine.Thickness = if inline then 1.5 else 2
 	end
+	-- WORDS THAT NEVER SPLIT (2026-10-17, UIKit.fitWords; OtherPlantsUI says why):
+	-- one line, scaled into its box, grown with a larger text size only while it
+	-- still fits.
 	if inline then
-		label.TextSize = ROW.Label
+		UIKit.fitWords(label, ROW.Label, Vector2.new(r.w - (ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), r.h))
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Position = UDim2.fromOffset(ROW.PadLeft, 0)
 		label.Size = UDim2.new(1, -(ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), 1, 0)
@@ -238,7 +241,7 @@ local function placeSwitch()
 	else
 		local wide = r.w >= RAIL.WideSize.X
 		local right = r.x + r.w / 2 > layout.safe.X / 2
-		label.TextSize = if wide then 13 else 12
+		UIKit.fitWords(label, if wide then 13 else 12, Vector2.new(r.w - 4, LABEL_H))
 		label.TextXAlignment = if right then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
 		label.Position = UDim2.fromOffset(2, 0)
 		label.Size = UDim2.new(1, -4, 0, LABEL_H)

@@ -3904,8 +3904,8 @@ do
 	end
 	-- Its name's sizes (PERFORMANCE MODE, 2026-10-11): one line in each rect.
 	look = look and src:find("local NAME_WIDE = 12\nlocal NAME_NARROW = 11\n", 1, true) ~= nil
-		and src:find("label.TextSize = if wide then NAME_WIDE else NAME_NARROW", 1, true) ~= nil
-		and walkSrc:find("label.TextSize = if wide then 13 else 12", 1, true) ~= nil
+		and src:find("UIKit.fitWords(label, if wide then NAME_WIDE else NAME_NARROW, Vector2.new(r.w - 4, LABEL_H))", 1, true) ~= nil
+		and walkSrc:find("UIKit.fitWords(label, if wide then 13 else 12, Vector2.new(r.w - 4, LABEL_H))", 1, true) ~= nil
 	check(look and src:find("local r = layout.others", 1, true) ~= nil
 			and src:find("slab.Visible = not (phone and ObbyData.onCourse(player)) and not away", 1, true) ~= nil
 			and not src:find("FireServer", 1, true) and not src:find("GameEvent", 1, true),
@@ -4058,7 +4058,7 @@ do
 	local walkSrc, othersSrc = sourceOf("WalkModeUI") or "", sourceOf("OtherPlantsUI") or ""
 	local rowLines = true
 	for _, line in ipairs({ "local ROW = HudLayout.Config.Phone.Switch", "local inline = layout.switchInline == true",
-		"label.TextSize = ROW.Label",
+		"UIKit.fitWords(label, ROW.Label, Vector2.new(r.w - (ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), r.h))",
 		"track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)", "thumb.Size = UDim2.fromOffset(ROW.Thumb, ROW.Thumb)",
 		"local stateWord = UIKit.outlined(track, \"State\", ROW.Word, WHITE, 1)" }) do
 		rowLines = rowLines and walkSrc:find(line, 1, true) ~= nil and othersSrc:find(line, 1, true) ~= nil
@@ -4067,13 +4067,15 @@ do
 	-- OFF or ON beside its thumb off a phone and never a word for ULTRA; on a
 	-- phone's row its thumb's place and colour say it alone (2026-10-13: three
 	-- places, and the 40-px track has no room for a word beside the middle one).
-	-- Its name wraps on a phone.
+	-- Its name is two lines of its own on a phone (RowLabel, 2026-10-17: never
+	-- broken by the engine; UIKit.fitWords).
 	rowLines = rowLines and walkSrc:find("stateWord.Visible = inline", 1, true) ~= nil
 		and othersSrc:find("stateWord.Visible = not inlineRow and level ~= \"ultra\"", 1, true) ~= nil
-		and othersSrc:find("label.TextSize = ROW.Label\n\t\tlabel.TextXAlignment = Enum.TextXAlignment.Left\n"
-			.. "\t\tlabel.TextWrapped = true", 1, true) ~= nil
+		and othersSrc:find("UIKit.fitWords(label, ROW.Label, Vector2.new(r.w - (ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), "
+			.. "r.h))\n\t\tlabel.TextXAlignment = Enum.TextXAlignment.Left\n"
+			.. "\t\tlabel.Position = UDim2.fromOffset(ROW.PadLeft, 0)", 1, true) ~= nil
 	check(rowLines and walkSrc:find("label.Text = WALK.Label\n", 1, true) ~= nil
-			and othersSrc:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
+			and othersSrc:find("label.Text = if inlineRow then OTHERS.RowLabel else OTHERS.Label\n", 1, true) ~= nil
 			and not walkSrc:find("RowPlate", 1, true) and not othersSrc:find("RowPlate", 1, true),
 		"both switches draw the see-through row alike on a phone: no plate behind it, the words inline, the small "
 			.. "switch -- WALK MODE's with ON or OFF in it, PERFORMANCE MODE's thumb alone at its three places")

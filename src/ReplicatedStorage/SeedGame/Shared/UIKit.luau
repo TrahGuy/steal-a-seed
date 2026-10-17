@@ -268,6 +268,97 @@ function UIKit.outlined(parent: Instance, name: string, size: number,
 end
 
 --==============================================================================
+-- WORDS THAT NEVER SPLIT (2026-10-17, the owner's pick for a larger text size)
+--
+-- A player's text size (GuiService.PreferredTextSize, which some phones feed from
+-- their own font size even with Roblox's setting at its default) draws fixed-size
+-- text larger: on the owner's phone every such word stood 3 px taller, and the
+-- switch's "PERFORMANCE", which fills its 73 px exactly at 10, broke as
+-- "PERFORMA / NCE MODE". A label given to fitWords carries its own lines ("\n"),
+-- which the engine never breaks (TextWrapped off; a scaled label cannot do that:
+-- the engine switches wrapping on with it). It asks for `size`, and a
+-- UITextSizeConstraint -- which binds whatever the setting says -- caps what is
+-- drawn at the largest size whose lines still fit `room`: found from the
+-- label's own TextBounds, the engine's measure of what it really draws, with no
+-- guess at the setting or its offset. So a larger setting grows it while every
+-- line still fits, up to FitWordsGrow past `size`, and no further; at the default
+-- setting a label that fitted at `size` is drawn exactly as before.
+--
+-- Fitted again when its words change, when the player changes the setting, and
+-- at every fitWords (a new room). A label not measurable yet (no TextBounds: not
+-- drawn anywhere) is fitted on the next frames instead. refitWords asks again.
+--==============================================================================
+UIKit.FitWordsName = "FitWords"
+UIKit.FitWordsGrow = 8
+
+local fitJobs: { [TextLabel]: { size: number, room: Vector2 } } = {}
+local fitWatching = false
+
+function UIKit.refitWords(label: TextLabel, tries: number?)
+	local job = fitJobs[label]
+	if not job then
+		return
+	end
+	local fit = label:FindFirstChild(UIKit.FitWordsName)
+	if not (fit and fit:IsA("UITextSizeConstraint")) then
+		fit = Instance.new("UITextSizeConstraint")
+		fit.Name = UIKit.FitWordsName
+		fit.MinTextSize = 1
+		fit.Parent = label
+	end
+	local cap = fit :: UITextSizeConstraint
+	local room = job.room
+	local top = math.clamp(math.floor(job.size + UIKit.FitWordsGrow), 1, 100)
+	cap.MaxTextSize = top
+	if label.Text ~= "" and label.TextBounds.Y <= 0 then
+		-- Not drawn anywhere yet: the design's size until it can be measured.
+		cap.MaxTextSize = math.clamp(math.floor(job.size), 1, 100)
+		local left = tries or 30
+		if left > 0 then
+			task.delay(0.1, function()
+				if fitJobs[label] == job then
+					UIKit.refitWords(label, left - 1)
+				end
+			end)
+		end
+		return
+	end
+	for d = top, 1, -1 do
+		cap.MaxTextSize = d
+		local drawn = label.TextBounds
+		if drawn.X <= room.X + 0.5 and drawn.Y <= room.Y + 0.5 then
+			return
+		end
+	end
+end
+
+function UIKit.fitWords(label: TextLabel, size: number, room: Vector2)
+	label.TextScaled = false
+	label.TextWrapped = false
+	label.TextSize = size
+	if fitJobs[label] == nil then
+		label:GetPropertyChangedSignal("Text"):Connect(function()
+			UIKit.refitWords(label)
+		end)
+		label.Destroying:Once(function()
+			fitJobs[label] = nil
+		end)
+	end
+	fitJobs[label] = { size = size, room = room }
+	if not fitWatching then
+		fitWatching = true
+		pcall(function()
+			game:GetService("GuiService"):GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
+				for each in pairs(fitJobs) do
+					UIKit.refitWords(each)
+				end
+			end)
+		end)
+	end
+	UIKit.refitWords(label)
+end
+
+--==============================================================================
 -- COMIC TYPE (2026-10-13, the owner's reference: a thumbnail in Comic Sans MS
 -- Bold, white letters with a thick black outline)
 --

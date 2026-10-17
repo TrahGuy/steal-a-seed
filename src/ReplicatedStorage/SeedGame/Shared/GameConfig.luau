@@ -1876,6 +1876,9 @@ GameConfig.OtherPlants = {
 	-- Attribute: true only in ULTRA (PerformanceMode.setLevel writes both).
 	HideOwnAttribute = "HideOwnPlants",
 	Label = "PERFORMANCE MODE",
+	-- On a phone's row (2026-10-17): the same words, one per line -- never broken
+	-- by the engine, so a larger text size cannot split PERFORMANCE (UIKit.fitWords).
+	RowLabel = "PERFORMANCE\nMODE",
 	OnText = "ON",
 	OffText = "OFF",
 	-- U+26A1, a colour emoji: drawn in LuckiestGuy with the HUD's outline from 10

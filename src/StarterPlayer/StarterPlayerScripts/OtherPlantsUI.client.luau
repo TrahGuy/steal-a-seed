@@ -326,10 +326,13 @@ local function placeSwitch()
 		-- A thinner outline on the row's smaller words, so their counters stay open.
 		labelLine.Thickness = if inline then 1.5 else 2
 	end
+	-- WORDS THAT NEVER SPLIT (2026-10-17, UIKit.fitWords): its lines are its own
+	-- (RowLabel on a phone's row), scaled into its box, and grown with a larger
+	-- text size only while each line still fits -- on the owner's phone the row's
+	-- 13 px broke the word as "PERFORMA / NCE MODE".
 	if inline then
-		label.TextSize = ROW.Label
+		UIKit.fitWords(label, ROW.Label, Vector2.new(r.w - (ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), r.h))
 		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.TextWrapped = true
 		label.Position = UDim2.fromOffset(ROW.PadLeft, 0)
 		label.Size = UDim2.new(1, -(ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), 1, 0)
 		track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)
@@ -342,9 +345,8 @@ local function placeSwitch()
 	else
 		local wide = r.w >= RAIL.WideSize.X
 		local right = r.x + r.w / 2 > layout.safe.X / 2
-		label.TextSize = if wide then NAME_WIDE else NAME_NARROW
+		UIKit.fitWords(label, if wide then NAME_WIDE else NAME_NARROW, Vector2.new(r.w - 4, LABEL_H))
 		label.TextXAlignment = if right then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
-		label.TextWrapped = false
 		label.Position = UDim2.fromOffset(2, 0)
 		label.Size = UDim2.new(1, -4, 0, LABEL_H)
 		local trackW = if wide then TRACK_WIDE else TRACK_NARROW
@@ -387,7 +389,7 @@ function paint()
 	-- THREE LEVELS (2026-10-13): OFF red at the left, ON green in the middle,
 	-- ULTRA gold at the right with its sparks and no word.
 	local level = PerformanceMode.level(player)
-	label.Text = OTHERS.Label
+	label.Text = if inlineRow then OTHERS.RowLabel else OTHERS.Label
 	local trackW = track.Size.X.Offset
 	local thumbW = thumb.Size.X.Offset
 	-- The middle place leans a pixel left when it must, so ON fits beside it.
