@@ -1,5 +1,40 @@
 # Steal a Seed — Session Handoff
 
+## MOBILE HUD FIXES AND THE SUMMON'S SECRET TOAST — 2026-10-17 (CLAUDE, DESKTOP)  (5 COMMITS ON wip: 1e1f977, 8844798, 57fc7a6, e23d219, d4d6649; NOT PUSHED, waiting for the owner's OK; NOT PUBLISHED; AdminSummonSpec 31/0, SecretToastSpec 65/0, FitWordsSpec 14/0 (NEW), PodRushSpec 102/0, HudLayoutSpec 1499/0; THE WHOLE SUITE 167 OF 167 (before d4d6649, whose two specs ran after); ONE GUARDED PLAY ON THE OWNER'S PHONE EMULATOR, 705 x 338)
+
+**First, v1067:** the owner published at 15:13:05 UTC 2026-10-16 (Studio's log), the tree at e0bc058, two minutes after that commit: SUMMON A SECRET and the mysterious What's New are live.
+
+**The owner's request**, with two phone screenshots (2000 x 900): "this needs fixing on mobile, also after I spawn a Secret, add an additional notification like when a secret spawns in rainbiome with that secret text effect". Their answers are in KB/MOBILE-HUD-AND-SUMMON-TOAST-PLAN.md.
+
+**What was wrong:**
+- The egg's toast after a summon was there, then trimmed. With a panel up the notice stack keeps to one line, and the admin's own line came right after it.
+- PERFORMANCE fills the phone row's 73 px exactly at 10 px. That phone draws every fixed-size word about 3 px larger (the engine's preferred text size; their Roblox setting says default), so it broke as "PERFORMA / NCE MODE".
+- The POD RUSH tracker and the restart notice both stood 8 px under the boost row, so they overlapped. On a phone the card sat mid-screen.
+
+**The five commits:**
+1. 1e1f977: the summon's admin line in the Secret word's sheen (Notice's `sheen`; AdminService.TellEveryone's fifth argument). The name badge is kept; both are found in the same headline.
+2. 8844798: a secret egg's toast waits while any centre panel is up and goes up when the last one shuts, if the spawn is no more than GameConfig.Secret.Toast.MenuWaitSeconds (30) old (Notice.releaseHeld). For everyone.
+3. 57fc7a6: UIKit.fitWords. The label carries its own lines and the engine never wraps it. A UITextSizeConstraint caps it at the largest size whose lines fit, found from the label's own TextBounds. PERFORMANCE MODE (on a phone's row RowLabel, "PERFORMANCE\nMODE") and WALK MODE use it in both layouts. At the default text size both draw exactly as before.
+4. e23d219: on a phone (touch, short side under 500) the tracker is always the one-line strip, in the column's first row. That row is the boost row's band, empty since 2026-10-04 and now 24 px, so the passing lines start at 30. The strip stands on a see-through plate (Tracker.PhonePlate, 0.35): the owner's exception to the 2026-10-09 transparent rule, for the phone strip only. PodRushUI publishes PodRush.Attributes.TrackerBottom, and AnnouncementUI stands 8 px under it on every screen.
+5. d4d6649: the fix found in the Play. Commit 4 had put TrackerBottom in PodRush.Events, so both scripts read nil and stopped; AnnouncementUI would have lost every notice. The specs had only checked the source text; PodRushSpec now checks the name.
+
+**Live (one guarded Play, SeedTest_20261016 (yesterday's throwaway store), the owner's phone emulator 705 x 338, touch, text size Medium):**
+- The switch rows: "PERFORMANCE / MODE" at 10 px, 73 x 20; WALK MODE 58 x 10.
+- From the console (its Events page scrolled to the SECRET card): "Summoned Grovemaw in Greenhollow." The admin line stood at the top over the console, SECRET in silver with the sweep, the badge after the name.
+- That egg's toast was held under the console and dropped: the console shut 38 s after the spawn, past the 30. A second spawn notice was fired at the client from the Play server with the console open. Nothing showed while it was open; "A SECRET EGG SPAWNED ON GREENHOLLOW!" showed 3 s after it shut.
+- POD RUSH: a temporary harness (src/ServerScriptService/ZZMobilePlay.server.luau, never committed, deleted after) moved the hourly slot to now and took the test player past the first loop. The strip stood at (232, 2), 240 x 24, on its plate: "4:51 0 banked · 3 more for BRONZE", the middle clear, TrackerBottom 26.
+- A restart notice set on the client only (nothing restarts) stood under the strip.
+- Studio is clean afterwards: 400 compared, 0 differ, 0 ZZ, the marker and its key removed.
+- Captures are in output/mobile-hud-2026-10-17 (untracked).
+
+**Not tested:** a real phone with a larger text size (Studio cannot set PreferredTextSize; FitWordsSpec stands a 13-px label in), a real restart, a tablet (the full card, unchanged).
+
+**Files:**
+- Shared: Notice, GameConfig (Secret.Toast.MenuWaitSeconds, OtherPlants.RowLabel, PodRush.Tracker's plate, PodRush.Attributes.TrackerBottom), UIKit (fitWords), HudLayout (the phone's BoostHeight 24, NoticeTop 30), PodRush (trackerRect's phone path);
+- AdminService/init.luau; ActionToastUI, OtherPlantsUI, WalkModeUI, PodRushUI, AnnouncementUI;
+- tools/tests: AdminSummonSpec, NameBadgeSpec, SecretToastSpec, FitWordsSpec (new), HudLayoutSpec, OtherPlantsSpec, PodRushSpec;
+- KB/MOBILE-HUD-AND-SUMMON-TOAST-PLAN.md (new).
+
 ## SUMMON A SECRET IN THE ADMIN CONSOLE, AND A MYSTERIOUS WHAT'S NEW — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as e0bc058 with the owner's OK ("push it when green"); LIVE as v1067, the owner's publish at 15:13:05 UTC 2026-10-16 (the tree at e0bc058); AdminSummonSpec 27/0 (NEW); AdminAnnounceSpec 44/0 and AdminMistSpec 69/0 (the new sibling stood in); CompactMenusSpec 48/0 (seventeen actions); THE WHOLE SUITE 166 OF 166 RAN; ITS ONE FAILURE, CompactMenusSpec's old sixteen-action pin, 48/0 ONCE UPDATED; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **Checked first, the owner's "published it, check it":**
