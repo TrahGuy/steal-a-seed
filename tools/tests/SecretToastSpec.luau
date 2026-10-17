@@ -621,6 +621,31 @@ local ok, err = pcall(function()
 		and string.find(toastSrc, "local SMALL: Metrics = { head = 21, headMin = 16, detail = 13, detailMin = 11, icon = 20,", 1, true) ~= nil
 		and string.find(toastSrc, "local PHONE: Metrics = { head = 14, headMin = 12, detail = 11, detailMin = 10, icon = 14,", 1, true) ~= nil,
 		"(this spec's names and sizes are the renderer's own)")
+
+	--==========================================================================
+	say("9. An egg's toast waits for an open menu (2026-10-17, the owner's pick)")
+	--==========================================================================
+	local wait = GameConfig.Secret.Toast.MenuWaitSeconds
+	check(wait == 30, "it waits at most 30 s", wait)
+	local a = { kind = "secret", title = "A" }
+	local b = { kind = "secret", title = "B" }
+	local c = { kind = "secret", title = "C" }
+	local d = { kind = "secret", title = "D" }
+	local due = Notice.releaseHeld({ { post = a, at = 100 }, { post = b, at = 70.1 }, { post = c, at = 70 },
+		{ post = d, at = 69 } }, 100, wait)
+	check(#due == 3 and due[1] == a and due[2] == b and due[3] == c,
+		"a menu shut in time shows each held egg, in order; one older than that is not shown", #due)
+	check(#Notice.releaseHeld({}, 100, wait) == 0, "nothing held, nothing shown")
+	check(count(toastSrc, "showSecret(post)") == 1
+		and string.find(toastSrc, "local function showSecret(post: Notice.Post)\n\tif PadInput.panelOpen() then\n"
+			.. "\t\ttable.insert(heldSecrets, { post = post, at = Notice.now() })", 1, true) ~= nil
+		and string.find(toastSrc, "if #heldSecrets == 0 or PadInput.panelOpen() then", 1, true) ~= nil
+		and string.find(toastSrc, "Notice.releaseHeld(heldSecrets, Notice.now(), GameConfig.Secret.Toast.MenuWaitSeconds)",
+			1, true) ~= nil
+		and string.find(toastSrc, "player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(releaseSecrets)\n"
+			.. "PadInput.PanelChanged:Connect(releaseSecrets)", 1, true) ~= nil,
+		"the egg's toast is held while any panel is up (the mutex, the console, the offline card) and goes up "
+			.. "when the last one shuts")
 end)
 
 NestService.SpecAnnouncer(nil)

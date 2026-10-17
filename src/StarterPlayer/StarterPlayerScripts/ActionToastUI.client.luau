@@ -1325,6 +1325,36 @@ end
 -- The spawns this client has shown, for the session (the script runs once).
 local seenSecrets: { [string]: boolean } = {}
 
+--==============================================================================
+-- A SECRET EGG'S TOAST WAITS FOR AN OPEN MENU (2026-10-17, the owner's pick;
+-- Notice.releaseHeld): held while any centre panel is up (PadInput.panelOpen --
+-- the OpenPanel mutex, the admin console, the offline card), and up when the
+-- last one shuts, if it is not older than Secret.Toast.MenuWaitSeconds by then.
+-- A storm's egg keeps its stillTrue: a storm over by then shows nothing.
+--==============================================================================
+local heldSecrets: { Notice.Held } = {}
+
+local function releaseSecrets()
+	if #heldSecrets == 0 or PadInput.panelOpen() then
+		return
+	end
+	local due = Notice.releaseHeld(heldSecrets, Notice.now(), GameConfig.Secret.Toast.MenuWaitSeconds)
+	table.clear(heldSecrets)
+	for _, post in ipairs(due) do
+		show(post)
+	end
+end
+
+local function showSecret(post: Notice.Post)
+	if PadInput.panelOpen() then
+		table.insert(heldSecrets, { post = post, at = Notice.now() })
+		return
+	end
+	show(post)
+end
+player:GetAttributeChangedSignal(GameConfig.Attributes.OpenPanel):Connect(releaseSecrets)
+PadInput.PanelChanged:Connect(releaseSecrets)
+
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)
 	local found = if remotes then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20) else nil
@@ -1364,7 +1394,7 @@ task.spawn(function()
 						return game:GetService("Workspace"):GetAttribute(GameConfig.Weather.Attributes.EventId) == event
 					end
 				end
-				show(post)
+				showSecret(post)
 			end
 		--==================================================================
 		-- THE RAIN (2026-10-02; WeatherService)

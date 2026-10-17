@@ -4976,6 +4976,10 @@ GameConfig.Secret = {
 		-- silver, dark outline, a grey sweep (static under reduced motion).
 		Word = "SECRET",
 		SweepSeconds = 1.6,
+		-- An egg's toast waits while a menu is open (2026-10-17, the owner's pick:
+		-- "wait for the menu", for everyone) and goes up when it shuts -- at most
+		-- this many seconds after the spawn; later than that it is not shown.
+		MenuWaitSeconds = 30,
 		-- The weather's special eggs that get the same toast when their event's
 		-- biome opens: the Thunderstorm's Pod 3 only -- its real rarity (Divine),
 		-- hatch pool and rewards are untouched; this is the notice alone.

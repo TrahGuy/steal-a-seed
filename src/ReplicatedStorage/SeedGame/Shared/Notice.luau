@@ -390,6 +390,27 @@ end
 
 export type SecretWords = { Title: string, TitleNoName: string }
 
+--==============================================================================
+-- A SECRET EGG'S TOAST WAITS FOR AN OPEN MENU (2026-10-17)
+--
+-- The owner never saw the egg's toast after a summon: with a panel up the stack
+-- keeps to one line, and the admin's own line put the egg's out at once. Their
+-- pick, for everyone: while a menu is open the toast is held, and it goes up when
+-- the menu shuts -- unless it is more than `wait` seconds old by then. Answers the
+-- held posts still due, in the order they came; the caller empties its list.
+--==============================================================================
+export type Held = { post: Post, at: number }
+
+function Notice.releaseHeld(held: { Held }, now: number, wait: number): { Post }
+	local due: { Post } = {}
+	for _, h in ipairs(held) do
+		if now - h.at <= wait then
+			table.insert(due, h.post)
+		end
+	end
+	return due
+end
+
 -- `seen` is this client's record of the spawns it has shown, filled in here.
 -- Nil: shown already. `nameOf` answers a biome's display name, or nil.
 function Notice.secretPost(news: SecretNews, words: SecretWords, nameOf: (string) -> string?,
