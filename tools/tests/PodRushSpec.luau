@@ -1013,6 +1013,10 @@ local ok, err = pcall(function()
 		"a phone's strip alone stands on a see-through plate")
 	-- And where it ends, for an announcement to stand under (2026-10-17).
 	local annSrc = sourceOf(scripts, "AnnouncementUI")
+	-- (A name both scripts read: in Attributes, where they look -- seen in Play 2026-10-17 when it stood in Events.)
+	check(type(RUSH.Attributes.TrackerBottom) == "string" and RUSH.Attributes.TrackerBottom ~= ""
+			and RUSH.Events.TrackerBottom == nil,
+		"the tracker's edge has its attribute name where PodRushUI and AnnouncementUI read it", RUSH.Attributes.TrackerBottom)
 	check(has(uiSrc, "publishBottom(if showing and placedAs ~= nil then placedRect else nil)")
 			and has(uiSrc, "player:SetAttribute(ATTR.TrackerBottom, bottom)")
 			and has(annSrc, "local rushBottom = player:GetAttribute(GameConfig.PodRush.Attributes.TrackerBottom)")

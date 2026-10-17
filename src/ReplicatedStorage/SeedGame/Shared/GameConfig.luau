@@ -6232,6 +6232,11 @@ GameConfig.PodRush = {
 		Count = "PodRushCount",
 		Level = "PodRushLevel",
 		Carrying = "PodRushCarrying",
+		-- On the local player, set by PodRushUI (on the client, 2026-10-17): the
+		-- bottom edge of the tracker or strip in safe space while it shows, nil
+		-- otherwise -- so an announcement stands under it (the owner's pick:
+		-- "the notice below the strip"; AnnouncementUI).
+		TrackerBottom = "PodRushTrackerBottom",
 	},
 	-- GameEvent actions, server to client.
 	Events = {
@@ -6241,11 +6246,6 @@ GameConfig.PodRush = {
 		-- This player's rush is over: { id, count, level, spins, boost, pod,
 		-- podOwed }.
 		Over = "PodRushOver",
-		-- On the local player, set by PodRushUI (on the client, 2026-10-17): the
-		-- bottom edge of the tracker or strip in safe space while it shows, nil
-		-- otherwise -- so an announcement stands under it (the owner's pick:
-		-- "the notice below the strip"; AnnouncementUI).
-		TrackerBottom = "PodRushTrackerBottom",
 	},
 	Words = {
 		Title = "POD RUSH",
