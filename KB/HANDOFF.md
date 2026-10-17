@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## SUMMON A SECRET IN THE ADMIN CONSOLE, AND A MYSTERIOUS WHAT'S NEW — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as e0bc058 with the owner's OK ("push it when green"), NOT PUBLISHED; AdminSummonSpec 27/0 (NEW); AdminAnnounceSpec 44/0 and AdminMistSpec 69/0 (the new sibling stood in); CompactMenusSpec 48/0 (seventeen actions); THE WHOLE SUITE 166 OF 166 RAN; ITS ONE FAILURE, CompactMenusSpec's old sixteen-action pin, 48/0 ONCE UPDATED; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
+## SUMMON A SECRET IN THE ADMIN CONSOLE, AND A MYSTERIOUS WHAT'S NEW — 2026-10-16 (CLAUDE, DESKTOP)  (PUSHED on wip as e0bc058 with the owner's OK ("push it when green"); LIVE as v1067, the owner's publish at 15:13:05 UTC 2026-10-16 (the tree at e0bc058); AdminSummonSpec 27/0 (NEW); AdminAnnounceSpec 44/0 and AdminMistSpec 69/0 (the new sibling stood in); CompactMenusSpec 48/0 (seventeen actions); THE WHOLE SUITE 166 OF 166 RAN; ITS ONE FAILURE, CompactMenusSpec's old sixteen-action pin, 48/0 ONCE UPDATED; MUTANTS 7/7 CAUGHT; ONE GUARDED PLAY, DESKTOP)
 
 **Checked first, the owner's "published it, check it":**
 - v1065, at 12:00:31 UTC (Studio's log, its clock in step), shipped the tree at 71245c2. It held the hourly rush, the sprout rename and the card fix.
